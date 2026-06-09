@@ -1,0 +1,128 @@
+version: "3.9"
+
+services:
+  # ==================== 基础设施 ====================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: bcd-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-better_cloud_drive}
+      POSTGRES_USER: ${POSTGRES_USER:-bcd_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bcd_pass_2026}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bcd_user} -d ${POSTGRES_DB:-better_cloud_drive}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bcd-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: bcd-redis
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bcd-network
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: bcd-seaweedfs
+    restart: unless-stopped
+    command: "server -dir=/data -s3 -s3.port=8333 -master.volumeSizeLimitMB=1024 -filer -webdav"
+    ports:
+      - "8333:8333"     # S3 API
+      - "8888:8888"     # WebDAV
+      - "9333:9333"     # Master
+    volumes:
+      - seaweeddata:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9333/cluster/status"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    networks:
+      - bcd-network
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: bcd-mailpit
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    networks:
+      - bcd-network
+
+  # ==================== 应用服务 ====================
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bcd-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-better_cloud_drive}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bcd_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bcd_pass_2026}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      STORAGE_S3_ENDPOINT: http://seaweedfs:8333
+      STORAGE_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-any}
+      STORAGE_S3_SECRET_KEY: ${S3_SECRET_KEY:-any}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    networks:
+      - bcd-network
+
+  # 后续阶段添加 frontend 服务
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: bcd-frontend
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - backend
+  #   ports:
+  #     - "${FRONTEND_PORT:-3000}:80"
+  #   networks:
+  #     - bcd-network
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  seaweeddata:
+    driver: local
+
+networks:
+  bcd-network:
+    driver: bridge

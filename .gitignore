@@ -1,0 +1,91 @@
+# ==================== Better Cloud Drive ====================
+
+# ==================== IDE ====================
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+*~
+
+# ==================== Java / Maven ====================
+*.class
+*.jar
+*.war
+!gradle/wrapper/gradle-wrapper.jar
+target/
+!**/src/main/**/target/
+!**/src/test/**/target/
+.mvn/
+mvnw
+mvnw.cmd
+
+# ==================== Gradle ====================
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# ==================== Android ====================
+*.apk
+*.aab
+*.dex
+*.ap_
+*.hprof
+.cxx/
+*.keystore
+!gradle/wrapper/gradle-wrapper.jar
+app/release/
+
+# Android Studio
+captures/
+.externalNativeBuild/
+
+# ==================== Node / Frontend ====================
+node_modules/
+dist/
+.nuxt/
+.output/
+*.local
+
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+*.egg
+.venv/
+venv/
+
+# ==================== Docker ====================
+docker-data/
+
+# ==================== OS ====================
+.DS_Store
+Thumbs.db
+
+# ==================== Environment ====================
+.env.local
+.env.*.local
+
+# ==================== Logs ====================
+*.log
+logs/
+
+# ==================== Claude / AI ====================
+.claude/
+
+# ==================== Archives / Temp ====================
+*.tar
+*.gz
+*.zip
+*.7z
+*.tmp
+*.temp
+tmp/
