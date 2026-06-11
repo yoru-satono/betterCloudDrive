@@ -1,12 +1,12 @@
 package com.betterclouddrive.dal.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -14,20 +14,42 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("operation_logs")
+@Entity
+@Table(name = "operation_logs")
 public class OperationLogEntity {
 
-    @TableId(type = IdType.AUTO)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "user_id")
     private Long userId;
+
+    @Column(name = "action_type")
     private String actionType;
+
+    @Column(name = "target_type")
     private String targetType;
+
+    @Column(name = "target_id")
     private Long targetId;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "detail", columnDefinition = "jsonb")
     private String detail;
+
+    @Column(name = "ip_address")
     private String ipAddress;
+
+    @Column(name = "user_agent")
     private String userAgent;
+
+    @Column(name = "result")
     private Integer result;
+
+    @Column(name = "duration_ms")
     private Integer durationMs;
+
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 }

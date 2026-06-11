@@ -1,8 +1,6 @@
 package com.betterclouddrive.dal.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,23 +12,31 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("user_tokens")
+@Entity
+@Table(name = "user_tokens")
 public class UserTokenEntity {
 
-    @TableId(type = IdType.AUTO)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "jti")
     private String jti;
 
+    @Column(name = "token_type")
     @Builder.Default
     private String tokenType = "access";
 
+    @Column(name = "issued_at")
     private LocalDateTime issuedAt;
 
+    @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
+    @Column(name = "is_revoked")
     @Builder.Default
     private Boolean isRevoked = false;
 }

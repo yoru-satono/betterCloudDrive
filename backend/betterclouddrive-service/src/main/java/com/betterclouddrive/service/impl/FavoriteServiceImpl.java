@@ -5,13 +5,13 @@ import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FavoriteEntity;
 import com.betterclouddrive.dal.entity.FileEntity;
-import com.betterclouddrive.dal.mapper.FavoriteMapper;
-import com.betterclouddrive.dal.mapper.FileMapper;
+import com.betterclouddrive.dal.repository.FavoriteRepository;
+import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.service.FavoriteService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,27 +24,23 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FavoriteServiceImpl implements FavoriteService {
 
-    private final FavoriteMapper favoriteMapper;
-    private final FileMapper fileMapper;
+    private final FavoriteRepository favoriteRepository;
+    private final FileRepository fileRepository;
 
     @Override
     @Transactional
     public void addFavorite(Long userId, Long fileId) {
-        FileEntity file = fileMapper.selectById(fileId);
+        FileEntity file = fileRepository.findById(fileId).orElse(null);
         if (file == null || file.getIsDeleted()) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
-        // Check if already favorited
-        Long count = favoriteMapper.selectCount(new LambdaQueryWrapper<FavoriteEntity>()
-                .eq(FavoriteEntity::getUserId, userId)
-                .eq(FavoriteEntity::getFileId, fileId));
-        if (count == 0) {
+        if (!favoriteRepository.existsByUserIdAndFileId(userId, fileId)) {
             FavoriteEntity fav = FavoriteEntity.builder()
                     .userId(userId)
                     .fileId(fileId)
                     .createdAt(LocalDateTime.now())
                     .build();
-            favoriteMapper.insert(fav);
+            favoriteRepository.save(fav);
             log.info("User {} added file {} to favorites", userId, fileId);
         } else {
             log.debug("File {} is already favorited by user {}", fileId, userId);
@@ -54,36 +50,29 @@ public class FavoriteServiceImpl implements FavoriteService {
     @Override
     @Transactional
     public void removeFavorite(Long userId, Long fileId) {
-        favoriteMapper.delete(new LambdaQueryWrapper<FavoriteEntity>()
-                .eq(FavoriteEntity::getUserId, userId)
-                .eq(FavoriteEntity::getFileId, fileId));
+        favoriteRepository.deleteByUserIdAndFileId(userId, fileId);
         log.info("User {} removed file {} from favorites", userId, fileId);
     }
 
     @Override
     public PageResult<FileEntity> listFavorites(Long userId, int page, int size) {
-        Page<FavoriteEntity> favPage = favoriteMapper.selectPage(new Page<>(page, size),
-                new LambdaQueryWrapper<FavoriteEntity>()
-                        .eq(FavoriteEntity::getUserId, userId)
-                        .orderByDesc(FavoriteEntity::getCreatedAt));
+        Page<FavoriteEntity> favPage = favoriteRepository.findByUserIdOrderByCreatedAtDesc(
+                userId, PageRequest.of(page - 1, size));
 
-        if (favPage.getRecords().isEmpty()) {
+        if (favPage.getContent().isEmpty()) {
             return PageResult.of(List.of(), 0L, page, size);
         }
 
-        List<Long> fileIds = favPage.getRecords().stream()
+        List<Long> fileIds = favPage.getContent().stream()
                 .map(FavoriteEntity::getFileId)
                 .collect(Collectors.toList());
 
-        List<FileEntity> files = fileMapper.selectBatchIds(fileIds);
-        return PageResult.of(files, favPage.getTotal(), page, size);
+        List<FileEntity> files = fileRepository.findAllById(fileIds);
+        return PageResult.of(files, favPage.getTotalElements(), page, size);
     }
 
     @Override
     public boolean isFavorited(Long userId, Long fileId) {
-        Long count = favoriteMapper.selectCount(new LambdaQueryWrapper<FavoriteEntity>()
-                .eq(FavoriteEntity::getUserId, userId)
-                .eq(FavoriteEntity::getFileId, fileId));
-        return count > 0;
+        return favoriteRepository.existsByUserIdAndFileId(userId, fileId);
     }
 }

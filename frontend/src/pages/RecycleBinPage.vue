@@ -1,55 +1,132 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import OButton from '@/components/base/OButton.vue'
+import OEmptyState from '@/components/base/OEmptyState.vue'
+import OSpinner from '@/components/base/OSpinner.vue'
+import FileIcon from '@/components/file/FileIcon.vue'
+import { useFormatters } from '@/composables/useFormatters'
+import { useConfirm } from '@/composables/useConfirm'
+import * as recycleApi from '@/api/recycle'
+import { toast } from 'vue-sonner'
+import type { FileEntity } from '@/types/file'
+
+const { formatSize, formatDate } = useFormatters()
+const { confirm } = useConfirm()
+
+const files = ref<FileEntity[]>([])
+const loading = ref(false)
+const selected = ref<Set<number>>(new Set())
+
+async function load() {
+  loading.value = true
+  try {
+    const { data } = await recycleApi.listRecycleBin(1, 100)
+    files.value = data.data.records
+  } finally { loading.value = false }
+}
+
+async function restore() {
+  const ids = [...selected.value]
+  await recycleApi.restoreFiles(ids)
+  toast.success('已恢复')
+  selected.value.clear()
+  load()
+}
+
+async function permanentDelete() {
+  const ids = [...selected.value]
+  const ok = await confirm('永久删除', `将永久删除 ${ids.length} 个文件，无法恢复。`)
+  if (!ok) return
+  await recycleApi.permanentDelete(ids)
+  toast.success('已永久删除')
+  selected.value.clear()
+  load()
+}
+
+async function emptyBin() {
+  const ok = await confirm('清空回收站', '将永久删除回收站所有文件，无法恢复。')
+  if (!ok) return
+  await recycleApi.emptyRecycleBin()
+  toast.success('回收站已清空')
+  load()
+}
+
+function toggle(id: number) {
+  if (selected.value.has(id)) selected.value.delete(id)
+  else selected.value.add(id)
+}
+
+onMounted(load)
+</script>
+
 <template>
-  <div class="animate-fade-in">
+  <div class="page-enter">
     <div class="page-header">
-      <h2>回收站</h2>
-      <button class="btn btn-danger btn-sm" @click="emptyBin" :disabled="loading">清空回收站</button>
+      <div>
+        <h2>回收站</h2>
+        <p class="text-muted" style="font-size:12px;margin-top:2px">文件保留 30 天后自动删除</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <OButton v-if="selected.size > 0" variant="ghost" size="sm" @click="restore">恢复 ({{ selected.size }})</OButton>
+        <OButton v-if="selected.size > 0" variant="danger" size="sm" @click="permanentDelete">永久删除 ({{ selected.size }})</OButton>
+        <OButton v-if="files.length > 0" variant="danger" size="sm" @click="emptyBin">清空回收站</OButton>
+      </div>
     </div>
-    <p class="text-muted" style="margin-bottom:16px">文件删除后保留 30 天，之后自动清理</p>
-    <div class="list-header"><span class="col-name">名称</span><span class="col-size">大小</span><span class="col-date">删除日期</span><span class="col-actions"></span></div>
-    <div v-if="items.length === 0 && !loading" class="empty-state"><p>回收站为空</p></div>
-    <div v-for="f in items" :key="f.id" class="file-row">
-      <span class="col-name truncate">{{ f.fileName }}</span>
-      <span class="col-size text-mono text-muted">{{ formatSize(f.fileSize) }}</span>
-      <span class="col-date text-muted">{{ formatDate(f.deletedAt) }}</span>
-      <span class="col-actions">
-        <button class="btn btn-ghost btn-sm" @click="restore(f.id)">恢复</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" @click="permanentDel(f.id)">彻底删除</button>
-      </span>
-    </div>
-    <div v-if="pages > 1" class="pagination">
-      <button class="btn btn-ghost btn-sm" :disabled="page <= 1" @click="fetch(page - 1)">上一页</button>
-      <span class="text-muted">{{ page }} / {{ pages }}</span>
-      <button class="btn btn-ghost btn-sm" :disabled="page >= pages" @click="fetch(page + 1)">下一页</button>
+
+    <div v-if="loading" class="page-loading"><OSpinner /></div>
+    <OEmptyState v-else-if="files.length === 0" title="回收站是空的" description="删除的文件会在这里显示" />
+    <div v-else class="file-table">
+      <div class="file-table__header">
+        <div></div><div>名称</div><div>大小</div><div>删除时间</div>
+      </div>
+      <div
+        v-for="file in files" :key="file.id"
+        class="file-table__row"
+        :class="{ 'file-table__row--selected': selected.has(file.id) }"
+        @click="toggle(file.id)"
+      >
+        <div class="file-table__check">
+          <div class="checkbox" :class="{ 'checkbox--on': selected.has(file.id) }">
+            <svg v-if="selected.has(file.id)" width="10" height="10" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        </div>
+        <div class="file-table__name">
+          <FileIcon :mime-type="file.mimeType" :file-type="file.fileType" :size="15" />
+          <span class="truncate">{{ file.fileName }}</span>
+        </div>
+        <div class="file-table__size font-mono">{{ file.fileType === 'folder' ? '—' : formatSize(file.fileSize) }}</div>
+        <div class="file-table__date">{{ formatDate(file.updatedAt) }}</div>
+      </div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import api from '@/api/client'
-const items = ref<any[]>([])
-const page = ref(1); const pages = ref(0); const loading = ref(false)
-async function fetch(p = 1) {
-  loading.value = true; page.value = p
-  const { data } = await api.get('/recycle-bin', { params: { page: p, size: 20 } })
-  items.value = data.data.records; pages.value = data.data.pages; loading.value = false
-}
-async function restore(id: number) { await api.post(`/recycle-bin/${id}/restore`); fetch() }
-async function permanentDel(id: number) { if (!confirm('彻底删除后不可恢复，确定？')) return; await api.delete(`/recycle-bin/${id}`); fetch() }
-async function emptyBin() { if (!confirm('确定清空回收站？')) return; await api.delete('/recycle-bin'); fetch() }
-function formatSize(b: number) { if (!b) return '—'; if (b < 1048576) return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(1)+' MB' }
-function formatDate(d: string) { return new Date(d).toLocaleDateString('zh-CN') }
-onMounted(() => fetch())
-</script>
-
 <style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.list-header { display: flex; padding: 8px 12px; border-bottom: 1px solid var(--border-default); font-size: 11px; text-transform: uppercase; color: var(--text-muted); }
-.file-row { display: flex; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); }
-.col-name { flex: 1; min-width: 0; }
-.col-size { width: 90px; text-align: right; }
-.col-date { width: 110px; text-align: right; }
-.col-actions { width: 160px; text-align: right; display: flex; gap: 4px; justify-content: flex-end; }
-.empty-state { padding: 60px 20px; text-align: center; color: var(--text-muted); }
-.pagination { display: flex; justify-content: center; gap: 12px; margin-top: 20px; align-items: center; }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+.page-loading { display: flex; justify-content: center; padding: 60px; }
+.file-table { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.file-table__header {
+  display: grid; grid-template-columns: 40px 1fr 90px 130px;
+  padding: 8px 12px; gap: 8px;
+  font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+}
+.file-table__row {
+  display: grid; grid-template-columns: 40px 1fr 90px 130px;
+  padding: 10px 12px; gap: 8px; align-items: center;
+  cursor: pointer; transition: background var(--fast);
+  border-bottom: 1px solid var(--border);
+}
+.file-table__row:last-child { border-bottom: none; }
+.file-table__row:hover { background: var(--bg-elevated); }
+.file-table__row--selected { background: var(--accent-dim); }
+.file-table__check { display: flex; align-items: center; justify-content: center; }
+.checkbox {
+  width: 16px; height: 16px; border: 1px solid var(--border-hover); border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; transition: all var(--fast);
+}
+.checkbox--on { background: var(--accent); border-color: var(--accent); color: #080809; }
+.file-table__name { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.file-table__size { font-size: 11px; color: var(--text-secondary); text-align: right; }
+.file-table__date { font-size: 11px; color: var(--text-secondary); text-align: right; }
 </style>

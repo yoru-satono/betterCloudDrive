@@ -2,29 +2,34 @@ package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.OperationLogEntity;
-import com.betterclouddrive.dal.mapper.OperationLogMapper;
+import com.betterclouddrive.dal.repository.OperationLogRepository;
 import com.betterclouddrive.service.OperationLogService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class OperationLogServiceImpl implements OperationLogService {
 
-    private final OperationLogMapper operationLogMapper;
+    private final OperationLogRepository operationLogRepository;
 
     @Override
     @Async
     public void logAsync(Long userId, String actionType, String targetType, Long targetId, String detail, String ipAddress, String userAgent) {
         try {
-            OperationLogEntity log = OperationLogEntity.builder()
+            OperationLogEntity logEntity = OperationLogEntity.builder()
                     .userId(userId)
                     .actionType(actionType)
                     .targetType(targetType)
@@ -35,7 +40,7 @@ public class OperationLogServiceImpl implements OperationLogService {
                     .result(1)
                     .createdAt(LocalDateTime.now())
                     .build();
-            operationLogMapper.insert(log);
+            operationLogRepository.save(logEntity);
         } catch (Exception e) {
             log.warn("Failed to write operation log", e);
         }
@@ -50,14 +55,25 @@ public class OperationLogServiceImpl implements OperationLogService {
     @Override
     public PageResult<OperationLogEntity> listLogs(Long userId, String actionType,
             LocalDateTime startDate, LocalDateTime endDate, int page, int size) {
-        LambdaQueryWrapper<OperationLogEntity> wrapper = new LambdaQueryWrapper<OperationLogEntity>()
-                .eq(userId != null, OperationLogEntity::getUserId, userId)
-                .eq(actionType != null && !actionType.isBlank(), OperationLogEntity::getActionType, actionType)
-                .ge(startDate != null, OperationLogEntity::getCreatedAt, startDate)
-                .le(endDate != null, OperationLogEntity::getCreatedAt, endDate)
-                .orderByDesc(OperationLogEntity::getCreatedAt);
+        Specification<OperationLogEntity> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (userId != null) {
+                predicates.add(cb.equal(root.get("userId"), userId));
+            }
+            if (actionType != null && !actionType.isBlank()) {
+                predicates.add(cb.equal(root.get("actionType"), actionType));
+            }
+            if (startDate != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), startDate));
+            }
+            if (endDate != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("createdAt"), endDate));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
 
-        Page<OperationLogEntity> result = operationLogMapper.selectPage(new Page<>(page, size), wrapper);
-        return PageResult.of(result.getRecords(), result.getTotal(), page, size);
+        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<OperationLogEntity> result = operationLogRepository.findAll(spec, pageable);
+        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
     }
 }

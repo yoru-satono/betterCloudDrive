@@ -6,7 +6,7 @@
 
 | 层 | 技术 |
 |---|------|
-| **后端** | Spring Boot 4.0 + JDK 25 + MyBatis-Plus 3.5.7 |
+| **后端** | Spring Boot 4.0 + JDK 25 + Spring Data JPA 4.0 |
 | **数据库** | PostgreSQL 16 + Flyway 迁移 |
 | **缓存** | Redis 7（限流、上传进度、配额同步、Token 黑名单） |
 | **存储** | SeaweedFS（S3 兼容对象存储） |

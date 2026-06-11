@@ -99,7 +99,6 @@ class TestRefresh:
 
 class TestLogout:
     def test_logout_then_access(self, client, test_user):
-        # Logout with a fresh access token
         r_login = client.post("/api/v1/auth/login", json={
             "username": test_user["username"], "password": test_user["password"]
         })
@@ -108,8 +107,22 @@ class TestLogout:
 
         client.post("/api/v1/auth/logout", headers=headers)
         r = client.get("/api/v1/auth/me", headers=headers)
-        # After logout, token is blacklisted — should NOT succeed
-        assert r.status_code != 200
+        # Blacklisted token → 401 or 403
+        assert r.status_code in (401, 403)
+
+    def test_access_after_logout_returns_401(self, client, test_user):
+        """Explicit check that the blacklisted token returns HTTP 401 (not just non-200)."""
+        r_login = client.post("/api/v1/auth/login", json={
+            "username": test_user["username"], "password": test_user["password"]
+        })
+        token = r_login.json()["data"]["accessToken"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        r_logout = client.post("/api/v1/auth/logout", headers=headers)
+        assert r_logout.status_code == 200
+
+        r = client.get("/api/v1/auth/me", headers=headers)
+        assert r.status_code in (401, 403)
 
 
 class TestMe:

@@ -4,11 +4,10 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.entity.UserTokenEntity;
-import com.betterclouddrive.dal.mapper.UserMapper;
-import com.betterclouddrive.dal.mapper.UserTokenMapper;
+import com.betterclouddrive.dal.repository.UserRepository;
+import com.betterclouddrive.dal.repository.UserTokenRepository;
 import com.betterclouddrive.service.AuthService;
 import com.betterclouddrive.service.EmailService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -25,8 +24,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    private final UserMapper userMapper;
-    private final UserTokenMapper userTokenMapper;
+    private final UserRepository userRepository;
+    private final UserTokenRepository userTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
@@ -41,11 +40,10 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public UserEntity register(String username, String password, String email) {
-        // Check username uniqueness
-        if (userMapper.selectCount(new LambdaQueryWrapper<UserEntity>().eq(UserEntity::getUsername, username)) > 0) {
+        if (userRepository.existsByUsername(username)) {
             throw new BusinessException(ApiCode.CONFLICT, "Username already exists");
         }
-        if (email != null && userMapper.selectCount(new LambdaQueryWrapper<UserEntity>().eq(UserEntity::getEmail, email)) > 0) {
+        if (email != null && userRepository.existsByEmail(email)) {
             throw new BusinessException(ApiCode.CONFLICT, "Email already exists");
         }
 
@@ -59,14 +57,12 @@ public class AuthServiceImpl implements AuthService {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        userMapper.insert(user);
-        return user;
+        return userRepository.save(user);
     }
 
     @Override
     public UserEntity login(String username, String password) {
-        UserEntity user = userMapper.selectOne(
-                new LambdaQueryWrapper<UserEntity>().eq(UserEntity::getUsername, username));
+        UserEntity user = userRepository.findByUsername(username).orElse(null);
         if (user == null || user.getDeletedAt() != null) {
             throw new BusinessException(ApiCode.UNAUTHORIZED, "Invalid username or password");
         }
@@ -82,12 +78,11 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void logout(String jti) {
-        UserTokenEntity tokenEntity = userTokenMapper.selectByJti(jti);
+        UserTokenEntity tokenEntity = userTokenRepository.findByJti(jti).orElse(null);
         if (tokenEntity == null) {
             return;
         }
 
-        // Calculate remaining validity and add to Redis blacklist
         long expiresAtEpoch = tokenEntity.getExpiresAt()
                 .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
         long remainingMs = expiresAtEpoch - System.currentTimeMillis();
@@ -96,14 +91,13 @@ public class AuthServiceImpl implements AuthService {
                     .set("token:blacklist:" + jti, "1", remainingMs, TimeUnit.MILLISECONDS);
         }
 
-        // Revoke token in database
         tokenEntity.setIsRevoked(true);
-        userTokenMapper.updateById(tokenEntity);
+        userTokenRepository.save(tokenEntity);
     }
 
     @Override
     public UserEntity getCurrentUser(Long userId) {
-        UserEntity user = userMapper.selectById(userId);
+        UserEntity user = userRepository.findById(userId).orElse(null);
         if (user == null || user.getDeletedAt() != null) {
             throw new BusinessException(ApiCode.UNAUTHORIZED);
         }
@@ -112,7 +106,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void sendVerificationCode(Long userId) {
-        UserEntity user = userMapper.selectById(userId);
+        UserEntity user = userRepository.findById(userId).orElse(null);
         if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
             throw new BusinessException(ApiCode.EMAIL_VERIFICATION_FAILED, "No email address on file");
         }
@@ -127,12 +121,12 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void verifyEmail(Long userId, String code) {
-        UserEntity user = userMapper.selectById(userId);
+        UserEntity user = userRepository.findById(userId).orElse(null);
         if (user == null) {
             throw new BusinessException(ApiCode.EMAIL_VERIFICATION_FAILED, "User not found");
         }
         if (Boolean.TRUE.equals(user.getEmailVerified())) {
-            return; // Already verified, no-op
+            return;
         }
         String storedCode = redisTemplate.opsForValue().get(EMAIL_VERIFY_PREFIX + userId);
         if (storedCode == null) {
@@ -142,19 +136,18 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ApiCode.EMAIL_CODE_MISMATCH);
         }
         user.setEmailVerified(true);
-        userMapper.updateById(user);
+        userRepository.save(user);
         redisTemplate.delete(EMAIL_VERIFY_PREFIX + userId);
     }
 
     @Override
     public void sendPasswordResetCode(String email) {
         if (email == null || email.isBlank()) {
-            return; // Silent — don't reveal whether email exists
+            return;
         }
-        UserEntity user = userMapper.selectOne(
-                new LambdaQueryWrapper<UserEntity>().eq(UserEntity::getEmail, email));
+        UserEntity user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
-            return; // Silent — user not found
+            return;
         }
         String code = generateCode();
         redisTemplate.opsForValue().set(PWD_RESET_PREFIX + email, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
@@ -182,13 +175,12 @@ public class AuthServiceImpl implements AuthService {
         if (!storedCode.equals(code)) {
             throw new BusinessException(ApiCode.EMAIL_CODE_MISMATCH);
         }
-        UserEntity user = userMapper.selectOne(
-                new LambdaQueryWrapper<UserEntity>().eq(UserEntity::getEmail, email));
+        UserEntity user = userRepository.findByEmail(email).orElse(null);
         if (user == null) {
             throw new BusinessException(ApiCode.PASSWORD_RESET_FAILED, "User not found");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
-        userMapper.updateById(user);
+        userRepository.save(user);
         redisTemplate.delete(PWD_RESET_PREFIX + email);
     }
 

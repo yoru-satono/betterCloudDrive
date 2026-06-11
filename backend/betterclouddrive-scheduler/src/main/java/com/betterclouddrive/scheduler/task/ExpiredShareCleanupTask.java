@@ -1,8 +1,7 @@
 package com.betterclouddrive.scheduler.task;
 
 import com.betterclouddrive.dal.entity.ShareLinkEntity;
-import com.betterclouddrive.dal.mapper.ShareLinkMapper;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.betterclouddrive.dal.repository.ShareLinkRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,22 +16,19 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ExpiredShareCleanupTask {
 
-    private final ShareLinkMapper shareLinkMapper;
+    private final ShareLinkRepository shareLinkRepository;
 
     @Scheduled(cron = "0 0 * * * ?") // Every hour
     @Transactional
     public void cleanupExpiredShares() {
-        List<ShareLinkEntity> expired = shareLinkMapper.selectList(
-                new LambdaQueryWrapper<ShareLinkEntity>()
-                        .eq(ShareLinkEntity::getIsCanceled, false)
-                        .le(ShareLinkEntity::getExpireAt, LocalDateTime.now()));
+        List<ShareLinkEntity> expired = shareLinkRepository.findByIsCanceledFalseAndExpireAtLessThanEqual(LocalDateTime.now());
         if (expired.isEmpty()) {
             return;
         }
 
         for (ShareLinkEntity share : expired) {
             share.setIsCanceled(true);
-            shareLinkMapper.updateById(share);
+            shareLinkRepository.save(share);
         }
         log.info("Cleaned up {} expired shares", expired.size());
     }

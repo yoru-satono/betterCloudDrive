@@ -1,12 +1,14 @@
 package com.betterclouddrive.scheduler.task;
 
 import com.betterclouddrive.dal.entity.FileEntity;
-import com.betterclouddrive.dal.mapper.FileMapper;
-import com.betterclouddrive.dal.mapper.FileVersionMapper;
+import com.betterclouddrive.dal.entity.FileVersionEntity;
+import com.betterclouddrive.dal.repository.FileRepository;
+import com.betterclouddrive.dal.repository.FileVersionRepository;
 import com.betterclouddrive.storage.StorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -14,16 +16,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class RecycleBinCleanupTask {
 
-    private final FileMapper fileMapper;
-    private final FileVersionMapper fileVersionMapper;
+    private final FileRepository fileRepository;
+    private final FileVersionRepository fileVersionRepository;
     private final StorageService storageService;
     private final StringRedisTemplate redisTemplate;
 
@@ -38,13 +38,12 @@ public class RecycleBinCleanupTask {
         log.info("Starting recycle bin cleanup...");
         LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
 
-        List<FileEntity> expiredFiles = fileMapper.selectExpiredDeletedFiles(cutoff, BATCH_SIZE);
+        List<FileEntity> expiredFiles = fileRepository.findExpiredDeletedFiles(cutoff, PageRequest.of(0, BATCH_SIZE));
         int totalCleaned = 0;
 
         while (!expiredFiles.isEmpty()) {
             for (FileEntity file : expiredFiles) {
                 try {
-                    // Delete from storage
                     if (file.getStoragePath() != null) {
                         storageService.deleteObject(file.getStoragePath());
                     }
@@ -52,16 +51,14 @@ public class RecycleBinCleanupTask {
                         storageService.deleteObject(file.getThumbnailPath());
                     }
 
-                    // Delete file versions from storage
-                    var versions = fileVersionMapper.selectByFileId(file.getId(), 100);
-                    for (var version : versions) {
+                    List<FileVersionEntity> versions = fileVersionRepository.findTopVersionsByFileId(
+                            file.getId(), PageRequest.of(0, 100));
+                    for (FileVersionEntity version : versions) {
                         storageService.deleteObject(version.getStoragePath());
                     }
 
-                    // Delete from DB (CASCADE handles versions, tags, favorites)
-                    fileMapper.deleteById(file.getId());
+                    fileRepository.deleteById(file.getId());
 
-                    // Decrement storage quota in Redis
                     if (file.getFileSize() > 0) {
                         redisTemplate.opsForValue().decrement(
                                 "storage:incr:" + file.getUserId(), file.getFileSize());
@@ -73,7 +70,7 @@ public class RecycleBinCleanupTask {
             }
 
             log.info("Recycle bin cleanup progress: {} files cleaned", totalCleaned);
-            expiredFiles = fileMapper.selectExpiredDeletedFiles(cutoff, BATCH_SIZE);
+            expiredFiles = fileRepository.findExpiredDeletedFiles(cutoff, PageRequest.of(0, BATCH_SIZE));
         }
 
         log.info("Recycle bin cleanup completed. Total cleaned: {}", totalCleaned);

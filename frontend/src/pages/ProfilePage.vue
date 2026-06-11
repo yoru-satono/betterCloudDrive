@@ -1,48 +1,118 @@
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useForm, useField } from 'vee-validate'
+import { z } from 'zod'
+import { toTypedSchema } from '@vee-validate/zod'
+import OInput from '@/components/base/OInput.vue'
+import OButton from '@/components/base/OButton.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useFormatters } from '@/composables/useFormatters'
+import * as authApi from '@/api/auth'
+import { toast } from 'vue-sonner'
+
+const auth = useAuthStore()
+const { formatSize } = useFormatters()
+
+const storagePercent = computed(() => auth.storagePercent)
+const storageColor = computed(() => storagePercent.value > 90 ? 'var(--danger)' : storagePercent.value > 70 ? 'var(--warning)' : 'var(--accent)')
+
+// Email form
+const emailSchema = toTypedSchema(z.object({ email: z.string().email('请输入有效邮箱').or(z.literal('')) }))
+const { handleSubmit: saveEmail, isSubmitting: savingEmail } = useForm({ validationSchema: emailSchema, initialValues: { email: auth.user?.email || '' } })
+const { value: email, errorMessage: emailError } = useField<string>('email')
+const submitEmail = saveEmail(async (v) => {
+  await authApi.updateProfile(v.email)
+  await auth.fetchMe()
+  toast.success('邮箱已更新')
+})
+
+// Password form
+const pwSchema = toTypedSchema(z.object({
+  oldPassword: z.string().min(1, '请输入当前密码'),
+  newPassword: z.string().min(6, '新密码至少 6 个字符'),
+  confirm: z.string()
+}).refine(d => d.newPassword === d.confirm, { message: '两次密码不一致', path: ['confirm'] }))
+const { handleSubmit: savePw, isSubmitting: savingPw, resetForm: resetPw } = useForm({ validationSchema: pwSchema })
+const { value: oldPw, errorMessage: oldPwErr } = useField<string>('oldPassword')
+const { value: newPw, errorMessage: newPwErr } = useField<string>('newPassword')
+const { value: confirmPw, errorMessage: confirmPwErr } = useField<string>('confirm')
+const submitPw = savePw(async (v) => {
+  await authApi.changePassword(v.oldPassword, v.newPassword)
+  toast.success('密码已修改')
+  resetPw()
+})
+</script>
+
 <template>
-  <div class="animate-fade-in" style="max-width:600px">
-    <h2>个人设置</h2>
-    <div class="card" style="margin-top:20px">
-      <div class="profile-section">
-        <div class="avatar-lg">{{ auth.user?.username?.charAt(0)?.toUpperCase() }}</div>
+  <div class="profile-page page-enter">
+    <h2 style="margin-bottom:24px">个人资料</h2>
+
+    <!-- User info card -->
+    <div class="profile-card">
+      <div class="profile-card__avatar">{{ auth.user?.username?.[0]?.toUpperCase() }}</div>
+      <div class="profile-card__info">
+        <div class="profile-card__name">{{ auth.user?.username }}</div>
+        <div class="profile-card__role">{{ auth.isAdmin ? '管理员' : '普通用户' }}</div>
+      </div>
+    </div>
+
+    <!-- Storage usage -->
+    <div class="section">
+      <h3 class="section__title">存储空间</h3>
+      <div class="storage-bar">
+        <div class="storage-bar__fill" :style="{ width: `${storagePercent}%`, background: storageColor }" />
+      </div>
+      <div class="storage-info">
+        <span class="font-mono">{{ formatSize(auth.user?.storageUsed || 0) }}</span>
+        <span class="text-muted"> / {{ formatSize(auth.user?.storageQuota || 0) }}</span>
+        <span style="margin-left:8px;font-size:12px" :style="{ color: storageColor }">{{ storagePercent }}%</span>
+      </div>
+    </div>
+
+    <!-- Update email -->
+    <div class="section">
+      <h3 class="section__title">更新邮箱</h3>
+      <form @submit.prevent="submitEmail" style="display:flex;gap:10px;align-items:flex-end">
+        <OInput v-model="email" label="邮箱地址" placeholder="输入新邮箱" type="email" :error="emailError" style="flex:1" />
+        <OButton type="submit" variant="primary" :loading="savingEmail">保存</OButton>
+      </form>
+    </div>
+
+    <!-- Change password -->
+    <div class="section">
+      <h3 class="section__title">修改密码</h3>
+      <form @submit.prevent="submitPw" style="display:flex;flex-direction:column;gap:14px">
+        <OInput v-model="oldPw" label="当前密码" type="password" :error="oldPwErr" />
+        <OInput v-model="newPw" label="新密码" type="password" :error="newPwErr" />
+        <OInput v-model="confirmPw" label="确认新密码" type="password" :error="confirmPwErr" />
         <div>
-          <h3>{{ auth.user?.username }}</h3>
-          <p class="text-muted">{{ auth.user?.email || '未设置邮箱' }}</p>
-          <p class="text-muted">{{ auth.user?.role === 'ROLE_ADMIN' ? '🔧 管理员' : '👤 普通用户' }}</p>
+          <OButton type="submit" variant="primary" :loading="savingPw">修改密码</OButton>
         </div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <h3 style="margin-bottom:8px">存储用量</h3>
-      <div class="storage-bar" style="height:8px;background:var(--bg-hover);border-radius:4px;overflow:hidden;margin-bottom:8px">
-        <div :style="{width:auth.storagePercent+'%',height:'100%',background:'var(--accent)',borderRadius:'4px',transition:'width .4s'}"></div>
-      </div>
-      <p class="text-mono text-muted">{{ formatSize(auth.user?.storageUsed) }} / {{ formatSize(auth.user?.storageQuota) }} ({{ auth.storagePercent }}%)</p>
-    </div>
-    <div class="card" style="margin-top:16px">
-      <h3 style="margin-bottom:12px">邮箱验证</h3>
-      <p v-if="auth.user?.emailVerified" class="text-accent">✅ 已验证</p>
-      <template v-else>
-        <button class="btn btn-primary btn-sm" @click="sendCode" :disabled="sent">发送验证码</button>
-        <div v-if="sent" style="display:flex;gap:8px;margin-top:12px">
-          <input v-model="code" class="input" placeholder="6位验证码" maxlength="6" style="width:140px" />
-          <button class="btn btn-primary btn-sm" @click="verifyCode">确认</button>
-        </div>
-        <p v-if="msg" class="text-muted" style="margin-top:8px">{{ msg }}</p>
-      </template>
+      </form>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref } from 'vue'
-import { useAuthStore } from '@/stores/auth'
-const auth = useAuthStore()
-const sent = ref(false); const code = ref(''); const msg = ref('')
-async function sendCode() { try { await auth.sendVerificationCode(); sent.value = true; msg.value = '验证码已发送' } catch { msg.value = '发送失败' } }
-async function verifyCode() { try { await auth.verifyEmail(code.value); await auth.fetchMe(); msg.value = '邮箱验证成功！' } catch { msg.value = '验证失败' } }
-function formatSize(b?: number) { if (!b) return '0 B'; if (b < 1073741824) return (b/1048576).toFixed(1)+' MB'; return (b/1073741824).toFixed(2)+' GB' }
-</script>
 <style scoped>
-.profile-section { display: flex; align-items: center; gap: 16px; }
-.avatar-lg { width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: var(--text-inverse); display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; font-family: var(--font-display); }
+.profile-page { max-width: 560px; }
+.profile-card {
+  display: flex; align-items: center; gap: 16px;
+  padding: 20px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg-elevated); margin-bottom: 28px;
+}
+.profile-card__avatar {
+  width: 52px; height: 52px; border-radius: 12px;
+  background: var(--accent-dim); border: 1px solid rgba(0,212,170,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 700; color: var(--accent);
+}
+.profile-card__name { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+.profile-card__role { font-size: 12px; color: var(--text-secondary); }
+
+.section { margin-bottom: 28px; }
+.section__title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.storage-bar { height: 6px; background: var(--border); border-radius: 3px; margin-bottom: 6px; overflow: hidden; }
+.storage-bar__fill { height: 100%; border-radius: 3px; transition: width 600ms; }
+.storage-info { font-size: 13px; }
 </style>

@@ -1,11 +1,12 @@
 package com.betterclouddrive.scheduler.task;
 
-import com.betterclouddrive.dal.mapper.UserMapper;
+import com.betterclouddrive.dal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 
@@ -15,11 +16,12 @@ import java.util.Set;
 public class StorageQuotaSyncTask {
 
     private final StringRedisTemplate redisTemplate;
-    private final UserMapper userMapper;
+    private final UserRepository userRepository;
 
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
 
     @Scheduled(fixedRateString = "${drive.storage.quota-sync-interval-ms:60000}")
+    @Transactional
     public void syncStorageQuota() {
         Set<String> keys = redisTemplate.keys(STORAGE_INCR_PREFIX + "*");
         if (keys == null || keys.isEmpty()) {
@@ -33,7 +35,7 @@ public class StorageQuotaSyncTask {
                 if (deltaStr != null) {
                     long delta = Long.parseLong(deltaStr);
                     if (delta != 0) {
-                        userMapper.updateStorageUsed(userId, delta);
+                        userRepository.updateStorageUsed(userId, delta);
                     }
                 }
                 redisTemplate.delete(key);

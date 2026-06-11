@@ -121,6 +121,64 @@ class TestInstantUpload:
         # Should return 419010 (no matching file) — this is normal
         assert_api_error(r, 419010)
 
+    def test_instant_upload_success(self, client, auth_headers, created_folder, sample_file):
+        """Second upload of same content should succeed via deduplication (秒传)."""
+        file_size = sample_file.stat().st_size
+        file_bytes = sample_file.read_bytes()
+        md5 = hashlib.md5(file_bytes).hexdigest()
+
+        # First: ensure the file is in storage via chunked upload (pass md5Hash so FileEntity stores it)
+        r = client.post("/api/v1/upload/init", json={
+            "parentId": created_folder["id"],
+            "fileName": f"orig_{uuid.uuid4().hex[:6]}.txt",
+            "fileSize": file_size,
+            "md5Hash": md5,
+            "totalChunks": 1,
+        }, headers=auth_headers)
+        session_id = r.json()["data"]["sessionId"]
+        client.post(
+            f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+            files={"file": sample_file.open("rb")},
+            headers=auth_headers,
+        )
+        client.post(f"/api/v1/upload/{session_id}/complete", headers=auth_headers)
+
+        # Now instant upload the same content — should find existing file
+        r2 = client.post("/api/v1/upload/instant", json={
+            "parentId": created_folder["id"],
+            "fileName": f"instant_{uuid.uuid4().hex[:6]}.txt",
+            "fileSize": file_size,
+            "md5Hash": md5,
+        }, headers=auth_headers)
+        data = assert_api_ok(r2)
+        assert "fileId" in data
+
+
+class TestUploadChunkIdempotent:
+    def test_upload_chunk_idempotent(self, client, auth_headers, created_folder, sample_file):
+        """Uploading the same chunk twice should not cause an error."""
+        file_size = sample_file.stat().st_size
+        r = client.post("/api/v1/upload/init", json={
+            "parentId": created_folder["id"],
+            "fileName": f"idem_{uuid.uuid4().hex[:6]}.txt",
+            "fileSize": file_size,
+            "totalChunks": 1,
+        }, headers=auth_headers)
+        session_id = r.json()["data"]["sessionId"]
+
+        # Upload chunk 0 twice — second call should be idempotent (200)
+        client.post(
+            f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+            files={"file": sample_file.open("rb")},
+            headers=auth_headers,
+        )
+        r2 = client.post(
+            f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+            files={"file": sample_file.open("rb")},
+            headers=auth_headers,
+        )
+        assert_api_ok(r2)
+
 
 class TestQuotaExceeded:
     def test_init_upload_quota_exceeded(self, client, auth_headers, test_user, created_folder):

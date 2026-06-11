@@ -17,6 +17,14 @@ class TestDownload:
         r = client.get(f"/api/v1/download/{created_folder['id']}", headers=auth_headers)
         assert_api_error(r, 404001)
 
+    def test_download_range_request(self, client, auth_headers, uploaded_file):
+        r = client.get(
+            f"/api/v1/download/{uploaded_file['fileId']}",
+            headers={**auth_headers, "Range": "bytes=0-10"},
+        )
+        # May be 206 or 200 depending on file size and implementation
+        assert r.status_code in (200, 206)
+
 
 class TestPreview:
     def test_preview_file(self, client, auth_headers, uploaded_file):
@@ -30,11 +38,3 @@ class TestPreview:
     def test_preview_folder(self, client, auth_headers, created_folder):
         r = client.get(f"/api/v1/preview/{created_folder['id']}", headers=auth_headers)
         assert_api_error(r, 404001)
-
-    def test_download_range_request(self, client, auth_headers, uploaded_file):
-        r = client.get(
-            f"/api/v1/download/{uploaded_file['fileId']}",
-            headers={**auth_headers, "Range": "bytes=0-10"},
-        )
-        # May be 206 or 200 depending on file size and implementation
-        assert r.status_code in (200, 206)

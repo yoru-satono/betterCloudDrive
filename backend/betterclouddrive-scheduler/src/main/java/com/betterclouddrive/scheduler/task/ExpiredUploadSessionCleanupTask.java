@@ -1,9 +1,8 @@
 package com.betterclouddrive.scheduler.task;
 
 import com.betterclouddrive.dal.entity.UploadSessionEntity;
-import com.betterclouddrive.dal.mapper.UploadSessionMapper;
+import com.betterclouddrive.dal.repository.UploadSessionRepository;
 import com.betterclouddrive.storage.StorageService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,7 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ExpiredUploadSessionCleanupTask {
 
-    private final UploadSessionMapper uploadSessionMapper;
+    private final UploadSessionRepository uploadSessionRepository;
     private final StorageService storageService;
     private final StringRedisTemplate redisTemplate;
 
@@ -31,10 +30,7 @@ public class ExpiredUploadSessionCleanupTask {
     @Transactional
     public void cleanupExpiredUploadSessions() {
         LocalDateTime cutoff = LocalDateTime.now().minusHours(expireHours);
-        List<UploadSessionEntity> expired = uploadSessionMapper.selectList(
-                new LambdaQueryWrapper<UploadSessionEntity>()
-                        .eq(UploadSessionEntity::getStatus, 1) // uploading
-                        .le(UploadSessionEntity::getCreatedAt, cutoff));
+        List<UploadSessionEntity> expired = uploadSessionRepository.findByStatusAndCreatedAtLessThanEqual(1, cutoff);
 
         if (expired.isEmpty()) {
             return;
@@ -42,14 +38,11 @@ public class ExpiredUploadSessionCleanupTask {
 
         for (UploadSessionEntity session : expired) {
             try {
-                // Delete uploaded chunk parts from storage
                 String chunkPrefix = "uploads/" + session.getUserId() + "/" + session.getId() + "/chunks";
                 storageService.deleteParts(chunkPrefix, session.getTotalChunks());
-                // Cleanup Redis bitmap
                 redisTemplate.delete("upload:bitmap:" + session.getId());
-                // Mark as expired
                 session.setStatus(3);
-                uploadSessionMapper.updateById(session);
+                uploadSessionRepository.save(session);
             } catch (Exception e) {
                 log.warn("Failed to cleanup upload session: {}", session.getId(), e);
             }

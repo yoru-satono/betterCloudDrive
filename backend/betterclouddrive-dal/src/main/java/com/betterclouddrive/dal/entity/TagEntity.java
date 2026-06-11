@@ -1,8 +1,6 @@
 package com.betterclouddrive.dal.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,18 +12,24 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("tags")
+@Entity
+@Table(name = "tags")
 public class TagEntity {
 
-    @TableId(type = IdType.AUTO)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "tag_name")
     private String tagName;
 
+    @Column(name = "color")
     @Builder.Default
     private String color = "#1890ff";
 
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 }

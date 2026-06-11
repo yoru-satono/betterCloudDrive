@@ -3,7 +3,7 @@ package com.betterclouddrive.web.controller;
 import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.entity.UserTokenEntity;
-import com.betterclouddrive.dal.mapper.UserTokenMapper;
+import com.betterclouddrive.dal.repository.UserTokenRepository;
 import com.betterclouddrive.service.AuthService;
 import com.betterclouddrive.web.dto.request.ForgotPasswordRequest;
 import com.betterclouddrive.web.dto.request.LoginRequest;
@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Map;
-import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 @RestController
@@ -33,7 +32,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
-    private final UserTokenMapper userTokenMapper;
+    private final UserTokenRepository userTokenRepository;
     private final StringRedisTemplate redisTemplate;
 
     @PostMapping("/register")
@@ -54,20 +53,19 @@ public class AuthController {
         Claims accessClaims = jwtTokenProvider.validateAccessToken(accessToken);
         Claims refreshClaims = jwtTokenProvider.validateRefreshToken(refreshToken);
 
-        // Save tokens to DB
         UserTokenEntity accessTokenEntity = UserTokenEntity.builder()
                 .userId(userId).jti(accessClaims.getId()).tokenType("access")
                 .issuedAt(LocalDateTime.now())
                 .expiresAt(LocalDateTime.ofInstant(accessClaims.getExpiration().toInstant(), ZoneId.systemDefault()))
                 .build();
-        userTokenMapper.insert(accessTokenEntity);
+        userTokenRepository.save(accessTokenEntity);
 
         UserTokenEntity refreshTokenEntity = UserTokenEntity.builder()
                 .userId(userId).jti(refreshClaims.getId()).tokenType("refresh")
                 .issuedAt(LocalDateTime.now())
                 .expiresAt(LocalDateTime.ofInstant(refreshClaims.getExpiration().toInstant(), ZoneId.systemDefault()))
                 .build();
-        userTokenMapper.insert(refreshTokenEntity);
+        userTokenRepository.save(refreshTokenEntity);
 
         return ApiResponse.success(Map.of(
                 "accessToken", accessToken,
@@ -82,8 +80,7 @@ public class AuthController {
         String jti = claims.getId();
         Long userId = Long.parseLong(claims.getSubject());
 
-        // Blacklist old refresh token
-        UserTokenEntity oldToken = userTokenMapper.selectByJti(jti);
+        UserTokenEntity oldToken = userTokenRepository.findByJti(jti).orElse(null);
         if (oldToken != null) {
             long remainingMs = oldToken.getExpiresAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                     - System.currentTimeMillis();
@@ -91,14 +88,12 @@ public class AuthController {
                 redisTemplate.opsForValue().set("token:blacklist:" + jti, "1", remainingMs, TimeUnit.MILLISECONDS);
             }
             oldToken.setIsRevoked(true);
-            userTokenMapper.updateById(oldToken);
+            userTokenRepository.save(oldToken);
         }
 
-        // Re-read current role from DB (role changes take effect on next refresh)
         UserEntity currentUser = authService.getCurrentUser(userId);
         String currentRole = currentUser.getRole() != null ? currentUser.getRole() : "ROLE_USER";
 
-        // Issue new tokens
         String newAccessToken = jwtTokenProvider.createAccessToken(userId,
                 claims.get("username", String.class), currentRole);
         String newRefreshToken = jwtTokenProvider.createRefreshToken(userId);

@@ -1,11 +1,13 @@
 package com.betterclouddrive.web.config;
 
-import com.betterclouddrive.dal.mapper.UserTokenMapper;
+import com.betterclouddrive.dal.repository.UserTokenRepository;
+import com.betterclouddrive.web.security.BasicAuthFilter;
 import com.betterclouddrive.web.security.JwtAuthenticationFilter;
 import com.betterclouddrive.web.security.JwtTokenProvider;
 import com.betterclouddrive.web.security.RateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -16,6 +18,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.security.web.firewall.StrictHttpFirewall;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -28,10 +32,22 @@ import java.util.List;
 public class SecurityConfig {
 
     @Bean
+    @Order(1)
+    public SecurityFilterChain webDavFilterChain(HttpSecurity http, BasicAuthFilter basicAuthFilter) throws Exception {
+        http
+            .securityMatcher("/webdav/**")
+            .csrf(AbstractHttpConfigurer::disable)
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+            .addFilterBefore(basicAuthFilter, UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+    @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                                             StringRedisTemplate redisTemplate,
-                                                            UserTokenMapper userTokenMapper) {
-        return new JwtAuthenticationFilter(jwtTokenProvider, redisTemplate, userTokenMapper);
+                                                            UserTokenRepository userTokenRepository) {
+        return new JwtAuthenticationFilter(jwtTokenProvider, redisTemplate, userTokenRepository);
     }
 
     @Bean
@@ -60,6 +76,16 @@ public class SecurityConfig {
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        StrictHttpFirewall firewall = new StrictHttpFirewall();
+        firewall.setAllowedHttpMethods(List.of(
+                "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE",
+                "PROPFIND", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK"
+        ));
+        return (web) -> web.httpFirewall(firewall);
     }
 
     @Bean

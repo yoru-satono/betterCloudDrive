@@ -1,5 +1,6 @@
 """Tests for /api/v1/files/{fileId}/versions endpoints."""
 
+import pytest
 from tests.helpers.assert_helper import assert_api_ok, assert_api_error
 
 
@@ -32,3 +33,25 @@ class TestFileVersions:
             f"/api/v1/files/{uploaded_file['fileId']}/versions/999", headers=auth_headers
         )
         assert r.json()["code"] != 200
+
+    def test_delete_version_success(self, client, auth_headers, uploaded_file):
+        """Delete a non-latest version; requires >=2 versions (skipped otherwise)."""
+        versions = assert_api_ok(
+            client.get(f"/api/v1/files/{uploaded_file['fileId']}/versions", headers=auth_headers)
+        )
+        if len(versions) < 2:
+            pytest.skip("File has fewer than 2 versions — version creation not tested here")
+
+        # Delete the oldest version (last in list, sorted newest-first)
+        oldest_vnum = versions[-1]["versionNumber"]
+        r = client.delete(
+            f"/api/v1/files/{uploaded_file['fileId']}/versions/{oldest_vnum}",
+            headers=auth_headers,
+        )
+        assert_api_ok(r)
+
+        # Verify version count decreased
+        updated = assert_api_ok(
+            client.get(f"/api/v1/files/{uploaded_file['fileId']}/versions", headers=auth_headers)
+        )
+        assert len(updated) == len(versions) - 1

@@ -95,6 +95,23 @@ class TestCopy:
         }, headers=auth_headers)
         assert_api_ok(r)
 
+    def test_copy_preserves_content(self, client, auth_headers, uploaded_file, created_folder, sample_file):
+        assert_api_ok(client.post(f"/api/v1/files/{uploaded_file['fileId']}/copy", json={
+            "targetParentId": created_folder["id"]
+        }, headers=auth_headers))
+
+        # copyFile returns Void — find the copy by listing the folder
+        files = assert_paginated(client.get(
+            f"/api/v1/files?parentId={created_folder['id']}&sortBy=createdAt&order=desc",
+            headers=auth_headers,
+        ))
+        copy_id = files["records"][0]["id"]
+
+        original_bytes = sample_file.read_bytes()
+        dl = client.get(f"/api/v1/download/{copy_id}", headers=auth_headers)
+        assert dl.status_code == 200
+        assert dl.content == original_bytes
+
 
 class TestDelete:
     def test_batch_delete(self, client, auth_headers, created_folder):

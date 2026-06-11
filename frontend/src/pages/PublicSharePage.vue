@@ -1,66 +1,136 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import OButton from '@/components/base/OButton.vue'
+import OInput from '@/components/base/OInput.vue'
+import OSpinner from '@/components/base/OSpinner.vue'
+import FileIcon from '@/components/file/FileIcon.vue'
+import { useFormatters } from '@/composables/useFormatters'
+import * as sharesApi from '@/api/shares'
+import type { FileEntity } from '@/types/file'
+import type { ShareLinkEntity } from '@/types/share'
+
+const route = useRoute()
+const { formatSize, formatDate } = useFormatters()
+
+const loading = ref(true)
+const file = ref<FileEntity | null>(null)
+const share = ref<ShareLinkEntity | null>(null)
+const error = ref('')
+const needPassword = ref(false)
+const password = ref('')
+const downloading = ref(false)
+
+async function load(pw?: string) {
+  try {
+    const { data } = await sharesApi.accessShare(route.params.shareCode as string, pw)
+    file.value = data.data.file
+    share.value = data.data.share
+    needPassword.value = false
+    error.value = ''
+  } catch (e: unknown) {
+    const status = (e as { response?: { status?: number } }).response?.status
+    if (status === 403) { needPassword.value = true }
+    else if (status === 404) { error.value = '分享链接不存在或已过期' }
+    else { error.value = '加载失败' }
+  } finally { loading.value = false }
+}
+
+async function submitPassword() {
+  loading.value = true
+  await load(password.value)
+}
+
+async function download() {
+  if (!file.value) return
+  downloading.value = true
+  try {
+    const { data } = await sharesApi.getShareDownloadUrl(route.params.shareCode as string, password.value || undefined)
+    const a = document.createElement('a')
+    a.href = data.data.url; a.download = data.data.fileName
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  } finally { downloading.value = false }
+}
+
+onMounted(() => load())
+</script>
+
 <template>
-  <div class="animate-fade-in">
-    <h2 class="page-title">分享文件</h2>
-    <p class="page-sub" v-if="!unlocked">输入密码访问此分享</p>
-    <div v-if="!unlocked && needPassword" class="form">
-      <input v-model="pwd" type="password" class="input" placeholder="输入分享密码" @keyup.enter="accessShare" />
-      <button class="btn btn-primary btn-full" @click="accessShare" style="margin-top:12px">访问</button>
-      <p v-if="err" class="error-msg">{{ err }}</p>
-    </div>
-    <div v-if="!unlocked && !needPassword">
-      <p>加载中...</p>
-    </div>
-    <div v-if="unlocked && file" class="card">
-      <div class="file-icon-lg" style="text-align:center;margin-bottom:16px">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="var(--accent)" opacity="0.15" stroke="var(--accent)" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+  <div class="share-page">
+    <div class="share-page__card">
+      <!-- Brand -->
+      <div class="share-page__brand">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+          <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+        BetterDrive
       </div>
-      <h3 style="text-align:center">{{ file.fileName }}</h3>
-      <p class="text-muted text-center" style="margin-top:4px">{{ formatSize(file.fileSize) }} · {{ file.fileType }}</p>
-      <div style="text-align:center;margin-top:20px">
-        <a :href="`/api/v1/download/${file.fileId}`" class="btn btn-primary" target="_blank">下载文件</a>
+
+      <div v-if="loading" class="share-page__loading"><OSpinner /></div>
+
+      <div v-else-if="error" class="share-page__error">
+        <p>{{ error }}</p>
+        <RouterLink to="/login">登录云盘</RouterLink>
       </div>
-      <div v-if="files.length > 0" style="margin-top:24px">
-        <h4 style="margin-bottom:12px">文件夹内容</h4>
-        <div v-for="f in files" :key="f.id" class="file-row">
-          <span class="col-name truncate">{{ f.fileName }}</span>
-          <span class="col-size text-mono text-muted">{{ formatSize(f.fileSize) }}</span>
+
+      <template v-else-if="needPassword">
+        <div class="share-page__title">此分享需要密码</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+          <OInput v-model="password" label="访问密码" type="password" placeholder="输入密码" @keyup.enter="submitPassword" />
+          <OButton variant="primary" :loading="loading" style="justify-content:center" @click="submitPassword">确认</OButton>
         </div>
-      </div>
+      </template>
+
+      <template v-else-if="file">
+        <div class="share-page__file">
+          <div class="share-page__file-icon">
+            <FileIcon :mime-type="file.mimeType" :file-type="file.fileType" :size="32" />
+          </div>
+          <div class="share-page__file-name">{{ file.fileName }}</div>
+          <div class="share-page__file-meta">
+            <span class="font-mono">{{ file.fileType === 'folder' ? '文件夹' : formatSize(file.fileSize) }}</span>
+            <span class="text-muted">· {{ formatDate(file.updatedAt) }}</span>
+          </div>
+          <OButton
+            v-if="file.fileType !== 'folder'"
+            variant="primary"
+            :loading="downloading"
+            style="margin-top:20px;justify-content:center"
+            @click="download"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            下载文件
+          </OButton>
+        </div>
+      </template>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import api from '@/api/client'
-const route = useRoute()
-const shareCode = route.params.shareCode as string
-const unlocked = ref(false); const file = ref<any>(null); const files = ref<any[]>([])
-const needPassword = ref(false); const pwd = ref(''); const err = ref('')
-async function accessShare(p?: string) {
-  try {
-    const body = p ? { password: p } : (needPassword.value ? { password: pwd.value } : {})
-    const { data } = await api.post(`/shares/access/${shareCode}`, body)
-    file.value = data.data; unlocked.value = true
-    const fres = await api.get(`/shares/access/${shareCode}/files`)
-    files.value = fres.data.data.records
-  } catch (e: any) {
-    if (e.response?.data?.code === 419003) { needPassword.value = true; err.value = '密码错误' }
-    else err.value = e.response?.data?.message || '访问失败'
-  }
-}
-function formatSize(b: number) { if (!b) return '0 B'; if (b < 1048576) return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(1)+' MB' }
-onMounted(() => accessShare())
-</script>
 <style scoped>
-.page-title { text-align: center; font-size: 24px; }
-.page-sub { text-align: center; color: var(--text-secondary); margin-top: 6px; margin-bottom: 24px; }
-.form { display: flex; flex-direction: column; }
-.btn-full { width: 100%; justify-content: center; padding: 12px; }
-.error-msg { color: var(--red); font-size: 13px; text-align: center; margin-top: 12px; }
-.text-center { text-align: center; }
-.file-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
-.col-name { flex: 1; }
-.col-size { width: 90px; text-align: right; }
+.share-page {
+  min-height: 100vh; background: var(--bg-base);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.share-page__card {
+  width: 100%; max-width: 400px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 14px; padding: 28px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+.share-page__brand {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600; color: var(--text-secondary);
+  margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
+}
+.share-page__loading { display: flex; justify-content: center; padding: 30px; }
+.share-page__error { text-align: center; color: var(--danger); padding: 20px; }
+.share-page__title { font-size: 16px; font-weight: 600; }
+.share-page__file { display: flex; flex-direction: column; align-items: center; padding: 10px 0; }
+.share-page__file-icon { margin-bottom: 16px; }
+.share-page__file-name { font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 8px; word-break: break-all; }
+.share-page__file-meta { font-size: 13px; color: var(--text-secondary); display: flex; gap: 8px; }
 </style>

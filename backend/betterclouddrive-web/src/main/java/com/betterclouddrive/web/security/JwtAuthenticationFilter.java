@@ -1,8 +1,6 @@
 package com.betterclouddrive.web.security;
 
-import com.betterclouddrive.common.constant.ApiCode;
-import com.betterclouddrive.dal.entity.UserTokenEntity;
-import com.betterclouddrive.dal.mapper.UserTokenMapper;
+import com.betterclouddrive.dal.repository.UserTokenRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.FilterChain;
@@ -25,14 +23,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final StringRedisTemplate redisTemplate;
-    private final UserTokenMapper userTokenMapper;
+    private final UserTokenRepository userTokenRepository;
 
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                     StringRedisTemplate redisTemplate,
-                                    UserTokenMapper userTokenMapper) {
+                                    UserTokenRepository userTokenRepository) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.redisTemplate = redisTemplate;
-        this.userTokenMapper = userTokenMapper;
+        this.userTokenRepository = userTokenRepository;
     }
 
     @Override

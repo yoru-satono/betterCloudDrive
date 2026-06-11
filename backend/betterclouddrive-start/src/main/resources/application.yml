@@ -54,6 +54,10 @@ spring:
     baseline-on-migrate: true
     schemas: public
 
+  # Dispatch OPTIONS/custom methods to controllers (needed for WebDAV)
+  mvc:
+    dispatch-options-request: true
+
   # Multipart upload
   servlet:
     multipart:
@@ -65,18 +69,17 @@ spring:
     init:
       mode: never
 
-# MyBatis-Plus
-mybatis-plus:
-  type-aliases-package: com.betterclouddrive.dal.entity
-  global-config:
-    db-config:
-      id-type: auto
-      logic-delete-field: isDeleted
-      logic-delete-value: true
-      logic-not-delete-value: false
-  configuration:
-    map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  # Spring Data JPA
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        default_schema: public
 
 # Storage (SeaweedFS S3)
 storage:

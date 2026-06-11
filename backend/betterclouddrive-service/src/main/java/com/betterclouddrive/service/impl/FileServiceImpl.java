@@ -4,17 +4,21 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
-import com.betterclouddrive.dal.mapper.FileMapper;
+import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.service.FileService;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -22,28 +26,34 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FileServiceImpl implements FileService {
 
-    private final FileMapper fileMapper;
+    private final FileRepository fileRepository;
     private final StringRedisTemplate redisTemplate;
 
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
 
     @Override
     public PageResult<FileEntity> listFiles(Long userId, Long parentId, int page, int size, String sortBy, String order) {
-        LambdaQueryWrapper<FileEntity> wrapper = new LambdaQueryWrapper<FileEntity>()
-                .eq(FileEntity::getUserId, userId)
-                .eq(parentId != null, FileEntity::getParentId, parentId)
-                .isNull(parentId == null, FileEntity::getParentId)
-                .eq(FileEntity::getIsDeleted, false)
-                .orderByAsc(FileEntity::getFileType)
-                .orderByAsc(FileEntity::getFileName);
+        Specification<FileEntity> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("userId"), userId));
+            if (parentId != null) {
+                predicates.add(cb.equal(root.get("parentId"), parentId));
+            } else {
+                predicates.add(cb.isNull(root.get("parentId")));
+            }
+            predicates.add(cb.equal(root.get("isDeleted"), false));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
 
-        Page<FileEntity> result = fileMapper.selectPage(new Page<>(page, size), wrapper);
-        return PageResult.of(result.getRecords(), result.getTotal(), page, size);
+        PageRequest pageable = PageRequest.of(page - 1, size,
+                Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()));
+        Page<FileEntity> result = fileRepository.findAll(spec, pageable);
+        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
     }
 
     @Override
     public FileEntity getFile(Long userId, Long fileId) {
-        FileEntity file = fileMapper.selectById(fileId);
+        FileEntity file = fileRepository.findById(fileId).orElse(null);
         if (file == null || !file.getUserId().equals(userId) || file.getIsDeleted()) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
@@ -53,15 +63,21 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileEntity createFolder(Long userId, Long parentId, String folderName) {
-        // Check for name conflict
-        Long count = fileMapper.selectCount(new LambdaQueryWrapper<FileEntity>()
-                .eq(FileEntity::getUserId, userId)
-                .eq(parentId != null, FileEntity::getParentId, parentId)
-                .isNull(parentId == null, FileEntity::getParentId)
-                .eq(FileEntity::getFileName, folderName)
-                .eq(FileEntity::getFileType, "folder")
-                .eq(FileEntity::getIsDeleted, false));
-        if (count > 0) {
+        Specification<FileEntity> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("userId"), userId));
+            if (parentId != null) {
+                predicates.add(cb.equal(root.get("parentId"), parentId));
+            } else {
+                predicates.add(cb.isNull(root.get("parentId")));
+            }
+            predicates.add(cb.equal(root.get("fileName"), folderName));
+            predicates.add(cb.equal(root.get("fileType"), "folder"));
+            predicates.add(cb.equal(root.get("isDeleted"), false));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+
+        if (fileRepository.count(spec) > 0) {
             throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
         }
 
@@ -76,8 +92,7 @@ public class FileServiceImpl implements FileService {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        fileMapper.insert(folder);
-        return folder;
+        return fileRepository.save(folder);
     }
 
     @Override
@@ -86,8 +101,7 @@ public class FileServiceImpl implements FileService {
         FileEntity file = getFile(userId, fileId);
         file.setFileName(newName);
         file.setUpdatedAt(LocalDateTime.now());
-        fileMapper.updateById(file);
-        return file;
+        return fileRepository.save(file);
     }
 
     @Override
@@ -96,7 +110,7 @@ public class FileServiceImpl implements FileService {
         FileEntity file = getFile(userId, fileId);
         file.setParentId(targetParentId);
         file.setUpdatedAt(LocalDateTime.now());
-        fileMapper.updateById(file);
+        fileRepository.save(file);
     }
 
     @Override
@@ -117,7 +131,7 @@ public class FileServiceImpl implements FileService {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        fileMapper.insert(copy);
+        fileRepository.save(copy);
     }
 
     @Override
@@ -127,8 +141,7 @@ public class FileServiceImpl implements FileService {
             FileEntity file = getFile(userId, fileId);
             file.setIsDeleted(true);
             file.setDeletedAt(LocalDateTime.now());
-            fileMapper.updateById(file);
-            // Decrement storage used (only files, not folders)
+            fileRepository.save(file);
             if ("file".equals(file.getFileType()) && file.getFileSize() > 0) {
                 redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, -file.getFileSize());
             }
@@ -138,59 +151,59 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void restoreFile(Long userId, Long fileId) {
-        FileEntity file = fileMapper.selectById(fileId);
+        FileEntity file = fileRepository.findById(fileId).orElse(null);
         if (file == null || !file.getUserId().equals(userId) || !file.getIsDeleted()) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         file.setIsDeleted(false);
         file.setDeletedAt(null);
-        fileMapper.updateById(file);
+        fileRepository.save(file);
     }
 
     @Override
     public PageResult<FileEntity> listRecycleBin(Long userId, int page, int size) {
-        LambdaQueryWrapper<FileEntity> wrapper = new LambdaQueryWrapper<FileEntity>()
-                .eq(FileEntity::getUserId, userId)
-                .eq(FileEntity::getIsDeleted, true)
-                .orderByDesc(FileEntity::getDeletedAt);
-        Page<FileEntity> result = fileMapper.selectPage(new Page<>(page, size), wrapper);
-        return PageResult.of(result.getRecords(), result.getTotal(), page, size);
+        Specification<FileEntity> spec = (root, query, cb) -> cb.and(
+                cb.equal(root.get("userId"), userId),
+                cb.equal(root.get("isDeleted"), true)
+        );
+        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "deletedAt"));
+        Page<FileEntity> result = fileRepository.findAll(spec, pageable);
+        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
     }
 
     @Override
     @Transactional
     public void permanentDelete(Long userId, Long fileId) {
-        FileEntity file = fileMapper.selectById(fileId);
+        FileEntity file = fileRepository.findById(fileId).orElse(null);
         if (file == null || !file.getUserId().equals(userId) || !file.getIsDeleted()) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
-        fileMapper.deleteById(fileId);
+        fileRepository.deleteById(fileId);
     }
 
     @Override
     @Transactional
     public void emptyRecycleBin(Long userId) {
-        LambdaQueryWrapper<FileEntity> wrapper = new LambdaQueryWrapper<FileEntity>()
-                .eq(FileEntity::getUserId, userId)
-                .eq(FileEntity::getIsDeleted, true);
-        fileMapper.delete(wrapper);
+        List<FileEntity> deleted = fileRepository.findByUserIdAndIsDeletedTrue(userId);
+        fileRepository.deleteAll(deleted);
     }
 
     @Override
     public PageResult<FileEntity> searchFiles(Long userId, String keyword, int page, int size) {
-        LambdaQueryWrapper<FileEntity> wrapper = new LambdaQueryWrapper<FileEntity>()
-                .eq(FileEntity::getUserId, userId)
-                .eq(FileEntity::getIsDeleted, false)
-                .like(FileEntity::getFileName, keyword)
-                .orderByAsc(FileEntity::getFileType)
-                .orderByAsc(FileEntity::getFileName);
-        Page<FileEntity> result = fileMapper.selectPage(new Page<>(page, size), wrapper);
-        return PageResult.of(result.getRecords(), result.getTotal(), page, size);
+        Specification<FileEntity> spec = (root, query, cb) -> cb.and(
+                cb.equal(root.get("userId"), userId),
+                cb.equal(root.get("isDeleted"), false),
+                cb.like(cb.lower(root.get("fileName")), "%" + keyword.toLowerCase() + "%")
+        );
+        PageRequest pageable = PageRequest.of(page - 1, size,
+                Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()));
+        Page<FileEntity> result = fileRepository.findAll(spec, pageable);
+        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
     }
 
     @Override
     public FileEntity adminGetFile(Long fileId) {
-        FileEntity file = fileMapper.selectById(fileId);
+        FileEntity file = fileRepository.findById(fileId).orElse(null);
         if (file == null || file.getIsDeleted()) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
@@ -203,6 +216,27 @@ public class FileServiceImpl implements FileService {
         FileEntity file = adminGetFile(fileId);
         file.setIsDeleted(true);
         file.setDeletedAt(LocalDateTime.now());
-        fileMapper.updateById(file);
+        fileRepository.save(file);
+    }
+
+    @Override
+    @Transactional
+    public FileEntity copyFileTo(Long userId, Long fileId, Long targetParentId, String targetFileName) {
+        FileEntity source = getFile(userId, fileId);
+        FileEntity copy = FileEntity.builder()
+                .userId(userId)
+                .parentId(targetParentId)
+                .fileName(targetFileName)
+                .fileType(source.getFileType())
+                .mimeType(source.getMimeType())
+                .fileSize(source.getFileSize())
+                .storagePath(source.getStoragePath())
+                .md5Hash(source.getMd5Hash())
+                .isDeleted(false)
+                .versionCount(1)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        return fileRepository.save(copy);
     }
 }

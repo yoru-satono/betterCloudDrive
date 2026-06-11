@@ -1,8 +1,6 @@
 package com.betterclouddrive.dal.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,34 +12,47 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("share_links")
+@Entity
+@Table(name = "share_links")
 public class ShareLinkEntity {
 
-    @TableId(type = IdType.AUTO)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "file_id")
     private Long fileId;
 
+    @Column(name = "share_code")
     private String shareCode;
 
+    @Column(name = "password_hash")
     private String passwordHash;
 
+    @Column(name = "expire_at")
     private LocalDateTime expireAt;
 
+    @Column(name = "max_downloads")
     private Integer maxDownloads;
 
+    @Column(name = "download_count")
     @Builder.Default
     private Integer downloadCount = 0;
 
+    @Column(name = "visit_count")
     @Builder.Default
     private Integer visitCount = 0;
 
+    @Column(name = "is_canceled")
     @Builder.Default
     private Boolean isCanceled = false;
 
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 }

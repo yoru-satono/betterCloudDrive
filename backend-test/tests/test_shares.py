@@ -156,6 +156,18 @@ class TestListSharedFiles:
         assert_api_error(r, 419002)
 
 
+class TestDownloadLimit:
+    def test_share_download_limit_exceeded(self, client, auth_headers, uploaded_file):
+        """maxDownloads=0 means zero downloads are permitted — any access returns 419005."""
+        r = client.post("/api/v1/shares", json={
+            "fileId": uploaded_file["fileId"], "maxDownloads": 0
+        }, headers=auth_headers)
+        code = r.json()["data"]["shareCode"]
+
+        r2 = client.post(f"/api/v1/shares/access/{code}")
+        assert_api_error(r2, 419005)
+
+
 class TestShareNotification:
     def test_create_share_with_notify_email(self, client, auth_headers, uploaded_file):
         r = client.post("/api/v1/shares", json={

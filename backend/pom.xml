@@ -15,7 +15,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.0</version>
+        <version>4.0.6</version>
         <relativePath/>
     </parent>
 
@@ -31,14 +31,9 @@
 
     <properties>
         <java.version>25</java.version>
-        <spring-boot.version>4.0.0</spring-boot.version>
-        <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <minio-sdk.version>8.5.12</minio-sdk.version>
-        <jjwt.version>0.12.5</jjwt.version>
-        <flyway.version>10.11.1</flyway.version>
-        <postgresql.version>42.7.3</postgresql.version>
+        <jjwt.version>0.12.6</jjwt.version>
         <hutool.version>5.8.27</hutool.version>
-        <lombok.version>1.18.46</lombok.version>
     </properties>
 
     <dependencyManagement>
@@ -75,20 +70,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- MyBatis-Plus -->
-            <dependency>
-                <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
-                <version>${mybatis-plus.version}</version>
-            </dependency>
-
-            <!-- PostgreSQL -->
-            <dependency>
-                <groupId>org.postgresql</groupId>
-                <artifactId>postgresql</artifactId>
-                <version>${postgresql.version}</version>
-            </dependency>
-
             <!-- MinIO SDK (S3 compatible) -->
             <dependency>
                 <groupId>io.minio</groupId>
@@ -116,25 +97,11 @@
             </dependency>
 
 
-            <!-- Flyway PostgreSQL -->
-            <dependency>
-                <groupId>org.flywaydb</groupId>
-                <artifactId>flyway-database-postgresql</artifactId>
-                <version>${flyway.version}</version>
-            </dependency>
-
             <!-- Hutool -->
             <dependency>
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
                 <version>${hutool.version}</version>
-            </dependency>
-
-            <!-- Lombok -->
-            <dependency>
-                <groupId>org.projectlombok</groupId>
-                <artifactId>lombok</artifactId>
-                <version>${lombok.version}</version>
             </dependency>
 
         </dependencies>
@@ -155,7 +122,6 @@
                             <path>
                                 <groupId>org.projectlombok</groupId>
                                 <artifactId>lombok</artifactId>
-                                <version>${lombok.version}</version>
                             </path>
                         </annotationProcessorPaths>
                     </configuration>

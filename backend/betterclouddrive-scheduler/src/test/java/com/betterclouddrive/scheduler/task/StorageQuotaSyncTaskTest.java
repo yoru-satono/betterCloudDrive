@@ -1,6 +1,6 @@
 package com.betterclouddrive.scheduler.task;
 
-import com.betterclouddrive.dal.mapper.UserMapper;
+import com.betterclouddrive.dal.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,7 +16,7 @@ import static org.mockito.ArgumentMatchers.*;
 class StorageQuotaSyncTaskTest {
 
     @Mock private StringRedisTemplate redisTemplate;
-    @Mock private UserMapper userMapper;
+    @Mock private UserRepository userRepository;
     @Mock private ValueOperations<String, String> valueOps;
     @InjectMocks private StorageQuotaSyncTask task;
 
@@ -30,8 +30,8 @@ class StorageQuotaSyncTaskTest {
 
         task.syncStorageQuota();
 
-        verify(userMapper).updateStorageUsed(1L, 1024L);
-        verify(userMapper).updateStorageUsed(2L, -512L);
+        verify(userRepository).updateStorageUsed(1L, 1024L);
+        verify(userRepository).updateStorageUsed(2L, -512L);
         verify(redisTemplate).delete("storage:incr:1");
         verify(redisTemplate).delete("storage:incr:2");
     }
@@ -42,7 +42,7 @@ class StorageQuotaSyncTaskTest {
 
         task.syncStorageQuota();
 
-        verify(userMapper, never()).updateStorageUsed(anyLong(), anyLong());
+        verify(userRepository, never()).updateStorageUsed(anyLong(), anyLong());
         verify(redisTemplate, never()).delete(anyString());
     }
 
@@ -52,7 +52,7 @@ class StorageQuotaSyncTaskTest {
 
         task.syncStorageQuota();
 
-        verify(userMapper, never()).updateStorageUsed(anyLong(), anyLong());
+        verify(userRepository, never()).updateStorageUsed(anyLong(), anyLong());
     }
 
     @Test
@@ -63,7 +63,7 @@ class StorageQuotaSyncTaskTest {
 
         task.syncStorageQuota();
 
-        verify(userMapper, never()).updateStorageUsed(anyLong(), anyLong());
+        verify(userRepository, never()).updateStorageUsed(anyLong(), anyLong());
         verify(redisTemplate).delete("storage:incr:1");
     }
 
@@ -73,6 +73,6 @@ class StorageQuotaSyncTaskTest {
         // Parsing "abc" will fail, but task should catch the error and continue
         task.syncStorageQuota();
         // No exception should propagate
-        verify(userMapper, never()).updateStorageUsed(anyLong(), anyLong());
+        verify(userRepository, never()).updateStorageUsed(anyLong(), anyLong());
     }
 }

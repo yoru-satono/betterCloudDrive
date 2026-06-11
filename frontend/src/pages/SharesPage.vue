@@ -1,73 +1,96 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import OButton from '@/components/base/OButton.vue'
+import OEmptyState from '@/components/base/OEmptyState.vue'
+import OSpinner from '@/components/base/OSpinner.vue'
+import OBadge from '@/components/base/OBadge.vue'
+import { useFormatters } from '@/composables/useFormatters'
+import { useConfirm } from '@/composables/useConfirm'
+import * as sharesApi from '@/api/shares'
+import { toast } from 'vue-sonner'
+import type { ShareLinkEntity } from '@/types/share'
+
+const { formatDate, formatDateFull } = useFormatters()
+const { confirm } = useConfirm()
+const shares = ref<ShareLinkEntity[]>([])
+const loading = ref(false)
+
+async function load() {
+  loading.value = true
+  try {
+    const { data } = await sharesApi.listShares(1, 100)
+    shares.value = data.data.records
+  } finally { loading.value = false }
+}
+
+async function copyLink(share: ShareLinkEntity) {
+  await navigator.clipboard.writeText(share.shareUrl)
+  toast.success('链接已复制')
+}
+
+async function deleteShare(share: ShareLinkEntity) {
+  const ok = await confirm('取消分享', '取消后分享链接将立即失效。')
+  if (!ok) return
+  await sharesApi.deleteShare(share.id)
+  toast.success('分享已取消')
+  load()
+}
+
+function isExpired(share: ShareLinkEntity) {
+  return share.expiresAt && new Date(share.expiresAt) < new Date()
+}
+
+onMounted(load)
+</script>
+
 <template>
-  <div class="animate-fade-in">
+  <div class="page-enter">
     <div class="page-header">
-      <h2>我的分享</h2>
-      <button class="btn btn-primary btn-sm" @click="showCreate = true">创建分享</button>
+      <div>
+        <h2>我的分享</h2>
+        <p class="text-muted" style="font-size:12px;margin-top:2px">{{ shares.length }} 个分享链接</p>
+      </div>
     </div>
-    <div v-if="shares.length === 0" class="empty-state"><p>暂无分享链接</p></div>
-    <div v-for="s in shares" :key="s.id" class="share-card card">
-      <div class="share-info">
-        <div class="share-code text-mono">{{ s.shareCode }}</div>
-        <div class="share-meta text-muted">
-          {{ s.passwordHash ? '🔒 有密码' : '🌐 公开' }}
-          · 下载 {{ s.downloadCount }}{{ s.maxDownloads ? '/' + s.maxDownloads : '' }}
-          · 访问 {{ s.visitCount }}
+
+    <div v-if="loading" class="page-loading"><OSpinner /></div>
+    <OEmptyState v-else-if="shares.length === 0" title="暂无分享" description="在文件浏览器中右键文件可创建分享链接" />
+    <div v-else class="shares-list">
+      <div v-for="share in shares" :key="share.id" class="share-card">
+        <div class="share-card__main">
+          <div class="share-card__url font-mono truncate">{{ share.shareUrl }}</div>
+          <div class="share-card__meta">
+            <span v-if="share.expiresAt">
+              <span :style="isExpired(share) ? 'color:var(--danger)' : 'color:var(--text-secondary)'">
+                {{ isExpired(share) ? '已过期' : `过期：${formatDateFull(share.expiresAt)}` }}
+              </span>
+            </span>
+            <span v-else class="text-muted">永不过期</span>
+            <span class="text-muted">· 访问 {{ share.visitCount }} 次</span>
+            <span v-if="share.isPasswordProtected" class="share-card__pw">🔒 有密码</span>
+          </div>
         </div>
-        <div class="share-meta text-muted" v-if="s.expireAt">过期：{{ new Date(s.expireAt).toLocaleDateString('zh-CN') }}</div>
-      </div>
-      <div class="share-actions">
-        <button class="btn btn-ghost btn-sm" @click="copyLink(s.shareCode)">复制链接</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" @click="cancelShare(s.id)">取消</button>
-      </div>
-    </div>
-    <!-- Create dialog -->
-    <div v-if="showCreate" class="dialog-overlay" @click.self="showCreate = false">
-      <div class="dialog animate-scale-in">
-        <h3>创建分享</h3>
-        <div class="form-group"><label>文件 ID</label><input v-model="newShare.fileId" type="number" class="input" /></div>
-        <div class="form-group"><label>密码（可选）</label><input v-model="newShare.password" class="input" /></div>
-        <div class="form-group"><label>过期时间（可选，epoch ms）</label><input v-model="newShare.expireAt" type="number" class="input" /></div>
-        <div class="form-group"><label>最大下载次数（可选）</label><input v-model="newShare.maxDownloads" type="number" class="input" /></div>
-        <div class="dialog-actions">
-          <button class="btn btn-ghost btn-sm" @click="showCreate = false">取消</button>
-          <button class="btn btn-primary btn-sm" @click="createShare">创建</button>
+        <div class="share-card__actions">
+          <OButton variant="ghost" size="sm" @click="copyLink(share)">复制链接</OButton>
+          <OButton variant="danger" size="sm" @click="deleteShare(share)">取消分享</OButton>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import api from '@/api/client'
-const shares = ref<any[]>([])
-const showCreate = ref(false)
-const newShare = ref({ fileId: '', password: '', expireAt: '', maxDownloads: '' })
-async function fetch() { const { data } = await api.get('/shares'); shares.value = data.data.records }
-async function createShare() {
-  const body: any = { fileId: Number(newShare.value.fileId) }
-  if (newShare.value.password) body.password = newShare.value.password
-  if (newShare.value.expireAt) body.expireAt = Number(newShare.value.expireAt)
-  if (newShare.value.maxDownloads) body.maxDownloads = Number(newShare.value.maxDownloads)
-  await api.post('/shares', body); showCreate.value = false; fetch()
-}
-async function cancelShare(id: number) { if (confirm('取消分享？')) { await api.delete(`/shares/${id}`); fetch() } }
-function copyLink(code: string) { navigator.clipboard.writeText(`${window.location.origin}/s/${code}`) }
-onMounted(fetch)
-</script>
-
 <style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.share-card { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.share-info { flex: 1; }
-.share-code { font-size: 15px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
-.share-meta { font-size: 12px; }
-.share-actions { display: flex; gap: 8px; }
-.empty-state { padding: 60px 20px; text-align: center; color: var(--text-muted); }
-.dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 200; }
-.dialog { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 24px; width: 400px; max-width: 90vw; display: flex; flex-direction: column; gap: 14px; }
-.dialog h3 { font-size: 16px; }
-.form-group { display: flex; flex-direction: column; gap: 4px; }
-.form-group label { font-size: 11px; text-transform: uppercase; color: var(--text-secondary); }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+.page-loading { display: flex; justify-content: center; padding: 60px; }
+.shares-list { display: flex; flex-direction: column; gap: 8px; }
+.share-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 16px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-elevated); transition: border-color var(--fast);
+}
+.share-card:hover { border-color: var(--border-hover); }
+.share-card__main { flex: 1; min-width: 0; }
+.share-card__url { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
+.share-card__meta { font-size: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.share-card__pw { font-size: 11px; }
+.share-card__actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>

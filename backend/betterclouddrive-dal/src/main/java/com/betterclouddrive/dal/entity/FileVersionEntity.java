@@ -1,8 +1,6 @@
 package com.betterclouddrive.dal.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,23 +12,32 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("file_versions")
+@Entity
+@Table(name = "file_versions")
 public class FileVersionEntity {
 
-    @TableId(type = IdType.AUTO)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "file_id")
     private Long fileId;
 
+    @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "version_number")
     private Integer versionNumber;
 
+    @Column(name = "file_size")
     private Long fileSize;
 
+    @Column(name = "md5_hash")
     private String md5Hash;
 
+    @Column(name = "storage_path")
     private String storagePath;
 
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 }
