@@ -4,6 +4,7 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.service.FileService;
+import com.betterclouddrive.service.FolderZipDownloadService;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
@@ -26,6 +27,7 @@ public class DownloadController {
 
     private final FileService fileService;
     private final StorageService storageService;
+    private final FolderZipDownloadService folderZipDownloadService;
 
     @GetMapping("/api/v1/download/{fileId}")
     public ResponseEntity<StreamingResponseBody> download(
@@ -53,6 +55,22 @@ public class DownloadController {
                         is.transferTo(outputStream);
                     }
                 });
+    }
+
+    @GetMapping("/api/v1/download/folders/{fileId}/zip")
+    public ResponseEntity<StreamingResponseBody> downloadFolderZip(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long fileId) {
+
+        FileEntity folder = fileService.getFile(user.getUserId(), fileId);
+        folderZipDownloadService.validateDownloadable(folder);
+        String zipFileName = folder.getFileName() + ".zip";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + URLEncoder.encode(zipFileName, StandardCharsets.UTF_8) + "\"")
+                .body(outputStream -> folderZipDownloadService.writeZip(folder, outputStream));
     }
 
     @GetMapping("/api/v1/preview/{fileId}")

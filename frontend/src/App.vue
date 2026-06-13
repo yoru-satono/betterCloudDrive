@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import OConfirmDialog from '@/components/base/OConfirmDialog.vue'
 import { Toaster } from 'vue-sonner'
 </script>
 
 <template>
   <RouterView />
+  <OConfirmDialog />
   <Toaster
     position="bottom-right"
     :theme="'dark'"

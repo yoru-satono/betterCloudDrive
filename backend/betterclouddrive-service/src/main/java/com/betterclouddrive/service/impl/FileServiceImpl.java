@@ -184,8 +184,7 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void emptyRecycleBin(Long userId) {
-        List<FileEntity> deleted = fileRepository.findByUserIdAndIsDeletedTrue(userId);
-        fileRepository.deleteAll(deleted);
+        fileRepository.deleteByUserIdAndIsDeletedTrue(userId);
     }
 
     @Override

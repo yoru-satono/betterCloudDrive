@@ -57,6 +57,8 @@
 
 ### 1.1 注册
 
+注册前必须先调用 `POST /api/v1/auth/register-code/send` 向邮箱发送 6 位验证码。
+
 ```
 POST /api/v1/auth/register
 ```
@@ -66,12 +68,12 @@ POST /api/v1/auth/register
 {
   "username": "zhangsan",       // 必填，3-64 字符
   "password": "Pass123456",     // 必填，8-128 字符，必须包含大写字母、小写字母和数字
-  "email": "zhangsan@example.com" // 可选，邮箱格式
+  "email": "zhangsan@example.com", // 必填，邮箱格式
+  "verificationCode": "123456"     // 必填，6 位邮箱验证码
 }
 ```
 
 > **密码复杂度要求**：至少 8 个字符，必须同时包含大写字母（A-Z）、小写字母（a-z）和数字（0-9）。
-```
 
 **Response `200`:**
 ```json
@@ -95,7 +97,26 @@ POST /api/v1/auth/register
 
 ---
 
-### 1.2 登录
+### 1.2 发送注册验证码
+
+```
+POST /api/v1/auth/register-code/send
+```
+
+无需认证。向待注册邮箱发送 6 位数字验证码。验证码有效期 10 分钟。
+
+**Request Body:**
+```json
+{
+  "email": "zhangsan@example.com"
+}
+```
+
+**错误码:** 409（邮箱已存在）、400（邮箱格式错误）
+
+---
+
+### 1.3 登录
 
 ```
 POST /api/v1/auth/login
@@ -135,7 +156,7 @@ POST /api/v1/auth/login
 
 ---
 
-### 1.3 刷新令牌
+### 1.4 刷新令牌
 
 ```
 POST /api/v1/auth/refresh
@@ -165,7 +186,7 @@ POST /api/v1/auth/refresh
 
 ---
 
-### 1.4 登出
+### 1.5 登出
 
 ```
 POST /api/v1/auth/logout
@@ -184,7 +205,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 1.5 获取当前用户信息
+### 1.6 获取当前用户信息
 
 ```
 GET /api/v1/auth/me
@@ -818,7 +839,7 @@ Authorization: Bearer <accessToken>
 除以下公开端点外，所有接口需要在请求头携带 `Authorization: Bearer <accessToken>`：
 
 **公开端点（无需认证）：**
-- `POST /api/v1/auth/register`、`POST /api/v1/auth/login`、`POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/register-code/send`、`POST /api/v1/auth/register`、`POST /api/v1/auth/login`、`POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/forgot-password`、`POST /api/v1/auth/reset-password`
 - `POST /api/v1/shares/access/{shareCode}`、`GET /api/v1/shares/access/{shareCode}/files`
 
@@ -1268,42 +1289,28 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 十三、邮箱验证与密码重置 `/api/v1/auth`
+## 十三、注册验证码与密码重置 `/api/v1/auth`
 
-### 13.1 发送验证码
-
-```
-POST /api/v1/auth/verify-email/send
-Authorization: Bearer <accessToken>
-```
-
-向当前用户的注册邮箱发送 6 位数字验证码。验证码有效期 10 分钟，存储在 Redis 中。用户必须有 email 才能发送。
-
-**错误码:** 419011（无邮箱或已验证）
-
----
-
-### 13.2 确认验证码
+### 13.1 发送注册验证码
 
 ```
-POST /api/v1/auth/verify-email/confirm
-Authorization: Bearer <accessToken>
+POST /api/v1/auth/register-code/send
 ```
+
+无需认证。向待注册邮箱发送 6 位数字验证码。验证码有效期 10 分钟，存储在 Redis 中。
 
 **Request Body:**
 ```json
 {
-  "code": "123456"
+  "email": "zhangsan@example.com"
 }
 ```
 
-成功后用户 `emailVerified` 标记为 `true`。
-
-**错误码:** 419012（验证码过期）、419013（验证码不匹配）
+**错误码:** 409（邮箱已存在）、400（邮箱格式错误）
 
 ---
 
-### 13.3 忘记密码（公开）
+### 13.2 忘记密码（公开）
 
 ```
 POST /api/v1/auth/forgot-password

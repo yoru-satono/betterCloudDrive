@@ -8,13 +8,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.SequenceInputStream;
+import java.util.Enumeration;
+import java.util.NoSuchElementException;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class S3StorageServiceImpl implements StorageService {
+
+    private static final long COMPOSE_UPLOAD_PART_SIZE = 10L * 1024 * 1024;
 
     private final S3StorageProperties props;
     private MinioClient client;
@@ -105,29 +108,60 @@ public class S3StorageServiceImpl implements StorageService {
     @Override
     public void composeParts(String finalObjectKey, String sourcePrefix, int totalParts) {
         try {
-            List<ComposeSource> sources = new ArrayList<>();
-            for (int i = 0; i < totalParts; i++) {
-                String partKey = sourcePrefix + ".part." + (i + 1);
-                sources.add(ComposeSource.builder()
-                        .bucket(props.getBucket())
-                        .object(partKey)
-                        .build());
-            }
-            client.composeObject(
-                ComposeObjectArgs.builder()
-                    .bucket(props.getBucket())
-                    .object(finalObjectKey)
-                    .sources(sources)
-                    .build()
-            );
+            uploadComposedObject(finalObjectKey, sourcePrefix, totalParts);
             // Clean up parts after successful composition
             for (int i = 0; i < totalParts; i++) {
-                deleteObject(sourcePrefix + ".part." + (i + 1));
+                deleteObject(partKey(sourcePrefix, i));
             }
         } catch (Exception e) {
             log.error("Failed to compose parts into: {}", finalObjectKey, e);
             throw new RuntimeException("Composition failed", e);
         }
+    }
+
+    private void uploadComposedObject(String finalObjectKey, String sourcePrefix, int totalParts) throws Exception {
+        try (InputStream stream = new SequenceInputStream(partStreams(sourcePrefix, totalParts))) {
+            client.putObject(
+                PutObjectArgs.builder()
+                    .bucket(props.getBucket())
+                    .object(finalObjectKey)
+                    .stream(stream, -1, COMPOSE_UPLOAD_PART_SIZE)
+                    .build()
+            );
+        }
+    }
+
+    private Enumeration<InputStream> partStreams(String sourcePrefix, int totalParts) {
+        return new Enumeration<>() {
+            private int index = 0;
+
+            @Override
+            public boolean hasMoreElements() {
+                return index < totalParts;
+            }
+
+            @Override
+            public InputStream nextElement() {
+                if (!hasMoreElements()) {
+                    throw new NoSuchElementException();
+                }
+                String partKey = partKey(sourcePrefix, index++);
+                try {
+                    return client.getObject(
+                        GetObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(partKey)
+                            .build()
+                    );
+                } catch (Exception e) {
+                    throw new RuntimeException("Failed to read upload part: " + partKey, e);
+                }
+            }
+        };
+    }
+
+    private String partKey(String sourcePrefix, int zeroBasedPartNumber) {
+        return sourcePrefix + ".part." + (zeroBasedPartNumber + 1);
     }
 
     @Override

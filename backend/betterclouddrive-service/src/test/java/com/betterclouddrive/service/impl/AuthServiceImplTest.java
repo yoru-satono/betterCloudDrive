@@ -42,19 +42,24 @@ class AuthServiceImplTest {
     void register_shouldCreateUser() {
         when(userRepository.existsByUsername(any())).thenReturn(false);
         when(userRepository.existsByEmail(any())).thenReturn(false);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("email:register:e@m.com")).thenReturn("123456");
         when(passwordEncoder.encode("pass")).thenReturn("hashed");
         when(userRepository.save(any(UserEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        authService.register("user", "pass", "e@m.com");
+        UserEntity user = authService.register("user", "pass", "e@m.com", "123456");
 
-        verify(userRepository).save(any(UserEntity.class));
+        assertThat(user.getEmail()).isEqualTo("e@m.com");
+        assertThat(user.getEmailVerified()).isTrue();
+        verify(userRepository).save(argThat(saved -> Boolean.TRUE.equals(saved.getEmailVerified())));
+        verify(redisTemplate).delete("email:register:e@m.com");
     }
 
     @Test
     void register_shouldThrowWhenUsernameExists() {
         when(userRepository.existsByUsername(any())).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.register("user", "pass", "e@m.com"))
+        assertThatThrownBy(() -> authService.register("user", "pass", "e@m.com", "123456"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("Username already exists")
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(409));
@@ -65,9 +70,42 @@ class AuthServiceImplTest {
         when(userRepository.existsByUsername(any())).thenReturn(false);
         when(userRepository.existsByEmail(any())).thenReturn(true);
 
-        assertThatThrownBy(() -> authService.register("user", "pass", "e@m.com"))
+        assertThatThrownBy(() -> authService.register("user", "pass", "e@m.com", "123456"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("Email already exists");
+    }
+
+    @Test
+    void register_shouldThrowWhenEmailMissing() {
+        when(userRepository.existsByUsername(any())).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.register("user", "pass", " ", "123456"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Email is required");
+    }
+
+    @Test
+    void register_shouldThrowWhenCodeExpired() {
+        when(userRepository.existsByUsername(any())).thenReturn(false);
+        when(userRepository.existsByEmail(any())).thenReturn(false);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("email:register:e@m.com")).thenReturn(null);
+
+        assertThatThrownBy(() -> authService.register("user", "pass", "e@m.com", "123456"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419012));
+    }
+
+    @Test
+    void register_shouldThrowWhenCodeMismatch() {
+        when(userRepository.existsByUsername(any())).thenReturn(false);
+        when(userRepository.existsByEmail(any())).thenReturn(false);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("email:register:e@m.com")).thenReturn("999999");
+
+        assertThatThrownBy(() -> authService.register("user", "pass", "e@m.com", "123456"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419013));
     }
 
     // ── login ─────────────────────────────────────────────────────────────────
@@ -170,54 +208,6 @@ class AuthServiceImplTest {
         verify(userTokenRepository, never()).save(any());
     }
 
-    // ── verifyEmail ───────────────────────────────────────────────────────────
-
-    @Test
-    void verifyEmail_shouldMarkVerified() {
-        UserEntity user = UserEntity.builder().id(1L).emailVerified(false).build();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("email:verify:1")).thenReturn("123456");
-
-        authService.verifyEmail(1L, "123456");
-
-        assertThat(user.getEmailVerified()).isTrue();
-        verify(userRepository).save(user);
-        verify(redisTemplate).delete("email:verify:1");
-    }
-
-    @Test
-    void verifyEmail_shouldThrowWhenCodeExpired() {
-        UserEntity user = UserEntity.builder().id(1L).emailVerified(false).build();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("email:verify:1")).thenReturn(null);
-
-        assertThatThrownBy(() -> authService.verifyEmail(1L, "123456"))
-                .isInstanceOf(BusinessException.class);
-    }
-
-    @Test
-    void verifyEmail_shouldThrowWhenCodeMismatch() {
-        UserEntity user = UserEntity.builder().id(1L).emailVerified(false).build();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("email:verify:1")).thenReturn("999999");
-
-        assertThatThrownBy(() -> authService.verifyEmail(1L, "123456"))
-                .isInstanceOf(BusinessException.class);
-    }
-
-    @Test
-    void verifyEmail_shouldDoNothingWhenAlreadyVerified() {
-        UserEntity user = UserEntity.builder().id(1L).emailVerified(true).build();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-
-        authService.verifyEmail(1L, "123456");
-
-        verify(userRepository, never()).save(any());
-    }
-
     // ── resetPassword ─────────────────────────────────────────────────────────
 
     @Test
@@ -244,25 +234,32 @@ class AuthServiceImplTest {
                 .isInstanceOf(BusinessException.class);
     }
 
-    // ── sendVerificationCode ──────────────────────────────────────────────────
+    // ── sendRegistrationCode ──────────────────────────────────────────────────
 
     @Test
-    void sendVerificationCode_shouldThrowWhenNoEmail() {
-        UserEntity user = UserEntity.builder().id(1L).email(null).build();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-
-        assertThatThrownBy(() -> authService.sendVerificationCode(1L))
-                .isInstanceOf(BusinessException.class);
+    void sendRegistrationCode_shouldThrowWhenNoEmail() {
+        assertThatThrownBy(() -> authService.sendRegistrationCode(" "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Email is required");
     }
 
     @Test
-    void sendVerificationCode_shouldSendCode() {
-        UserEntity user = UserEntity.builder().id(1L).email("u@test.com").emailVerified(false).build();
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+    void sendRegistrationCode_shouldThrowWhenEmailExists() {
+        when(userRepository.existsByEmail("u@test.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.sendRegistrationCode("u@test.com"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Email already exists");
+    }
+
+    @Test
+    void sendRegistrationCode_shouldSendCode() {
+        when(userRepository.existsByEmail("u@test.com")).thenReturn(false);
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
-        authService.sendVerificationCode(1L);
+        authService.sendRegistrationCode("U@Test.com ");
 
         verify(emailService).sendVerificationCode(eq("u@test.com"), anyString());
+        verify(valueOps).set(eq("email:register:u@test.com"), anyString(), eq(10L), eq(TimeUnit.MINUTES));
     }
 }

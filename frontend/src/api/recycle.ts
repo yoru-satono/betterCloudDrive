@@ -6,10 +6,10 @@ export const listRecycleBin = (page = 1, size = 20) =>
   api.get<ApiResponse<PageResult<FileEntity>>>('/recycle-bin', { params: { page, size } })
 
 export const restoreFiles = (fileIds: number[]) =>
-  api.post<ApiResponse<void>>('/recycle-bin/restore', { fileIds })
+  Promise.all(fileIds.map(fileId => api.post<ApiResponse<void>>(`/recycle-bin/${fileId}/restore`)))
 
 export const permanentDelete = (fileIds: number[]) =>
-  api.delete<ApiResponse<void>>('/recycle-bin', { data: { fileIds } })
+  Promise.all(fileIds.map(fileId => api.delete<ApiResponse<void>>(`/recycle-bin/${fileId}`)))
 
 export const emptyRecycleBin = () =>
-  api.delete<ApiResponse<void>>('/recycle-bin/empty')
+  api.delete<ApiResponse<void>>('/recycle-bin')

@@ -1,14 +1,19 @@
-"""Tests for /api/v1/auth endpoints (register, login, refresh, logout, me, email, password)."""
+"""Tests for /api/v1/auth endpoints (register, login, refresh, logout, email, password)."""
 
 import uuid
 from tests.helpers.assert_helper import assert_api_ok, assert_api_error
 
 
 class TestRegister:
-    def test_register_success(self, client):
+    def test_register_success(self, client, registration_code_for):
         username = f"reg_{uuid.uuid4().hex[:8]}"
+        email = f"{username}@test.com"
+        verification_code = registration_code_for(email)
         r = client.post("/api/v1/auth/register", json={
-            "username": username, "password": "Test123!", "email": f"{username}@test.com"
+            "username": username,
+            "password": "Test123!",
+            "email": email,
+            "verificationCode": verification_code,
         })
         data = assert_api_ok(r)
         assert data["userId"] is not None
@@ -16,42 +21,72 @@ class TestRegister:
 
     def test_register_duplicate_username(self, client, test_user):
         r = client.post("/api/v1/auth/register", json={
-            "username": test_user["username"], "password": "Test123!"
+            "username": test_user["username"],
+            "password": "Test123!",
+            "email": f"dup_{uuid.uuid4().hex[:8]}@test.com",
+            "verificationCode": "123456",
         })
         assert_api_error(r, 409)
 
     def test_register_short_username(self, client):
         r = client.post("/api/v1/auth/register", json={
-            "username": "ab", "password": "Test123!"
+            "username": "ab",
+            "password": "Test123!",
+            "email": f"short_{uuid.uuid4().hex[:8]}@test.com",
+            "verificationCode": "123456",
         })
         assert_api_error(r, 400)
 
     def test_register_short_password(self, client):
         r = client.post("/api/v1/auth/register", json={
-            "username": f"u_{uuid.uuid4().hex[:6]}", "password": "Ab1"
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": "Ab1",
+            "email": f"shortpass_{uuid.uuid4().hex[:8]}@test.com",
+            "verificationCode": "123456",
         })
         assert_api_error(r, 400)
 
     def test_register_weak_password_no_uppercase(self, client):
         r = client.post("/api/v1/auth/register", json={
-            "username": f"u_{uuid.uuid4().hex[:6]}", "password": "abcdef1"
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": "abcdef1",
+            "email": f"weak_{uuid.uuid4().hex[:8]}@test.com",
+            "verificationCode": "123456",
         })
         assert_api_error(r, 400)
 
     def test_register_weak_password_no_digit(self, client):
         r = client.post("/api/v1/auth/register", json={
-            "username": f"u_{uuid.uuid4().hex[:6]}", "password": "Abcdefgh"
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": "Abcdefgh",
+            "email": f"nodigit_{uuid.uuid4().hex[:8]}@test.com",
+            "verificationCode": "123456",
         })
         assert_api_error(r, 400)
 
     def test_register_invalid_email(self, client):
         r = client.post("/api/v1/auth/register", json={
-            "username": f"u_{uuid.uuid4().hex[:6]}", "password": "Test123!", "email": "not-an-email"
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": "Test123!",
+            "email": "not-an-email",
+            "verificationCode": "123456",
+        })
+        assert_api_error(r, 400)
+
+    def test_register_missing_email(self, client):
+        r = client.post("/api/v1/auth/register", json={
+            "username": f"u_{uuid.uuid4().hex[:6]}",
+            "password": "Test123!",
+            "verificationCode": "123456",
         })
         assert_api_error(r, 400)
 
     def test_register_missing_username(self, client):
-        r = client.post("/api/v1/auth/register", json={"password": "Test123!"})
+        r = client.post("/api/v1/auth/register", json={
+            "password": "Test123!",
+            "email": f"missing_{uuid.uuid4().hex[:8]}@test.com",
+            "verificationCode": "123456",
+        })
         assert_api_error(r, 400)
 
 
@@ -137,19 +172,27 @@ class TestMe:
         assert r.status_code in (401, 403)
 
 
-class TestEmailVerification:
-    def test_send_verification_code(self, client, auth_headers, test_user):
-        r = client.post("/api/v1/auth/verify-email/send", headers=auth_headers)
-        # Should succeed since test_user has an email
+class TestRegistrationCode:
+    def test_send_registration_code(self, client):
+        r = client.post("/api/v1/auth/register-code/send", json={
+            "email": f"code_{uuid.uuid4().hex[:8]}@test.com"
+        })
         assert_api_ok(r)
 
-    def test_send_verification_already_verified(self, client, auth_headers):
-        r = client.post("/api/v1/auth/verify-email/send", headers=auth_headers)
-        # May succeed or fail — just ensure no 500
-        assert r.status_code < 500
+    def test_send_registration_code_duplicate_email(self, client, test_user):
+        r = client.post("/api/v1/auth/register-code/send", json={"email": test_user["email"]})
+        assert_api_error(r, 409)
 
-    def test_verify_email_wrong_code(self, client, auth_headers):
-        r = client.post("/api/v1/auth/verify-email/confirm", json={"code": "000000"}, headers=auth_headers)
+    def test_register_wrong_code(self, client, registration_code_for):
+        username = f"badcode_{uuid.uuid4().hex[:8]}"
+        email = f"{username}@test.com"
+        registration_code_for(email)
+        r = client.post("/api/v1/auth/register", json={
+            "username": username,
+            "password": "Test123!",
+            "email": email,
+            "verificationCode": "000000",
+        })
         assert_api_error(r, 419013)
 
 

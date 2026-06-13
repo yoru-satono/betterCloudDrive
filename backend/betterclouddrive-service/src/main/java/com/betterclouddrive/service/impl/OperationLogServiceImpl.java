@@ -4,6 +4,7 @@ import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.OperationLogEntity;
 import com.betterclouddrive.dal.repository.OperationLogRepository;
 import com.betterclouddrive.service.OperationLogService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -24,6 +26,7 @@ import java.util.List;
 public class OperationLogServiceImpl implements OperationLogService {
 
     private final OperationLogRepository operationLogRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     @Async
@@ -34,7 +37,7 @@ public class OperationLogServiceImpl implements OperationLogService {
                     .actionType(actionType)
                     .targetType(targetType)
                     .targetId(targetId)
-                    .detail(detail)
+                    .detail(toJsonDetail(detail))
                     .ipAddress(ipAddress)
                     .userAgent(userAgent)
                     .result(1)
@@ -43,6 +46,22 @@ public class OperationLogServiceImpl implements OperationLogService {
             operationLogRepository.save(logEntity);
         } catch (Exception e) {
             log.warn("Failed to write operation log", e);
+        }
+    }
+
+    private String toJsonDetail(String detail) {
+        if (detail == null || detail.isBlank()) {
+            return null;
+        }
+        try {
+            objectMapper.readTree(detail);
+            return detail;
+        } catch (Exception ignored) {
+            try {
+                return objectMapper.writeValueAsString(Map.of("message", detail));
+            } catch (Exception e) {
+                return "{\"message\":\"operation\"}";
+            }
         }
     }
 

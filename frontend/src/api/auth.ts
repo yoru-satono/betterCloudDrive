@@ -5,8 +5,11 @@ import type { ApiResponse } from '@/types/api'
 export const login = (username: string, password: string) =>
   api.post<ApiResponse<LoginResponse>>('/auth/login', { username, password })
 
-export const register = (username: string, password: string, email?: string) =>
-  api.post<ApiResponse<void>>('/auth/register', { username, password, email })
+export const sendRegistrationCode = (email: string) =>
+  api.post<ApiResponse<void>>('/auth/register-code/send', { email })
+
+export const register = (username: string, password: string, email: string, verificationCode: string) =>
+  api.post<ApiResponse<void>>('/auth/register', { username, password, email, verificationCode })
 
 export const refresh = (refreshToken: string) =>
   api.post<ApiResponse<LoginResponse>>('/auth/refresh', { refreshToken })
@@ -22,15 +25,3 @@ export const forgotPassword = (email: string) =>
 
 export const resetPassword = (email: string, code: string, newPassword: string) =>
   api.post<ApiResponse<void>>('/auth/reset-password', { email, code, newPassword })
-
-export const sendVerificationCode = () =>
-  api.post<ApiResponse<void>>('/auth/verify-email/send')
-
-export const verifyEmail = (code: string) =>
-  api.post<ApiResponse<void>>('/auth/verify-email/confirm', { code })
-
-export const changePassword = (oldPassword: string, newPassword: string) =>
-  api.post<ApiResponse<void>>('/auth/change-password', { oldPassword, newPassword })
-
-export const updateProfile = (email: string) =>
-  api.put<ApiResponse<void>>('/auth/profile', { email })

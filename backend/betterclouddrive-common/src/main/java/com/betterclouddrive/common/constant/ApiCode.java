@@ -28,7 +28,7 @@ public enum ApiCode {
     INVALID_SHARE_CODE(419002, "invalid share code"),
     SHARE_PASSWORD_REQUIRED(419003, "password required"),
     SHARE_EXPIRED(419004, "share link has expired"),
-    SHARE_DOWNLOAD_LIMIT(419005, "download limit reached"),
+    SHARE_VISIT_LIMIT(419005, "visit limit reached"),
     CHUNK_UPLOAD_INVALID(419006, "invalid chunk upload state"),
     CHUNK_MD5_MISMATCH(419007, "chunk MD5 does not match"),
     FILE_TOO_LARGE(419008, "file exceeds maximum allowed size"),
@@ -38,6 +38,7 @@ public enum ApiCode {
     EMAIL_CODE_EXPIRED(419012, "verification code expired"),
     EMAIL_CODE_MISMATCH(419013, "verification code mismatch"),
     PASSWORD_RESET_FAILED(419014, "password reset failed"),
+    FOLDER_DOWNLOAD_LIMIT_EXCEEDED(419015, "folder download limit exceeded"),
 
     // ==================== 5xx Server Errors ====================
     INTERNAL_ERROR(500, "internal server error"),

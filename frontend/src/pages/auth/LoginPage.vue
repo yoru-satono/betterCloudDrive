@@ -27,9 +27,7 @@ const submit = handleSubmit(async (values) => {
     await auth.login(values.username, values.password)
     toast.success('登录成功')
     router.push('/files')
-  } catch {
-    toast.error('用户名或密码错误')
-  }
+  } catch { /* client.ts handles toast */ }
 })
 </script>
 
@@ -43,7 +41,7 @@ const submit = handleSubmit(async (values) => {
         </svg>
       </div>
       <h1 class="login-page__title">欢迎回来</h1>
-      <p class="login-page__sub">登录到 BetterDrive</p>
+      <p class="login-page__sub">登录到 BetterCloudDrive</p>
     </div>
 
     <form class="login-page__form" @submit.prevent="submit">

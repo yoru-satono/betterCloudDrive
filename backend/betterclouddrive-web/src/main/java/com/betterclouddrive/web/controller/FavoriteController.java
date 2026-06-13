@@ -34,6 +34,11 @@ public class FavoriteController {
         return ApiResponse.success();
     }
 
+    @GetMapping("/{fileId}/status")
+    public ApiResponse<Boolean> isFavorite(@CurrentUser UserPrincipal user, @PathVariable Long fileId) {
+        return ApiResponse.success(favoriteService.isFavorite(user.getUserId(), fileId));
+    }
+
     @GetMapping
     public ApiResponse<PageResult<FileEntity>> listFavorites(
             @CurrentUser UserPrincipal user,
@@ -42,8 +47,4 @@ public class FavoriteController {
         return ApiResponse.success(favoriteService.listFavorites(user.getUserId(), page, size));
     }
 
-    @GetMapping("/{fileId}/status")
-    public ApiResponse<Boolean> isFavorited(@CurrentUser UserPrincipal user, @PathVariable Long fileId) {
-        return ApiResponse.success(favoriteService.isFavorited(user.getUserId(), fileId));
-    }
 }

@@ -1,7 +1,13 @@
 import api from './client'
-import type { ShareLinkEntity, CreateShareRequest } from '@/types/share'
+import type { AccessShareResponse, ShareLinkEntity, CreateShareRequest, UpdateShareRequest } from '@/types/share'
 import type { ApiResponse, PageResult } from '@/types/api'
 import type { FileEntity } from '@/types/file'
+
+export interface SaveSharedItemRequest {
+  fileId?: number
+  targetParentId?: number | null
+  password?: string
+}
 
 export const createShare = (req: CreateShareRequest) =>
   api.post<ApiResponse<ShareLinkEntity>>('/shares', req)
@@ -9,11 +15,23 @@ export const createShare = (req: CreateShareRequest) =>
 export const listShares = (page = 1, size = 20) =>
   api.get<ApiResponse<PageResult<ShareLinkEntity>>>('/shares', { params: { page, size } })
 
+export const getShare = (shareId: number) =>
+  api.get<ApiResponse<ShareLinkEntity>>(`/shares/${shareId}`)
+
+export const updateShare = (shareId: number, req: UpdateShareRequest) =>
+  api.put<ApiResponse<ShareLinkEntity>>(`/shares/${shareId}`, req)
+
 export const deleteShare = (shareId: number) =>
   api.delete<ApiResponse<void>>(`/shares/${shareId}`)
 
 export const accessShare = (shareCode: string, password?: string) =>
-  api.get<ApiResponse<{ file: FileEntity; share: ShareLinkEntity }>>(`/shares/access/${shareCode}`, { params: { password } })
+  api.post<ApiResponse<AccessShareResponse>>(`/shares/access/${shareCode}`, password ? { password } : undefined, { suppressToast: true })
 
-export const getShareDownloadUrl = (shareCode: string, password?: string) =>
-  api.get<ApiResponse<{ url: string; fileName: string }>>(`/shares/access/${shareCode}/download`, { params: { password } })
+export const listSharedFiles = (shareCode: string, parentId?: number | null, page = 1, size = 20) =>
+  api.get<ApiResponse<PageResult<FileEntity>>>(`/shares/access/${shareCode}/files`, {
+    params: { parentId: parentId ?? undefined, page, size },
+    suppressToast: true
+  })
+
+export const saveSharedItem = (shareCode: string, req: SaveSharedItemRequest) =>
+  api.post<ApiResponse<FileEntity>>(`/shares/access/${shareCode}/save`, req, { suppressToast: true })

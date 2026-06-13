@@ -186,14 +186,10 @@ class FileServiceImplTest {
     }
 
     @Test
-    void emptyRecycleBin_shouldDeleteAll() {
-        FileEntity f1 = FileEntity.builder().id(1L).userId(1L).isDeleted(true).build();
-        FileEntity f2 = FileEntity.builder().id(2L).userId(1L).isDeleted(true).build();
-        when(fileRepository.findByUserIdAndIsDeletedTrue(1L)).thenReturn(List.of(f1, f2));
-
+    void emptyRecycleBin_shouldDeleteAllWithBulkQuery() {
         fileService.emptyRecycleBin(1L);
 
-        verify(fileRepository).deleteAll(List.of(f1, f2));
+        verify(fileRepository).deleteByUserIdAndIsDeletedTrue(1L);
     }
 
     @Test

@@ -18,10 +18,7 @@ onMounted(async () => {
 
 const cards = (s: AdminStats) => [
   { label: '总用户数',   value: s.totalUsers,      sub: `${s.activeUsers} 活跃` },
-  { label: '总文件数',   value: s.totalFiles,       sub: '' },
-  { label: '已用存储',   value: formatSize(s.totalStorageUsed), sub: `/ ${formatSize(s.totalStorageQuota)}` },
-  { label: '活跃分享',   value: s.activeShares,     sub: '' },
-  { label: '今日操作',   value: s.todayOperations,  sub: '' },
+  { label: '已用存储',   value: formatSize(s.totalStorageUsed), sub: '' },
 ]
 </script>
 

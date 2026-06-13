@@ -1,5 +1,7 @@
 <script setup lang="ts">
-defineProps<{
+import { computed, useId } from 'vue'
+
+const props = defineProps<{
   modelValue?: string
   placeholder?: string
   type?: string
@@ -7,17 +9,22 @@ defineProps<{
   error?: string
   disabled?: boolean
   prefix?: string
+  id?: string
 }>()
 defineEmits<{ 'update:modelValue': [string] }>()
+
+const fallbackId = useId()
+const inputId = computed(() => props.id || `o-input-${fallbackId}`)
 </script>
 
 <template>
   <div class="o-input-wrap">
-    <label v-if="label" class="o-input__label">{{ label }}</label>
+    <label v-if="label" class="o-input__label" :for="inputId">{{ label }}</label>
     <div class="o-input__field" :class="{ 'o-input__field--error': error, 'o-input__field--disabled': disabled }">
       <span v-if="prefix" class="o-input__prefix">{{ prefix }}</span>
       <slot name="icon" />
       <input
+        :id="inputId"
         :type="type || 'text'"
         :value="modelValue"
         :placeholder="placeholder"

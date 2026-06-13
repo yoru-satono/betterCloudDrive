@@ -50,6 +50,8 @@ dist/
 .nuxt/
 .output/
 *.local
+playwright-report/
+frontend/e2e/.auth/
 
 # ==================== Python ====================
 __pycache__/

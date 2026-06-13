@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   # ==================== 基础设施 ====================
 
@@ -53,7 +51,7 @@ services:
     volumes:
       - seaweeddata:/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9333/cluster/status"]
+      test: ["CMD-SHELL", "wget -q -O - http://$$(hostname -i):9333/cluster/status"]
       interval: 15s
       timeout: 10s
       retries: 3
@@ -91,6 +89,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bcd_pass_2026}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
       STORAGE_S3_ENDPOINT: http://seaweedfs:8333
       STORAGE_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-any}
       STORAGE_S3_SECRET_KEY: ${S3_SECRET_KEY:-any}
@@ -101,19 +101,18 @@ services:
     networks:
       - bcd-network
 
-  # 后续阶段添加 frontend 服务
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   container_name: bcd-frontend
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - backend
-  #   ports:
-  #     - "${FRONTEND_PORT:-3000}:80"
-  #   networks:
-  #     - bcd-network
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bcd-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    networks:
+      - bcd-network
 
 volumes:
   pgdata:

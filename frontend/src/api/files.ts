@@ -13,6 +13,9 @@ export interface ListFilesParams {
 export const listFiles = (params: ListFilesParams) =>
   api.get<ApiResponse<PageResult<FileEntity>>>('/files', { params })
 
+export const getFile = (fileId: number) =>
+  api.get<ApiResponse<FileEntity>>(`/files/${fileId}`)
+
 export const searchFiles = (q: string, page = 1, size = 20) =>
   api.get<ApiResponse<PageResult<FileEntity>>>('/files/search', { params: { q, page, size } })
 
@@ -26,7 +29,7 @@ export const deleteFiles = (fileIds: number[]) =>
   api.delete<ApiResponse<void>>('/files', { data: { fileIds } })
 
 export const moveFile = (fileId: number, targetParentId: number | null) =>
-  api.post<ApiResponse<FileEntity>>(`/files/${fileId}/move`, { targetParentId })
+  api.post<ApiResponse<void>>(`/files/${fileId}/move`, { targetParentId })
 
 export const copyFile = (fileId: number, targetParentId: number | null) =>
-  api.post<ApiResponse<FileEntity>>(`/files/${fileId}/copy`, { targetParentId })
+  api.post<ApiResponse<void>>(`/files/${fileId}/copy`, { targetParentId })

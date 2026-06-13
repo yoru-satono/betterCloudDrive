@@ -18,12 +18,12 @@ export const useAuthStore = defineStore('auth', () => {
     const { data } = await authApi.login(username, password)
     localStorage.setItem('accessToken', data.data.accessToken)
     localStorage.setItem('refreshToken', data.data.refreshToken)
-    user.value = data.data.user
+    await fetchMe()
     return data
   }
 
-  async function register(username: string, password: string, email?: string) {
-    return authApi.register(username, password, email)
+  async function register(username: string, password: string, email: string, verificationCode: string) {
+    return authApi.register(username, password, email, verificationCode)
   }
 
   async function fetchMe() {

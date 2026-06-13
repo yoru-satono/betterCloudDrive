@@ -44,7 +44,7 @@ const iconPaths: Record<string, string> = {
         </svg>
       </div>
       <Transition name="fade">
-        <span v-if="ui.sidebarExpanded" class="sidebar__brand">BetterDrive</span>
+        <span v-if="ui.sidebarExpanded" class="sidebar__brand">BetterCloudDrive</span>
       </Transition>
     </div>
 

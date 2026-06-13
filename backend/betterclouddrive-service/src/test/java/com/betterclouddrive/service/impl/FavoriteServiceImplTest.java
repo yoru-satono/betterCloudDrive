@@ -76,6 +76,13 @@ class FavoriteServiceImplTest {
     }
 
     @Test
+    void isFavorite_shouldReturnRepositoryStatus() {
+        when(favoriteRepository.existsByUserIdAndFileId(1L, 10L)).thenReturn(true);
+
+        assertThat(favoriteService.isFavorite(1L, 10L)).isTrue();
+    }
+
+    @Test
     void listFavorites_shouldReturnFilesInOrder() {
         FavoriteEntity fav = FavoriteEntity.builder().userId(1L).fileId(10L).build();
         Page<FavoriteEntity> favPage = new PageImpl<>(List.of(fav), PageRequest.of(0, 20), 1);
@@ -103,17 +110,4 @@ class FavoriteServiceImplTest {
         assertThat(result.getTotal()).isEqualTo(0);
     }
 
-    @Test
-    void isFavorited_shouldReturnTrue() {
-        when(favoriteRepository.existsByUserIdAndFileId(1L, 1L)).thenReturn(true);
-
-        assertThat(favoriteService.isFavorited(1L, 1L)).isTrue();
-    }
-
-    @Test
-    void isFavorited_shouldReturnFalse() {
-        when(favoriteRepository.existsByUserIdAndFileId(1L, 99L)).thenReturn(false);
-
-        assertThat(favoriteService.isFavorited(1L, 99L)).isFalse();
-    }
 }

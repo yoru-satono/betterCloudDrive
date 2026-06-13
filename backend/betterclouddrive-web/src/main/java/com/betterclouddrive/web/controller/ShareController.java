@@ -8,15 +8,25 @@ import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.ShareLinkEntity;
 import com.betterclouddrive.service.AuthService;
 import com.betterclouddrive.service.FileService;
+import com.betterclouddrive.service.FolderZipDownloadService;
 import com.betterclouddrive.service.ShareService;
+import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.dto.request.CreateShareRequest;
+import com.betterclouddrive.web.dto.request.SaveSharedItemRequest;
 import com.betterclouddrive.web.dto.request.UpdateShareRequest;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.InputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @RestController
@@ -26,13 +36,15 @@ public class ShareController {
     private final ShareService shareService;
     private final FileService fileService;
     private final AuthService authService;
+    private final StorageService storageService;
+    private final FolderZipDownloadService folderZipDownloadService;
 
     @PostMapping("/api/v1/shares")
     public ApiResponse<ShareLinkEntity> createShare(@CurrentUser UserPrincipal user,
                                                      @Valid @RequestBody CreateShareRequest request) {
         ShareLinkEntity share = shareService.createShare(
                 user.getUserId(), request.getFileId(), request.getPassword(),
-                request.getExpireAt(), request.getMaxDownloads());
+                request.getExpireAt(), request.getMaxVisits());
 
         // Send share notification email if requested
         if (request.getNotifyEmail() != null && !request.getNotifyEmail().isBlank()) {
@@ -62,7 +74,7 @@ public class ShareController {
                                                      @PathVariable Long shareId,
                                                      @RequestBody UpdateShareRequest request) {
         return ApiResponse.success(shareService.updateShare(
-                user.getUserId(), shareId, request.getPassword(), request.getExpireAt(), request.getMaxDownloads()));
+                user.getUserId(), shareId, request.getPassword(), request.getExpireAt(), request.getMaxVisits()));
     }
 
     @DeleteMapping("/api/v1/shares/{shareId}")
@@ -93,5 +105,66 @@ public class ShareController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.success(shareService.listSharedFiles(shareCode, parentId, page, size));
+    }
+
+    /** Authenticated endpoint: save a shared file or folder into the current user's drive */
+    @PostMapping("/api/v1/shares/access/{shareCode}/save")
+    public ApiResponse<FileEntity> saveSharedItem(
+            @CurrentUser UserPrincipal user,
+            @PathVariable String shareCode,
+            @RequestBody(required = false) SaveSharedItemRequest request) {
+        if (user == null) {
+            throw new BusinessException(ApiCode.UNAUTHORIZED);
+        }
+        SaveSharedItemRequest body = request != null ? request : new SaveSharedItemRequest();
+        return ApiResponse.success(shareService.saveSharedItem(
+                shareCode,
+                body.getFileId(),
+                body.getTargetParentId(),
+                user.getUserId(),
+                body.getPassword()));
+    }
+
+    /** Public endpoint: download a file from a shared link */
+    @PostMapping("/api/v1/shares/access/{shareCode}/download/{fileId}")
+    public ResponseEntity<StreamingResponseBody> downloadSharedFile(
+            @PathVariable String shareCode,
+            @PathVariable Long fileId,
+            @RequestBody(required = false) Map<String, String> body) {
+        String password = body != null ? body.get("password") : null;
+        FileEntity file = shareService.downloadSharedFile(shareCode, fileId, password);
+        InputStream stream = storageService.downloadObject(file.getStoragePath());
+        String mimeType = file.getMimeType() != null ? file.getMimeType() : "application/octet-stream";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(mimeType))
+                .contentLength(file.getFileSize())
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + URLEncoder.encode(file.getFileName(), StandardCharsets.UTF_8) + "\"")
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .body(outputStream -> {
+                    try (InputStream is = stream) {
+                        is.transferTo(outputStream);
+                    }
+                });
+    }
+
+    /** Public endpoint: download a shared folder as ZIP from the webpage */
+    @PostMapping("/api/v1/shares/access/{shareCode}/download/{fileId}/zip")
+    public ResponseEntity<StreamingResponseBody> downloadSharedFolderZip(
+            @PathVariable String shareCode,
+            @PathVariable Long fileId,
+            @RequestBody(required = false) Map<String, String> body) {
+        String password = body != null ? body.get("password") : null;
+        FileEntity folder = shareService.resolveSharedFolderDownload(shareCode, fileId, password);
+        folderZipDownloadService.validateDownloadable(folder);
+        shareService.recordSharedDownload(shareCode, password);
+        String zipFileName = folder.getFileName() + ".zip";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/zip"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + URLEncoder.encode(zipFileName, StandardCharsets.UTF_8) + "\"")
+                .body(outputStream -> folderZipDownloadService.writeZip(folder, outputStream));
     }
 }

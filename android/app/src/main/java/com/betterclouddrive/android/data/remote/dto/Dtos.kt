@@ -110,14 +110,14 @@ data class CreateShareRequest(
     @SerialName("fileId") val fileId: Long,
     val password: String? = null,
     @SerialName("expireAt") val expireAt: String? = null,
-    @SerialName("maxDownloads") val maxDownloads: Int? = null,
+    @SerialName("maxVisits") val maxVisits: Int? = null,
 )
 
 @Serializable
 data class UpdateShareRequest(
     val password: String? = null,
     @SerialName("expireAt") val expireAt: String? = null,
-    @SerialName("maxDownloads") val maxDownloads: Int? = null,
+    @SerialName("maxVisits") val maxVisits: Int? = null,
 )
 
 @Serializable

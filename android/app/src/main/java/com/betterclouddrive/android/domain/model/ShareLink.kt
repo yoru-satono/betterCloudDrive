@@ -12,7 +12,7 @@ data class ShareLink(
     @SerialName("passwordHash") val passwordHash: String? = null,
     @SerialName("hasPassword") val hasPassword: Boolean = false,
     @SerialName("expireAt") val expireAt: String? = null,
-    @SerialName("maxDownloads") val maxDownloads: Int? = null,
+    @SerialName("maxVisits") val maxVisits: Int? = null,
     @SerialName("downloadCount") val downloadCount: Int = 0,
     @SerialName("visitCount") val visitCount: Int = 0,
     @SerialName("isCanceled") val isCanceled: Boolean = false,

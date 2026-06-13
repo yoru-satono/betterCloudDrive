@@ -34,9 +34,9 @@ class TestCreateShare:
         }, headers=auth_headers)
         assert_api_ok(r)
 
-    def test_create_share_with_max_downloads(self, client, auth_headers, uploaded_file):
+    def test_create_share_with_max_visits(self, client, auth_headers, uploaded_file):
         r = client.post("/api/v1/shares", json={
-            "fileId": uploaded_file["fileId"], "maxDownloads": 1
+            "fileId": uploaded_file["fileId"], "maxVisits": 1
         }, headers=auth_headers)
         assert_api_ok(r)
 
@@ -156,11 +156,11 @@ class TestListSharedFiles:
         assert_api_error(r, 419002)
 
 
-class TestDownloadLimit:
-    def test_share_download_limit_exceeded(self, client, auth_headers, uploaded_file):
-        """maxDownloads=0 means zero downloads are permitted — any access returns 419005."""
+class TestVisitLimit:
+    def test_share_visit_limit_exceeded(self, client, auth_headers, uploaded_file):
+        """maxVisits=0 means zero visits are permitted — any access returns 419005."""
         r = client.post("/api/v1/shares", json={
-            "fileId": uploaded_file["fileId"], "maxDownloads": 0
+            "fileId": uploaded_file["fileId"], "maxVisits": 0
         }, headers=auth_headers)
         code = r.json()["data"]["shareCode"]
 

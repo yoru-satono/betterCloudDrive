@@ -7,7 +7,6 @@ import lombok.Data;
 
 @Data
 public class InitUploadRequest {
-    @NotNull
     private Long parentId;
     @NotBlank
     private String fileName;

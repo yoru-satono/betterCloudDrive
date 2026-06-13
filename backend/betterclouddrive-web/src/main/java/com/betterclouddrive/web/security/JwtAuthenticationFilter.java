@@ -1,6 +1,9 @@
 package com.betterclouddrive.web.security;
 
+import com.betterclouddrive.common.constant.ApiCode;
+import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.dal.repository.UserTokenRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.FilterChain;
@@ -9,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,6 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final StringRedisTemplate redisTemplate;
     private final UserTokenRepository userTokenRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                     StringRedisTemplate redisTemplate,
@@ -49,8 +54,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             // Check Redis blacklist
             if (Boolean.TRUE.equals(redisTemplate.hasKey("token:blacklist:" + jti))) {
-                response.setStatus(401);
-                filterChain.doFilter(request, response);
+                writeAuthError(response, ApiCode.TOKEN_BLACKLISTED);
                 return;
             }
 
@@ -66,11 +70,23 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(authentication);
         } catch (ExpiredJwtException e) {
             log.debug("Token expired: {}", e.getMessage());
+            writeAuthError(response, ApiCode.TOKEN_EXPIRED);
+            return;
         } catch (Exception e) {
             log.debug("Token validation failed: {}", e.getMessage());
+            writeAuthError(response, ApiCode.UNAUTHORIZED);
+            return;
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void writeAuthError(HttpServletResponse response, ApiCode code) throws IOException {
+        SecurityContextHolder.clearContext();
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter().write(objectMapper.writeValueAsString(
+                ApiResponse.error(code.getCode(), code.getMessage())));
     }
 
     private String extractToken(HttpServletRequest request) {

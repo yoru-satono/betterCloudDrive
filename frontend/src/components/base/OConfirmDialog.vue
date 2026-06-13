@@ -7,7 +7,12 @@ const ui = useUIStore()
 </script>
 
 <template>
-  <OModal :open="!!ui.confirmDialog" :title="ui.confirmDialog?.title" @close="ui.resolveConfirm(false)">
+  <OModal
+    :open="!!ui.confirmDialog"
+    :title="ui.confirmDialog?.title"
+    style="z-index: 300"
+    @close="ui.resolveConfirm(false)"
+  >
     <p style="color: var(--text-secondary); line-height: 1.6;">{{ ui.confirmDialog?.message }}</p>
     <template #footer>
       <OButton variant="ghost" @click="ui.resolveConfirm(false)">取消</OButton>

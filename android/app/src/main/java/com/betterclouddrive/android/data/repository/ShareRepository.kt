@@ -15,9 +15,9 @@ class ShareRepository @Inject constructor(private val api: ApiService) {
         fileId: Long,
         password: String? = null,
         expireAt: String? = null,
-        maxDownloads: Int? = null,
+        maxVisits: Int? = null,
     ): NetworkResult<ShareLink> = apiCall {
-        api.createShare(CreateShareRequest(fileId, password, expireAt, maxDownloads))
+        api.createShare(CreateShareRequest(fileId, password, expireAt, maxVisits))
     }
 
     suspend fun listShares(page: Int = 1, size: Int = 20): NetworkResult<PageResult<ShareLink>> = apiCall {
@@ -30,9 +30,9 @@ class ShareRepository @Inject constructor(private val api: ApiService) {
         shareId: Long,
         password: String? = null,
         expireAt: String? = null,
-        maxDownloads: Int? = null,
+        maxVisits: Int? = null,
     ): NetworkResult<ShareLink> = apiCall {
-        api.updateShare(shareId, UpdateShareRequest(password, expireAt, maxDownloads))
+        api.updateShare(shareId, UpdateShareRequest(password, expireAt, maxVisits))
     }
 
     suspend fun cancelShare(shareId: Long): NetworkResult<Unit> = apiCall { api.cancelShare(shareId) }

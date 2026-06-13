@@ -18,6 +18,11 @@ public class RegisterRequest {
             message = "Password must contain at least one uppercase letter, one lowercase letter, and one digit")
     private String password;
 
+    @NotBlank
     @Email
     private String email;
+
+    @NotBlank
+    @Pattern(regexp = "^\\d{6}$", message = "Verification code must be 6 digits")
+    private String verificationCode;
 }

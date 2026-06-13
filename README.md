@@ -23,10 +23,10 @@
 - **分片上传**：5MB 分片 + 秒传（MD5 去重）+ 断点续传
 - **下载预览**：流式下载（Range 支持）/图片/视频/文本在线预览
 - **回收站**：30 天自动清理/恢复/彻底删除
-- **分享链接**：创建/密码保护/过期时间/下载次数限制
+- **分享链接**：创建/密码保护/过期时间/访问次数限制
 - **收藏 & 标签**：文件收藏/标签分类管理
 - **版本管理**：文件多版本保留/历史版本删除
-- **邮箱验证 & 密码重置**：Mailpit 模拟邮件
+- **注册验证码 & 密码重置**：Mailpit 模拟邮件
 - **存储配额**：默认 10GB/用户，管理员可调整
 - **管理员面板**：用户管理/配额调整/操作日志/系统统计
 - **响应式 UI**：Web 端桌面+移动端，Android 端手机+平板双布局
@@ -37,7 +37,7 @@
 betterCloudDrive/
 ├── backend/                 # Spring Boot 多模块后端
 │   ├── betterclouddrive-common/     # DTO、枚举、异常
-│   ├── betterclouddrive-dal/        # MyBatis-Plus 实体/Mapper
+│   ├── betterclouddrive-dal/        # Spring Data JPA 实体/Repository
 │   ├── betterclouddrive-storage/    # SeaweedFS S3 适配
 │   ├── betterclouddrive-service/    # 业务逻辑层
 │   ├── betterclouddrive-web/        # Controller、Security
@@ -53,30 +53,45 @@ betterCloudDrive/
 
 ## 快速启动
 
-### 1. 启动基础设施
+### 方式一：Docker Compose 启动全栈
+
+设置 JWT 密钥后启动全栈服务。Compose 会自动构建后端 JAR 和前端静态资源，不需要提前生成 `target/`：
+
+```bash
+export JWT_ACCESS_SECRET=dGhpcy1pcy1hLTMyLWJ5dGUtc2VjcmV0LWtleS1mb3ItYWNjIQ==
+export JWT_REFRESH_SECRET=dGhpcy1pcy1hLTMyLWJ5dGUtcmVmcmVzaC1zZWNyZXQta2V5ISE=
+docker compose up -d --build
+```
+
+默认访问地址：
+
+- Web 前端：`http://localhost:3000`
+- 后端 API：`http://localhost:8080`
+- Mailpit：`http://localhost:8025`
+- SeaweedFS S3：`http://localhost:8333`
+
+前端容器使用 nginx 托管构建产物，并将 `/api/` 和 `/webdav/` 反向代理到 Compose 网络内的 `backend:8080`。可通过 `FRONTEND_PORT`、`BACKEND_PORT`、`POSTGRES_PORT`、`REDIS_PORT`、`MAILPIT_UI_PORT` 等环境变量调整宿主机端口。
+
+### 方式二：本地开发启动
+
+启动依赖和后端：
 
 ```bash
 docker compose up -d postgres redis seaweedfs mailpit
+export JWT_ACCESS_SECRET=dGhpcy1pcy1hLTMyLWJ5dGUtc2VjcmV0LWtleS1mb3ItYWNjIQ==
+export JWT_REFRESH_SECRET=dGhpcy1pcy1hLTMyLWJ5dGUtcmVmcmVzaC1zZWNyZXQta2V5ISE=
+docker compose up -d --build backend
 ```
 
-### 2. 启动后端
-
-```bash
-cd backend && mvn clean package -DskipTests
-docker compose up -d backend
-```
-
-后端运行在 `http://localhost:8080`。
-
-### 3. 启动 Web 前端
+启动 Web 前端开发服务器：
 
 ```bash
 cd frontend && npm install && npm run dev
 ```
 
-访问 `http://localhost:5173`。
+开发服务器访问 `http://localhost:5173`，Vite 会把 `/api` 和 `/webdav` 代理到 `http://localhost:8080`。
 
-### 4. 构建 Android 应用
+### 构建 Android 应用
 
 ```bash
 cd android && ./gradlew assembleDebug
@@ -86,12 +101,13 @@ APK 输出在 `android/app/build/outputs/apk/debug/`。
 
 ## API 文档
 
-完整 API 文档见 [docs/API.md](docs/API.md)，共 57 个端点，涵盖认证、文件管理、上传下载、回收站、分享、收藏、标签、版本管理、邮箱验证、密码重置、管理员面板。
+完整 API 文档见 [docs/API.md](docs/API.md)，涵盖认证、文件管理、上传下载、回收站、分享、收藏、标签、版本管理、注册验证码、密码重置、管理员面板。
 
 ### 公开端点
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| POST | `/api/v1/auth/register-code/send` | 发送注册验证码 |
 | POST | `/api/v1/auth/register` | 注册 |
 | POST | `/api/v1/auth/login` | 登录 |
 | POST | `/api/v1/auth/refresh` | 刷新令牌 |

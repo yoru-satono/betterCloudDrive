@@ -35,8 +35,8 @@ public class ShareLinkEntity {
     @Column(name = "expire_at")
     private LocalDateTime expireAt;
 
-    @Column(name = "max_downloads")
-    private Integer maxDownloads;
+    @Column(name = "max_visits")
+    private Integer maxVisits;
 
     @Column(name = "download_count")
     @Builder.Default

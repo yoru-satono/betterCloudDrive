@@ -31,6 +31,15 @@ class OperationLogServiceImplTest {
     }
 
     @Test
+    void logAsync_shouldWrapPlainDetailAsJson() {
+        operationLogService.logAsync(1L, "UPLOAD", "FILE", null, "UploadController.completeUpload", "127.0.0.1", "test");
+
+        org.mockito.ArgumentCaptor<OperationLogEntity> captor = org.mockito.ArgumentCaptor.forClass(OperationLogEntity.class);
+        verify(operationLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getDetail()).isEqualTo("{\"message\":\"UploadController.completeUpload\"}");
+    }
+
+    @Test
     void listLogs_shouldReturnPageWithAllFilters() {
         Page<OperationLogEntity> page = new PageImpl<>(
                 List.of(log(1L, "UPLOAD")), PageRequest.of(0, 20), 1);

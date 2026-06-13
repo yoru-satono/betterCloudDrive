@@ -16,6 +16,7 @@ const emit = defineEmits<{ close: [] }>()
       <div
         v-if="visible"
         class="ctx-menu"
+        role="menu"
         :style="{ left: `${x}px`, top: `${y}px` }"
         @click.stop
       >
@@ -24,6 +25,7 @@ const emit = defineEmits<{ close: [] }>()
           <button
             v-else
             class="ctx-menu__item"
+            role="menuitem"
             :class="{ 'ctx-menu__item--danger': item.danger }"
             @click="() => { item.action(); emit('close') }"
           >

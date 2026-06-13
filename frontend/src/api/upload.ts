@@ -3,25 +3,27 @@ import type { UploadSession } from '@/types/file'
 import type { ApiResponse } from '@/types/api'
 
 export const instantUpload = (parentId: number | null, fileName: string, fileSize: number, md5: string, mimeType?: string) =>
-  api.post<ApiResponse<{ fileId: number; existed: boolean }>>('/upload/instant', { parentId, fileName, fileSize, md5, mimeType })
+  api.post<ApiResponse<{ fileId: number; instant: true }>>('/upload/instant', { parentId, fileName, fileSize, md5Hash: md5 }, { suppressToast: true })
 
-export const initMultipart = (parentId: number | null, fileName: string, totalSize: number, mimeType?: string) =>
-  api.post<ApiResponse<UploadSession>>('/upload/multipart/init', { parentId, fileName, totalSize, mimeType })
+export const initMultipart = (parentId: number | null, fileName: string, fileSize: number, md5Hash: string, totalChunks: number, mimeType?: string) =>
+  api.post<ApiResponse<UploadSession>>('/upload/init', { parentId, fileName, fileSize, md5Hash, totalChunks }, { suppressToast: true })
 
 export const uploadChunk = (uploadId: string, chunkIndex: number, data: Blob, onProgress?: (pct: number) => void) => {
   const form = new FormData()
   form.append('file', data)
-  return api.post<ApiResponse<void>>(`/upload/multipart/${uploadId}/chunk/${chunkIndex}`, form, {
+  return api.post<ApiResponse<{ chunkNumber: number }>>(`/upload/${uploadId}/chunk`, form, {
+    params: { chunkNumber: chunkIndex },
     headers: { 'Content-Type': 'multipart/form-data' },
+    suppressToast: true,
     onUploadProgress: onProgress ? (e) => { if (e.total) onProgress(Math.round((e.loaded / e.total) * 100)) } : undefined
   })
 }
 
 export const completeMultipart = (uploadId: string) =>
-  api.post<ApiResponse<{ fileId: number }>>(`/upload/multipart/${uploadId}/complete`)
+  api.post<ApiResponse<{ fileId: number }>>(`/upload/${uploadId}/complete`, undefined, { suppressToast: true })
 
 export const abortMultipart = (uploadId: string) =>
-  api.delete<ApiResponse<void>>(`/upload/multipart/${uploadId}`)
+  api.post<ApiResponse<void>>(`/upload/${uploadId}/cancel`, undefined, { suppressToast: true })
 
 export const getUploadStatus = (uploadId: string) =>
-  api.get<ApiResponse<UploadSession>>(`/upload/multipart/${uploadId}/status`)
+  api.get<ApiResponse<UploadSession>>(`/upload/${uploadId}/status`, { suppressToast: true })

@@ -6,7 +6,7 @@ import { computed } from 'vue'
 const store = useUploadStore()
 
 const activeCount = computed(() => store.queue.filter(i => i.status === 'uploading' || i.status === 'pending' || i.status === 'hashing').length)
-const allDone = computed(() => store.queue.length > 0 && store.queue.every(i => i.status === 'done' || i.status === 'instant' || i.status === 'error'))
+const allDone = computed(() => store.queue.length > 0 && store.queue.every(i => i.status === 'done' || i.status === 'instant' || i.status === 'error' || i.status === 'canceled'))
 
 const statusLabel: Record<string, string> = {
   pending: '等待中',
@@ -14,8 +14,11 @@ const statusLabel: Record<string, string> = {
   uploading: '上传中',
   done: '完成',
   instant: '秒传',
-  error: '失败'
+  error: '失败',
+  canceled: '已取消'
 }
+
+const formatProgress = (progress: number) => progress.toFixed(2)
 </script>
 
 <template>
@@ -42,10 +45,14 @@ const statusLabel: Record<string, string> = {
               {{ statusLabel[item.status] }}
               <span v-if="item.chunkProgress" class="font-mono" style="margin-left:4px">{{ item.chunkProgress }}</span>
             </span>
-            <span v-if="item.status === 'uploading' || item.status === 'hashing'" class="upload-queue__pct">{{ item.progress }}%</span>
+            <span v-if="item.status === 'uploading' || item.status === 'hashing'" class="upload-queue__pct">{{ formatProgress(item.progress) }}%</span>
           </div>
           <div v-if="item.status === 'uploading' || item.status === 'hashing'" class="upload-queue__bar">
             <div class="upload-queue__bar-fill" :style="{ width: `${item.progress}%` }" />
+          </div>
+          <div v-if="item.status === 'uploading'" class="upload-queue__actions">
+            <OButton variant="subtle" size="sm" @click="store.refreshUploadStatus(item.id)">刷新状态</OButton>
+            <OButton variant="danger" size="sm" @click="store.cancelUpload(item.id)">取消</OButton>
           </div>
           <p v-if="item.error" class="upload-queue__error">{{ item.error }}</p>
         </div>
@@ -78,6 +85,7 @@ const statusLabel: Record<string, string> = {
 .upload-queue__status { font-size: 11px; color: var(--text-secondary); }
 .upload-queue__status--done,
 .upload-queue__status--instant { color: var(--success); }
+.upload-queue__status--canceled,
 .upload-queue__status--error { color: var(--danger); }
 .upload-queue__status--uploading,
 .upload-queue__status--hashing { color: var(--accent); }
@@ -91,6 +99,7 @@ const statusLabel: Record<string, string> = {
   transition: width 200ms;
 }
 .upload-queue__error { font-size: 11px; color: var(--danger); margin-top: 3px; }
+.upload-queue__actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
 
 .slide-up-queue-enter-active { transition: all 220ms var(--ease-out); }
 .slide-up-queue-leave-active { transition: all 150ms; }

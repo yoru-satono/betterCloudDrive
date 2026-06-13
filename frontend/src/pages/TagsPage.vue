@@ -22,6 +22,10 @@ const tagFiles = ref<FileEntity[]>([])
 const showCreate = ref(false)
 const newTagName = ref('')
 const newTagColor = ref('#00d4aa')
+const showEdit = ref(false)
+const editTarget = ref<TagEntity | null>(null)
+const editTagName = ref('')
+const editTagColor = ref('#00d4aa')
 
 const PRESET_COLORS = ['#00d4aa', '#60a5fa', '#a78bfa', '#f87171', '#fb923c', '#4ade80', '#f472b6']
 
@@ -42,6 +46,22 @@ async function createTag() {
   load()
 }
 
+function openEditTag(tag: TagEntity) {
+  editTarget.value = tag
+  editTagName.value = tag.tagName
+  editTagColor.value = tag.color || '#00d4aa'
+  showEdit.value = true
+}
+
+async function updateTag() {
+  if (!editTarget.value || !editTagName.value.trim()) return
+  const { data } = await tagsApi.updateTag(editTarget.value.id, editTagName.value.trim(), editTagColor.value)
+  toast.success('标签已更新')
+  showEdit.value = false
+  if (activeTag.value?.id === editTarget.value.id) activeTag.value = data.data
+  await load()
+}
+
 async function deleteTag(tag: TagEntity) {
   const ok = await confirm('删除标签', `删除标签「${tag.tagName}」不会删除文件。`)
   if (!ok) return
@@ -55,6 +75,14 @@ async function selectTag(tag: TagEntity) {
   activeTag.value = tag
   const { data } = await tagsApi.listFilesByTag(tag.id, 1, 50)
   tagFiles.value = data.data.records
+}
+
+async function removeFromTag(file: FileEntity) {
+  if (!activeTag.value) return
+  await tagsApi.removeFileTag(file.id, activeTag.value.id)
+  toast.success('已移除此标签')
+  await selectTag(activeTag.value)
+  await load()
 }
 
 onMounted(load)
@@ -81,6 +109,7 @@ onMounted(load)
           <span class="tag-dot" :style="{ background: tag.color || '#00d4aa' }" />
           <span class="tag-item__name truncate">{{ tag.tagName }}</span>
           <span class="tag-item__count">{{ tag.fileCount }}</span>
+          <button class="tag-item__edit" @click.stop="openEditTag(tag)">编辑</button>
           <button class="tag-item__del" @click.stop="deleteTag(tag)">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -102,6 +131,7 @@ onMounted(load)
             <FileIcon :mime-type="f.mimeType" :file-type="f.fileType" :size="15" />
             <span class="truncate" style="flex:1;font-size:13px">{{ f.fileName }}</span>
             <span class="font-mono" style="font-size:11px;color:var(--text-secondary)">{{ f.fileType === 'folder' ? '文件夹' : formatSize(f.fileSize) }}</span>
+            <OButton variant="subtle" size="sm" @click="removeFromTag(f)">移除</OButton>
           </div>
         </div>
       </template>
@@ -128,6 +158,27 @@ onMounted(load)
         <OButton variant="primary" @click="createTag">创建</OButton>
       </template>
     </OModal>
+
+    <OModal title="编辑标签" :open="showEdit" @close="showEdit = false">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <OInput v-model="editTagName" label="标签名称" placeholder="输入标签名" @keyup.enter="updateTag" />
+        <div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">颜色</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button
+              v-for="c in PRESET_COLORS" :key="c"
+              class="color-btn"
+              :style="{ background: c, outline: editTagColor === c ? '2px solid white' : 'none' }"
+              @click="editTagColor = c"
+            />
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <OButton variant="ghost" @click="showEdit = false">取消</OButton>
+        <OButton variant="primary" @click="updateTag">保存</OButton>
+      </template>
+    </OModal>
   </div>
 </template>
 
@@ -148,11 +199,15 @@ onMounted(load)
 .tag-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .tag-item__name { flex: 1; font-size: 13px; }
 .tag-item__count { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.tag-item__edit,
 .tag-item__del {
   background: none; border: none; cursor: pointer; color: var(--text-muted);
   opacity: 0; display: flex; align-items: center; transition: opacity var(--fast);
+  font-family: var(--font-sans); font-size: 11px;
 }
+.tag-item:hover .tag-item__edit,
 .tag-item:hover .tag-item__del { opacity: 1; }
+.tag-item__edit:hover { color: var(--accent); }
 .tag-item__del:hover { color: var(--danger); }
 
 .tag-files { display: flex; flex-direction: column; gap: 4px; }

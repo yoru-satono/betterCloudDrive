@@ -55,6 +55,11 @@ public class FavoriteServiceImpl implements FavoriteService {
     }
 
     @Override
+    public boolean isFavorite(Long userId, Long fileId) {
+        return favoriteRepository.existsByUserIdAndFileId(userId, fileId);
+    }
+
+    @Override
     public PageResult<FileEntity> listFavorites(Long userId, int page, int size) {
         Page<FavoriteEntity> favPage = favoriteRepository.findByUserIdOrderByCreatedAtDesc(
                 userId, PageRequest.of(page - 1, size));
@@ -71,8 +76,4 @@ public class FavoriteServiceImpl implements FavoriteService {
         return PageResult.of(files, favPage.getTotalElements(), page, size);
     }
 
-    @Override
-    public boolean isFavorited(Long userId, Long fileId) {
-        return favoriteRepository.existsByUserIdAndFileId(userId, fileId);
-    }
 }

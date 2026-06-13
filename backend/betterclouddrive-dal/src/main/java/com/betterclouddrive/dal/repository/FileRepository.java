@@ -4,6 +4,7 @@ import com.betterclouddrive.dal.entity.FileEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +20,10 @@ public interface FileRepository extends JpaRepository<FileEntity, Long>, JpaSpec
 
     @Query("SELECT f FROM FileEntity f WHERE f.isDeleted = true AND f.deletedAt < :cutoff ORDER BY f.id ASC")
     List<FileEntity> findExpiredDeletedFiles(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);
+
+    @Modifying
+    @Query("DELETE FROM FileEntity f WHERE f.userId = :userId AND f.isDeleted = true")
+    int deleteByUserIdAndIsDeletedTrue(@Param("userId") Long userId);
 
     Optional<FileEntity> findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc(String md5Hash);
 

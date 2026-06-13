@@ -16,6 +16,7 @@ const { formatSize, formatDate } = useFormatters()
 <template>
   <div
     class="file-card"
+    :data-testid="`file-card-${file.fileName}`"
     :class="{ 'file-card--selected': selected }"
     :style="{ animationDelay: `${(index || 0) * 18}ms` }"
     @click="emit('click', file, $event)"

@@ -108,6 +108,10 @@ drive:
   upload:
     chunk-size: 5242880           # 5MB
     session-expire-hours: 24
+  download:
+    folder-zip:
+      max-files: 1000
+      max-size-bytes: 1073741824  # 1GB
   version:
     max-versions: 10
   share:

@@ -3,7 +3,7 @@
     <!-- Left decorative panel -->
     <div class="public-layout__left" aria-hidden="true">
       <div class="pub-deco">
-        <div class="pub-deco__title">BetterDrive</div>
+        <div class="pub-deco__title">BetterCloudDrive</div>
         <div class="pub-deco__sub">安全 · 高效 · 可靠</div>
         <div class="pub-deco__grid">
           <div v-for="n in 16" :key="n" class="pub-deco__cell" :style="{ animationDelay: `${n * 120}ms` }" />

@@ -7,10 +7,10 @@ import com.betterclouddrive.dal.repository.UserTokenRepository;
 import com.betterclouddrive.service.AuthService;
 import com.betterclouddrive.web.dto.request.ForgotPasswordRequest;
 import com.betterclouddrive.web.dto.request.LoginRequest;
+import com.betterclouddrive.web.dto.request.RegisterCodeRequest;
 import com.betterclouddrive.web.dto.request.RefreshTokenRequest;
 import com.betterclouddrive.web.dto.request.RegisterRequest;
 import com.betterclouddrive.web.dto.request.ResetPasswordRequest;
-import com.betterclouddrive.web.dto.request.VerifyEmailRequest;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.JwtTokenProvider;
 import com.betterclouddrive.web.security.UserPrincipal;
@@ -37,8 +37,15 @@ public class AuthController {
 
     @PostMapping("/register")
     public ApiResponse<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request) {
-        UserEntity user = authService.register(request.getUsername(), request.getPassword(), request.getEmail());
+        UserEntity user = authService.register(
+                request.getUsername(), request.getPassword(), request.getEmail(), request.getVerificationCode());
         return ApiResponse.success(Map.of("userId", user.getId(), "username", user.getUsername()));
+    }
+
+    @PostMapping("/register-code/send")
+    public ApiResponse<Void> sendRegisterCode(@Valid @RequestBody RegisterCodeRequest request) {
+        authService.sendRegistrationCode(request.getEmail());
+        return ApiResponse.success();
     }
 
     @PostMapping("/login")
@@ -114,19 +121,6 @@ public class AuthController {
     @GetMapping("/me")
     public ApiResponse<UserEntity> me(@CurrentUser UserPrincipal user) {
         return ApiResponse.success(authService.getCurrentUser(user.getUserId()));
-    }
-
-    @PostMapping("/verify-email/send")
-    public ApiResponse<Void> sendVerificationCode(@CurrentUser UserPrincipal user) {
-        authService.sendVerificationCode(user.getUserId());
-        return ApiResponse.success();
-    }
-
-    @PostMapping("/verify-email/confirm")
-    public ApiResponse<Void> verifyEmail(@CurrentUser UserPrincipal user,
-                                          @Valid @RequestBody VerifyEmailRequest request) {
-        authService.verifyEmail(user.getUserId(), request.getCode());
-        return ApiResponse.success();
     }
 
     @PostMapping("/forgot-password")

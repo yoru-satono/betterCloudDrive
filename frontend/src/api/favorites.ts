@@ -6,7 +6,7 @@ export const listFavorites = (page = 1, size = 20) =>
   api.get<ApiResponse<PageResult<FileEntity>>>('/favorites', { params: { page, size } })
 
 export const addFavorite = (fileId: number) =>
-  api.post<ApiResponse<void>>('/favorites', { fileId })
+  api.post<ApiResponse<void>>(`/favorites/${fileId}`)
 
 export const removeFavorite = (fileId: number) =>
   api.delete<ApiResponse<void>>(`/favorites/${fileId}`)

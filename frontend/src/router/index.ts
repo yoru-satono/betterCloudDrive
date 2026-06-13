@@ -5,6 +5,7 @@ const routes = [
     path: '/',
     component: () => import('@/layouts/PublicLayout.vue'),
     children: [
+      { path: '',                 redirect: '/login' },
       { path: 'login',            name: 'Login',          component: () => import('@/pages/auth/LoginPage.vue'),          meta: { guest: true } },
       { path: 'register',         name: 'Register',       component: () => import('@/pages/auth/RegisterPage.vue'),       meta: { guest: true } },
       { path: 'forgot-password',  name: 'ForgotPassword', component: () => import('@/pages/auth/ForgotPasswordPage.vue'), meta: { guest: true } },
@@ -33,6 +34,7 @@ const routes = [
     children: [
       { path: '',       name: 'AdminDashboard', component: () => import('@/pages/admin/AdminDashboard.vue') },
       { path: 'users',  name: 'AdminUsers',     component: () => import('@/pages/admin/AdminUsers.vue') },
+      { path: 'users/:userId/files', name: 'AdminUserFiles', component: () => import('@/pages/admin/AdminUserFiles.vue') },
       { path: 'logs',   name: 'AdminLogs',      component: () => import('@/pages/admin/AdminLogs.vue') },
     ]
   },

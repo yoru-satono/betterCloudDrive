@@ -1,18 +1,35 @@
 export interface ShareLinkEntity {
   id: number
+  userId: number
   fileId: number
   shareCode: string
-  shareUrl: string
-  expiresAt: string | null
-  visitCount: number
+  passwordHash: string | null
+  expireAt: string | null
   maxVisits: number | null
-  isPasswordProtected: boolean
+  downloadCount: number
+  visitCount: number
+  isCanceled: boolean
   createdAt: string
+  updatedAt: string
 }
 
 export interface CreateShareRequest {
   fileId: number
-  expiresAt?: string
+  expireAt?: number
   maxVisits?: number
   password?: string
+  notifyEmail?: string
+}
+
+export interface UpdateShareRequest {
+  expireAt?: number
+  maxVisits?: number
+  password?: string
+}
+
+export interface AccessShareResponse {
+  fileId: number
+  fileName: string
+  fileType: 'file' | 'folder'
+  fileSize: number
 }

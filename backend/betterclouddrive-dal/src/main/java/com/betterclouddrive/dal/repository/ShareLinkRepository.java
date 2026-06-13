@@ -21,5 +21,9 @@ public interface ShareLinkRepository extends JpaRepository<ShareLinkEntity, Long
     @Query("UPDATE ShareLinkEntity s SET s.visitCount = s.visitCount + :count WHERE s.shareCode = :shareCode")
     int incrementVisitCount(@Param("shareCode") String shareCode, @Param("count") int count);
 
+    @Modifying
+    @Query("UPDATE ShareLinkEntity s SET s.downloadCount = s.downloadCount + 1, s.updatedAt = CURRENT_TIMESTAMP WHERE s.id = :shareId")
+    int incrementDownloadCount(@Param("shareId") Long shareId);
+
     List<ShareLinkEntity> findByIsCanceledFalseAndExpireAtLessThanEqual(LocalDateTime now);
 }

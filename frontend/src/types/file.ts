@@ -25,13 +25,11 @@ export interface FileVersionEntity {
 }
 
 export interface UploadSession {
-  uploadId: string
-  fileId: number
-  fileName: string
-  totalSize: number
-  chunkSize: number
+  sessionId: string
+  chunkSize?: number
   totalChunks: number
-  uploadedChunks: number[]
+  uploadedChunks?: number
+  missingChunks?: number[]
 }
 
 export interface BreadcrumbItem {

@@ -42,9 +42,9 @@ onMounted(load)
   <div class="page-enter">
     <div class="page-header">
       <h2>操作日志</h2>
-      <div style="display:flex;gap:8px;align-items:center">
-        <OInput v-model="userId" placeholder="用户ID筛选" style="width:140px" type="number" />
-        <OButton variant="ghost" size="sm" @click="() => { page = 1; load() }">筛选</OButton>
+      <div class="logs-filter">
+        <OInput v-model="userId" placeholder="用户ID筛选" class="logs-filter__input" type="number" />
+        <OButton variant="primary" size="sm" @click="() => { page = 1; load() }">筛选</OButton>
         <OButton variant="subtle" size="sm" @click="() => { userId = ''; page = 1; load() }">重置</OButton>
       </div>
     </div>
@@ -56,12 +56,12 @@ onMounted(load)
         <div class="log-item__dot" />
         <div class="log-item__content">
           <div class="log-item__header">
-            <span class="log-item__action" :style="{ color: actionColor(log.action) }">{{ log.action }}</span>
-            <span class="log-item__user">{{ log.username }}</span>
+            <span class="log-item__action" :style="{ color: actionColor(log.actionType) }">{{ log.actionType }}</span>
+            <span class="log-item__user">用户 {{ log.userId }}</span>
             <span class="log-item__time font-mono">{{ formatDateFull(log.createdAt) }}</span>
           </div>
-          <div v-if="log.targetName" class="log-item__target">
-            目标：{{ log.targetName }}
+          <div v-if="log.targetType || log.targetId" class="log-item__target">
+            目标：{{ log.targetType || '未知' }}<span v-if="log.targetId"> #{{ log.targetId }}</span>
           </div>
           <div v-if="log.detail" class="log-item__detail">{{ log.detail }}</div>
         </div>
@@ -77,7 +77,22 @@ onMounted(load)
 </template>
 
 <style scoped>
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.logs-filter {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+.logs-filter__input {
+  width: 140px;
+}
 .logs-timeline { position: relative; padding-left: 20px; }
 .logs-timeline::before {
   content: ''; position: absolute; left: 7px; top: 0; bottom: 0; width: 1px;
@@ -104,4 +119,15 @@ onMounted(load)
 .log-item__detail { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 .pagination { display: flex; align-items: center; gap: 12px; justify-content: center; margin-top: 20px; }
 .pagination__info { font-size: 12px; color: var(--text-secondary); }
+
+@media (max-width: 640px) {
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .logs-filter,
+  .logs-filter__input {
+    width: 100%;
+  }
+}
 </style>

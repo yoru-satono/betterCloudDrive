@@ -5,10 +5,12 @@ import com.betterclouddrive.web.security.BasicAuthFilter;
 import com.betterclouddrive.web.security.JwtAuthenticationFilter;
 import com.betterclouddrive.web.security.JwtTokenProvider;
 import com.betterclouddrive.web.security.RateLimitFilter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -65,9 +67,13 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/auth/register", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
+                .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+                .requestMatchers("/api/v1/auth/register", "/api/v1/auth/register-code/send", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
                 .requestMatchers("/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
-                .requestMatchers("/api/v1/shares/access/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/shares/access/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/shares/access/*/files").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/shares/access/*/download/*/zip").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/shares/access/*/download/*").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/**").authenticated()
                 .anyRequest().permitAll()
@@ -97,7 +103,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of("*"));
-        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

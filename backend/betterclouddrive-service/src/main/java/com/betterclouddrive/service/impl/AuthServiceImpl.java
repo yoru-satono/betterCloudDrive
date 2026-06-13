@@ -14,6 +14,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -33,31 +34,45 @@ public class AuthServiceImpl implements AuthService {
     @Value("${drive.storage.default-quota-bytes:10737418240}")
     private long defaultQuotaBytes;
 
-    private static final String EMAIL_VERIFY_PREFIX = "email:verify:";
+    private static final String EMAIL_REGISTER_PREFIX = "email:register:";
     private static final String PWD_RESET_PREFIX = "pwd:reset:";
     private static final int CODE_TTL_MINUTES = 10;
 
     @Override
     @Transactional
-    public UserEntity register(String username, String password, String email) {
+    public UserEntity register(String username, String password, String email, String verificationCode) {
         if (userRepository.existsByUsername(username)) {
             throw new BusinessException(ApiCode.CONFLICT, "Username already exists");
         }
-        if (email != null && userRepository.existsByEmail(email)) {
+        String normalizedEmail = normalizeEmail(email);
+        if (!StringUtils.hasText(normalizedEmail)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Email is required");
+        }
+        if (userRepository.existsByEmail(normalizedEmail)) {
             throw new BusinessException(ApiCode.CONFLICT, "Email already exists");
+        }
+        String storedCode = redisTemplate.opsForValue().get(EMAIL_REGISTER_PREFIX + normalizedEmail);
+        if (storedCode == null) {
+            throw new BusinessException(ApiCode.EMAIL_CODE_EXPIRED);
+        }
+        if (!storedCode.equals(verificationCode)) {
+            throw new BusinessException(ApiCode.EMAIL_CODE_MISMATCH);
         }
 
         UserEntity user = UserEntity.builder()
                 .username(username)
                 .passwordHash(passwordEncoder.encode(password))
-                .email(email)
+                .email(normalizedEmail)
+                .emailVerified(true)
                 .status(1)
                 .storageQuota(defaultQuotaBytes)
                 .storageUsed(0L)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        return userRepository.save(user);
+        UserEntity saved = userRepository.save(user);
+        redisTemplate.delete(EMAIL_REGISTER_PREFIX + normalizedEmail);
+        return saved;
     }
 
     @Override
@@ -105,39 +120,17 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public void sendVerificationCode(Long userId) {
-        UserEntity user = userRepository.findById(userId).orElse(null);
-        if (user == null || user.getEmail() == null || user.getEmail().isBlank()) {
-            throw new BusinessException(ApiCode.EMAIL_VERIFICATION_FAILED, "No email address on file");
+    public void sendRegistrationCode(String email) {
+        String normalizedEmail = normalizeEmail(email);
+        if (!StringUtils.hasText(normalizedEmail)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Email is required");
         }
-        if (Boolean.TRUE.equals(user.getEmailVerified())) {
-            throw new BusinessException(ApiCode.EMAIL_VERIFICATION_FAILED, "Email is already verified");
+        if (userRepository.existsByEmail(normalizedEmail)) {
+            throw new BusinessException(ApiCode.CONFLICT, "Email already exists");
         }
         String code = generateCode();
-        redisTemplate.opsForValue().set(EMAIL_VERIFY_PREFIX + userId, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
-        emailService.sendVerificationCode(user.getEmail(), code);
-    }
-
-    @Override
-    @Transactional
-    public void verifyEmail(Long userId, String code) {
-        UserEntity user = userRepository.findById(userId).orElse(null);
-        if (user == null) {
-            throw new BusinessException(ApiCode.EMAIL_VERIFICATION_FAILED, "User not found");
-        }
-        if (Boolean.TRUE.equals(user.getEmailVerified())) {
-            return;
-        }
-        String storedCode = redisTemplate.opsForValue().get(EMAIL_VERIFY_PREFIX + userId);
-        if (storedCode == null) {
-            throw new BusinessException(ApiCode.EMAIL_CODE_EXPIRED);
-        }
-        if (!storedCode.equals(code)) {
-            throw new BusinessException(ApiCode.EMAIL_CODE_MISMATCH);
-        }
-        user.setEmailVerified(true);
-        userRepository.save(user);
-        redisTemplate.delete(EMAIL_VERIFY_PREFIX + userId);
+        redisTemplate.opsForValue().set(EMAIL_REGISTER_PREFIX + normalizedEmail, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
+        emailService.sendVerificationCode(normalizedEmail, code);
     }
 
     @Override
@@ -191,5 +184,9 @@ public class AuthServiceImpl implements AuthService {
 
     private String generateCode() {
         return String.format("%06d", ThreadLocalRandom.current().nextInt(100000, 1000000));
+    }
+
+    private String normalizeEmail(String email) {
+        return StringUtils.hasText(email) ? email.trim().toLowerCase() : null;
     }
 }
