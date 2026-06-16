@@ -14,6 +14,8 @@ vi.mock('@/api/client', () => ({
 vi.mock('@/api/desktopDownload', () => ({
   downloadDesktopFile: vi.fn(),
   downloadDesktopFolder: vi.fn(),
+  startQueuedDesktopFileDownload: vi.fn(),
+  startQueuedDesktopFolderDownload: vi.fn(),
   isDesktopDownloadRuntime: vi.fn(() => false),
 }))
 
@@ -24,6 +26,8 @@ const toastSuccess = toast.success as Mock
 const isDesktopDownloadRuntime = desktopDownload.isDesktopDownloadRuntime as Mock
 const downloadDesktopFile = desktopDownload.downloadDesktopFile as Mock
 const downloadDesktopFolder = desktopDownload.downloadDesktopFolder as Mock
+const startQueuedDesktopFileDownload = desktopDownload.startQueuedDesktopFileDownload as Mock
+const startQueuedDesktopFolderDownload = desktopDownload.startQueuedDesktopFolderDownload as Mock
 
 describe('downloadFile', () => {
   beforeEach(() => {
@@ -34,6 +38,8 @@ describe('downloadFile', () => {
     isDesktopDownloadRuntime.mockReturnValue(false)
     downloadDesktopFile.mockReset()
     downloadDesktopFolder.mockReset()
+    startQueuedDesktopFileDownload.mockReset()
+    startQueuedDesktopFolderDownload.mockReset()
   })
 
   it('downloads a blob response using the authenticated download endpoint', async () => {
@@ -69,13 +75,13 @@ describe('downloadFile', () => {
 
   it('uses the desktop file save flow in Tauri runtime', async () => {
     isDesktopDownloadRuntime.mockReturnValue(true)
-    downloadDesktopFile.mockResolvedValue(true)
+    startQueuedDesktopFileDownload.mockResolvedValue(true)
 
     await downloadFile(7, 'fallback.txt')
 
-    expect(downloadDesktopFile).toHaveBeenCalledWith(7, 'fallback.txt')
+    expect(startQueuedDesktopFileDownload).toHaveBeenCalledWith({ id: 7, fileName: 'fallback.txt', fileSize: 0 })
     expect(apiGet).not.toHaveBeenCalled()
-    expect(toastSuccess).toHaveBeenCalledWith('下载完成')
+    expect(toastSuccess).toHaveBeenCalledWith('已加入传输队列')
   })
 
   it('downloads a folder using the authenticated ZIP endpoint', async () => {
@@ -92,13 +98,13 @@ describe('downloadFile', () => {
 
   it('uses the desktop recursive folder flow in Tauri runtime', async () => {
     isDesktopDownloadRuntime.mockReturnValue(true)
-    downloadDesktopFolder.mockResolvedValue(true)
+    startQueuedDesktopFolderDownload.mockResolvedValue(true)
 
     await downloadFolderZip(7, 'docs')
 
-    expect(downloadDesktopFolder).toHaveBeenCalledWith({ id: 7, fileName: 'docs' })
+    expect(startQueuedDesktopFolderDownload).toHaveBeenCalledWith({ id: 7, fileName: 'docs', fileSize: 0 })
     expect(apiGet).not.toHaveBeenCalled()
-    expect(toastSuccess).toHaveBeenCalledWith('文件夹下载完成')
+    expect(toastSuccess).toHaveBeenCalledWith('已加入传输队列')
   })
 
   it('shows folder ZIP limit errors from JSON blob responses', async () => {

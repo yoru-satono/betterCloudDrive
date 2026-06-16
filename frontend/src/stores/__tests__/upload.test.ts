@@ -6,6 +6,7 @@ import { useUploadStore } from '@/stores/upload'
 import { useFilesStore } from '@/stores/files'
 import * as uploadApi from '@/api/upload'
 import * as resumableUpload from '@/api/resumableUpload'
+import * as desktopSettings from '@/api/desktopSettings'
 
 vi.mock('@/api/upload', () => ({
   instantUpload: vi.fn(),
@@ -21,6 +22,11 @@ vi.mock('@/api/resumableUpload', () => ({
   removeResumableUpload: vi.fn(),
   readResumableUploads: vi.fn(() => []),
   saveResumableUpload: vi.fn(),
+}))
+
+vi.mock('@/api/desktopSettings', () => ({
+  getDesktopSettings: vi.fn(),
+  isDesktopSettingsRuntime: vi.fn(() => false),
 }))
 
 class MockFileReader {
@@ -47,6 +53,8 @@ const findResumableUpload = resumableUpload.findResumableUpload as Mock
 const removeResumableUpload = resumableUpload.removeResumableUpload as Mock
 const readResumableUploads = resumableUpload.readResumableUploads as Mock
 const saveResumableUpload = resumableUpload.saveResumableUpload as Mock
+const getDesktopSettings = desktopSettings.getDesktopSettings as Mock
+const isDesktopSettingsRuntime = desktopSettings.isDesktopSettingsRuntime as Mock
 const toastError = toast.error as Mock
 const toastSuccess = toast.success as Mock
 
@@ -90,6 +98,10 @@ beforeEach(() => {
   readResumableUploads.mockReset()
   readResumableUploads.mockReturnValue([])
   saveResumableUpload.mockReset()
+  getDesktopSettings.mockReset()
+  getDesktopSettings.mockResolvedValue({ maxConcurrentUploads: 3 })
+  isDesktopSettingsRuntime.mockReset()
+  isDesktopSettingsRuntime.mockReturnValue(false)
   toastError.mockReset()
   toastSuccess.mockReset()
 })
@@ -121,6 +133,42 @@ describe('upload store', () => {
 
     expect(store.queue.filter(item => item.status === 'hashing')).toHaveLength(3)
     expect(store.queue[3]).toMatchObject({ fileName: 'd.txt', status: 'hashing' })
+
+    gates[1].resolve({ data: { data: { fileId: 2, instant: true } } })
+    gates[2].resolve({ data: { data: { fileId: 3, instant: true } } })
+    gates[3].resolve({ data: { data: { fileId: 4, instant: true } } })
+    await vi.waitFor(() => expect(instantUpload).toHaveBeenCalledTimes(5))
+    gates[4].resolve({ data: { data: { fileId: 5, instant: true } } })
+    await flushAsync()
+  })
+
+  it('uses desktop upload concurrency settings when running in Tauri', async () => {
+    isDesktopSettingsRuntime.mockReturnValue(true)
+    getDesktopSettings.mockResolvedValue({ maxConcurrentUploads: 2 })
+    const gates = Array.from({ length: 4 }, () => deferred<{ data: { data: { fileId: number; instant: true } } }>())
+    let instantIndex = 0
+    instantUpload.mockImplementation(() => gates[instantIndex++].promise)
+    mockFilesRefresh()
+
+    const store = useUploadStore()
+    store.addFiles([
+      makeFile(3, 'a.txt'),
+      makeFile(3, 'b.txt'),
+      makeFile(3, 'c.txt'),
+      makeFile(3, 'd.txt'),
+    ], 10)
+    await vi.waitFor(() => expect(instantUpload).toHaveBeenCalledTimes(2))
+    await flushAsync()
+
+    expect(store.queue.filter(item => item.status === 'hashing')).toHaveLength(2)
+    expect(store.queue.filter(item => item.status === 'pending')).toHaveLength(2)
+
+    gates[0].resolve({ data: { data: { fileId: 1, instant: true } } })
+    gates[1].resolve({ data: { data: { fileId: 2, instant: true } } })
+    await vi.waitFor(() => expect(instantUpload).toHaveBeenCalledTimes(4))
+    gates[2].resolve({ data: { data: { fileId: 3, instant: true } } })
+    gates[3].resolve({ data: { data: { fileId: 4, instant: true } } })
+    await flushAsync()
   })
 
   it('starts the next pending upload after canceling an active upload', async () => {
@@ -144,6 +192,28 @@ describe('upload store', () => {
 
     expect(store.queue[0]).toMatchObject({ status: 'canceled' })
     expect(store.queue[3]).toMatchObject({ fileName: 'd.txt', status: 'hashing' })
+  })
+
+  it('pauses and resumes an active upload before chunk transfer', async () => {
+    const gate = deferred<{ data: { data: { chunkNumber: number } } }>()
+    instantUpload.mockRejectedValue({ response: { data: { code: 419010 } } })
+    initMultipart.mockResolvedValue({ data: { data: { sessionId: 'pause-session', totalChunks: 1 } } })
+    uploadChunk.mockReturnValue(gate.promise)
+    completeMultipart.mockResolvedValue({ data: { data: { fileId: 2 } } })
+    mockFilesRefresh()
+
+    const store = useUploadStore()
+    store.addFiles([makeFile()], 10)
+    await vi.waitFor(() => expect(store.queue[0].status).toBe('uploading'))
+
+    store.pauseUpload(store.queue[0].id)
+    await flushAsync()
+    expect(store.queue[0].status).toBe('paused')
+
+    store.resumePausedUpload(store.queue[0].id)
+    await vi.waitFor(() => expect(uploadChunk).toHaveBeenCalled())
+    gate.resolve({ data: { data: { chunkNumber: 0 } } })
+    await vi.waitFor(() => expect(completeMultipart).toHaveBeenCalled())
   })
 
   it('marks an item as instant when instant upload succeeds', async () => {

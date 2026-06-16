@@ -15,6 +15,14 @@ interface DesktopFolderSelection {
   path?: string
 }
 
+interface DownloadTreeNode {
+  id: number
+  fileName: string
+  fileType: 'file' | 'folder'
+  fileSize: number
+  children: DownloadTreeNode[]
+}
+
 export const isDesktopDownloadRuntime = () => isDesktopRuntime()
 
 export function isPickerAbort(error: unknown) {
@@ -56,10 +64,44 @@ export async function downloadDesktopFile(fileId: number, fileName: string) {
   return result.saved
 }
 
+export async function startQueuedDesktopFileDownload(file: Pick<FileEntity, 'id' | 'fileName' | 'fileSize'>) {
+  const result = await invoke<DesktopDownloadResult>('start_desktop_download_file', {
+    request: {
+      fileId: file.id,
+      fileName: file.fileName,
+      fileSize: file.fileSize,
+      token: getBearerToken(),
+      apiBaseUrl: getApiBaseUrl(),
+    },
+  })
+  return result.saved
+}
+
+export async function startQueuedDesktopFolderDownload(folder: Pick<FileEntity, 'id' | 'fileName' | 'fileSize'>) {
+  const tree = await buildDownloadTree(folder.id, folder.fileName, 'folder', folder.fileSize)
+  const result = await invoke<DesktopDownloadResult>('start_desktop_download_folder', {
+    request: {
+      root: tree,
+      token: getBearerToken(),
+      apiBaseUrl: getApiBaseUrl(),
+    },
+  })
+  return result.saved
+}
+
 export async function downloadDesktopFolder(folder: Pick<FileEntity, 'id' | 'fileName'>) {
   const root = await invoke<DesktopFolderSelection>('choose_desktop_folder', { folderName: folder.fileName })
   if (!root.selected || !root.path) return false
-  await downloadFolderChildren(folder.id, root.path)
+  const tasks: DownloadTask[] = []
+  await collectDownloadTasks(folder.id, root.path, tasks)
+  await runPool(tasks, 3, async (task) => {
+    await invoke<DesktopDownloadResult>('download_desktop_file_to_path', {
+      url: buildDownloadUrl(task.fileId),
+      fileName: task.fileName,
+      directoryPath: task.directoryPath,
+      token: getBearerToken(),
+    })
+  })
   return true
 }
 
@@ -84,7 +126,13 @@ export async function listAllChildren(parentId: number): Promise<FileEntity[]> {
   return records
 }
 
-async function downloadFolderChildren(parentId: number, directoryPath: string) {
+interface DownloadTask {
+  fileId: number
+  fileName: string
+  directoryPath: string
+}
+
+async function collectDownloadTasks(parentId: number, directoryPath: string, tasks: DownloadTask[]) {
   const children = await listAllChildren(parentId)
 
   for (const child of children) {
@@ -94,14 +142,43 @@ async function downloadFolderChildren(parentId: number, directoryPath: string) {
         folderName: child.fileName,
       })
       if (!childDirectory.selected || !childDirectory.path) continue
-      await downloadFolderChildren(child.id, childDirectory.path)
-    } else {
-      await invoke<DesktopDownloadResult>('download_desktop_file_to_path', {
-        url: buildDownloadUrl(child.id),
-        fileName: child.fileName,
-        directoryPath,
-        token: getBearerToken(),
-      })
+      await collectDownloadTasks(child.id, childDirectory.path, tasks)
+      continue
     }
+    tasks.push({ fileId: child.id, fileName: child.fileName, directoryPath })
   }
+}
+
+async function buildDownloadTree(
+  id: number,
+  fileName: string,
+  fileType: 'file' | 'folder',
+  fileSize: number,
+): Promise<DownloadTreeNode> {
+  if (fileType === 'file') {
+    return { id, fileName, fileType, fileSize, children: [] }
+  }
+
+  const children = await listAllChildren(id)
+  return {
+    id,
+    fileName,
+    fileType,
+    fileSize,
+    children: await Promise.all(children.map(child =>
+      buildDownloadTree(child.id, child.fileName, child.fileType, child.fileSize),
+    )),
+  }
+}
+
+async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
+  const concurrency = Math.max(1, Math.min(16, Math.floor(limit || 1)))
+  let next = 0
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++]
+      await worker(item)
+    }
+  })
+  await Promise.all(runners)
 }

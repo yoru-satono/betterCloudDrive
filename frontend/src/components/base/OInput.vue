@@ -2,7 +2,7 @@
 import { computed, useId } from 'vue'
 
 const props = defineProps<{
-  modelValue?: string
+  modelValue?: string | number
   placeholder?: string
   type?: string
   label?: string

@@ -12,11 +12,12 @@ import {
 } from '@/api/resumableUpload'
 import { useFilesStore } from './files'
 import { toast } from 'vue-sonner'
+import { getDesktopSettings, isDesktopSettingsRuntime } from '@/api/desktopSettings'
 
-export type UploadStatus = 'pending' | 'hashing' | 'uploading' | 'done' | 'error' | 'instant' | 'canceled' | 'resume_required'
+export type UploadStatus = 'pending' | 'hashing' | 'uploading' | 'paused' | 'done' | 'error' | 'instant' | 'canceled' | 'resume_required'
 
 const CHUNK_SIZE = 5 * 1024 * 1024
-const MAX_CONCURRENT_UPLOADS = 3
+const DEFAULT_MAX_CONCURRENT_UPLOADS = 3
 
 export interface UploadItem {
   id: string
@@ -35,6 +36,7 @@ export interface UploadItem {
   resumable?: boolean
   desktop?: boolean
   started?: boolean
+  pausedFrom?: Exclude<UploadStatus, 'paused'>
 }
 
 export interface UploadFileEntry {
@@ -47,6 +49,7 @@ export interface UploadFileEntry {
 export const useUploadStore = defineStore('upload', () => {
   const queue = ref<UploadItem[]>([])
   const isOpen = ref(false)
+  let scheduling = false
 
   function addFiles(files: File[], parentId: number | null) {
     addUploadFiles(files.map(file => ({ file, parentId })))
@@ -124,12 +127,29 @@ export const useUploadStore = defineStore('upload', () => {
   }
 
   function scheduleUploads() {
-    const activeCount = queue.value.filter(item =>
-      !item.desktop
-      && item.started
-      && (item.status === 'hashing' || item.status === 'uploading')
-    ).length
-    const slots = Math.max(0, MAX_CONCURRENT_UPLOADS - activeCount)
+    if (!isDesktopSettingsRuntime()) {
+      startPendingUploads(DEFAULT_MAX_CONCURRENT_UPLOADS)
+      return
+    }
+
+    if (scheduling) return
+    scheduling = true
+    void getDesktopSettings().then((settings) => {
+      const maxConcurrentUploads = Math.max(1, Math.min(16, Math.floor(settings.maxConcurrentUploads || DEFAULT_MAX_CONCURRENT_UPLOADS)))
+      startPendingUploads(maxConcurrentUploads)
+    }).catch(() => {
+      startPendingUploads(DEFAULT_MAX_CONCURRENT_UPLOADS)
+    }).finally(() => {
+      scheduling = false
+      const activeCount = activeUploadCount()
+      const hasPending = queue.value.some(item => !item.desktop && !item.started && item.status === 'pending')
+      if (hasPending && activeCount === 0) scheduleUploads()
+    })
+  }
+
+  function startPendingUploads(maxConcurrentUploads: number) {
+    const activeCount = activeUploadCount()
+    const slots = Math.max(0, maxConcurrentUploads - activeCount)
     if (slots === 0) return
 
     queue.value
@@ -139,6 +159,14 @@ export const useUploadStore = defineStore('upload', () => {
         item.started = true
         void processUpload(item)
       })
+  }
+
+  function activeUploadCount() {
+    return queue.value.filter(item =>
+      !item.desktop
+      && item.started
+      && (item.status === 'hashing' || item.status === 'uploading')
+    ).length
   }
 
   async function processUpload(item: UploadItem) {
@@ -158,6 +186,7 @@ export const useUploadStore = defineStore('upload', () => {
       update({ status: 'hashing' })
       const md5 = await computeMd5(item.file, (pct) => update({ progress: pct * 30 }))
       if (isCanceled()) return
+      if (!await waitWhilePaused(item.id)) return
       if (item.uploadId && item.md5Hash && item.md5Hash !== md5) {
         update({
           status: 'resume_required',
@@ -190,6 +219,7 @@ export const useUploadStore = defineStore('upload', () => {
 
       const instant = await tryInstantUpload(item.parentId, item.fileName, item.file.size, md5, item.file.type || undefined)
       if (isCanceled()) return
+      if (!await waitWhilePaused(item.id)) return
       if (instant) {
         removeResumableUpload(resumeRecord?.sessionId || item.uploadId)
         update({ status: 'instant', progress: 100, resumable: false })
@@ -231,6 +261,7 @@ export const useUploadStore = defineStore('upload', () => {
       for (const i of missingChunks) {
         const current = queue.value.find(q => q.id === item.id)
         if (current?.status === 'canceled') return
+        if (!await waitWhilePaused(item.id)) return
         const chunk = item.file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
         const missingIndex = missingChunks.indexOf(i)
         await uploadApi.uploadChunk(session.sessionId, i, chunk, (pct) => {
@@ -239,9 +270,11 @@ export const useUploadStore = defineStore('upload', () => {
           const overall = 30 + (completedEquivalent / session.totalChunks) * 65
           update({ progress: overall, chunkProgress: `${Math.min(session.totalChunks, Math.floor(completedEquivalent))}/${session.totalChunks}` })
         })
+        if (!await waitWhilePaused(item.id)) return
         updateProgressFromChunks(update, session.totalChunks, session.totalChunks - missingChunks.length + missingIndex + 1)
       }
 
+      if (!await waitWhilePaused(item.id)) return
       await uploadApi.completeMultipart(session.sessionId)
       removeResumableUpload(session.sessionId)
       update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
@@ -271,6 +304,24 @@ export const useUploadStore = defineStore('upload', () => {
       removeResumableUpload(item.uploadId)
     }
     Object.assign(item, { status: 'canceled' as UploadStatus, error: null, resumable: false, started: false })
+    scheduleUploads()
+  }
+
+  function pauseUpload(id: string) {
+    const item = queue.value.find(q => q.id === id)
+    if (!item) return
+    if (!['pending', 'hashing', 'uploading'].includes(item.status)) return
+    item.pausedFrom = item.status as Exclude<UploadStatus, 'paused'>
+    item.status = 'paused'
+    item.error = null
+    scheduleUploads()
+  }
+
+  function resumePausedUpload(id: string) {
+    const item = queue.value.find(q => q.id === id)
+    if (!item || item.status !== 'paused') return
+    item.status = item.started ? (item.pausedFrom || 'uploading') : 'pending'
+    item.pausedFrom = undefined
     scheduleUploads()
   }
 
@@ -317,12 +368,28 @@ export const useUploadStore = defineStore('upload', () => {
     removeItem,
     clearDone,
     cancelUpload,
+    pauseUpload,
+    resumePausedUpload,
     refreshUploadStatus,
     retryUpload,
     resumeUploadWithFile,
     restoreResumableUploads,
   }
 })
+
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function waitWhilePaused(id: string) {
+  const store = useUploadStore()
+  while (true) {
+    const item = store.queue.find(q => q.id === id)
+    if (!item || item.status === 'canceled') return false
+    if (item.status !== 'paused') return true
+    await delay(100)
+  }
+}
 
 function normalizeUploadPatch(patch: Partial<UploadItem>) {
   if (patch.progress === undefined) {

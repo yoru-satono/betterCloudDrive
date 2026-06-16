@@ -1,3 +1,10 @@
+use crate::{
+    settings::{self, DesktopSettings, TransferLimiters},
+    transfer::{
+        self, DesktopTransferState, TransferDirection, TransferNode, TransferNodeKind,
+        TransferNodePatch, TransferStatus, TransferTask,
+    },
+};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -7,7 +14,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 
 const CHUNK_SIZE: u64 = 5 * 1024 * 1024;
@@ -155,12 +162,13 @@ struct InstantUploadResponse {
     instant: Option<bool>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct LocalUploadFile {
     path: PathBuf,
     file_name: String,
     display_name: String,
     directory_path: Vec<String>,
+    remote_directory_path: Vec<String>,
     file_size: u64,
 }
 
@@ -168,6 +176,8 @@ struct UploadContext<R: Runtime> {
     app: AppHandle<R>,
     client: reqwest::Client,
     state: DesktopUploadState,
+    transfer_state: DesktopTransferState,
+    transfer_task_id: String,
     batch_id: String,
     root_name: String,
     parent_id: Option<i64>,
@@ -175,12 +185,39 @@ struct UploadContext<R: Runtime> {
     api_base_url: String,
     resumable_uploads: Vec<ResumableUploadRecord>,
     resumable_directories: Vec<ResumableDirectoryRecord>,
+    settings: DesktopSettings,
+    upload_limiter: Arc<settings::RateLimiter>,
+    limiters: TransferLimiters,
+}
+
+impl<R: Runtime> Clone for UploadContext<R> {
+    fn clone(&self) -> Self {
+        Self {
+            app: self.app.clone(),
+            client: self.client.clone(),
+            state: self.state.clone(),
+            transfer_state: self.transfer_state.clone(),
+            transfer_task_id: self.transfer_task_id.clone(),
+            batch_id: self.batch_id.clone(),
+            root_name: self.root_name.clone(),
+            parent_id: self.parent_id,
+            token: self.token.clone(),
+            api_base_url: self.api_base_url.clone(),
+            resumable_uploads: self.resumable_uploads.clone(),
+            resumable_directories: self.resumable_directories.clone(),
+            settings: self.settings.clone(),
+            upload_limiter: self.upload_limiter.clone(),
+            limiters: self.limiters.clone(),
+        }
+    }
 }
 
 #[tauri::command]
 pub async fn upload_desktop_folder<R: Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, DesktopUploadState>,
+    transfer_state: State<'_, DesktopTransferState>,
+    limiters: State<'_, TransferLimiters>,
     request: DesktopFolderUploadRequest,
 ) -> Result<DesktopFolderUploadStart, String> {
     let root = if let Some(path) = e2e_upload_directory() {
@@ -205,31 +242,185 @@ pub async fn upload_desktop_folder<R: Runtime>(
         .and_then(|name| name.to_str())
         .unwrap_or("folder")
         .to_string();
-    let batch_id = format!("desktop-folder-{}", epoch_millis());
-    let ctx = UploadContext {
-        app: app.clone(),
-        client: reqwest::Client::new(),
-        state: state.inner().clone(),
-        batch_id: batch_id.clone(),
-        root_name: root_name.clone(),
-        parent_id: request.parent_id,
-        token: request.token,
-        api_base_url: request.api_base_url.trim_end_matches('/').to_string(),
-        resumable_uploads: request.resumable_uploads,
-        resumable_directories: request.resumable_directories,
-    };
-
-    tauri::async_runtime::spawn(async move {
-        if let Err(error) = upload_folder(ctx, root).await {
-            let _ = app.emit("desktop-upload:error", serde_json::json!({ "message": error }));
-        }
-    });
+    let batch_id = transfer::new_task_id("desktop-upload");
+    let plan = collect_upload_plan(&root)?;
+    let task = build_upload_transfer_task(
+        &batch_id,
+        &root_name,
+        request.parent_id,
+        request.api_base_url.trim_end_matches('/'),
+        &plan,
+    );
+    transfer_state.add_task(&app, task)?;
+    if transfer_state.mark_running(&batch_id) {
+        spawn_upload_task(
+            app.clone(),
+            state.inner().clone(),
+            transfer_state.inner().clone(),
+            limiters.inner().clone(),
+            batch_id.clone(),
+            root_name.clone(),
+            request.parent_id,
+            request.token,
+            request.api_base_url,
+            request.resumable_uploads,
+            request.resumable_directories,
+            plan,
+        );
+    }
 
     Ok(DesktopFolderUploadStart {
         selected: true,
         batch_id: Some(batch_id),
         root_name: Some(root_name),
     })
+}
+
+#[tauri::command]
+pub async fn upload_desktop_files<R: Runtime>(
+    app: AppHandle<R>,
+    state: tauri::State<'_, DesktopUploadState>,
+    transfer_state: State<'_, DesktopTransferState>,
+    limiters: State<'_, TransferLimiters>,
+    request: DesktopFolderUploadRequest,
+) -> Result<DesktopFolderUploadStart, String> {
+    let files = app
+        .dialog()
+        .file()
+        .blocking_pick_files()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|path| path.into_path().ok())
+        .collect::<Vec<_>>();
+
+    if files.is_empty() {
+        return Ok(DesktopFolderUploadStart {
+            selected: false,
+            batch_id: None,
+            root_name: None,
+        });
+    }
+
+    let root_name = if files.len() == 1 {
+        files[0]
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("upload")
+            .to_string()
+    } else {
+        format!("{} 个文件", files.len())
+    };
+    let batch_id = transfer::new_task_id("desktop-upload-files");
+    let plan = collect_selected_files_plan(&root_name, files)?;
+    let task = build_upload_transfer_task(
+        &batch_id,
+        &root_name,
+        request.parent_id,
+        request.api_base_url.trim_end_matches('/'),
+        &plan,
+    );
+    transfer_state.add_task(&app, task)?;
+    if transfer_state.mark_running(&batch_id) {
+        spawn_upload_task(
+            app.clone(),
+            state.inner().clone(),
+            transfer_state.inner().clone(),
+            limiters.inner().clone(),
+            batch_id.clone(),
+            root_name.clone(),
+            request.parent_id,
+            request.token,
+            request.api_base_url,
+            request.resumable_uploads,
+            request.resumable_directories,
+            plan,
+        );
+    }
+
+    Ok(DesktopFolderUploadStart {
+        selected: true,
+        batch_id: Some(batch_id),
+        root_name: Some(root_name),
+    })
+}
+
+pub fn spawn_resume_upload_task<R: Runtime>(
+    app: AppHandle<R>,
+    state: DesktopUploadState,
+    transfer_state: Arc<transfer::TransferStateInner>,
+    limiters: TransferLimiters,
+    task_id: String,
+    token: String,
+    api_base_url: String,
+    resumable_uploads: Vec<ResumableUploadRecord>,
+    resumable_directories: Vec<ResumableDirectoryRecord>,
+) {
+    let transfer_state = DesktopTransferState::from_inner(transfer_state);
+    let Some((root_name, parent_id, plan)) = resume_plan_from_queue(&transfer_state, &task_id) else {
+        let _ = transfer_state.finish_task(&app, &task_id);
+        return;
+    };
+    spawn_upload_task(
+        app,
+        state,
+        transfer_state,
+        limiters,
+        task_id,
+        root_name,
+        parent_id,
+        token,
+        api_base_url,
+        resumable_uploads,
+        resumable_directories,
+        plan,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn_upload_task<R: Runtime>(
+    app: AppHandle<R>,
+    state: DesktopUploadState,
+    transfer_state: DesktopTransferState,
+    limiters: TransferLimiters,
+    task_id: String,
+    root_name: String,
+    parent_id: Option<i64>,
+    token: String,
+    api_base_url: String,
+    resumable_uploads: Vec<ResumableUploadRecord>,
+    resumable_directories: Vec<ResumableDirectoryRecord>,
+    plan: LocalUploadPlan,
+) {
+    tauri::async_runtime::spawn(async move {
+        let result = async {
+            let settings = settings::read_desktop_settings(&app)?;
+            let ctx = UploadContext {
+                app: app.clone(),
+                client: settings::build_client(&settings)?,
+                state,
+                transfer_state: transfer_state.clone(),
+                transfer_task_id: task_id.clone(),
+                batch_id: task_id.clone(),
+                root_name,
+                parent_id,
+                token,
+                api_base_url: api_base_url.trim_end_matches('/').to_string(),
+                resumable_uploads,
+                resumable_directories,
+                settings,
+                upload_limiter: limiters.upload(),
+                limiters,
+            };
+            upload_folder(ctx, plan).await
+        }
+        .await;
+
+        if let Err(error) = result {
+            let _ = app.emit("desktop-upload:error", serde_json::json!({ "message": error.clone() }));
+            let _ = app.emit("transfer:error", serde_json::json!({ "taskId": task_id, "message": error }));
+        }
+        let _ = transfer_state.finish_task(&app, &task_id);
+    });
 }
 
 #[tauri::command]
@@ -241,8 +432,7 @@ pub fn cancel_desktop_upload(
     Ok(())
 }
 
-async fn upload_folder<R: Runtime>(mut ctx: UploadContext<R>, root: PathBuf) -> Result<(), String> {
-    let plan = collect_upload_plan(&root)?;
+async fn upload_folder<R: Runtime>(mut ctx: UploadContext<R>, plan: LocalUploadPlan) -> Result<(), String> {
     let directories = collect_directory_paths(&ctx.root_name, &plan);
     let directory_ids = create_remote_directories(&mut ctx, directories).await?;
 
@@ -257,13 +447,25 @@ async fn upload_folder<R: Runtime>(mut ctx: UploadContext<R>, root: PathBuf) -> 
         return Ok(());
     }
 
+    let mut handles = Vec::new();
+
     for file in plan.files {
         let parent_id = directory_ids
-            .get(&directory_path_key(&file.directory_path, ctx.parent_id))
+            .get(&directory_path_key(&file.remote_directory_path, ctx.parent_id))
             .copied()
             .flatten()
             .or(ctx.parent_id);
-        upload_file(&ctx, file, parent_id).await?;
+        let task_ctx = ctx.clone();
+        handles.push(tauri::async_runtime::spawn(async move {
+            upload_file(&task_ctx, file, parent_id).await
+        }));
+    }
+
+    for handle in handles {
+        let result = handle.await.map_err(|e| format!("上传任务失败: {e}"))?;
+        if let Err(error) = result {
+            let _ = ctx.app.emit("desktop-upload:error", serde_json::json!({ "message": error }));
+        }
     }
 
     let _ = ctx.app.emit(
@@ -281,11 +483,20 @@ async fn upload_file<R: Runtime>(
     file: LocalUploadFile,
     parent_id: Option<i64>,
 ) -> Result<(), String> {
-    let id = format!("{}:{}", ctx.batch_id, file.display_name);
+    let id = transfer::upload_node_id(&ctx.batch_id, &file.display_name);
+    if is_transfer_canceled(ctx.transfer_state.wait_if_blocked(&ctx.app, &id).await) {
+        mark_transfer_canceled(ctx, &file, &id, parent_id, None, None, total_chunks(file.file_size));
+        return Ok(());
+    }
+    let _permit = ctx.limiters.acquire_upload(ctx.settings.max_concurrent_uploads).await;
     let total_chunks = total_chunks(file.file_size);
     emit_item(ctx, &file, &id, parent_id, "hashing", 0.0, "", None, None, None, total_chunks, false);
 
     let md5_hash = compute_md5(&file.path).map_err(|e| format!("计算 MD5 失败: {e}"))?;
+    if is_transfer_canceled(ctx.transfer_state.wait_if_blocked(&ctx.app, &id).await) {
+        mark_transfer_canceled(ctx, &file, &id, parent_id, None, Some(md5_hash), total_chunks);
+        return Ok(());
+    }
     emit_item(ctx, &file, &id, parent_id, "hashing", 30.0, "", None, None, Some(md5_hash.clone()), total_chunks, false);
 
     if try_instant_upload(ctx, parent_id, &file, &md5_hash).await? {
@@ -334,12 +545,20 @@ async fn upload_file<R: Runtime>(
     );
 
     for (index, chunk_number) in missing_chunks.iter().enumerate() {
+        if is_transfer_canceled(ctx.transfer_state.wait_if_blocked(&ctx.app, &id).await) {
+            mark_transfer_canceled(ctx, &file, &id, parent_id, Some(upload_id), Some(md5_hash), session.total_chunks);
+            return Ok(());
+        }
         if ctx.state.is_canceled(&id) {
             ctx.state.clear(&id);
             emit_item(ctx, &file, &id, parent_id, "canceled", 0.0, "", Some(upload_id), None, Some(md5_hash), session.total_chunks, false);
             return Ok(());
         }
         upload_chunk(ctx, &upload_id, &file.path, *chunk_number, session.chunk_size).await?;
+        if is_transfer_canceled(ctx.transfer_state.wait_if_blocked(&ctx.app, &id).await) {
+            mark_transfer_canceled(ctx, &file, &id, parent_id, Some(upload_id), Some(md5_hash), session.total_chunks);
+            return Ok(());
+        }
         let uploaded = completed_before + index as u64 + 1;
         emit_item(
             ctx,
@@ -357,6 +576,10 @@ async fn upload_file<R: Runtime>(
         );
     }
 
+    if is_transfer_canceled(ctx.transfer_state.wait_if_blocked(&ctx.app, &id).await) {
+        mark_transfer_canceled(ctx, &file, &id, parent_id, Some(upload_id), Some(md5_hash), session.total_chunks);
+        return Ok(());
+    }
     complete_upload(ctx, &upload_id).await?;
     emit_item(ctx, &file, &id, parent_id, "done", 100.0, "", Some(upload_id), None, Some(md5_hash), session.total_chunks, false);
     Ok(())
@@ -463,6 +686,9 @@ async fn upload_chunk<R: Runtime>(
     chunk_size: u64,
 ) -> Result<(), String> {
     let bytes = read_chunk(path, chunk_number, chunk_size).map_err(|e| format!("读取分片失败: {e}"))?;
+    ctx.upload_limiter
+        .throttle(bytes.len() as u64, ctx.settings.upload_limit_bytes_per_sec)
+        .await;
     let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("chunk").to_string();
     let part = Part::bytes(bytes).file_name(file_name);
     let form = Form::new().part("file", part);
@@ -594,9 +820,136 @@ fn find_resumable_upload<R: Runtime>(
         .cloned()
 }
 
+#[derive(Clone, Debug)]
 struct LocalUploadPlan {
     files: Vec<LocalUploadFile>,
     directories: Vec<Vec<String>>,
+}
+
+fn build_upload_transfer_task(
+    task_id: &str,
+    root_name: &str,
+    base_parent_id: Option<i64>,
+    api_base_url: &str,
+    plan: &LocalUploadPlan,
+) -> TransferTask {
+    let now = transfer::epoch_millis();
+    let root_node_id = transfer::upload_node_id(task_id, root_name);
+    let mut nodes = Vec::new();
+
+    for directory in &plan.directories {
+        let display_path = directory.join("/");
+        let parent_id = if directory.len() > 1 {
+            Some(transfer::upload_node_id(task_id, &directory[..directory.len() - 1].join("/")))
+        } else {
+            None
+        };
+        nodes.push(TransferNode {
+            id: transfer::upload_node_id(task_id, &display_path),
+            task_id: task_id.to_string(),
+            parent_id,
+            direction: TransferDirection::Upload,
+            kind: TransferNodeKind::Folder,
+            name: directory.last().cloned().unwrap_or_else(|| root_name.to_string()),
+            display_path: display_path.clone(),
+            path: directory.clone(),
+            status: TransferStatus::Pending,
+            progress: 0.0,
+            bytes_done: 0,
+            bytes_total: 0,
+            error: None,
+            local_path: None,
+            target_path: None,
+            remote_file_id: None,
+            remote_parent_id: None,
+            upload_id: None,
+            md5_hash: None,
+            total_chunks: 0,
+            completed_chunks: 0,
+            chunk_size: CHUNK_SIZE,
+            remote_path: directory.clone(),
+        });
+    }
+
+    for file in &plan.files {
+        nodes.push(TransferNode {
+            id: transfer::upload_node_id(task_id, &file.display_name),
+            task_id: task_id.to_string(),
+            parent_id: Some(transfer::upload_node_id(task_id, &file.directory_path.join("/"))),
+            direction: TransferDirection::Upload,
+            kind: TransferNodeKind::File,
+            name: file.file_name.clone(),
+            display_path: file.display_name.clone(),
+            path: {
+                let mut parts = file.directory_path.clone();
+                parts.push(file.file_name.clone());
+                parts
+            },
+            status: TransferStatus::Pending,
+            progress: 0.0,
+            bytes_done: 0,
+            bytes_total: file.file_size,
+            error: None,
+            local_path: Some(file.path.to_string_lossy().to_string()),
+            target_path: None,
+            remote_file_id: None,
+            remote_parent_id: base_parent_id,
+            upload_id: None,
+            md5_hash: None,
+            total_chunks: total_chunks(file.file_size),
+            completed_chunks: 0,
+            chunk_size: CHUNK_SIZE,
+            remote_path: file.remote_directory_path.clone(),
+        });
+    }
+
+    TransferTask {
+        id: task_id.to_string(),
+        direction: TransferDirection::Upload,
+        root_node_id,
+        name: root_name.to_string(),
+        status: TransferStatus::Pending,
+        progress: 0.0,
+        bytes_done: 0,
+        bytes_total: plan.files.iter().map(|file| file.file_size).sum(),
+        created_at: now,
+        updated_at: now,
+        api_base_url: api_base_url.to_string(),
+        base_parent_id,
+        nodes,
+    }
+}
+
+fn resume_plan_from_queue(
+    transfer_state: &DesktopTransferState,
+    task_id: &str,
+) -> Option<(String, Option<i64>, LocalUploadPlan)> {
+    let queue = transfer_state.queue_snapshot();
+    let task = queue.tasks.into_iter().find(|task| task.id == task_id)?;
+    let files = task
+        .nodes
+        .iter()
+        .filter(|node| node.kind == TransferNodeKind::File)
+        .filter(|node| !transfer::is_terminal(&node.status))
+        .filter_map(|node| {
+            let local_path = node.local_path.as_ref()?;
+            Some(LocalUploadFile {
+                path: PathBuf::from(local_path),
+                file_name: node.name.clone(),
+                display_name: node.display_path.clone(),
+                directory_path: node.path[..node.path.len().saturating_sub(1)].to_vec(),
+                remote_directory_path: node.remote_path.clone(),
+                file_size: node.bytes_total,
+            })
+        })
+        .collect();
+    let directories = task
+        .nodes
+        .iter()
+        .filter(|node| node.kind == TransferNodeKind::Folder)
+        .map(|node| node.path.clone())
+        .collect();
+    Some((task.name, task.base_parent_id, LocalUploadPlan { files, directories }))
 }
 
 fn collect_upload_plan(root: &Path) -> Result<LocalUploadPlan, String> {
@@ -635,11 +988,40 @@ fn collect_files_inner(
                 file_name,
                 display_name: display_parts.join("/"),
                 directory_path: directory_path.clone(),
+                remote_directory_path: directory_path.clone(),
                 file_size: metadata.len(),
             });
         }
     }
     Ok(())
+}
+
+fn collect_selected_files_plan(root_name: &str, files: Vec<PathBuf>) -> Result<LocalUploadPlan, String> {
+    let root = vec![root_name.to_string()];
+    let mut entries = Vec::new();
+    for path in files {
+        let metadata = fs::metadata(&path).map_err(|e| format!("读取文件信息失败: {e}"))?;
+        if !metadata.is_file() {
+            continue;
+        }
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("upload")
+            .to_string();
+        entries.push(LocalUploadFile {
+            path,
+            file_name: file_name.clone(),
+            display_name: format!("{root_name}/{file_name}"),
+            directory_path: root.clone(),
+            remote_directory_path: Vec::new(),
+            file_size: metadata.len(),
+        });
+    }
+    Ok(LocalUploadPlan {
+        files: entries,
+        directories: vec![root],
+    })
 }
 
 fn collect_directory_paths(root_name: &str, plan: &LocalUploadPlan) -> Vec<Vec<String>> {
@@ -712,6 +1094,36 @@ fn emit_item<R: Runtime>(
     total_chunks: u64,
     resumable: bool,
 ) {
+    let transfer_status = upload_status_to_transfer_status(status);
+    let completed_chunks = parse_completed_chunks(chunk_progress);
+    let bytes_done = if transfer_status == TransferStatus::Done || transfer_status == TransferStatus::Instant {
+        Some(file.file_size)
+    } else if total_chunks > 0 && completed_chunks > 0 {
+        Some((completed_chunks * CHUNK_SIZE).min(file.file_size))
+    } else if progress > 0.0 {
+        Some(((progress / 100.0) * file.file_size as f64).round() as u64)
+    } else {
+        Some(0)
+    };
+    let _ = ctx.transfer_state.update_node(
+        &ctx.app,
+        id,
+        TransferNodePatch {
+            status: Some(transfer_status),
+            progress: Some(progress),
+            bytes_done,
+            bytes_total: Some(file.file_size),
+            error: Some(error.clone()),
+            upload_id: Some(upload_id.clone()),
+            md5_hash: Some(md5_hash.clone()),
+            total_chunks: Some(total_chunks),
+            completed_chunks: Some(completed_chunks),
+            chunk_size: Some(CHUNK_SIZE),
+            remote_parent_id: Some(parent_id),
+            ..TransferNodePatch::default()
+        },
+    );
+
     let event = DesktopUploadItemEvent {
         id: id.to_string(),
         batch_id: ctx.batch_id.clone(),
@@ -730,6 +1142,41 @@ fn emit_item<R: Runtime>(
         resumable_record: None,
     };
     let _ = ctx.app.emit("desktop-upload:item-updated", event);
+}
+
+fn is_transfer_canceled(result: Result<(), String>) -> bool {
+    matches!(result, Err(error) if error == "transfer canceled")
+}
+
+fn mark_transfer_canceled<R: Runtime>(
+    ctx: &UploadContext<R>,
+    file: &LocalUploadFile,
+    id: &str,
+    parent_id: Option<i64>,
+    upload_id: Option<String>,
+    md5_hash: Option<String>,
+    total_chunks: u64,
+) {
+    emit_item(ctx, file, id, parent_id, "canceled", 0.0, "", upload_id, None, md5_hash, total_chunks, false);
+}
+
+fn upload_status_to_transfer_status(status: &str) -> TransferStatus {
+    match status {
+        "hashing" => TransferStatus::Hashing,
+        "uploading" => TransferStatus::Transferring,
+        "done" => TransferStatus::Done,
+        "instant" => TransferStatus::Instant,
+        "error" => TransferStatus::Error,
+        "canceled" => TransferStatus::Canceled,
+        _ => TransferStatus::Pending,
+    }
+}
+
+fn parse_completed_chunks(chunk_progress: &str) -> u64 {
+    chunk_progress
+        .split_once('/')
+        .and_then(|(done, _)| done.parse::<u64>().ok())
+        .unwrap_or(0)
 }
 
 fn emit_record<R: Runtime>(ctx: &UploadContext<R>, record: ResumableUploadRecord) {
@@ -781,6 +1228,7 @@ mod tests {
             file_name: "main.rs".into(),
             display_name: "Project/src/main.rs".into(),
             directory_path: vec!["Project".into(), "src".into()],
+            remote_directory_path: vec!["Project".into(), "src".into()],
             file_size: 1,
         }];
         let plan = LocalUploadPlan {

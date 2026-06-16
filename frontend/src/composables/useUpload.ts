@@ -5,6 +5,7 @@ import { chooseFolderUploadPlan, isFolderPickerCancel, type FolderUploadPlan } f
 import {
   isDesktopFolderUploadRuntime,
   registerDesktopUploadListeners,
+  uploadDesktopFiles,
   uploadDesktopFolder,
 } from '@/api/desktopUpload'
 import * as filesApi from '@/api/files'
@@ -44,6 +45,17 @@ export function useUpload() {
   }
 
   function triggerFilePicker() {
+    if (isDesktopFolderUploadRuntime()) {
+      uploadDesktopFiles(filesStore.currentParentId).then((result) => {
+        if (result.selected && result.rootName) {
+          toast.success(`${result.rootName} 已加入传输队列`)
+        }
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : '上传文件失败'
+        toast.error(message)
+      })
+      return
+    }
     const input = document.createElement('input')
     input.type = 'file'
     input.multiple = true
@@ -58,7 +70,7 @@ export function useUpload() {
       if (isDesktopFolderUploadRuntime()) {
         const result = await uploadDesktopFolder(filesStore.currentParentId)
         if (result.selected && result.rootName) {
-          toast.success(`${result.rootName} 已加入上传队列`)
+          toast.success(`${result.rootName} 已加入传输队列`)
         }
         return
       }
@@ -99,22 +111,7 @@ function registerDesktopUploadBridge(uploadStore: ReturnType<typeof useUploadSto
   desktopUploadListenersReady = true
   registerDesktopUploadListeners({
     onItemUpdated: (item) => {
-      uploadStore.applyDesktopUploadItem({
-        id: item.id,
-        fileName: item.fileName,
-        displayName: item.displayName,
-        parentId: item.parentId,
-        status: item.status,
-        progress: item.progress,
-        chunkProgress: item.chunkProgress,
-        error: item.error ?? null,
-        uploadId: item.uploadId ?? undefined,
-        fileSize: item.fileSize,
-        md5Hash: item.md5Hash ?? undefined,
-        totalChunks: item.totalChunks,
-        resumable: item.resumable,
-        desktop: true,
-      })
+      void item
     },
     onBatchCompleted: () => {
       filesStore.refresh()

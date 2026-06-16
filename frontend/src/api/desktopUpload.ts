@@ -53,6 +53,18 @@ export async function uploadDesktopFolder(parentId: number | null) {
   })
 }
 
+export async function uploadDesktopFiles(parentId: number | null) {
+  return invoke<DesktopFolderUploadStart>('upload_desktop_files', {
+    request: {
+      parentId,
+      token: getDesktopUploadToken(),
+      apiBaseUrl: getApiBaseUrl(),
+      resumableUploads: readResumableUploads(),
+      resumableDirectories: readResumableDirectories(),
+    },
+  })
+}
+
 export async function cancelDesktopUpload(uploadItemId: string) {
   return invoke<void>('cancel_desktop_upload', { uploadItemId })
 }

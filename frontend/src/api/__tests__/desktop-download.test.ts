@@ -8,6 +8,8 @@ import {
   isPickerAbort,
   listAllChildren,
   sanitizePathSegment,
+  startQueuedDesktopFileDownload,
+  startQueuedDesktopFolderDownload,
 } from '@/api/desktopDownload'
 import type { FileEntity } from '@/types/file'
 import { invoke } from '@tauri-apps/api/core'
@@ -23,6 +25,10 @@ vi.mock('@/config/runtime', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
+}))
+
+vi.mock('@/api/desktopSettings', () => ({
+  getDesktopSettings: vi.fn(() => Promise.resolve({ maxConcurrentDownloads: 3 })),
 }))
 
 const listFiles = vi.mocked(filesApi.listFiles)
@@ -121,6 +127,22 @@ describe('desktop downloads', () => {
     })
   })
 
+  it('starts one queued desktop file download', async () => {
+    invokeMock.mockResolvedValue({ saved: true, path: 'queued/a.txt' })
+
+    await expect(startQueuedDesktopFileDownload({ id: 3, fileName: 'a.txt', fileSize: 42 })).resolves.toBe(true)
+
+    expect(invokeMock).toHaveBeenCalledWith('start_desktop_download_file', {
+      request: {
+        fileId: 3,
+        fileName: 'a.txt',
+        fileSize: 42,
+        token: undefined,
+        apiBaseUrl: 'http://127.0.0.1:8080/api/v1',
+      },
+    })
+  })
+
   it('recursively downloads folders without requesting ZIP files', async () => {
     listFiles.mockImplementation(async (params) => {
       if (params.parentId === 10) return page([folder(11, 10, 'child'), file(12, 10, 'root.txt')])
@@ -152,6 +174,42 @@ describe('desktop downloads', () => {
       fileName: 'nested.txt',
       directoryPath: 'chosen/docs/child',
       token: undefined,
+    })
+  })
+
+  it('starts a queued folder download with a recursive tree', async () => {
+    listFiles.mockImplementation(async (params) => {
+      if (params.parentId === 10) return page([folder(11, 10, 'child'), file(12, 10, 'root.txt')])
+      if (params.parentId === 11) return page([file(13, 11, 'nested.txt')])
+      return page([])
+    })
+    invokeMock.mockResolvedValue({ saved: true, path: 'queued/docs' })
+
+    await expect(startQueuedDesktopFolderDownload({ id: 10, fileName: 'docs', fileSize: 0 })).resolves.toBe(true)
+
+    expect(invokeMock).toHaveBeenCalledWith('start_desktop_download_folder', {
+      request: {
+        root: {
+          id: 10,
+          fileName: 'docs',
+          fileType: 'folder',
+          fileSize: 0,
+          children: [
+            {
+              id: 11,
+              fileName: 'child',
+              fileType: 'folder',
+              fileSize: 0,
+              children: [
+                { id: 13, fileName: 'nested.txt', fileType: 'file', fileSize: 1, children: [] },
+              ],
+            },
+            { id: 12, fileName: 'root.txt', fileType: 'file', fileSize: 1, children: [] },
+          ],
+        },
+        token: undefined,
+        apiBaseUrl: 'http://127.0.0.1:8080/api/v1',
+      },
     })
   })
 })

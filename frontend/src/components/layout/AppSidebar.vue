@@ -3,6 +3,7 @@ import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useFormatters } from '@/composables/useFormatters'
 import { useRouter, useRoute } from 'vue-router'
+import { isDesktopRuntime } from '@/config/runtime'
 
 const ui = useUIStore()
 const auth = useAuthStore()
@@ -16,6 +17,10 @@ const navItems = [
   { to: '/shares',      label: '我的分享',  icon: 'share' },
   { to: '/tags',        label: '标签管理',  icon: 'tag' },
   { to: '/recycle-bin', label: '回收站',    icon: 'trash' },
+]
+
+const desktopItems = [
+  { to: '/settings',    label: '设置',      icon: 'settings' },
 ]
 
 const adminItems = [
@@ -64,6 +69,24 @@ const iconPaths: Record<string, string> = {
           <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ item.label }}</span>
         </Transition>
       </RouterLink>
+
+      <template v-if="isDesktopRuntime()">
+        <div class="sidebar__divider" />
+        <RouterLink
+          v-for="item in desktopItems"
+          :key="item.to"
+          :to="item.to"
+          class="sidebar__item"
+          :class="{ 'sidebar__item--active': route.path.startsWith(item.to) }"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path :d="iconPaths[item.icon]" />
+          </svg>
+          <Transition name="fade">
+            <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ item.label }}</span>
+          </Transition>
+        </RouterLink>
+      </template>
 
       <div v-if="auth.isAdmin" class="sidebar__divider" />
 

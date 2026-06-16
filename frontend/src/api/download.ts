@@ -5,6 +5,8 @@ import {
   downloadDesktopFile,
   downloadDesktopFolder,
   isDesktopDownloadRuntime,
+  startQueuedDesktopFileDownload,
+  startQueuedDesktopFolderDownload,
 } from './desktopDownload'
 
 const getFileNameFromDisposition = (disposition: string | undefined, fallback: string) => {
@@ -45,8 +47,8 @@ const triggerBrowserDownload = (url: string, fileName: string) => {
 export const downloadFile = async (fileId: number, fileName: string) => {
   try {
     if (isDesktopDownloadRuntime()) {
-      const saved = await downloadDesktopFile(fileId, fileName)
-      if (saved) toast.success('下载完成')
+      const saved = await startQueuedDesktopFileDownload({ id: fileId, fileName, fileSize: 0 })
+      if (saved) toast.success('已加入传输队列')
       return
     }
 
@@ -61,8 +63,8 @@ export const downloadFile = async (fileId: number, fileName: string) => {
 export const downloadFolderZip = async (fileId: number, folderName: string) => {
   try {
     if (isDesktopDownloadRuntime()) {
-      const saved = await downloadDesktopFolder({ id: fileId, fileName: folderName })
-      if (saved) toast.success('文件夹下载完成')
+      const saved = await startQueuedDesktopFolderDownload({ id: fileId, fileName: folderName, fileSize: 0 })
+      if (saved) toast.success('已加入传输队列')
       return
     }
 
