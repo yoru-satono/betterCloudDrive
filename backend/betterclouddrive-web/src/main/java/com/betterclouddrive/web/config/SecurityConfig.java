@@ -70,6 +70,8 @@ public class SecurityConfig {
                 .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                 .requestMatchers("/api/v1/auth/register", "/api/v1/auth/register-code/send", "/api/v1/auth/login", "/api/v1/auth/refresh").permitAll()
                 .requestMatchers("/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/download/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/download/folders/*/zip").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/shares/access/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/shares/access/*/files").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/shares/access/*/download/*/zip").permitAll()

@@ -7,6 +7,7 @@ public interface AuthService {
     UserEntity login(String username, String password);
     void logout(String jti);
     UserEntity getCurrentUser(Long userId);
+    UserEntity updateWebDavSettings(Long userId, boolean enabled, String password);
 
     /** Send 6-digit verification code before account registration */
     void sendRegistrationCode(String email);

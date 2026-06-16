@@ -39,7 +39,7 @@ const emit = defineEmits<{ close: [] }>()
 
 <style scoped>
 .ctx-menu {
-  position: fixed; z-index: 300;
+  position: fixed; z-index: 700;
   background: var(--bg-overlay);
   border: 1px solid var(--border-hover);
   border-radius: 9px;

@@ -27,7 +27,7 @@ onMounted(() => { if (!auth.isAdmin) router.push('/files') })
 </template>
 
 <style scoped>
-.admin-layout { min-height: 100vh; background: var(--bg-base); }
+.admin-layout { min-height: calc(100vh - var(--desktop-titlebar-h, 0px)); background: var(--bg-base); }
 .admin-layout__header {
   display: flex; align-items: center; gap: 12px;
   height: 52px; padding: 0 24px;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import FileToolbar from '@/components/file/FileToolbar.vue'
 import FileBreadcrumb from '@/components/file/FileBreadcrumb.vue'
 import FileGrid from '@/components/file/FileGrid.vue'
@@ -17,24 +17,29 @@ import { useUpload } from '@/composables/useUpload'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { useConfirm } from '@/composables/useConfirm'
 import { useFormatters } from '@/composables/useFormatters'
+import { usePreviewStore } from '@/stores/preview'
 import * as filesApi from '@/api/files'
 import * as favApi from '@/api/favorites'
 import * as sharesApi from '@/api/shares'
 import * as tagsApi from '@/api/tags'
 import * as versionsApi from '@/api/versions'
-import { downloadFile, downloadFolderZip, previewFile } from '@/api/download'
+import { downloadFile, downloadFolderZip } from '@/api/download'
 import { toast } from 'vue-sonner'
 import type { FileEntity } from '@/types/file'
 import type { TagEntity } from '@/types/tag'
 import type { FileVersionEntity } from '@/types/file'
+import { buildShareUrl } from '@/config/runtime'
+import { onFileAction, type FileActionDetail } from '@/components/file/fileActions'
 
 const route = useRoute()
+const router = useRouter()
 const store = useFilesStore()
 const selection = useFileSelection()
 const upload = useUpload()
 const ctx = useContextMenu()
 const { confirm } = useConfirm()
 const { formatSize, formatDateFull } = useFormatters()
+const preview = usePreviewStore()
 
 const showNewFolder = ref(false)
 const newFolderName = ref('')
@@ -55,11 +60,6 @@ const pickerTarget = ref<FileEntity | null>(null)
 const pickerLoading = ref(false)
 const detailOpen = ref(false)
 const detailTarget = ref<FileEntity | null>(null)
-const previewOpen = ref(false)
-const previewTarget = ref<FileEntity | null>(null)
-const previewUrl = ref('')
-const previewError = ref('')
-const previewLoading = ref(false)
 const tagOpen = ref(false)
 const tagTarget = ref<FileEntity | null>(null)
 const tags = ref<TagEntity[]>([])
@@ -72,39 +72,76 @@ const versionsLoading = ref(false)
 
 const GENERATED_PASSWORD_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*_-+=?'
 
-onMounted(() => {
-  const folderId = route.params.folderId ? Number(route.params.folderId) : null
-  store.fetchFiles(folderId)
-})
+watch(
+  () => route.params.folderId,
+  (folderId) => {
+    store.openDirectory(folderId ? Number(folderId) : null)
+  },
+  { immediate: true },
+)
+
+const stopFileAction = onFileAction(handleFileAction)
+onUnmounted(stopFileAction)
 
 function openContextMenu(file: FileEntity, event: MouseEvent) {
   ctx.open(event, buildMenu(file))
 }
 
-function buildMenu(file: FileEntity) {
+function buildMenu(file: FileEntity, options: { includeOpenLocation?: boolean; afterAction?: () => void } = {}) {
   const items = []
+  const action = (run: () => void | Promise<void>) => () => {
+    void run()
+    options.afterAction?.()
+  }
+  if (options.includeOpenLocation) {
+    items.push({ label: '打开文件所在位置', action: () => openLocation(file, options.afterAction) })
+  }
   items.push({
     label: '下载',
-    action: () => file.fileType === 'folder'
+    action: action(() => file.fileType === 'folder'
       ? downloadFolderZip(file.id, file.fileName)
-      : downloadFile(file.id, file.fileName),
+      : downloadFile(file.id, file.fileName)),
   })
   if (file.fileType !== 'folder') {
-    items.push({ label: '预览', action: () => openPreview(file) })
-    items.push({ label: '版本管理', action: () => openVersions(file) })
+    items.push({ label: '预览', action: action(() => preview.openPreview(file)) })
+    items.push({ label: '版本管理', action: action(() => openVersions(file)) })
   }
-  items.push({ label: '详情', action: () => openDetail(file) })
-  items.push({ label: '管理标签', action: () => openTagManager(file) })
-  items.push({ label: '移动到', action: () => openFolderAction(file, 'move') })
+  items.push({ label: '详情', action: action(() => openDetail(file)) })
+  items.push({ label: '管理标签', action: action(() => openTagManager(file)) })
+  items.push({ label: '移动到', action: action(() => openFolderAction(file, 'move')) })
   if (file.fileType !== 'folder') {
-    items.push({ label: '复制到', action: () => openFolderAction(file, 'copy') })
+    items.push({ label: '复制到', action: action(() => openFolderAction(file, 'copy')) })
   }
-  items.push({ label: '重命名', action: () => startRename(file) })
-  items.push({ label: '收藏', action: () => toggleFavorite(file) })
-  items.push({ label: '分享', action: () => openShareDialog(file) })
+  items.push({ label: '重命名', action: action(() => startRename(file)) })
+  items.push({ label: '收藏', action: action(() => toggleFavorite(file)) })
+  items.push({ label: '分享', action: action(() => openShareDialog(file)) })
   items.push({ divider: true, label: '', action: () => {} })
-  items.push({ label: '删除', action: () => deleteSingle(file), danger: true })
+  items.push({ label: '删除', action: action(() => deleteSingle(file)), danger: true })
   return items
+}
+
+function handleFileAction(detail: FileActionDetail) {
+  detail.handled = true
+  if (detail.action === 'preview') {
+    preview.openPreview(detail.file)
+    return
+  }
+  if (detail.action === 'enter-folder') {
+    router.push({ name: 'Folder', params: { folderId: detail.file.id } })
+    return
+  }
+  if (detail.action === 'open-location') {
+    openLocation(detail.file, detail.afterAction)
+    return
+  }
+  if (detail.action === 'context-menu' && detail.event) {
+    ctx.open(detail.event, buildMenu(detail.file, { includeOpenLocation: true, afterAction: detail.afterAction }))
+  }
+}
+
+async function openLocation(file: FileEntity, afterAction?: () => void) {
+  await router.push(file.parentId ? { name: 'Folder', params: { folderId: file.parentId } } : { name: 'Files' })
+  afterAction?.()
 }
 
 function startRename(file: FileEntity) {
@@ -202,7 +239,7 @@ async function submitShare() {
     password,
     notifyEmail: shareNotifyEmail.value.trim() || undefined,
   })
-  const shareUrl = `${window.location.origin}/s/${data.data.shareCode}`
+  const shareUrl = buildShareUrl(data.data.shareCode)
   const clipboardText = password ? `分享链接：${shareUrl}\n访问密码：${password}` : shareUrl
   await navigator.clipboard.writeText(clipboardText).catch(() => {})
   showShare.value = false
@@ -238,35 +275,6 @@ async function openDetail(file: FileEntity) {
   const { data } = await filesApi.getFile(file.id)
   detailTarget.value = data.data
   detailOpen.value = true
-}
-
-async function openPreview(file: FileEntity) {
-  previewTarget.value = file
-  previewOpen.value = true
-  previewLoading.value = true
-  previewError.value = ''
-  if (previewUrl.value) {
-    URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = ''
-  }
-  try {
-    const res = await previewFile(file.id)
-    previewUrl.value = URL.createObjectURL(res.data)
-  } catch {
-    previewError.value = '此文件暂时无法预览'
-  } finally {
-    previewLoading.value = false
-  }
-}
-
-function closePreview() {
-  previewOpen.value = false
-  previewTarget.value = null
-  previewError.value = ''
-  if (previewUrl.value) {
-    URL.revokeObjectURL(previewUrl.value)
-    previewUrl.value = ''
-  }
 }
 
 async function openTagManager(file: FileEntity) {
@@ -334,7 +342,7 @@ async function deleteVersion(versionNumber: number) {
 }
 
 function handleDblclick(file: FileEntity) {
-  if (file.fileType === 'folder') store.enterFolder(file)
+  if (file.fileType === 'folder') router.push({ name: 'Folder', params: { folderId: file.id } })
   else downloadFile(file.id, file.fileName)
 }
 </script>
@@ -349,6 +357,7 @@ function handleDblclick(file: FileEntity) {
   >
     <FileToolbar
       @upload="upload.triggerFilePicker"
+      @upload-folder="upload.triggerFolderPicker"
       @new-folder="showNewFolder = true"
       @delete="deleteSelected"
       @refresh="store.refresh"
@@ -503,20 +512,6 @@ function handleDblclick(file: FileEntity) {
       </div>
     </OModal>
 
-    <OModal title="文件预览" :open="previewOpen" width="720px" @close="closePreview">
-      <div class="preview-box">
-        <OSpinner v-if="previewLoading" />
-        <div v-else-if="previewError" class="preview-box__error">{{ previewError }}</div>
-        <img v-else-if="previewTarget?.mimeType?.startsWith('image/')" :src="previewUrl" :alt="previewTarget.fileName" />
-        <iframe v-else-if="previewTarget?.mimeType === 'application/pdf' || previewTarget?.mimeType?.startsWith('text/')" :src="previewUrl" />
-        <div v-else class="preview-box__error">此类型暂不支持内嵌预览</div>
-      </div>
-      <template #footer>
-        <OButton variant="ghost" @click="closePreview">关闭</OButton>
-        <OButton v-if="previewTarget" variant="primary" @click="downloadFile(previewTarget.id, previewTarget.fileName)">下载</OButton>
-      </template>
-    </OModal>
-
     <OModal title="管理标签" :open="tagOpen" @close="tagOpen = false">
       <div class="tag-manage">
         <div class="tag-manage__target">{{ tagTarget?.fileName }}</div>
@@ -649,26 +644,6 @@ function handleDblclick(file: FileEntity) {
   font-weight: 500;
   overflow-wrap: anywhere;
 }
-.preview-box {
-  min-height: 320px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.preview-box img {
-  display: block;
-  max-width: 100%;
-  max-height: 64vh;
-  object-fit: contain;
-}
-.preview-box iframe {
-  width: 100%;
-  height: 64vh;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: white;
-}
-.preview-box__error,
 .tag-manage__empty,
 .tag-manage__loading,
 .versions-box__empty,

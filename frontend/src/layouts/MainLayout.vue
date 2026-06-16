@@ -3,6 +3,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import SearchOverlay from '@/components/layout/SearchOverlay.vue'
 import UploadQueue from '@/components/file/UploadQueue.vue'
+import FilePreviewModal from '@/components/file/FilePreviewModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { onMounted } from 'vue'
 
@@ -24,13 +25,16 @@ onMounted(() => { if (!auth.user) auth.fetchMe() })
       </main>
     </div>
     <SearchOverlay />
+    <FilePreviewModal />
     <UploadQueue />
   </div>
 </template>
 
 <style scoped>
 .main-layout {
-  display: flex; height: 100vh; overflow: hidden;
+  display: flex;
+  height: calc(100vh - var(--desktop-titlebar-h, 0px));
+  overflow: hidden;
 }
 .main-layout__right {
   flex: 1; display: flex; flex-direction: column; min-width: 0;

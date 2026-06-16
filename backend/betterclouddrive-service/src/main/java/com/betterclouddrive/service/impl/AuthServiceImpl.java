@@ -64,6 +64,7 @@ public class AuthServiceImpl implements AuthService {
                 .passwordHash(passwordEncoder.encode(password))
                 .email(normalizedEmail)
                 .emailVerified(true)
+                .webdavEnabled(false)
                 .status(1)
                 .storageQuota(defaultQuotaBytes)
                 .storageUsed(0L)
@@ -117,6 +118,20 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ApiCode.UNAUTHORIZED);
         }
         return user;
+    }
+
+    @Override
+    @Transactional
+    public UserEntity updateWebDavSettings(Long userId, boolean enabled, String password) {
+        UserEntity user = getCurrentUser(userId);
+        if (enabled) {
+            if (!StringUtils.hasText(password)) {
+                throw new BusinessException(ApiCode.BAD_REQUEST, "WebDAV password is required");
+            }
+            user.setWebdavPasswordHash(passwordEncoder.encode(password));
+        }
+        user.setWebdavEnabled(enabled);
+        return userRepository.save(user);
     }
 
     @Override

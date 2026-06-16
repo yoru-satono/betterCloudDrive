@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import OButton from '@/components/base/OButton.vue'
-import { useUploadStore } from '@/stores/upload'
+import { useUploadStore, type UploadItem } from '@/stores/upload'
 import { computed } from 'vue'
 
 const store = useUploadStore()
@@ -15,10 +15,21 @@ const statusLabel: Record<string, string> = {
   done: '完成',
   instant: '秒传',
   error: '失败',
-  canceled: '已取消'
+  canceled: '已取消',
+  resume_required: '待续传'
 }
 
 const formatProgress = (progress: number) => progress.toFixed(2)
+
+function selectResumeFile(item: UploadItem) {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (file) store.resumeUploadWithFile(item.id, file)
+  }
+  input.click()
+}
 </script>
 
 <template>
@@ -39,7 +50,7 @@ const formatProgress = (progress: number) => progress.toFixed(2)
       </div>
       <div class="upload-queue__list">
         <div v-for="item in store.queue" :key="item.id" class="upload-queue__item">
-          <div class="upload-queue__name truncate">{{ item.fileName }}</div>
+          <div class="upload-queue__name truncate">{{ item.displayName || item.fileName }}</div>
           <div class="upload-queue__info">
             <span class="upload-queue__status" :class="`upload-queue__status--${item.status}`">
               {{ statusLabel[item.status] }}
@@ -50,8 +61,12 @@ const formatProgress = (progress: number) => progress.toFixed(2)
           <div v-if="item.status === 'uploading' || item.status === 'hashing'" class="upload-queue__bar">
             <div class="upload-queue__bar-fill" :style="{ width: `${item.progress}%` }" />
           </div>
-          <div v-if="item.status === 'uploading'" class="upload-queue__actions">
-            <OButton variant="subtle" size="sm" @click="store.refreshUploadStatus(item.id)">刷新状态</OButton>
+          <div v-if="item.status === 'uploading' || item.status === 'resume_required' || (item.status === 'error' && item.resumable)" class="upload-queue__actions">
+            <OButton v-if="item.uploadId" variant="subtle" size="sm" @click="store.refreshUploadStatus(item.id)">刷新状态</OButton>
+            <OButton v-if="item.status === 'resume_required' || (item.status === 'error' && item.resumable)" variant="subtle" size="sm" @click="selectResumeFile(item)">
+              选择文件继续
+            </OButton>
+            <OButton v-if="item.status === 'error' && item.file" variant="subtle" size="sm" @click="store.retryUpload(item.id)">重试</OButton>
             <OButton variant="danger" size="sm" @click="store.cancelUpload(item.id)">取消</OButton>
           </div>
           <p v-if="item.error" class="upload-queue__error">{{ item.error }}</p>

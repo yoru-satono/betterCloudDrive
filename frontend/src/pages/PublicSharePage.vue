@@ -204,7 +204,7 @@ onMounted(() => load())
 
 <style scoped>
 .share-page {
-  min-height: 100vh; background: var(--bg-base);
+  min-height: calc(100vh - var(--desktop-titlebar-h, 0px)); background: var(--bg-base);
   display: flex; align-items: center; justify-content: center; padding: 20px;
 }
 .share-page__card {

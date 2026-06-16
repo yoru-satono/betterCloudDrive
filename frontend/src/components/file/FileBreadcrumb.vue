@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import type { BreadcrumbItem } from '@/types/file'
 import { useFilesStore } from '@/stores/files'
+import { useRouter } from 'vue-router'
 
 const store = useFilesStore()
+const router = useRouter()
+
+function navigateTo(item: BreadcrumbItem) {
+  router.push(item.id === null
+    ? { name: 'Files' }
+    : { name: 'Folder', params: { folderId: item.id } })
+}
 </script>
 
 <template>
@@ -16,7 +24,7 @@ const store = useFilesStore()
       <button
         class="breadcrumb__item"
         :class="{ 'breadcrumb__item--active': idx === store.breadcrumb.length - 1 }"
-        @click="store.navigateTo(item)"
+        @click="navigateTo(item)"
       >{{ item.name }}</button>
     </template>
   </nav>

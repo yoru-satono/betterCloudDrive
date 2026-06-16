@@ -9,6 +9,8 @@ export const useFilesStore = defineStore('files', () => {
   const page = ref(1)
   const pages = ref(0)
   const loading = ref(false)
+  const searchResults = ref<FileEntity[]>([])
+  const searchLoading = ref(false)
   const currentParentId = ref<number | null>(null)
   const breadcrumb = ref<BreadcrumbItem[]>([{ id: null, name: '全部文件' }])
   const viewMode = ref<'grid' | 'list'>('grid')
@@ -45,14 +47,17 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   async function searchFiles(q: string) {
-    loading.value = true
+    searchLoading.value = true
     try {
       const { data } = await filesApi.searchFiles(q)
-      files.value = data.data.records
-      total.value = data.data.total
+      searchResults.value = data.data.records
     } finally {
-      loading.value = false
+      searchLoading.value = false
     }
+  }
+
+  function clearSearchResults() {
+    searchResults.value = []
   }
 
   async function refresh() {
@@ -66,10 +71,41 @@ export const useFilesStore = defineStore('files', () => {
     fetchFiles(item.id)
   }
 
-  function enterFolder(folder: FileEntity) {
-    breadcrumb.value.push({ id: folder.id, name: folder.fileName })
-    fetchFiles(folder.id)
+  async function openLocationFor(file: FileEntity) {
+    await openDirectory(file.parentId ?? null)
+  }
+
+  async function openDirectory(folderId: number | null, folderHint?: FileEntity) {
+    const nextBreadcrumb = folderId === null
+      ? [{ id: null, name: '全部文件' }]
+      : await buildBreadcrumb(folderId, folderHint)
+    await fetchFiles(folderId)
+    breadcrumb.value = nextBreadcrumb
     clearSelection()
+  }
+
+  async function buildBreadcrumb(folderId: number, folderHint?: FileEntity) {
+    const items: BreadcrumbItem[] = []
+    const visited = new Set<number>()
+    let current: FileEntity | null = folderHint?.id === folderId ? folderHint : null
+    let cursor: number | null = folderId
+
+    while (cursor !== null && !visited.has(cursor)) {
+      visited.add(cursor)
+      if (!current || current.id !== cursor) {
+        const { data } = await filesApi.getFile(cursor)
+        current = data.data
+      }
+      items.unshift({ id: current.id, name: current.fileName })
+      cursor = current.parentId
+      current = null
+    }
+
+    return [{ id: null, name: '全部文件' }, ...items]
+  }
+
+  function enterFolder(folder: FileEntity) {
+    return openDirectory(folder.id, folder)
   }
 
   function clearSelection() {
@@ -86,9 +122,9 @@ export const useFilesStore = defineStore('files', () => {
   }
 
   return {
-    files, total, page, pages, loading, currentParentId, breadcrumb,
+    files, total, page, pages, loading, searchResults, searchLoading, currentParentId, breadcrumb,
     viewMode, sortBy, order, selectedIds, selectedFiles, hasSelection,
     fetchFiles, searchFiles, refresh, navigateTo, enterFolder,
-    clearSelection, toggleSelect, selectAll
+    openDirectory, openLocationFor, clearSearchResults, clearSelection, toggleSelect, selectAll
   }
 })

@@ -20,6 +20,12 @@ export const logout = () =>
 export const getMe = () =>
   api.get<ApiResponse<UserEntity>>('/auth/me')
 
+export const getWebDavSettings = () =>
+  api.get<ApiResponse<{ enabled: boolean }>>('/auth/webdav')
+
+export const updateWebDavSettings = (enabled: boolean, password?: string) =>
+  api.put<ApiResponse<UserEntity>>('/auth/webdav', { enabled, password })
+
 export const forgotPassword = (email: string) =>
   api.post<ApiResponse<void>>('/auth/forgot-password', { email })
 

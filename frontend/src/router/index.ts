@@ -1,4 +1,5 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
+import { isDesktopRuntime } from '@/config/runtime'
 
 const routes = [
   {
@@ -42,7 +43,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: isDesktopRuntime() ? createWebHashHistory() : createWebHistory(),
   routes
 })
 

@@ -37,12 +37,19 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try { await authApi.logout() } catch { /* ignore */ }
-    localStorage.clear()
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
     user.value = null
+  }
+
+  async function updateWebDavSettings(enabled: boolean, password?: string) {
+    const { data } = await authApi.updateWebDavSettings(enabled, password)
+    user.value = data.data
+    return data
   }
 
   return {
     user, loading, isLoggedIn, isAdmin, storagePercent,
-    login, register, fetchMe, logout
+    login, register, fetchMe, logout, updateWebDavSettings
   }
 })

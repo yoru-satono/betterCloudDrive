@@ -1,5 +1,6 @@
 package com.betterclouddrive.dal.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -24,7 +25,16 @@ public class UserEntity {
     private String username;
 
     @Column(name = "password_hash")
+    @JsonIgnore
     private String passwordHash;
+
+    @Column(name = "webdav_enabled")
+    @Builder.Default
+    private Boolean webdavEnabled = false;
+
+    @Column(name = "webdav_password_hash")
+    @JsonIgnore
+    private String webdavPasswordHash;
 
     @Column(name = "email")
     private String email;

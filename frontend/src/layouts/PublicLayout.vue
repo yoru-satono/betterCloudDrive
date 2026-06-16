@@ -19,7 +19,7 @@
 
 <style scoped>
 .public-layout {
-  min-height: 100vh; display: flex;
+  min-height: calc(100vh - var(--desktop-titlebar-h, 0px)); display: flex;
 }
 .public-layout__left {
   flex: 1;

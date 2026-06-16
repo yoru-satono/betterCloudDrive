@@ -74,6 +74,23 @@ public class S3StorageServiceImpl implements StorageService {
     }
 
     @Override
+    public InputStream downloadObjectRange(String objectKey, long offset, long length) {
+        try {
+            return client.getObject(
+                GetObjectArgs.builder()
+                    .bucket(props.getBucket())
+                    .object(objectKey)
+                    .offset(offset)
+                    .length(length)
+                    .build()
+            );
+        } catch (Exception e) {
+            log.error("Failed to download object range: {} offset={} length={}", objectKey, offset, length, e);
+            throw new RuntimeException("Storage range download failed: " + objectKey, e);
+        }
+    }
+
+    @Override
     public void deleteObject(String objectKey) {
         try {
             client.removeObject(

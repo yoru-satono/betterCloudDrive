@@ -10,6 +10,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import * as sharesApi from '@/api/shares'
 import { toast } from 'vue-sonner'
 import type { ShareLinkEntity } from '@/types/share'
+import { buildShareUrl } from '@/config/runtime'
 
 const { formatDateFull } = useFormatters()
 const { confirm } = useConfirm()
@@ -82,10 +83,6 @@ async function submitEdit() {
 
 function isExpired(share: ShareLinkEntity) {
   return share.expireAt && new Date(share.expireAt) < new Date()
-}
-
-function buildShareUrl(shareCode: string) {
-  return `${window.location.origin}/s/${shareCode}`
 }
 
 onMounted(load)

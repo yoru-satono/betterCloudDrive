@@ -12,6 +12,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -58,7 +59,13 @@ public class BasicAuthFilter extends OncePerRequestFilter {
         String password = decoded.substring(colon + 1);
 
         UserEntity user = userRepository.findByUsername(username).orElse(null);
-        if (user == null || !passwordEncoder.matches(password, user.getPasswordHash())) {
+        if (user == null
+                || user.getDeletedAt() != null
+                || user.getStatus() == null
+                || user.getStatus() != 1
+                || !Boolean.TRUE.equals(user.getWebdavEnabled())
+                || !StringUtils.hasText(user.getWebdavPasswordHash())
+                || !passwordEncoder.matches(password, user.getWebdavPasswordHash())) {
             response.setHeader("WWW-Authenticate", "Basic realm=\"BetterCloudDrive WebDAV\"");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;

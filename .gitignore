@@ -1,95 +1,142 @@
-# ==================== Better Cloud Drive ====================
+# Better Cloud Drive
 
-# ==================== IDE ====================
+# OS files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editors and IDEs
 .idea/
 *.iml
-.vscode/
-.classpath
-.project
-.settings/
+.vscode/*
+**/.vscode/*
+!.vscode/extensions.json
+!**/.vscode/extensions.json
 *.swp
 *.swo
 *~
+.classpath
+.project
+.settings/
 
-# ==================== Java / Maven ====================
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Java / Maven / Gradle
 *.class
 *.jar
 *.war
-!gradle/wrapper/gradle-wrapper.jar
+*.ear
 target/
-!**/src/main/**/target/
-!**/src/test/**/target/
-.mvn/
-mvnw
-mvnw.cmd
-
-# ==================== Gradle ====================
 .gradle/
 build/
+!**/src/main/**/target/
+!**/src/test/**/target/
 !gradle/wrapper/gradle-wrapper.jar
 local.properties
 
-# ==================== Android ====================
+# Android build outputs
 *.apk
 *.aab
-*.dex
 *.ap_
+*.dex
 *.hprof
 .cxx/
-*.keystore
-!gradle/wrapper/gradle-wrapper.jar
-app/release/
-
-# Android Studio
 captures/
 .externalNativeBuild/
+app/release/
 
-# ==================== Node / Frontend ====================
+# Node / frontend
 node_modules/
 dist/
+dist-ssr/
+.vite/
 .nuxt/
 .output/
-*.local
-playwright-report/
-frontend/e2e/.auth/
+coverage/
+.nyc_output/
+.npm-cache/
+**/.npm-cache/
 
-# ==================== Python ====================
+# Playwright / WebDriver / E2E
+playwright-report/
+blob-report/
+test-results/
+frontend/e2e/.auth/
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+.wdio-cache/
+**/.wdio-cache/
+
+# Rust / Tauri
+frontend/src-tauri/target/
+**/*.rs.bk
+
+# Tauri package outputs
+frontend/src-tauri/target/release/bundle/
+frontend/src-tauri/target/release/nsis/
+frontend/src-tauri/target/release/wix/
+*.msi
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.pdb
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
 .eggs/
-.pytest_cache/
-.ruff_cache/
 *.egg
 .venv/
 venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
-# ==================== Docker ====================
+# Docker and local service data
 docker-data/
+volumes/
+postgres-data/
+redis-data/
+seaweed-data/
+seaweedfs-data/
+mailpit-data/
 
-# ==================== OS ====================
-.DS_Store
-Thumbs.db
-
-# ==================== Environment ====================
-.env.local
-.env.*.local
-
-# ==================== Logs ====================
-*.log
-logs/
-
-# ==================== Claude / AI ====================
-.claude/
-claude/
-
-# ==================== Archives / Temp ====================
+# Archives and temporary files
 *.tar
+*.tar.gz
+*.tgz
 *.gz
 *.zip
 *.7z
+*.rar
 *.tmp
 *.temp
 tmp/
-.env
+temp/
+.tmp/

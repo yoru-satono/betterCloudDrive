@@ -35,7 +35,7 @@
 | 419002 | 无效的分享码 |
 | 419003 | 分享需要密码 |
 | 419004 | 分享链接已过期 |
-| 419005 | 下载次数已达上限 |
+| 419005 | 分享访问次数已达上限 |
 | 419006 | 分片上传状态无效 |
 | 419007 | 分片 MD5 不匹配 |
 | 419008 | 文件超出最大限制 |
@@ -45,6 +45,7 @@
 | 419012 | 验证码已过期 |
 | 419013 | 验证码不匹配 |
 | 419014 | 密码重置失败 |
+| 419015 | 文件夹打包下载超出限制 |
 | 429 | 请求过于频繁 |
 | 500 | 服务器内部错误 |
 | 500001 | 存储服务错误 |
@@ -221,13 +222,70 @@ Authorization: Bearer <accessToken>
     "id": 1,
     "username": "zhangsan",
     "email": "zhangsan@example.com",
+    "emailVerified": true,
     "nickname": null,
     "avatarUrl": null,
+    "role": "ROLE_USER",
     "storageQuota": 10737418240,
     "storageUsed": 5242880,
+    "webdavEnabled": false,
     "status": 1,
-    "createdAt": "2026-06-01T10:00:00"
+    "createdAt": "2026-06-01T10:00:00",
+    "updatedAt": "2026-06-01T10:00:00",
+    "deletedAt": null
   }
+}
+```
+
+---
+
+### 1.7 获取 WebDAV 设置
+
+```
+GET /api/v1/auth/webdav
+Authorization: Bearer <accessToken>
+```
+
+**Response `200`:**
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "enabled": false
+  }
+}
+```
+
+---
+
+### 1.8 更新 WebDAV 设置
+
+```
+PUT /api/v1/auth/webdav
+Authorization: Bearer <accessToken>
+```
+
+**Request Body:**
+```json
+{
+  "enabled": true,
+  "password": "webdavPass123"
+}
+```
+
+- WebDAV 默认关闭。
+- 开启 WebDAV 时必须提供独立的 WebDAV 密码；服务端不要求该密码与网盘登录密码不同。
+- 关闭 WebDAV 时仅需传 `{"enabled": false}`，`password` 可省略。
+- 开启或重新开启时会写入新的 WebDAV 密码哈希。
+
+**Response `200`:** 返回更新后的当前用户资料，结构同 `GET /api/v1/auth/me`。
+
+**Response `400`:**
+```json
+{
+  "code": 400,
+  "message": "WebDAV password is required"
 }
 ```
 
@@ -495,11 +553,11 @@ Authorization: Bearer <accessToken>
 **Request Body:**
 ```json
 {
-  "parentId": 10,                // 必填，目标文件夹 ID
+  "parentId": 10,                // 可选，目标文件夹 ID；null 表示根目录
   "fileName": "report.pdf",     // 必填
   "fileSize": 10485760,         // 必填，文件总大小（字节）
   "md5Hash": "d41d8cd...",      // 可选，完整文件 MD5
-  "totalChunks": 3              // 必填，分片总数（每片 5MB）
+  "totalChunks": 3              // 必填，分片总数；当前服务端分片大小为 5MB
 }
 ```
 
@@ -553,7 +611,7 @@ Content-Type: multipart/form-data
 }
 ```
 
-> 同一分片重复上传会被自动忽略（Redis bitmap 去重）。
+> 同一分片重复上传会被自动忽略。服务端使用 Redis bitmap 记录已接收分片，bitmap 有效期为 24 小时。
 
 ---
 
@@ -577,6 +635,22 @@ Authorization: Bearer <accessToken>
   }
 }
 ```
+
+---
+
+### 3.3.1 断点续传约定
+
+客户端如需暂停后继续上传，应本地持久化以下会话信息：
+
+- `sessionId`
+- `parentId`
+- `fileName`
+- `fileSize`
+- `md5Hash`
+- `totalChunks`
+- `chunkSize`
+
+恢复时先调用 `GET /api/v1/upload/{sessionId}/status`，只补传 `missingChunks` 中的分片，全部分片完成后再调用 `complete`。当前前端和 Tauri 客户端均按 24 小时窗口保存可续传上传记录。
 
 ---
 
@@ -678,22 +752,110 @@ Authorization: Bearer <accessToken>
 
 ## 四、文件下载与预览
 
-### 4.1 下载文件
+### 4.1 创建文件下载 Ticket
 
 ```
-GET /api/v1/download/{fileId}
+POST /api/v1/download/{fileId}/ticket
 Authorization: Bearer <accessToken>
 ```
 
-以附件形式下载，浏览器自动触发保存。
+为网页端下载生成临时 URL。Ticket 有效期 24 小时；每次使用时会续期 24 小时。
 
-**Response:** 二进制流，`Content-Type` 为文件实际 MIME 类型，`Content-Disposition: attachment`。
+**Response `200`:**
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "url": "/api/v1/download/42?ticket=F6imJ4..."
+  }
+}
+```
 
-支持 `Range` 请求头实现断点续传。
+> 该接口仅支持普通文件。对文件夹调用会返回 `404001`，文件夹应使用 ZIP ticket 或由 Tauri 客户端直接递归下载。
 
 ---
 
-### 4.2 在线预览
+### 4.2 下载文件
+
+```
+GET /api/v1/download/{fileId}
+Authorization: Bearer <accessToken>   // 可选：使用 Bearer 或 ticket 二选一
+```
+
+**Query Parameters:**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| ticket | String | 否 | 由 `POST /api/v1/download/{fileId}/ticket` 生成的临时下载凭证 |
+
+以附件形式下载。浏览器端通常先创建 ticket，再使用返回的 URL 触发下载；Tauri 客户端可直接携带 `Authorization: Bearer <accessToken>` 下载。
+
+**Response:** 二进制流，`Content-Type` 为文件实际 MIME 类型，`Content-Disposition: attachment`。
+
+支持 `Range` 请求头实现断点续传：
+
+```
+Range: bytes=1048576-
+```
+
+- 无 `Range`：返回 `200 OK`，包含 `Accept-Ranges: bytes`。
+- 有合法 `Range`：返回 `206 Partial Content`，包含 `Content-Range` 和该片段的 `Content-Length`。
+- 多段 Range 不支持；非法或不可满足的 Range 返回 `416 Requested Range Not Satisfiable`。
+
+---
+
+### 4.3 创建文件夹 ZIP 下载 Ticket
+
+```
+POST /api/v1/download/folders/{fileId}/zip/ticket
+Authorization: Bearer <accessToken>
+```
+
+为网页端文件夹打包下载生成临时 URL。Ticket 有效期 24 小时；每次使用时会续期 24 小时。
+
+**Response `200`:**
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "url": "/api/v1/download/folders/10/zip?ticket=F6imJ4..."
+  }
+}
+```
+
+**错误码:** 400（目标不是文件夹）、419015（文件数或总大小超过网页打包限制）
+
+---
+
+### 4.4 下载文件夹 ZIP
+
+```
+GET /api/v1/download/folders/{fileId}/zip
+Authorization: Bearer <accessToken>   // 可选：使用 Bearer 或 ticket 二选一
+```
+
+**Query Parameters:**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| ticket | String | 否 | 由 `POST /api/v1/download/folders/{fileId}/zip/ticket` 生成的临时下载凭证 |
+
+网页端文件夹下载会在服务端生成 ZIP 缓存对象并支持 `Range`。缓存按文件夹内容签名复用，默认从最后一次下载时间起保留 24 小时，清理任务默认每 30 分钟执行一次。
+
+默认网页端打包限制：
+
+| 限制项 | 默认值 |
+|--------|--------|
+| 最大文件数 | 1000 |
+| 最大总大小 | 1GB |
+
+Tauri 客户端的文件夹下载不走 ZIP 打包接口，而是递归列出文件夹内容并逐个文件下载到用户选择的本地目录。
+
+---
+
+### 4.5 在线预览
 
 ```
 GET /api/v1/preview/{fileId}
@@ -841,7 +1003,9 @@ Authorization: Bearer <accessToken>
 **公开端点（无需认证）：**
 - `POST /api/v1/auth/register-code/send`、`POST /api/v1/auth/register`、`POST /api/v1/auth/login`、`POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/forgot-password`、`POST /api/v1/auth/reset-password`
+- `GET /api/v1/download/{fileId}`、`GET /api/v1/download/folders/{fileId}/zip`（未携带 Bearer Token 时必须提供有效 `ticket`）
 - `POST /api/v1/shares/access/{shareCode}`、`GET /api/v1/shares/access/{shareCode}/files`
+- `POST /api/v1/shares/access/{shareCode}/download/{fileId}`、`POST /api/v1/shares/access/{shareCode}/download/{fileId}/zip`
 
 ```
 Authorization: Bearer <accessToken>
@@ -952,9 +1116,41 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 九、分享管理 `/api/v1/shares`
+## 九、WebDAV `/webdav`
 
-### 9.1 创建分享
+WebDAV 协议入口不使用 `/api/v1` 前缀，Base URL 为：
+
+```
+http://localhost:8080/webdav/
+```
+
+**认证方式:** HTTP Basic Auth
+
+- 用户名：网盘用户名
+- 密码：用户在 `PUT /api/v1/auth/webdav` 中设置的独立 WebDAV 密码
+- 只有 `webdavEnabled = true` 且已设置 WebDAV 密码的用户可以访问
+
+**支持的方法:**
+
+| 方法 | 说明 |
+|------|------|
+| OPTIONS | 返回支持的方法和 DAV 级别 |
+| PROPFIND | 列出目录或读取资源属性，支持 `Depth: 0` 和默认一层目录 |
+| GET / HEAD | 下载文件或读取文件元信息 |
+| PUT | 上传或覆盖文件 |
+| MKCOL | 创建文件夹 |
+| DELETE | 删除文件或文件夹（移入回收站） |
+| MOVE | 移动或重命名 |
+| COPY | 复制文件；当前不支持复制文件夹 |
+| LOCK / UNLOCK | 写锁令牌，锁信息保存在 Redis，默认 1 小时 |
+
+> WebDAV 的 PUT 为流式上传，不使用 `/api/v1/upload` 的分片会话接口，因此不提供同等的上传断点续传语义。
+
+---
+
+## 十、分享管理 `/api/v1/shares`
+
+### 10.1 创建分享
 
 ```
 POST /api/v1/shares
@@ -967,7 +1163,7 @@ Authorization: Bearer <accessToken>
   "fileId": 42,              // 必填
   "password": "1234",        // 可选，访问密码
   "expireAt": 1718000000000, // 可选，过期时间（epoch ms），null 永不过期
-  "maxDownloads": 10,        // 可选，最大下载次数，null 无限制
+  "maxVisits": 10,           // 可选，最大访问次数，null 无限制
   "notifyEmail": "friend@example.com"  // 可选，发送分享通知邮件
 }
 ```
@@ -983,18 +1179,22 @@ Authorization: Bearer <accessToken>
     "shareCode": "aB3xK9mW",
     "passwordHash": "$2a$12$...",
     "expireAt": "2026-07-09T10:00:00",
-    "maxDownloads": 10,
+    "maxVisits": 10,
     "downloadCount": 0,
     "visitCount": 0,
     "isCanceled": false,
-    "createdAt": "2026-06-09T12:00:00"
+    "createdAt": "2026-06-09T12:00:00",
+    "updatedAt": "2026-06-09T12:00:00"
   }
 }
 ```
 
+> `passwordHash` 只在服务端实体响应中出现；客户端不应展示或保存该字段。`downloadCount` 当前会在公开下载或保存分享内容时递增，`maxVisits` 限制的是访问分享详情的次数。
+> 分享密码如果提供，长度必须为 4-16 个字符。
+
 ---
 
-### 9.2 列出我的分享
+### 10.2 列出我的分享
 
 ```
 GET /api/v1/shares?page=1&size=20
@@ -1005,7 +1205,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.3 获取分享详情
+### 10.3 获取分享详情
 
 ```
 GET /api/v1/shares/{shareId}
@@ -1016,7 +1216,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.4 更新分享
+### 10.4 更新分享
 
 ```
 PUT /api/v1/shares/{shareId}
@@ -1028,13 +1228,15 @@ Authorization: Bearer <accessToken>
 {
   "password": "",           // 设置为 "" 移除密码保护
   "expireAt": 0,            // 设置为 0 移除过期时间
-  "maxDownloads": null      // 设置为 null 移除下载限制
+  "maxVisits": null         // 当前为 null 时不修改；传数字可更新访问次数限制
 }
 ```
 
+> 当前接口无法通过 `null` 清除已存在的 `maxVisits` 限制；`null` 表示保持原值不变。
+
 ---
 
-### 9.5 取消分享
+### 10.5 取消分享
 
 ```
 DELETE /api/v1/shares/{shareId}
@@ -1045,7 +1247,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 9.6 访问分享（公开）
+### 10.6 访问分享（公开）
 
 ```
 POST /api/v1/shares/access/{shareCode}
@@ -1074,11 +1276,11 @@ POST /api/v1/shares/access/{shareCode}
 }
 ```
 
-**错误码:** 419002（无效分享码）、419003（需要密码/密码错误）、419004（已过期）、419005（下载次数达上限）
+**错误码:** 419002（无效分享码）、419003（需要密码/密码错误）、419004（已过期）、419005（访问次数达上限）
 
 ---
 
-### 9.7 浏览分享内容（公开）
+### 10.7 浏览分享内容（公开）
 
 ```
 GET /api/v1/shares/access/{shareCode}/files?parentId=&page=1&size=20
@@ -1088,9 +1290,81 @@ GET /api/v1/shares/access/{shareCode}/files?parentId=&page=1&size=20
 
 ---
 
-## 十、收藏 `/api/v1/favorites`
+### 10.8 保存分享内容到我的网盘
 
-### 10.1 添加收藏
+```
+POST /api/v1/shares/access/{shareCode}/save
+Authorization: Bearer <accessToken>
+```
+
+将公开分享中的文件或文件夹复制到当前登录用户的网盘。分享设置了密码时必须提供密码。
+
+**Request Body（可选）:**
+```json
+{
+  "fileId": 42,
+  "targetParentId": null,
+  "password": "1234"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| fileId | Long | 否 | 要保存的分享内文件/文件夹 ID；省略时保存分享根节点 |
+| targetParentId | Long | 否 | 目标文件夹 ID；`null` 表示保存到根目录 |
+| password | String | 否 | 分享密码 |
+
+**Response `200`:** 返回保存后的根文件或文件夹实体。
+
+**错误码:** 409001（目标目录同名冲突）、419001（配额不足）、419002/419003/419004（分享无效、密码错误或过期）
+
+---
+
+### 10.9 下载分享文件（公开）
+
+```
+POST /api/v1/shares/access/{shareCode}/download/{fileId}
+```
+
+无需认证。分享设置了密码时必须在 Body 中提供密码。
+
+**Request Body（无密码时可选）:**
+```json
+{
+  "password": "1234"
+}
+```
+
+**Response:** 二进制流，`Content-Disposition: attachment`，包含 `Accept-Ranges: bytes` 响应头。
+
+> 当前分享文件下载响应声明支持 Range，但接口实现会返回完整文件内容，不处理 `Range` 请求头。需要严格断点续传时使用登录态下载接口 `/api/v1/download/{fileId}`。
+
+---
+
+### 10.10 下载分享文件夹 ZIP（公开）
+
+```
+POST /api/v1/shares/access/{shareCode}/download/{fileId}/zip
+```
+
+无需认证。将分享范围内的文件夹打包为 ZIP 流返回；分享设置了密码时必须在 Body 中提供密码。
+
+**Request Body（无密码时可选）:**
+```json
+{
+  "password": "1234"
+}
+```
+
+**Response:** 二进制 ZIP 流，`Content-Disposition: attachment`。
+
+> 该公开 ZIP 接口为即时打包流，不使用 4.4 的登录态 ZIP 缓存，也不支持 Range 续传。
+
+---
+
+## 十一、收藏 `/api/v1/favorites`
+
+### 11.1 添加收藏
 
 ```
 POST /api/v1/favorites/{fileId}
@@ -1101,7 +1375,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 10.2 取消收藏
+### 11.2 取消收藏
 
 ```
 DELETE /api/v1/favorites/{fileId}
@@ -1112,7 +1386,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 10.3 收藏列表
+### 11.3 收藏列表
 
 ```
 GET /api/v1/favorites?page=1&size=20
@@ -1123,7 +1397,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 10.4 查询收藏状态
+### 11.4 查询收藏状态
 
 ```
 GET /api/v1/favorites/{fileId}/status
@@ -1141,9 +1415,9 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 十一、标签 `/api/v1/tags`
+## 十二、标签 `/api/v1/tags`
 
-### 11.1 创建标签
+### 12.1 创建标签
 
 ```
 POST /api/v1/tags
@@ -1162,7 +1436,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 11.2 标签列表
+### 12.2 标签列表
 
 ```
 GET /api/v1/tags
@@ -1173,7 +1447,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 11.3 更新标签
+### 12.3 更新标签
 
 ```
 PUT /api/v1/tags/{tagId}
@@ -1190,7 +1464,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 11.4 删除标签
+### 12.4 删除标签
 
 ```
 DELETE /api/v1/tags/{tagId}
@@ -1201,7 +1475,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 11.5 批量关联文件
+### 12.5 批量关联文件
 
 ```
 POST /api/v1/tags/{tagId}/files
@@ -1217,7 +1491,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 11.6 取消文件关联
+### 12.6 取消文件关联
 
 ```
 DELETE /api/v1/tags/{tagId}/files/{fileId}
@@ -1226,7 +1500,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 11.7 按标签列出文件
+### 12.7 按标签列出文件
 
 ```
 GET /api/v1/tags/{tagId}/files?page=1&size=20
@@ -1237,9 +1511,9 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 十二、文件版本 `/api/v1/files/{fileId}/versions`
+## 十三、文件版本 `/api/v1/files/{fileId}/versions`
 
-### 12.1 版本列表
+### 13.1 版本列表
 
 ```
 GET /api/v1/files/{fileId}/versions
@@ -1278,7 +1552,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 12.2 删除版本
+### 13.2 删除版本
 
 ```
 DELETE /api/v1/files/{fileId}/versions/{versionNumber}
@@ -1289,9 +1563,9 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 十三、注册验证码与密码重置 `/api/v1/auth`
+## 十四、注册验证码与密码重置 `/api/v1/auth`
 
-### 13.1 发送注册验证码
+### 14.1 发送注册验证码
 
 ```
 POST /api/v1/auth/register-code/send
@@ -1310,7 +1584,7 @@ POST /api/v1/auth/register-code/send
 
 ---
 
-### 13.2 忘记密码（公开）
+### 14.2 忘记密码（公开）
 
 ```
 POST /api/v1/auth/forgot-password
@@ -1329,7 +1603,7 @@ POST /api/v1/auth/forgot-password
 
 ---
 
-### 13.4 重置密码（公开）
+### 14.3 重置密码（公开）
 
 ```
 POST /api/v1/auth/reset-password
@@ -1350,11 +1624,11 @@ POST /api/v1/auth/reset-password
 
 ---
 
-## 十四、管理员 `/api/v1/admin`
+## 十五、管理员 `/api/v1/admin`
 
 > 所有管理员端点需要 `ROLE_ADMIN` 角色，普通用户返回 403。
 
-### 14.1 用户列表
+### 15.1 用户列表
 
 ```
 GET /api/v1/admin/users?keyword=&status=&page=1&size=20
@@ -1374,7 +1648,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 14.2 修改用户状态
+### 15.2 修改用户状态
 
 ```
 PATCH /api/v1/admin/users/{userId}/status
@@ -1390,7 +1664,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 14.3 修改用户配额
+### 15.3 修改用户配额
 
 ```
 PATCH /api/v1/admin/users/{userId}/quota
@@ -1416,7 +1690,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 14.4 浏览用户文件
+### 15.4 浏览用户文件
 
 ```
 GET /api/v1/admin/users/{userId}/files?parentId=&page=1&size=20&sortBy=fileName&order=asc
@@ -1427,7 +1701,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 14.5 查看任意文件
+### 15.5 查看任意文件
 
 ```
 GET /api/v1/admin/files/{fileId}
@@ -1438,7 +1712,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 14.6 删除任意文件
+### 15.6 删除任意文件
 
 ```
 DELETE /api/v1/admin/files/{fileId}
@@ -1449,7 +1723,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 14.7 操作日志
+### 15.7 操作日志
 
 ```
 GET /api/v1/admin/logs?userId=&actionType=&startDate=&endDate=&page=1&size=20
@@ -1469,7 +1743,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 14.8 系统统计
+### 15.8 系统统计
 
 ```
 GET /api/v1/admin/stats

@@ -1,9 +1,10 @@
 -- ============================================================
 -- Better Cloud Drive - Initial Schema (MVP)
 -- PostgreSQL 16+
--- 10 tables: users, files, file_versions, share_links,
+-- 11 tables: users, files, file_versions, share_links,
 --            upload_sessions, operation_logs (partitioned),
---            user_tokens, favorites, tags, file_tags
+--            folder_zip_download_cache, user_tokens, favorites,
+--            tags, file_tags
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -26,12 +27,15 @@ CREATE TABLE users (
     username        VARCHAR(64)  NOT NULL,
     password_hash   VARCHAR(255) NOT NULL,
     email           VARCHAR(128),
-    phone           VARCHAR(20),
+    email_verified  BOOLEAN      NOT NULL DEFAULT FALSE,
     nickname        VARCHAR(64),
     avatar_url      VARCHAR(512),
-    status          SMALLINT     NOT NULL DEFAULT 1,        -- 1=active, 0=disabled, -1=frozen
+    role            VARCHAR(32)  NOT NULL DEFAULT 'ROLE_USER',
+    status          INTEGER      NOT NULL DEFAULT 1,        -- 1=active, 0=disabled, -1=frozen
     storage_quota   BIGINT       NOT NULL DEFAULT 10737418240, -- 10 GB
     storage_used    BIGINT       NOT NULL DEFAULT 0,
+    webdav_enabled  BOOLEAN      NOT NULL DEFAULT FALSE,
+    webdav_password_hash VARCHAR(255),
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at      TIMESTAMP                               -- soft delete
@@ -47,9 +51,13 @@ CREATE TRIGGER trg_users_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 COMMENT ON TABLE users IS '用户表';
+COMMENT ON COLUMN users.email_verified IS 'Whether the user has verified their email address';
+COMMENT ON COLUMN users.role IS 'User role: ROLE_USER (default) or ROLE_ADMIN';
 COMMENT ON COLUMN users.status IS '1=active, 0=disabled, -1=frozen';
 COMMENT ON COLUMN users.storage_quota IS '存储配额（字节），默认10GB';
 COMMENT ON COLUMN users.storage_used IS '已用存储（字节）';
+COMMENT ON COLUMN users.webdav_enabled IS '是否启用 WebDAV，默认关闭';
+COMMENT ON COLUMN users.webdav_password_hash IS 'WebDAV 独立密码 BCrypt 哈希';
 
 
 -- ============================================================
@@ -135,7 +143,7 @@ CREATE TABLE share_links (
     share_code      VARCHAR(16)  NOT NULL,
     password_hash   VARCHAR(255),                            -- BCrypt; NULL = no password
     expire_at       TIMESTAMP,                               -- NULL = never expires
-    max_downloads   INT,                                     -- NULL = unlimited
+    max_visits      INT,                                     -- NULL = unlimited
     download_count  INT          NOT NULL DEFAULT 0,
     visit_count     INT          NOT NULL DEFAULT 0,         -- synced from Redis
     is_canceled     BOOLEAN      NOT NULL DEFAULT FALSE,
@@ -158,6 +166,7 @@ CREATE TRIGGER trg_share_links_updated_at
 COMMENT ON TABLE share_links IS '分享链接表';
 COMMENT ON COLUMN share_links.share_code IS '8位随机短码，用于生成分享URL';
 COMMENT ON COLUMN share_links.password_hash IS 'BCrypt哈希，NULL表示无密码';
+COMMENT ON COLUMN share_links.max_visits IS '最大访问次数，NULL表示无限制';
 
 
 -- ============================================================
@@ -174,7 +183,7 @@ CREATE TABLE upload_sessions (
     total_chunks    INT          NOT NULL,
     received_chunks INT          NOT NULL DEFAULT 0,
     storage_path    VARCHAR(512),                            -- SeaweedFS multipart upload ID
-    status          SMALLINT     NOT NULL DEFAULT 1,         -- 1=uploading, 2=completed, 3=expired
+    status          INTEGER      NOT NULL DEFAULT 1,         -- 1=uploading, 2=completed, 3=expired
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -194,7 +203,34 @@ COMMENT ON COLUMN upload_sessions.status IS '1=uploading, 2=completed, 3=expired
 
 
 -- ============================================================
--- 6. operation_logs (partitioned by month)
+-- 6. folder_zip_download_cache
+-- ============================================================
+CREATE TABLE folder_zip_download_cache (
+    id                  BIGSERIAL PRIMARY KEY,
+    user_id             BIGINT       NOT NULL,
+    folder_id           BIGINT       NOT NULL,
+    object_key          VARCHAR(512) NOT NULL,
+    file_name           VARCHAR(255) NOT NULL,
+    file_size           BIGINT       NOT NULL DEFAULT 0,
+    content_signature   VARCHAR(64)  NOT NULL,
+    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_downloaded_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_folder_zip_cache_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_folder_zip_cache_folder FOREIGN KEY (folder_id) REFERENCES files(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX uk_folder_zip_cache_user_folder
+    ON folder_zip_download_cache(user_id, folder_id);
+
+CREATE INDEX idx_folder_zip_cache_last_downloaded
+    ON folder_zip_download_cache(last_downloaded_at);
+
+COMMENT ON TABLE folder_zip_download_cache IS '文件夹 ZIP 下载缓存表';
+
+
+-- ============================================================
+-- 7. operation_logs (partitioned by month)
 -- ============================================================
 CREATE TABLE operation_logs (
     id            BIGSERIAL,
@@ -205,7 +241,7 @@ CREATE TABLE operation_logs (
     detail        JSONB,
     ip_address    VARCHAR(45),
     user_agent    VARCHAR(512),
-    result        SMALLINT     NOT NULL DEFAULT 1,  -- 1=success, 0=failure
+    result        INTEGER      NOT NULL DEFAULT 1,  -- 1=success, 0=failure
     duration_ms   INT,
     created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -290,7 +326,7 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================================
--- 7. user_tokens
+-- 8. user_tokens
 -- ============================================================
 CREATE TABLE user_tokens (
     id          BIGSERIAL PRIMARY KEY,
@@ -313,7 +349,7 @@ COMMENT ON COLUMN user_tokens.jti IS 'JWT ID，用于黑名单和追踪';
 
 
 -- ============================================================
--- 8. favorites
+-- 9. favorites
 -- ============================================================
 CREATE TABLE favorites (
     id         BIGSERIAL PRIMARY KEY,
@@ -331,7 +367,7 @@ COMMENT ON TABLE favorites IS '收藏表';
 
 
 -- ============================================================
--- 9. tags
+-- 10. tags
 -- ============================================================
 CREATE TABLE tags (
     id         BIGSERIAL PRIMARY KEY,
@@ -350,7 +386,7 @@ COMMENT ON TABLE tags IS '标签表';
 
 
 -- ============================================================
--- 10. file_tags
+-- 11. file_tags
 -- ============================================================
 CREATE TABLE file_tags (
     id         BIGSERIAL PRIMARY KEY,
@@ -368,3 +404,4 @@ CREATE UNIQUE INDEX uk_file_tag ON file_tags(file_id, tag_id);
 CREATE INDEX idx_file_tags_tag ON file_tags(tag_id);
 
 COMMENT ON TABLE file_tags IS '文件-标签关联表';
+

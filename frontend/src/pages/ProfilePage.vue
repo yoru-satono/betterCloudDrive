@@ -1,13 +1,34 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useFormatters } from '@/composables/useFormatters'
+import OButton from '@/components/base/OButton.vue'
+import OInput from '@/components/base/OInput.vue'
+import { toast } from 'vue-sonner'
 
 const auth = useAuthStore()
 const { formatSize } = useFormatters()
 
 const storagePercent = computed(() => auth.storagePercent)
 const storageColor = computed(() => storagePercent.value > 90 ? 'var(--danger)' : storagePercent.value > 70 ? 'var(--warning)' : 'var(--accent)')
+const webdavPassword = ref('')
+const webdavLoading = ref(false)
+const webdavEnabled = computed(() => Boolean(auth.user?.webdavEnabled))
+
+async function saveWebDavSettings(enabled: boolean) {
+  if (enabled && !webdavPassword.value.trim()) {
+    toast.error('请设置 WebDAV 独立密码')
+    return
+  }
+  webdavLoading.value = true
+  try {
+    await auth.updateWebDavSettings(enabled, enabled ? webdavPassword.value : undefined)
+    webdavPassword.value = ''
+    toast.success(enabled ? 'WebDAV 已开启' : 'WebDAV 已关闭')
+  } finally {
+    webdavLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -36,6 +57,38 @@ const storageColor = computed(() => storagePercent.value > 90 ? 'var(--danger)' 
         <span style="margin-left:8px;font-size:12px" :style="{ color: storageColor }">{{ storagePercent }}%</span>
       </div>
     </div>
+
+    <div class="section">
+      <div class="section__header">
+        <h3 class="section__title">WebDAV</h3>
+        <span class="webdav-status" :class="{ 'webdav-status--on': webdavEnabled }">
+          {{ webdavEnabled ? '已开启' : '已关闭' }}
+        </span>
+      </div>
+      <p class="section__hint">WebDAV 默认关闭，开启时必须设置独立密码。</p>
+      <div class="webdav-form">
+        <OInput
+          v-model="webdavPassword"
+          type="password"
+          :label="webdavEnabled ? '新的 WebDAV 密码' : 'WebDAV 密码'"
+          placeholder="输入独立密码"
+          :disabled="webdavLoading"
+        />
+        <div class="webdav-actions">
+          <OButton variant="primary" :loading="webdavLoading" @click="saveWebDavSettings(true)">
+            {{ webdavEnabled ? '更新密码' : '开启 WebDAV' }}
+          </OButton>
+          <OButton
+            v-if="webdavEnabled"
+            variant="danger"
+            :disabled="webdavLoading"
+            @click="saveWebDavSettings(false)"
+          >
+            关闭 WebDAV
+          </OButton>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -58,8 +111,26 @@ const storageColor = computed(() => storagePercent.value > 90 ? 'var(--danger)' 
 
 .section { margin-bottom: 28px; }
 .section__title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+.section__header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.section__header .section__title { margin-bottom: 0; }
+.section__hint { margin-bottom: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
 
 .storage-bar { height: 6px; background: var(--border); border-radius: 3px; margin-bottom: 6px; overflow: hidden; }
 .storage-bar__fill { height: 100%; border-radius: 3px; transition: width 600ms; }
 .storage-info { font-size: 13px; }
+.webdav-status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 8px;
+}
+.webdav-status--on {
+  border-color: rgba(0, 212, 170, 0.35);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.webdav-form { display: flex; flex-direction: column; gap: 12px; }
+.webdav-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 </style>

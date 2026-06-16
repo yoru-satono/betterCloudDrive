@@ -11,6 +11,8 @@ import com.betterclouddrive.web.dto.request.RegisterCodeRequest;
 import com.betterclouddrive.web.dto.request.RefreshTokenRequest;
 import com.betterclouddrive.web.dto.request.RegisterRequest;
 import com.betterclouddrive.web.dto.request.ResetPasswordRequest;
+import com.betterclouddrive.web.dto.request.UpdateWebDavSettingsRequest;
+import com.betterclouddrive.web.dto.response.UserProfileResponse;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.JwtTokenProvider;
 import com.betterclouddrive.web.security.UserPrincipal;
@@ -119,8 +121,25 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public ApiResponse<UserEntity> me(@CurrentUser UserPrincipal user) {
-        return ApiResponse.success(authService.getCurrentUser(user.getUserId()));
+    public ApiResponse<UserProfileResponse> me(@CurrentUser UserPrincipal user) {
+        return ApiResponse.success(UserProfileResponse.from(authService.getCurrentUser(user.getUserId())));
+    }
+
+    @GetMapping("/webdav")
+    public ApiResponse<Map<String, Object>> getWebDavSettings(@CurrentUser UserPrincipal user) {
+        UserEntity currentUser = authService.getCurrentUser(user.getUserId());
+        return ApiResponse.success(Map.of(
+                "enabled", Boolean.TRUE.equals(currentUser.getWebdavEnabled())
+        ));
+    }
+
+    @PutMapping("/webdav")
+    public ApiResponse<UserProfileResponse> updateWebDavSettings(
+            @CurrentUser UserPrincipal user,
+            @Valid @RequestBody UpdateWebDavSettingsRequest request) {
+        boolean enabled = Boolean.TRUE.equals(request.getEnabled());
+        UserEntity updated = authService.updateWebDavSettings(user.getUserId(), enabled, request.getPassword());
+        return ApiResponse.success(UserProfileResponse.from(updated));
     }
 
     @PostMapping("/forgot-password")

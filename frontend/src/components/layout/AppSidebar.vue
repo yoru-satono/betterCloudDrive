@@ -110,7 +110,7 @@ const iconPaths: Record<string, string> = {
 <style scoped>
 .sidebar {
   width: var(--sidebar-collapsed);
-  min-height: 100vh;
+  min-height: calc(100vh - var(--desktop-titlebar-h, 0px));
   background: var(--bg-surface);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;

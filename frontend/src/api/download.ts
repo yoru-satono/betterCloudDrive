@@ -1,5 +1,11 @@
 import api from './client'
 import { toast } from 'vue-sonner'
+import { getApiBaseUrl } from '@/config/runtime'
+import {
+  downloadDesktopFile,
+  downloadDesktopFolder,
+  isDesktopDownloadRuntime,
+} from './desktopDownload'
 
 const getFileNameFromDisposition = (disposition: string | undefined, fallback: string) => {
   if (!disposition) return fallback
@@ -26,10 +32,26 @@ const saveBlobResponse = async (response: { data: Blob; headers: Record<string, 
   URL.revokeObjectURL(url)
 }
 
+const triggerBrowserDownload = (url: string, fileName: string) => {
+  const link = document.createElement('a')
+  link.href = url.startsWith('http') ? url : `${getApiBaseUrl().replace(/\/api\/v1$/, '')}${url}`
+  link.download = fileName
+  link.rel = 'noopener'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
 export const downloadFile = async (fileId: number, fileName: string) => {
   try {
-    const res = await api.get<Blob>(`/download/${fileId}`, { responseType: 'blob', suppressToast: true })
-    await saveBlobResponse(res, fileName)
+    if (isDesktopDownloadRuntime()) {
+      const saved = await downloadDesktopFile(fileId, fileName)
+      if (saved) toast.success('下载完成')
+      return
+    }
+
+    const { data } = await api.post<{ code: number; data: { url: string } }>(`/download/${fileId}/ticket`, undefined, { suppressToast: true })
+    triggerBrowserDownload(data.data.url, fileName)
   } catch (e) {
     const msg = e instanceof Error ? e.message : '下载失败'
     toast.error(msg)
@@ -38,15 +60,21 @@ export const downloadFile = async (fileId: number, fileName: string) => {
 
 export const downloadFolderZip = async (fileId: number, folderName: string) => {
   try {
-    const res = await api.get<Blob>(`/download/folders/${fileId}/zip`, { responseType: 'blob', suppressToast: true })
-    await saveBlobResponse(res, `${folderName}.zip`)
+    if (isDesktopDownloadRuntime()) {
+      const saved = await downloadDesktopFolder({ id: fileId, fileName: folderName })
+      if (saved) toast.success('文件夹下载完成')
+      return
+    }
+
+    const { data } = await api.post<{ code: number; data: { url: string } }>(`/download/folders/${fileId}/zip/ticket`, undefined, { suppressToast: true })
+    triggerBrowserDownload(data.data.url, `${folderName}.zip`)
   } catch (e) {
     const msg = e instanceof Error ? e.message : '下载失败'
     toast.error(msg)
   }
 }
 
-export const previewFileUrl = (fileId: number) => `/api/v1/preview/${fileId}`
+export const previewFileUrl = (fileId: number) => `${getApiBaseUrl()}/preview/${fileId}`
 
 export const previewFile = (fileId: number) =>
   api.get<Blob>(`/preview/${fileId}`, { responseType: 'blob', suppressToast: true })

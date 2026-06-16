@@ -181,6 +181,47 @@ class AuthServiceImplTest {
                 .isInstanceOf(BusinessException.class);
     }
 
+    @Test
+    void updateWebDavSettings_shouldRequirePasswordWhenEnabled() {
+        UserEntity user = UserEntity.builder().id(1L).webdavEnabled(false).build();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> authService.updateWebDavSettings(1L, true, " "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("WebDAV password is required");
+    }
+
+    @Test
+    void updateWebDavSettings_shouldEnableWithIndependentPasswordHash() {
+        UserEntity user = UserEntity.builder().id(1L).webdavEnabled(false).build();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("dav-pass")).thenReturn("dav-hash");
+        when(userRepository.save(user)).thenReturn(user);
+
+        UserEntity result = authService.updateWebDavSettings(1L, true, "dav-pass");
+
+        assertThat(result.getWebdavEnabled()).isTrue();
+        assertThat(result.getWebdavPasswordHash()).isEqualTo("dav-hash");
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateWebDavSettings_shouldDisableWithoutPassword() {
+        UserEntity user = UserEntity.builder()
+                .id(1L)
+                .webdavEnabled(true)
+                .webdavPasswordHash("old-hash")
+                .build();
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        UserEntity result = authService.updateWebDavSettings(1L, false, null);
+
+        assertThat(result.getWebdavEnabled()).isFalse();
+        assertThat(result.getWebdavPasswordHash()).isEqualTo("old-hash");
+        verify(passwordEncoder, never()).encode(anyString());
+    }
+
     // ── logout ────────────────────────────────────────────────────────────────
 
     @Test

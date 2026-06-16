@@ -2,20 +2,46 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import SparkMD5 from 'spark-md5'
 import * as uploadApi from '@/api/upload'
+import { cancelDesktopUpload } from '@/api/desktopUpload'
+import {
+  findResumableUpload,
+  removeResumableUpload,
+  readResumableUploads,
+  saveResumableUpload,
+  type ResumableUploadRecord,
+} from '@/api/resumableUpload'
 import { useFilesStore } from './files'
 import { toast } from 'vue-sonner'
 
-export type UploadStatus = 'pending' | 'hashing' | 'uploading' | 'done' | 'error' | 'instant' | 'canceled'
+export type UploadStatus = 'pending' | 'hashing' | 'uploading' | 'done' | 'error' | 'instant' | 'canceled' | 'resume_required'
+
+const CHUNK_SIZE = 5 * 1024 * 1024
+const MAX_CONCURRENT_UPLOADS = 3
 
 export interface UploadItem {
   id: string
-  file: File
+  file?: File
   fileName: string
+  displayName: string
+  parentId: number | null
   status: UploadStatus
   progress: number
   chunkProgress: string
   error: string | null
   uploadId?: string
+  fileSize?: number
+  md5Hash?: string
+  totalChunks?: number
+  resumable?: boolean
+  desktop?: boolean
+  started?: boolean
+}
+
+export interface UploadFileEntry {
+  file: File
+  parentId: number | null
+  fileName?: string
+  displayName?: string
 }
 
 export const useUploadStore = defineStore('upload', () => {
@@ -23,10 +49,17 @@ export const useUploadStore = defineStore('upload', () => {
   const isOpen = ref(false)
 
   function addFiles(files: File[], parentId: number | null) {
-    const items: UploadItem[] = files.map(f => ({
+    addUploadFiles(files.map(file => ({ file, parentId })))
+  }
+
+  function addUploadFiles(entries: UploadFileEntry[]) {
+    if (!entries.length) return
+    const items: UploadItem[] = entries.map(entry => ({
       id: crypto.randomUUID(),
-      file: f,
-      fileName: f.name,
+      file: entry.file,
+      fileName: entry.fileName || entry.file.name,
+      displayName: entry.displayName || entry.fileName || entry.file.name,
+      parentId: entry.parentId,
       status: 'pending',
       progress: 0,
       chunkProgress: '',
@@ -34,7 +67,36 @@ export const useUploadStore = defineStore('upload', () => {
     }))
     queue.value.push(...items)
     isOpen.value = true
-    items.forEach(item => processUpload(item, parentId))
+    scheduleUploads()
+  }
+
+  function restoreResumableUploads() {
+    const records = readResumableUploads()
+    if (!records.length || queue.value.length) return
+    queue.value = records.map(record => ({
+      id: crypto.randomUUID(),
+      fileName: record.fileName,
+      displayName: record.displayName,
+      parentId: record.parentId,
+      status: 'resume_required',
+      progress: 0,
+      chunkProgress: '',
+      error: '请重新选择此文件以继续上传',
+      uploadId: record.sessionId,
+      fileSize: record.fileSize,
+      md5Hash: record.md5Hash,
+      totalChunks: record.totalChunks,
+      resumable: true,
+    }))
+    isOpen.value = true
+    queue.value.forEach(item => refreshUploadStatus(item.id).catch(() => {
+      if (item.uploadId) removeResumableUpload(item.uploadId)
+      Object.assign(item, {
+        status: 'error' as UploadStatus,
+        error: '续传会话已失效，请重新上传',
+        resumable: false,
+      })
+    }))
   }
 
   function removeItem(id: string) {
@@ -46,61 +108,170 @@ export const useUploadStore = defineStore('upload', () => {
     queue.value = queue.value.filter(i => i.status !== 'done' && i.status !== 'instant')
   }
 
-  async function processUpload(item: UploadItem, parentId: number | null) {
+  function applyDesktopUploadItem(item: Omit<UploadItem, 'file'>) {
+    const existing = queue.value.find(entry => entry.id === item.id)
+    const next = normalizeUploadPatch({ ...item, desktop: true })
+    if (existing) {
+      Object.assign(existing, next)
+    } else {
+      queue.value.push({
+        ...next,
+        error: next.error ?? null,
+        desktop: true,
+      } as UploadItem)
+    }
+    isOpen.value = true
+  }
+
+  function scheduleUploads() {
+    const activeCount = queue.value.filter(item =>
+      !item.desktop
+      && item.started
+      && (item.status === 'hashing' || item.status === 'uploading')
+    ).length
+    const slots = Math.max(0, MAX_CONCURRENT_UPLOADS - activeCount)
+    if (slots === 0) return
+
+    queue.value
+      .filter(item => !item.desktop && !item.started && item.status === 'pending')
+      .slice(0, slots)
+      .forEach(item => {
+        item.started = true
+        void processUpload(item)
+      })
+  }
+
+  async function processUpload(item: UploadItem) {
+    const isCanceled = () => queue.value.find(q => q.id === item.id)?.status === 'canceled'
     const update = (patch: Partial<UploadItem>) => {
       const i = queue.value.find(q => q.id === item.id)
+      if (i?.status === 'canceled' && patch.status !== 'canceled') return
       if (i) Object.assign(i, normalizeUploadPatch(patch))
     }
+    const label = item.displayName || item.fileName
 
     try {
+      if (!item.file) {
+        update({ status: 'resume_required', error: '请重新选择此文件以继续上传' })
+        return
+      }
       update({ status: 'hashing' })
       const md5 = await computeMd5(item.file, (pct) => update({ progress: pct * 30 }))
-      const CHUNK_SIZE = 5 * 1024 * 1024
+      if (isCanceled()) return
+      if (item.uploadId && item.md5Hash && item.md5Hash !== md5) {
+        update({
+          status: 'resume_required',
+          error: '选择的文件与续传任务不匹配',
+          progress: 0,
+        })
+        return
+      }
       const totalChunks = Math.max(1, Math.ceil(item.file.size / CHUNK_SIZE))
+      update({
+        fileSize: item.file.size,
+        md5Hash: md5,
+        totalChunks,
+      })
 
-      const instant = await tryInstantUpload(parentId, item.fileName, item.file.size, md5, item.file.type || undefined)
+      const uploadIdentity = {
+        parentId: item.parentId,
+        fileName: item.fileName,
+        displayName: item.displayName,
+        fileSize: item.file.size,
+        md5Hash: md5,
+      }
+      const resumeRecord = findResumableUpload(uploadIdentity)
+      if (resumeRecord) {
+        item.parentId = resumeRecord.parentId
+        update({ parentId: resumeRecord.parentId })
+        mergeRestoredQueueItem(item.id, resumeRecord)
+      }
+      if (isCanceled()) return
+
+      const instant = await tryInstantUpload(item.parentId, item.fileName, item.file.size, md5, item.file.type || undefined)
+      if (isCanceled()) return
       if (instant) {
-        update({ status: 'instant', progress: 100 })
-        toast.success(`${item.fileName} 秒传成功`)
+        removeResumableUpload(resumeRecord?.sessionId || item.uploadId)
+        update({ status: 'instant', progress: 100, resumable: false })
+        toast.success(`${label} 秒传成功`)
         useFilesStore().refresh()
         return
       }
 
       update({ status: 'uploading', progress: 30 })
 
-      const initRes = await uploadApi.initMultipart(parentId, item.fileName, item.file.size, md5, totalChunks, item.file.type || undefined)
-      const uploadId = initRes.data.data.sessionId
-      update({ uploadId })
-      await refreshUploadStatus(item.id).catch(() => {})
+      const session = await getOrCreateUploadSession(item, md5, totalChunks, resumeRecord)
+      if (isCanceled()) {
+        await uploadApi.abortMultipart(session.sessionId).catch(() => {})
+        removeResumableUpload(session.sessionId)
+        return
+      }
+      update({
+        uploadId: session.sessionId,
+        totalChunks: session.totalChunks,
+        resumable: true,
+      })
+      saveResumableUpload({
+        sessionId: session.sessionId,
+        parentId: item.parentId,
+        fileName: item.fileName,
+        displayName: item.displayName,
+        fileSize: item.file.size,
+        md5Hash: md5,
+        totalChunks: session.totalChunks,
+        chunkSize: session.chunkSize,
+        createdAt: resumeRecord?.sessionId === session.sessionId ? resumeRecord.createdAt : Date.now(),
+        updatedAt: Date.now(),
+      })
 
-      for (let i = 0; i < totalChunks; i++) {
+      const missingChunks = await getMissingChunks(session.sessionId, session.totalChunks).catch(() => range(session.totalChunks))
+      if (isCanceled()) return
+      updateProgressFromChunks(update, session.totalChunks, session.totalChunks - missingChunks.length)
+
+      for (const i of missingChunks) {
         const current = queue.value.find(q => q.id === item.id)
         if (current?.status === 'canceled') return
         const chunk = item.file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
-        await uploadApi.uploadChunk(uploadId, i, chunk, (pct) => {
-          const overall = 30 + ((i + pct / 100) / totalChunks) * 65
-          update({ progress: overall, chunkProgress: `${i + 1}/${totalChunks}` })
+        const missingIndex = missingChunks.indexOf(i)
+        await uploadApi.uploadChunk(session.sessionId, i, chunk, (pct) => {
+          const completedBeforeChunk = session.totalChunks - missingChunks.length
+          const completedEquivalent = completedBeforeChunk + missingIndex + pct / 100
+          const overall = 30 + (completedEquivalent / session.totalChunks) * 65
+          update({ progress: overall, chunkProgress: `${Math.min(session.totalChunks, Math.floor(completedEquivalent))}/${session.totalChunks}` })
         })
+        updateProgressFromChunks(update, session.totalChunks, session.totalChunks - missingChunks.length + missingIndex + 1)
       }
 
-      await uploadApi.completeMultipart(uploadId)
-      update({ status: 'done', progress: 100, chunkProgress: '' })
-      toast.success(`${item.fileName} 上传完成`)
+      await uploadApi.completeMultipart(session.sessionId)
+      removeResumableUpload(session.sessionId)
+      update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
+      toast.success(`${label} 上传完成`)
       useFilesStore().refresh()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '上传失败'
-      update({ status: 'error', error: msg })
-      toast.error(`${item.fileName} 上传失败`)
+      update({ status: 'error', error: msg, resumable: !!item.uploadId })
+      toast.error(`${label} 上传失败`)
+    } finally {
+      const current = queue.value.find(q => q.id === item.id)
+      if (current) current.started = false
+      scheduleUploads()
     }
   }
 
   async function cancelUpload(id: string) {
     const item = queue.value.find(q => q.id === id)
     if (!item) return
+    if (item.desktop) {
+      await cancelDesktopUpload(id).catch(() => {})
+      Object.assign(item, { status: 'canceled' as UploadStatus, error: null, resumable: false })
+      return
+    }
     if (item.uploadId) {
       await uploadApi.abortMultipart(item.uploadId).catch(() => {})
+      removeResumableUpload(item.uploadId)
     }
-    Object.assign(item, { status: 'canceled' as UploadStatus, error: null })
+    Object.assign(item, { status: 'canceled' as UploadStatus, error: null, resumable: false, started: false })
+    scheduleUploads()
   }
 
   async function refreshUploadStatus(id: string) {
@@ -110,10 +281,47 @@ export const useUploadStore = defineStore('upload', () => {
     const status = data.data
     if (status.uploadedChunks !== undefined && status.totalChunks) {
       item.chunkProgress = `${status.uploadedChunks}/${status.totalChunks}`
+      item.progress = normalizeProgress(30 + (status.uploadedChunks / status.totalChunks) * 65)
     }
   }
 
-  return { queue, isOpen, addFiles, removeItem, clearDone, cancelUpload, refreshUploadStatus }
+  function resumeUploadWithFile(id: string, file: File) {
+    const item = queue.value.find(q => q.id === id)
+    if (!item) return
+    item.file = file
+    item.error = null
+    item.status = 'pending'
+    item.started = false
+    scheduleUploads()
+  }
+
+  function retryUpload(id: string) {
+    const item = queue.value.find(q => q.id === id)
+    if (!item) return
+    if (!item.file) {
+      Object.assign(item, { status: 'resume_required' as UploadStatus, error: '请重新选择此文件以继续上传' })
+      return
+    }
+    Object.assign(item, { status: 'pending' as UploadStatus, error: null, started: false })
+    scheduleUploads()
+  }
+
+  restoreResumableUploads()
+
+  return {
+    queue,
+    isOpen,
+    addFiles,
+    addUploadFiles,
+    applyDesktopUploadItem,
+    removeItem,
+    clearDone,
+    cancelUpload,
+    refreshUploadStatus,
+    retryUpload,
+    resumeUploadWithFile,
+    restoreResumableUploads,
+  }
 })
 
 function normalizeUploadPatch(patch: Partial<UploadItem>) {
@@ -139,6 +347,55 @@ async function tryInstantUpload(parentId: number | null, fileName: string, fileS
     const code = (e as { response?: { data?: { code?: number } } }).response?.data?.code
     if (code === 419010) return false
     throw e
+  }
+}
+
+async function getOrCreateUploadSession(item: UploadItem, md5Hash: string, totalChunks: number, resumeRecord: ResumableUploadRecord | null) {
+  if (resumeRecord) {
+    try {
+      await uploadApi.getUploadStatus(resumeRecord.sessionId)
+      return {
+        sessionId: resumeRecord.sessionId,
+        totalChunks: resumeRecord.totalChunks,
+        chunkSize: resumeRecord.chunkSize || CHUNK_SIZE,
+      }
+    } catch {
+      removeResumableUpload(resumeRecord.sessionId)
+    }
+  }
+
+  const initRes = await uploadApi.initMultipart(item.parentId, item.fileName, item.fileSize || item.file!.size, md5Hash, totalChunks, item.file?.type || undefined)
+  return {
+    sessionId: initRes.data.data.sessionId,
+    totalChunks: initRes.data.data.totalChunks || totalChunks,
+    chunkSize: initRes.data.data.chunkSize || CHUNK_SIZE,
+  }
+}
+
+async function getMissingChunks(sessionId: string, totalChunks: number) {
+  const { data } = await uploadApi.getUploadStatus(sessionId)
+  const missing = data.data.missingChunks
+  if (Array.isArray(missing)) return missing
+  const uploaded = data.data.uploadedChunks || 0
+  return range(totalChunks).slice(uploaded)
+}
+
+function updateProgressFromChunks(update: (patch: Partial<UploadItem>) => void, totalChunks: number, uploadedChunks: number) {
+  update({
+    chunkProgress: `${uploadedChunks}/${totalChunks}`,
+    progress: normalizeProgress(30 + (uploadedChunks / totalChunks) * 65),
+  })
+}
+
+function range(length: number) {
+  return Array.from({ length }, (_, index) => index)
+}
+
+function mergeRestoredQueueItem(activeId: string, record: ResumableUploadRecord) {
+  const store = useUploadStore()
+  const duplicateIndex = store.queue.findIndex(item => item.id !== activeId && item.uploadId === record.sessionId)
+  if (duplicateIndex >= 0) {
+    store.queue.splice(duplicateIndex, 1)
   }
 }
 

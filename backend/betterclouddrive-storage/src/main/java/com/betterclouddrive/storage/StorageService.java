@@ -9,6 +9,9 @@ public interface StorageService {
     /** Download an object, returns the input stream */
     InputStream downloadObject(String objectKey);
 
+    /** Download an object byte range, returns the input stream */
+    InputStream downloadObjectRange(String objectKey, long offset, long length);
+
     /** Delete an object */
     void deleteObject(String objectKey);
 

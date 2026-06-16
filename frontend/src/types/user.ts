@@ -8,6 +8,7 @@ export interface UserEntity {
   role: 'ROLE_USER' | 'ROLE_ADMIN'
   storageUsed: number
   storageQuota: number
+  webdavEnabled?: boolean
   status: number
   createdAt: string
   updatedAt: string

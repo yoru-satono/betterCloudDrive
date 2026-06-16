@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios'
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { toast } from 'vue-sonner'
+import { getApiBaseUrl } from '@/config/runtime'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -16,12 +17,13 @@ interface ApiEnvelope {
 }
 
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: getApiBaseUrl(),
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' }
 })
 
 api.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl()
   const token = localStorage.getItem('accessToken')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
@@ -48,7 +50,8 @@ const shouldSkipEnvelopeCheck = (res: AxiosResponse) => {
 }
 
 const redirectToLogin = () => {
-  localStorage.clear()
+  localStorage.removeItem('accessToken')
+  localStorage.removeItem('refreshToken')
   window.location.href = '/login'
 }
 
@@ -77,7 +80,10 @@ const handleApiError = async (error: AxiosError<ApiEnvelope>) => {
     }
 
     try {
-      const { data } = await axios.post<ApiEnvelope & { data?: { accessToken: string; refreshToken: string } }>('/api/v1/auth/refresh', { refreshToken })
+      const { data } = await axios.post<ApiEnvelope & { data?: { accessToken: string; refreshToken: string } }>(
+        `${getApiBaseUrl()}/auth/refresh`,
+        { refreshToken }
+      )
       if (data.code !== 200 || !data.data) throw new Error(data.message || '刷新令牌失败')
       const { accessToken, refreshToken: newRefresh } = data.data
       localStorage.setItem('accessToken', accessToken)

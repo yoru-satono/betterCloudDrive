@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import { useFilesStore } from '@/stores/files'
 import FileIcon from '@/components/file/FileIcon.vue'
 import { useFormatters } from '@/composables/useFormatters'
 import { onKeyStroke } from '@vueuse/core'
+import { dispatchFileAction } from '@/components/file/fileActions'
+import FileContextMenu from '@/components/file/FileContextMenu.vue'
+import { useContextMenu } from '@/composables/useContextMenu'
+import { downloadFile, downloadFolderZip } from '@/api/download'
+import { usePreviewStore } from '@/stores/preview'
+import type { FileEntity } from '@/types/file'
 
 const ui = useUIStore()
+const router = useRouter()
 const files = useFilesStore()
+const ctx = useContextMenu()
+const preview = usePreviewStore()
 const { formatSize } = useFormatters()
 const q = ref('')
 
@@ -18,11 +28,45 @@ onKeyStroke('Escape', () => { if (ui.searchOpen) ui.closeSearch() })
 
 watch(q, async (val) => {
   if (val.trim().length >= 1) await files.searchFiles(val.trim())
+  else files.clearSearchResults()
 })
 
 function handleClose() {
   ui.closeSearch()
   q.value = ''
+  files.clearSearchResults()
+}
+
+async function openSearchItem(file: FileEntity) {
+  if (file.fileType === 'folder') {
+    await router.push({ name: 'Folder', params: { folderId: file.id } })
+    handleClose()
+    return
+  }
+
+  preview.openPreview(file)
+  handleClose()
+}
+
+function openSearchContextMenu(file: FileEntity, event: MouseEvent) {
+  const handled = dispatchFileAction({ action: 'context-menu', file, event, afterAction: handleClose })
+  if (handled) return
+  ctx.open(event, [
+    {
+      label: '打开文件所在位置',
+      action: () => router.push(file.parentId
+        ? { name: 'Folder', params: { folderId: file.parentId } }
+        : { name: 'Files' }).then(handleClose),
+    },
+    {
+      label: '下载',
+      action: () => {
+        if (file.fileType === 'folder') downloadFolderZip(file.id, file.fileName)
+        else downloadFile(file.id, file.fileName)
+        handleClose()
+      },
+    },
+  ])
 }
 </script>
 
@@ -44,17 +88,18 @@ function handleClose() {
             <kbd @click="handleClose">Esc</kbd>
           </div>
           <div v-if="q.length > 0" class="search-results">
-            <div v-if="files.loading" class="search-loading">搜索中...</div>
+            <div v-if="files.searchLoading" class="search-loading">搜索中...</div>
             <div
-              v-else-if="files.files.length === 0"
+              v-else-if="files.searchResults.length === 0"
               class="search-empty"
             >未找到相关文件</div>
             <div
               v-else
-              v-for="file in files.files.slice(0, 10)"
+              v-for="file in files.searchResults.slice(0, 10)"
               :key="file.id"
               class="search-item"
-              @click="handleClose"
+              @click="openSearchItem(file)"
+              @contextmenu.prevent="openSearchContextMenu(file, $event)"
             >
               <FileIcon :mime-type="file.mimeType" :file-type="file.fileType" :size="16" />
               <span class="search-item__name truncate">{{ file.fileName }}</span>
@@ -62,6 +107,13 @@ function handleClose() {
             </div>
           </div>
         </div>
+        <FileContextMenu
+          :visible="ctx.visible.value"
+          :x="ctx.x.value"
+          :y="ctx.y.value"
+          :items="ctx.items.value"
+          @close="ctx.close"
+        />
       </div>
     </Transition>
   </Teleport>

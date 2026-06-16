@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import OButton from '@/components/base/OButton.vue'
 import { useFilesStore } from '@/stores/files'
+import { isDesktopRuntime } from '@/config/runtime'
 
 const emit = defineEmits<{
   upload: []
+  'upload-folder': []
   'new-folder': []
   delete: []
   refresh: []
 }>()
 const store = useFilesStore()
+const desktopRuntime = isDesktopRuntime()
 </script>
 
 <template>
@@ -19,6 +22,14 @@ const store = useFilesStore()
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
         上传文件
+      </OButton>
+      <OButton v-if="desktopRuntime" variant="ghost" size="sm" @click="emit('upload-folder')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+          <path d="M12 16V9"/>
+          <path d="M9 12l3-3 3 3"/>
+        </svg>
+        上传文件夹
       </OButton>
       <OButton variant="ghost" size="sm" @click="emit('new-folder')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
