@@ -50,7 +50,6 @@ betterCloudDrive/
 ├── observability/           # Loki/Promtail/Tempo/OTel/Grafana 配置
 ├── docs/API.md              # API 文档
 ├── docs/CONFIGURATION.md    # 配置与部署文档
-├── docs/design/             # 子系统概要设计文档
 ├── config/redis/redis.conf  # Redis 配置
 └── docker-compose.yml       # 服务编排
 ```
@@ -152,10 +151,9 @@ APK 输出在 `android/app/build/outputs/apk/debug/`。
 
 完整 API 文档见 [docs/API.md](docs/API.md)，涵盖认证、文件管理、上传下载、回收站、分享、收藏、标签、版本管理、注册验证码、密码重置、管理员面板。
 
-## 设计与配置文档
+## 配置文档
 
 - [配置与部署文档](docs/CONFIGURATION.md)
-- [子系统概要设计文档](docs/design/README.md)
 
 ### 公开端点
 

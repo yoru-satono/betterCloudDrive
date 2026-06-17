@@ -141,7 +141,7 @@ CREATE TABLE share_links (
     user_id         BIGINT       NOT NULL,
     file_id         BIGINT       NOT NULL,
     share_code      VARCHAR(16)  NOT NULL,
-    password_hash   VARCHAR(255),                            -- BCrypt; NULL = no password
+    password_ciphertext VARCHAR(255),                         -- AES-GCM ciphertext; NULL = no password
     expire_at       TIMESTAMP,                               -- NULL = never expires
     max_visits      INT,                                     -- NULL = unlimited
     download_count  INT          NOT NULL DEFAULT 0,
@@ -165,7 +165,7 @@ CREATE TRIGGER trg_share_links_updated_at
 
 COMMENT ON TABLE share_links IS '分享链接表';
 COMMENT ON COLUMN share_links.share_code IS '8位随机短码，用于生成分享URL';
-COMMENT ON COLUMN share_links.password_hash IS 'BCrypt哈希，NULL表示无密码';
+COMMENT ON COLUMN share_links.password_ciphertext IS '分享密码密文，使用 AES-GCM 加密；NULL 表示无密码';
 COMMENT ON COLUMN share_links.max_visits IS '最大访问次数，NULL表示无限制';
 
 
@@ -243,6 +243,10 @@ CREATE TABLE operation_logs (
     user_agent    VARCHAR(512),
     result        INTEGER      NOT NULL DEFAULT 1,  -- 1=success, 0=failure
     duration_ms   INT,
+    request_id    VARCHAR(64),
+    trace_id      VARCHAR(64),
+    status_code   INT,
+    error_code    INT,
     created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id, created_at)
@@ -279,9 +283,16 @@ CREATE TABLE operation_logs_default PARTITION OF operation_logs DEFAULT;
 CREATE INDEX idx_oplog_user ON operation_logs(user_id);
 CREATE INDEX idx_oplog_action ON operation_logs(action_type, created_at);
 CREATE INDEX idx_oplog_created ON operation_logs(created_at);
+CREATE INDEX idx_oplog_request_id ON operation_logs(request_id);
+CREATE INDEX idx_oplog_trace_id ON operation_logs(trace_id);
+CREATE INDEX idx_oplog_status_created ON operation_logs(status_code, created_at);
 
 COMMENT ON TABLE operation_logs IS '操作日志表（按月分区）';
 COMMENT ON COLUMN operation_logs.detail IS 'JSONB扩展字段，如 {"from":"/a.txt","to":"/b.txt"}';
+COMMENT ON COLUMN operation_logs.request_id IS '单次 HTTP 请求 ID，用于 API 响应、运行日志和审计日志关联';
+COMMENT ON COLUMN operation_logs.trace_id IS '分布式追踪 ID，用于关联 OpenTelemetry/Tempo trace';
+COMMENT ON COLUMN operation_logs.status_code IS 'HTTP 状态码';
+COMMENT ON COLUMN operation_logs.error_code IS '业务错误码，暂无业务响应解析时可为空';
 
 
 -- ============================================================
