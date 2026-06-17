@@ -76,6 +76,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/shares/access/*/files").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/shares/access/*/download/*/zip").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/shares/access/*/download/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/grafana/auth").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/v1/**").authenticated()
                 .anyRequest().permitAll()

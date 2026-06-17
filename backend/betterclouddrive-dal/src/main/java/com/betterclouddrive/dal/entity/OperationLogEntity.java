@@ -50,6 +50,18 @@ public class OperationLogEntity {
     @Column(name = "duration_ms")
     private Integer durationMs;
 
+    @Column(name = "request_id")
+    private String requestId;
+
+    @Column(name = "trace_id")
+    private String traceId;
+
+    @Column(name = "status_code")
+    private Integer statusCode;
+
+    @Column(name = "error_code")
+    private Integer errorCode;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 }

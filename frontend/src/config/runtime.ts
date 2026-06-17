@@ -2,8 +2,8 @@ const API_BASE_URL_STORAGE_KEY = 'bcd.apiBaseUrl'
 const WEB_BASE_URL_STORAGE_KEY = 'bcd.webBaseUrl'
 
 const WEB_API_BASE_URL = '/api/v1'
-const DESKTOP_API_BASE_URL = 'http://127.0.0.1:8080/api/v1'
-const DESKTOP_WEB_BASE_URL = 'http://127.0.0.1:3000'
+const DESKTOP_API_BASE_URL = import.meta.env.VITE_DESKTOP_API_BASE_URL || 'http://127.0.0.1:8080/api/v1'
+const DESKTOP_WEB_BASE_URL = import.meta.env.VITE_DESKTOP_WEB_BASE_URL || 'http://127.0.0.1:3000'
 
 type RuntimeWindow = Window & {
   __TAURI__?: unknown

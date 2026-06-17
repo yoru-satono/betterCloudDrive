@@ -62,7 +62,7 @@ class AndroidAuthAndNavigationE2ETest {
 
         composeRule.waitForTag("login-settings").performClick()
         composeRule.waitForTag("server-url-input").performTextClearance()
-        composeRule.waitForTag("server-url-input").performTextInput("http://10.0.2.2:8080")
+        composeRule.waitForTag("server-url-input").performTextInput(E2EConfig.serverBaseUrl)
         composeRule.waitForTag("server-url-save").performClick()
         composeRule.waitForText("服务器地址已保存，请重新登录").assertIsDisplayed()
 

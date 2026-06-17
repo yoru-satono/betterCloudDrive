@@ -44,8 +44,8 @@ data class E2ETag(
 )
 
 class E2EApiClient(
-    private val baseUrl: String = "http://10.0.2.2:8080/api/v1",
-    private val mailpitUrl: String = "http://10.0.2.2:8025/api/v1",
+    private val baseUrl: String = E2EConfig.apiBaseUrl,
+    private val mailpitUrl: String = E2EConfig.mailpitApiBaseUrl,
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private val client = OkHttpClient.Builder()

@@ -2,11 +2,13 @@ package com.betterclouddrive.web.security;
 
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.UserRepository;
+import com.betterclouddrive.common.context.RequestTraceContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -76,6 +78,9 @@ public class BasicAuthFilter extends OncePerRequestFilter {
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(principal, null, List.of(new SimpleGrantedAuthority(role)));
         SecurityContextHolder.getContext().setAuthentication(auth);
+        request.setAttribute(RequestTraceContext.ATTRIBUTE_USER_ID, user.getId());
+        MDC.put(RequestTraceContext.MDC_USER_ID, String.valueOf(user.getId()));
+        MDC.put("userId", String.valueOf(user.getId()));
 
         chain.doFilter(request, response);
     }

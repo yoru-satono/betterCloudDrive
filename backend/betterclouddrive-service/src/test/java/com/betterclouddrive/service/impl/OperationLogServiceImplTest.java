@@ -40,6 +40,33 @@ class OperationLogServiceImplTest {
     }
 
     @Test
+    void logRequestAudit_shouldPersistTraceFields() {
+        operationLogService.logRequestAudit(
+                1L,
+                "DOWNLOAD",
+                "FILE",
+                2L,
+                "{\"path\":\"/api/v1/download/2\"}",
+                "127.0.0.1",
+                "test-agent",
+                1,
+                12,
+                "req-1",
+                "4bf92f3577b34da6a3ce929d0e0e4736",
+                206,
+                null);
+
+        org.mockito.ArgumentCaptor<OperationLogEntity> captor = org.mockito.ArgumentCaptor.forClass(OperationLogEntity.class);
+        verify(operationLogRepository).save(captor.capture());
+        OperationLogEntity saved = captor.getValue();
+        assertThat(saved.getRequestId()).isEqualTo("req-1");
+        assertThat(saved.getTraceId()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
+        assertThat(saved.getStatusCode()).isEqualTo(206);
+        assertThat(saved.getDurationMs()).isEqualTo(12);
+        assertThat(saved.getResult()).isEqualTo(1);
+    }
+
+    @Test
     void listLogs_shouldReturnPageWithAllFilters() {
         Page<OperationLogEntity> page = new PageImpl<>(
                 List.of(log(1L, "UPLOAD")), PageRequest.of(0, 20), 1);
@@ -48,7 +75,8 @@ class OperationLogServiceImplTest {
 
         LocalDateTime start = LocalDateTime.now().minusDays(7);
         LocalDateTime end = LocalDateTime.now();
-        PageResult<OperationLogEntity> result = operationLogService.listLogs(1L, "UPLOAD", start, end, 1, 20);
+        PageResult<OperationLogEntity> result = operationLogService.listLogs(
+                1L, "UPLOAD", "req-1", "trace-1", 200, 1, start, end, 1, 20);
 
         assertThat(result.getRecords()).hasSize(1);
         assertThat(result.getTotal()).isEqualTo(1);
@@ -62,7 +90,8 @@ class OperationLogServiceImplTest {
         when(operationLogRepository.findAll(any(Specification.class), any(PageRequest.class)))
                 .thenReturn(page);
 
-        PageResult<OperationLogEntity> result = operationLogService.listLogs(null, null, null, null, 1, 20);
+        PageResult<OperationLogEntity> result = operationLogService.listLogs(
+                null, null, null, null, null, null, null, null, 1, 20);
 
         assertThat(result.getRecords()).hasSize(2);
         assertThat(result.getTotal()).isEqualTo(2);
@@ -76,7 +105,8 @@ class OperationLogServiceImplTest {
 
         LocalDateTime start = LocalDateTime.of(2025, 1, 1, 0, 0);
         LocalDateTime end = LocalDateTime.of(2025, 1, 31, 23, 59);
-        PageResult<OperationLogEntity> result = operationLogService.listLogs(null, null, start, end, 1, 20);
+        PageResult<OperationLogEntity> result = operationLogService.listLogs(
+                null, null, null, null, null, null, start, end, 1, 20);
 
         assertThat(result.getRecords()).isEmpty();
         assertThat(result.getTotal()).isEqualTo(0);

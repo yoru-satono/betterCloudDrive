@@ -128,3 +128,55 @@ drive:
     default-period-seconds: 60
     upload-permits: 10
     upload-period-seconds: 60
+
+# Observability
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  otlp:
+    metrics:
+      export:
+        enabled: ${METRICS_EXPORT_OTLP_ENABLED:false}
+  tracing:
+    export:
+      enabled: ${TRACING_ENABLED:true}
+      otlp:
+        enabled: ${TRACING_EXPORT_OTLP_ENABLED:true}
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+          transport: http
+
+logging:
+  file:
+    path: ${LOG_DIR:./logs}
+  structured:
+    json:
+      context:
+        include: true
+      add:
+        service.name: ${spring.application.name}
+
+observability:
+  enabled: ${OBSERVABILITY_ENABLED:true}
+  legacy-operation-aspect:
+    enabled: false
+  system-logs:
+    loki-base-url: ${LOKI_BASE_URL:http://localhost:3100}
+    grafana-base-url: ${GRAFANA_BASE_URL:/grafana}
+    grafana-datasource: ${GRAFANA_LOKI_DATASOURCE:Loki}
+    default-limit: ${SYSTEM_LOG_DEFAULT_LIMIT:100}
+    max-limit: ${SYSTEM_LOG_MAX_LIMIT:500}
+  grafana-auth:
+    secret: ${GRAFANA_AUTH_PROXY_SECRET:}
+    ttl-seconds: ${GRAFANA_AUTH_PROXY_TTL_SECONDS:300}
+  audit:
+    enabled: ${AUDIT_LOG_ENABLED:true}
+    full-event-enabled: ${AUDIT_FULL_EVENT_ENABLED:true}
+    max-body-bytes: ${AUDIT_MAX_BODY_BYTES:8192}

@@ -16,11 +16,13 @@ logging:
     com.betterclouddrive: WARN
     root: WARN
   file:
-    name: /var/log/cloud-drive/app.log
-  logback:
-    rollingpolicy:
-      max-history: 30
-      max-file-size: 100MB
+    path: ${LOG_DIR:/var/log/cloud-drive}
+  structured:
+    json:
+      context:
+        include: true
+      add:
+        env: prod
 
 mybatis-plus:
   configuration:

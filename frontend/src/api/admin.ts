@@ -14,7 +14,26 @@ export interface OperationLog {
   userAgent: string | null
   result: number | null
   durationMs: number | null
+  requestId: string | null
+  traceId: string | null
+  statusCode: number | null
+  errorCode: number | null
   createdAt: string
+}
+
+export interface SystemLogEntry {
+  id: string
+  idType: 'traceId' | 'requestId' | 'timestamp'
+  traceId: string | null
+  requestId: string | null
+  timestamp: string | null
+  level: string | null
+  logger: string | null
+  message: string | null
+  path: string | null
+  method: string | null
+  logType: string | null
+  grafanaUrl: string
 }
 
 export interface AdminStats {
@@ -49,5 +68,31 @@ export const getFile = (fileId: number) =>
 export const deleteFile = (fileId: number) =>
   api.delete<ApiResponse<void>>(`/admin/files/${fileId}`)
 
-export const listLogs = (params: { userId?: number; actionType?: string; page?: number; size?: number; startDate?: string; endDate?: string }) =>
+export const listLogs = (params: {
+  userId?: number
+  actionType?: string
+  requestId?: string
+  traceId?: string
+  statusCode?: number
+  result?: number
+  page?: number
+  size?: number
+  startDate?: string
+  endDate?: string
+}) =>
   api.get<ApiResponse<PageResult<OperationLog>>>('/admin/logs', { params })
+
+export const listSystemLogs = (params: {
+  traceId?: string
+  requestId?: string
+  level?: string
+  logType?: string
+  keyword?: string
+  startTime?: string
+  endTime?: string
+  limit?: number
+}) =>
+  api.get<ApiResponse<SystemLogEntry[]>>('/admin/system-logs', { params })
+
+export const createGrafanaSession = () =>
+  api.post<ApiResponse<void>>('/admin/grafana/session')

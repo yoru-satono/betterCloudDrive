@@ -31,6 +31,16 @@ public class OperationLogServiceImpl implements OperationLogService {
     @Override
     @Async
     public void logAsync(Long userId, String actionType, String targetType, Long targetId, String detail, String ipAddress, String userAgent) {
+        logRequestAudit(userId, actionType, targetType, targetId, detail, ipAddress, userAgent,
+                1, null, null, null, null, null);
+    }
+
+    @Override
+    @Async("operationLogExecutor")
+    public void logRequestAudit(Long userId, String actionType, String targetType, Long targetId,
+                                String detail, String ipAddress, String userAgent, Integer result,
+                                Integer durationMs, String requestId, String traceId,
+                                Integer statusCode, Integer errorCode) {
         try {
             OperationLogEntity logEntity = OperationLogEntity.builder()
                     .userId(userId)
@@ -40,7 +50,12 @@ public class OperationLogServiceImpl implements OperationLogService {
                     .detail(toJsonDetail(detail))
                     .ipAddress(ipAddress)
                     .userAgent(userAgent)
-                    .result(1)
+                    .result(result != null ? result : 1)
+                    .durationMs(durationMs)
+                    .requestId(requestId)
+                    .traceId(traceId)
+                    .statusCode(statusCode)
+                    .errorCode(errorCode)
                     .createdAt(LocalDateTime.now())
                     .build();
             operationLogRepository.save(logEntity);
@@ -73,6 +88,7 @@ public class OperationLogServiceImpl implements OperationLogService {
 
     @Override
     public PageResult<OperationLogEntity> listLogs(Long userId, String actionType,
+            String requestId, String traceId, Integer statusCode, Integer result,
             LocalDateTime startDate, LocalDateTime endDate, int page, int size) {
         Specification<OperationLogEntity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -81,6 +97,18 @@ public class OperationLogServiceImpl implements OperationLogService {
             }
             if (actionType != null && !actionType.isBlank()) {
                 predicates.add(cb.equal(root.get("actionType"), actionType));
+            }
+            if (requestId != null && !requestId.isBlank()) {
+                predicates.add(cb.equal(root.get("requestId"), requestId));
+            }
+            if (traceId != null && !traceId.isBlank()) {
+                predicates.add(cb.equal(root.get("traceId"), traceId));
+            }
+            if (statusCode != null) {
+                predicates.add(cb.equal(root.get("statusCode"), statusCode));
+            }
+            if (result != null) {
+                predicates.add(cb.equal(root.get("result"), result));
             }
             if (startDate != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"), startDate));
@@ -92,7 +120,7 @@ public class OperationLogServiceImpl implements OperationLogService {
         };
 
         PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<OperationLogEntity> result = operationLogRepository.findAll(spec, pageable);
-        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
+        Page<OperationLogEntity> logPage = operationLogRepository.findAll(spec, pageable);
+        return PageResult.of(logPage.getContent(), logPage.getTotalElements(), page, size);
     }
 }

@@ -2,6 +2,7 @@ package com.betterclouddrive.common.dto;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.betterclouddrive.common.context.RequestTraceContext;
 import org.junit.jupiter.api.Test;
 
 class ApiResponseTest {
@@ -54,5 +55,16 @@ class ApiResponseTest {
         assertThat(first.getRequestId()).isNotNull();
         assertThat(second.getRequestId()).isNotNull();
         assertThat(first.getRequestId()).isNotEqualTo(second.getRequestId());
+    }
+
+    @Test
+    void shouldUseBoundRequestIdWhenPresent() {
+        RequestTraceContext.setRequestId("request-1");
+        try {
+            ApiResponse<Object> response = ApiResponse.success();
+            assertThat(response.getRequestId()).isEqualTo("request-1");
+        } finally {
+            RequestTraceContext.clear();
+        }
     }
 }

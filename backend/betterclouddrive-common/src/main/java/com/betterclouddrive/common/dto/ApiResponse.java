@@ -1,12 +1,11 @@
 package com.betterclouddrive.common.dto;
 
+import com.betterclouddrive.common.context.RequestTraceContext;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import java.util.UUID;
 
 @Data
 @NoArgsConstructor
@@ -27,7 +26,7 @@ public class ApiResponse<T> {
                 .message("success")
                 .data(data)
                 .timestamp(System.currentTimeMillis())
-                .requestId(UUID.randomUUID().toString().substring(0, 8))
+                .requestId(RequestTraceContext.getRequestId())
                 .build();
     }
 
@@ -40,7 +39,7 @@ public class ApiResponse<T> {
                 .code(code)
                 .message(message)
                 .timestamp(System.currentTimeMillis())
-                .requestId(UUID.randomUUID().toString().substring(0, 8))
+                .requestId(RequestTraceContext.getRequestId())
                 .build();
     }
 
@@ -50,7 +49,7 @@ public class ApiResponse<T> {
                 .message(message)
                 .data(data)
                 .timestamp(System.currentTimeMillis())
-                .requestId(UUID.randomUUID().toString().substring(0, 8))
+                .requestId(RequestTraceContext.getRequestId())
                 .build();
     }
 }

@@ -28,6 +28,8 @@ $RECYCLE.BIN/
 .env
 .env.*
 !.env.example
+config/env-files/*.env
+!config/env-files/*.env.example
 *.local
 
 # Logs

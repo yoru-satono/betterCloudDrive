@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="LOG_DIR" source="logging.file.path" defaultValue="./logs"/>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="better-cloud-drive"/>
+
+    <property name="LOG_FILE" value="${LOG_DIR}/runtime.log"/>
+    <property name="FILE_LOG_STRUCTURED_FORMAT" value="logstash"/>
+    <property name="LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE" value="${LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE:-100MB}"/>
+    <property name="LOGBACK_ROLLINGPOLICY_MAX_HISTORY" value="${LOGBACK_ROLLINGPOLICY_MAX_HISTORY:-30}"/>
+    <property name="LOGBACK_ROLLINGPOLICY_TOTAL_SIZE_CAP" value="${LOGBACK_ROLLINGPOLICY_TOTAL_SIZE_CAP:-5GB}"/>
+
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <include resource="org/springframework/boot/logging/logback/structured-file-appender.xml"/>
+
+    <appender name="AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/audit.log</file>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <charset>UTF-8</charset>
+            <pattern>%msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/audit.log.%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>180</maxHistory>
+            <totalSizeCap>20GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <logger name="AUDIT" level="INFO" additivity="false">
+        <appender-ref ref="AUDIT_FILE"/>
+    </logger>
+
+    <logger name="org.springframework" level="INFO"/>
+    <logger name="org.hibernate.SQL" level="WARN"/>
+
+    <root level="${LOG_LEVEL:-INFO}">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

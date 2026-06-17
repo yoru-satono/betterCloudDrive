@@ -188,5 +188,36 @@ describe('API endpoint contracts', () => {
 
     await adminApi.deleteFile(12)
     expect(apiMock.delete).toHaveBeenCalledWith('/admin/files/12')
+
+    await adminApi.listLogs({
+      userId: 5,
+      actionType: 'LOGIN',
+      requestId: 'req-1',
+      traceId: 'trace-1',
+      statusCode: 401,
+      result: 0,
+      page: 2,
+      size: 50,
+    })
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/logs', {
+      params: {
+        userId: 5,
+        actionType: 'LOGIN',
+        requestId: 'req-1',
+        traceId: 'trace-1',
+        statusCode: 401,
+        result: 0,
+        page: 2,
+        size: 50,
+      },
+    })
+
+    await adminApi.listSystemLogs({ traceId: 'trace-1', level: 'WARN', limit: 100 })
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/system-logs', {
+      params: { traceId: 'trace-1', level: 'WARN', limit: 100 },
+    })
+
+    await adminApi.createGrafanaSession()
+    expect(apiMock.post).toHaveBeenCalledWith('/admin/grafana/session')
   })
 })

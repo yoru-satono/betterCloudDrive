@@ -5,16 +5,14 @@ services:
     image: postgres:16-alpine
     container_name: bcd-postgres
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-better_cloud_drive}
-      POSTGRES_USER: ${POSTGRES_USER:-bcd_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bcd_pass_2026}
+    env_file:
+      - ./config/env-files/database.env
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${HOST_POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bcd_user} -d ${POSTGRES_DB:-better_cloud_drive}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,12 +23,14 @@ services:
     image: redis:7-alpine
     container_name: bcd-redis
     restart: unless-stopped
+    env_file:
+      - ./config/env-files/database.env
     command: redis-server /usr/local/etc/redis/redis.conf
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${HOST_REDIS_PORT:-6379}:6379"
     volumes:
       - redisdata:/data
-      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - ./config/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -43,11 +43,13 @@ services:
     image: chrislusf/seaweedfs:latest
     container_name: bcd-seaweedfs
     restart: unless-stopped
+    env_file:
+      - ./config/env-files/storage.env
     command: "server -dir=/data -s3 -s3.port=8333 -master.volumeSizeLimitMB=1024 -filer -webdav"
     ports:
-      - "8333:8333"     # S3 API
-      - "8888:8888"     # WebDAV
-      - "9333:9333"     # Master
+      - "${HOST_SEAWEEDFS_S3_PORT:-8333}:8333"         # S3 API
+      - "${HOST_SEAWEEDFS_WEBDAV_PORT:-8888}:8888"     # WebDAV
+      - "${HOST_SEAWEEDFS_MASTER_PORT:-9333}:9333"     # Master
     volumes:
       - seaweeddata:/data
     healthcheck:
@@ -62,43 +64,147 @@ services:
     image: axllent/mailpit:latest
     container_name: bcd-mailpit
     restart: unless-stopped
+    env_file:
+      - ./config/env-files/mail.env
     ports:
-      - "${MAILPIT_SMTP_PORT:-1025}:1025"
-      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${HOST_MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${HOST_MAILPIT_UI_PORT:-8025}:8025"
+    networks:
+      - bcd-network
+
+  loki:
+    image: grafana/loki:2.9.8
+    container_name: bcd-loki
+    restart: unless-stopped
+    env_file:
+      - ./config/env-files/observability.env
+    command: -config.file=/etc/loki/config.yml
+    ports:
+      - "${HOST_LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/config.yml:ro
+      - lokidata:/loki
+    networks:
+      - bcd-network
+
+  tempo:
+    image: grafana/tempo:2.7.2
+    container_name: bcd-tempo
+    restart: unless-stopped
+    env_file:
+      - ./config/env-files/observability.env
+    command: ["-config.file=/etc/tempo/config.yml"]
+    ports:
+      - "${HOST_TEMPO_PORT:-3200}:3200"
+      - "${HOST_OTEL_GRPC_PORT:-4317}:4317"
+      - "${HOST_OTEL_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./observability/tempo-config.yml:/etc/tempo/config.yml:ro
+      - tempodata:/var/tempo
+    networks:
+      - bcd-network
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.133.0
+    container_name: bcd-otel-collector
+    restart: unless-stopped
+    env_file:
+      - ./config/env-files/observability.env
+    command: ["--config=/etc/otel/config.yml"]
+    volumes:
+      - ./observability/otel-collector.yml:/etc/otel/config.yml:ro
+    depends_on:
+      - tempo
+    networks:
+      - bcd-network
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    container_name: bcd-promtail
+    restart: unless-stopped
+    env_file:
+      - ./config/env-files/observability.env
+    command: -config.file=/etc/promtail/config.yml -config.expand-env=true
+    volumes:
+      - ./observability/promtail-config.yml:/etc/promtail/config.yml:ro
+      - backendlogs:/var/log/cloud-drive:ro
+    depends_on:
+      - loki
+      - backend
+    networks:
+      - bcd-network
+
+  backend-log-init:
+    image: betterclouddrive-backend
+    container_name: bcd-backend-log-init
+    user: root
+    entrypoint:
+      - sh
+      - -c
+      - mkdir -p /var/log/cloud-drive && chown -R appuser:appgroup /var/log/cloud-drive
+    volumes:
+      - backendlogs:/var/log/cloud-drive
+    restart: "no"
+    networks:
+      - bcd-network
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: bcd-grafana
+    restart: unless-stopped
+    env_file:
+      - ./config/env-files/observability.env
+    environment:
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_AUTH_PROXY_HEADERS: "Name:X-WEBAUTH-NAME Email:X-WEBAUTH-EMAIL Role:X-WEBAUTH-ROLE"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Admin
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+      - tempo
     networks:
       - bcd-network
 
   # ==================== 应用服务 ====================
 
   backend:
+    image: betterclouddrive-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: bcd-backend
     restart: unless-stopped
     depends_on:
+      backend-log-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       seaweedfs:
         condition: service_healthy
+    env_file:
+      - ./config/env-files/database.env
+      - ./config/env-files/storage.env
+      - ./config/env-files/security.env
+      - ./config/env-files/backend.env
+      - ./config/env-files/observability.env
+      - ./config/env-files/mail.env
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-better_cloud_drive}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-bcd_user}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-bcd_pass_2026}
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PORT: 6379
-      MAIL_HOST: mailpit
-      MAIL_PORT: 1025
-      STORAGE_S3_ENDPOINT: http://seaweedfs:8333
-      STORAGE_S3_ACCESS_KEY: ${S3_ACCESS_KEY:-any}
-      STORAGE_S3_SECRET_KEY: ${S3_SECRET_KEY:-any}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
-      SHARE_PASSWORD_ENCRYPTION_KEY: ${SHARE_PASSWORD_ENCRYPTION_KEY}
+      SPRING_PROFILES_ACTIVE: prod
     ports:
-      - "${BACKEND_PORT:-8080}:8080"
+      - "${HOST_BACKEND_PORT:-8080}:8080"
+    volumes:
+      - backendlogs:/var/log/cloud-drive
     networks:
       - bcd-network
 
@@ -106,12 +212,22 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_WEB_BASE_URL: ${VITE_WEB_BASE_URL:-}
+        VITE_DESKTOP_API_BASE_URL: ${VITE_DESKTOP_API_BASE_URL:-http://127.0.0.1:8080/api/v1}
+        VITE_DESKTOP_WEB_BASE_URL: ${VITE_DESKTOP_WEB_BASE_URL:-http://127.0.0.1:3000}
     container_name: bcd-frontend
     restart: unless-stopped
     depends_on:
       - backend
+      - grafana
+    env_file:
+      - ./config/env-files/frontend.env
+    environment:
+      NGINX_ENVSUBST_FILTER: ^FRONTEND_BACKEND_PROXY_BASE$
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${HOST_FRONTEND_PORT:-3000}:80"
     networks:
       - bcd-network
 
@@ -121,6 +237,14 @@ volumes:
   redisdata:
     driver: local
   seaweeddata:
+    driver: local
+  backendlogs:
+    driver: local
+  lokidata:
+    driver: local
+  tempodata:
+    driver: local
+  grafanadata:
     driver: local
 
 networks:

@@ -7,6 +7,38 @@ plugins {
     id 'com.google.devtools.ksp'
 }
 
+def workspaceRoot = file('../..')
+def rootEnvFile = file('../../.env')
+if (!rootEnvFile.exists()) {
+    rootEnvFile = file('../../.env.example')
+}
+def rootEnv = new Properties()
+if (rootEnvFile.exists()) {
+    rootEnvFile.withInputStream { rootEnv.load(it) }
+}
+def moduleEnv = new Properties()
+def moduleFiles = [
+        'config/env-files/database.env',
+        'config/env-files/storage.env',
+        'config/env-files/security.env',
+        'config/env-files/backend.env',
+        'config/env-files/frontend.env',
+        'config/env-files/observability.env',
+        'config/env-files/mail.env',
+]
+moduleFiles.each { relativePath ->
+    def file = new File(workspaceRoot, relativePath)
+    if (file.exists()) {
+        file.withInputStream { moduleEnv.load(it) }
+    }
+}
+def envOrDefault = { name, defaultValue ->
+    def value = providers.environmentVariable(name).orElse(
+            moduleEnv.getProperty(name, rootEnv.getProperty(name, defaultValue))
+    ).get()
+    value
+}
+
 android {
     namespace 'com.betterclouddrive.android'
     compileSdk 35
@@ -18,6 +50,9 @@ android {
         versionCode 1
         versionName '1.0.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        buildConfigField 'String', 'DEFAULT_SERVER_BASE_URL', "\"${envOrDefault('ANDROID_DEFAULT_SERVER_BASE_URL', 'http://10.0.2.2:8080')}\""
+        testInstrumentationRunnerArgument 'bcd.serverBaseUrl', envOrDefault('ANDROID_E2E_SERVER_BASE_URL', 'http://10.0.2.2:8080')
+        testInstrumentationRunnerArgument 'bcd.mailpitBaseUrl', envOrDefault('ANDROID_E2E_MAILPIT_BASE_URL', 'http://10.0.2.2:8025')
     }
 
     buildTypes {

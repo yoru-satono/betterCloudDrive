@@ -1,6 +1,7 @@
 package com.betterclouddrive.web.security;
 
 import com.betterclouddrive.common.constant.ApiCode;
+import com.betterclouddrive.common.context.RequestTraceContext;
 import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.dal.repository.UserTokenRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,6 +12,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -68,6 +70,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     new UsernamePasswordAuthenticationToken(principal, null,
                             List.of(new SimpleGrantedAuthority(role)));
             SecurityContextHolder.getContext().setAuthentication(authentication);
+            request.setAttribute(RequestTraceContext.ATTRIBUTE_USER_ID, userId);
+            MDC.put(RequestTraceContext.MDC_USER_ID, String.valueOf(userId));
+            MDC.put("userId", String.valueOf(userId));
         } catch (ExpiredJwtException e) {
             log.debug("Token expired: {}", e.getMessage());
             writeAuthError(response, ApiCode.TOKEN_EXPIRED);
