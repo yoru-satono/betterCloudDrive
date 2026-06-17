@@ -240,10 +240,9 @@ async function submitShare() {
     notifyEmail: shareNotifyEmail.value.trim() || undefined,
   })
   const shareUrl = buildShareUrl(data.data.shareCode)
-  const clipboardText = password ? `分享链接：${shareUrl}\n访问密码：${password}` : shareUrl
-  await navigator.clipboard.writeText(clipboardText).catch(() => {})
+  await navigator.clipboard.writeText(shareUrl).catch(() => {})
   showShare.value = false
-  toast.success(password ? '分享链接和密码已复制到剪贴板' : '分享链接已复制到剪贴板')
+  toast.success('分享链接已复制到剪贴板')
 }
 
 function openFolderAction(file: FileEntity, mode: 'move' | 'copy') {

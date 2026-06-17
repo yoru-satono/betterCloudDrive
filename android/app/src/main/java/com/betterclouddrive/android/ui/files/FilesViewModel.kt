@@ -36,7 +36,9 @@ enum class ViewMode { LIST, GRID }
 @HiltViewModel
 class FilesViewModel @Inject constructor(
     private val fileRepository: FileRepository,
-    private val uploadRepository: UploadRepository,
+    private val transferRepository: TransferRepository,
+    private val favoriteRepository: FavoriteRepository,
+    private val shareRepository: ShareRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FilesUiState())
@@ -47,22 +49,26 @@ class FilesViewModel @Inject constructor(
 
     fun loadFiles(folderId: Long? = null) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null, currentFolderId = folderId)
-            when (val result = fileRepository.listFiles(parentId = folderId)) {
-                is NetworkResult.Success -> {
-                    val data = result.data
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        files = data.records,
-                        page = data.page,
-                        totalPages = data.pages,
-                    )
-                }
-                is NetworkResult.Error -> {
-                    _uiState.value = _uiState.value.copy(isLoading = false, error = result.message)
-                }
-                is NetworkResult.Loading -> {}
+            loadFilesInternal(folderId)
+        }
+    }
+
+    private suspend fun loadFilesInternal(folderId: Long? = null) {
+        _uiState.value = _uiState.value.copy(isLoading = true, error = null, currentFolderId = folderId)
+        when (val result = fileRepository.listFiles(parentId = folderId)) {
+            is NetworkResult.Success -> {
+                val data = result.data
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    files = data.records,
+                    page = data.page,
+                    totalPages = data.pages,
+                )
             }
+            is NetworkResult.Error -> {
+                _uiState.value = _uiState.value.copy(isLoading = false, error = result.message)
+            }
+            is NetworkResult.Loading -> {}
         }
     }
 
@@ -148,86 +154,74 @@ class FilesViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(error = null)
     }
 
-    // Upload
-    fun uploadFile(uri: Uri) {
+    fun uploadFiles(uris: List<Uri>) {
+        if (uris.isEmpty()) return
         viewModelScope.launch {
-            val fileName = uploadRepository.getFileName(uri)
-            val fileSize = uploadRepository.getFileSize(uri)
-            if (fileSize <= 0) {
-                _events.emit(UiEvent.ShowSnackbar("无法读取文件", true))
-                return@launch
+            uris.forEach { uri ->
+                val task = transferRepository.enqueueUpload(_uiState.value.currentFolderId, uri)
+                transferRepository.start(task.id, viewModelScope) {
+                    viewModelScope.launch { loadFiles(_uiState.value.currentFolderId) }
+                }
             }
+            _events.emit(UiEvent.ShowSnackbar("已加入传输队列"))
+        }
+    }
 
+    fun enqueueDownload(file: FileItem, targetUri: Uri) {
+        viewModelScope.launch {
+            val task = transferRepository.enqueueDownload(file.id, file.fileName, file.fileSize, targetUri)
+            _events.emit(UiEvent.ShowSnackbar("已加入传输队列"))
+            transferRepository.start(task.id, viewModelScope)
+        }
+    }
+
+    fun addFavorite(file: FileItem) {
+        viewModelScope.launch {
+            when (val result = favoriteRepository.addFavorite(file.id)) {
+                is NetworkResult.Success -> _events.emit(UiEvent.ShowSnackbar("已收藏"))
+                is NetworkResult.Error -> _events.emit(UiEvent.ShowSnackbar("收藏失败: ${result.message}", true))
+                is NetworkResult.Loading -> {}
+            }
+        }
+    }
+
+    fun openFolder(folderId: Long? = null) {
+        viewModelScope.launch {
+            val breadcrumb = mutableListOf(BreadcrumbItem(null, "根目录"))
+            if (folderId != null) {
+                val path = mutableListOf<FileItem>()
+                var currentId: Long? = folderId
+                while (currentId != null) {
+                    when (val result = fileRepository.getFile(currentId)) {
+                        is NetworkResult.Success -> {
+                            val folder = result.data
+                            path.add(folder)
+                            currentId = folder.parentId
+                        }
+                        else -> {
+                            currentId = null
+                        }
+                    }
+                }
+                path.asReversed().forEach { folder ->
+                    breadcrumb.add(BreadcrumbItem(folder.id, folder.fileName))
+                }
+            }
             _uiState.value = _uiState.value.copy(
-                isUploading = true,
-                uploadFileName = fileName,
-                uploadProgress = 0f,
+                breadcrumb = breadcrumb,
+                currentFolderId = folderId,
+                selectedFile = null,
             )
+            loadFilesInternal(folderId)
+        }
+    }
 
-            val inputStream = uploadRepository.openInputStream(uri) ?: run {
-                _events.emit(UiEvent.ShowSnackbar("无法打开文件", true))
-                _uiState.value = _uiState.value.copy(isUploading = false)
-                return@launch
-            }
-
-            try {
-                // Try instant upload first
-                val fullData = inputStream.readBytes()
-                inputStream.close()
-                val md5 = uploadRepository.computeMd5(fullData)
-                val totalChunks = ((fileSize + 5_242_880 - 1) / 5_242_880).toInt() // ceil division by 5MB
-
-                val instantResult = uploadRepository.instantUpload(
-                    _uiState.value.currentFolderId ?: 0,
-                    fileName,
-                    fileSize,
-                    md5,
-                )
-                if (instantResult is NetworkResult.Success) {
-                    _uiState.value = _uiState.value.copy(isUploading = false, uploadProgress = 1f)
-                    _events.emit(UiEvent.ShowSnackbar("秒传成功"))
-                    loadFiles(_uiState.value.currentFolderId)
-                    return@launch
-                }
-
-                // Fallback: chunked upload
-                val initResult = uploadRepository.initUpload(
-                    _uiState.value.currentFolderId ?: 0,
-                    fileName,
-                    fileSize,
-                    totalChunks,
-                    md5,
-                )
-                if (initResult !is NetworkResult.Success) {
-                    _events.emit(UiEvent.ShowSnackbar("初始化上传失败: ${(initResult as NetworkResult.Error).message}", true))
-                    _uiState.value = _uiState.value.copy(isUploading = false)
-                    return@launch
-                }
-
-                val session = initResult.data
-                val chunkSize = 5_242_880
-                for (i in 0 until totalChunks) {
-                    val start = i * chunkSize
-                    val end = minOf(start + chunkSize, fullData.size.toInt())
-                    val chunk = fullData.copyOfRange(start, end)
-                    uploadRepository.uploadChunk(session.sessionId, i, chunk)
-                    _uiState.value = _uiState.value.copy(
-                        uploadProgress = (i + 1).toFloat() / totalChunks,
-                    )
-                }
-
-                val completeResult = uploadRepository.completeUpload(session.sessionId)
-                if (completeResult is NetworkResult.Success) {
-                    _events.emit(UiEvent.ShowSnackbar("上传完成"))
-                    loadFiles(_uiState.value.currentFolderId)
-                } else {
-                    _events.emit(UiEvent.ShowSnackbar("上传完成失败: ${(completeResult as NetworkResult.Error).message}", true))
-                }
-            } catch (e: Exception) {
-                _events.emit(UiEvent.ShowSnackbar("上传异常: ${e.message}", true))
-            } finally {
-                _uiState.value = _uiState.value.copy(isUploading = false)
-                try { inputStream.close() } catch (_: Exception) {}
+    fun createShare(file: FileItem) {
+        viewModelScope.launch {
+            when (val result = shareRepository.createShare(file.id)) {
+                is NetworkResult.Success -> _events.emit(UiEvent.ShowSnackbar("已创建分享: ${result.data.shareCode}"))
+                is NetworkResult.Error -> _events.emit(UiEvent.ShowSnackbar("分享失败: ${result.message}", true))
+                is NetworkResult.Loading -> {}
             }
         }
     }

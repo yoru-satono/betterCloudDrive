@@ -404,4 +404,3 @@ CREATE UNIQUE INDEX uk_file_tag ON file_tags(file_id, tag_id);
 CREATE INDEX idx_file_tags_tag ON file_tags(tag_id);
 
 COMMENT ON TABLE file_tags IS '文件-标签关联表';
-

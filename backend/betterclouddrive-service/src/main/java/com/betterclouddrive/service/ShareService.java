@@ -8,6 +8,7 @@ public interface ShareService {
     ShareLinkEntity createShare(Long userId, Long fileId, String password, Long expireAtMs, Integer maxVisits);
     PageResult<ShareLinkEntity> listShares(Long userId, int page, int size);
     ShareLinkEntity getShare(Long userId, Long shareId);
+    String getSharePassword(Long userId, Long shareId);
     ShareLinkEntity updateShare(Long userId, Long shareId, String password, Long expireAtMs, Integer maxVisits);
     void cancelShare(Long userId, Long shareId);
     /** Access a shared link: verify code + password, return the shared file info */

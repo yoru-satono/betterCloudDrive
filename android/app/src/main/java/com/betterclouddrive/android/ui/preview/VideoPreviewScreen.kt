@@ -15,13 +15,13 @@ import androidx.media3.ui.PlayerView
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoPreviewScreen(
-    fileId: Long,
+    previewUrl: String,
     onNavigateBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val player = remember {
+    val player = remember(previewUrl) {
         ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri("http://10.0.2.2:8080/api/v1/preview/$fileId")
+            val mediaItem = MediaItem.fromUri(previewUrl)
             setMediaItem(mediaItem)
             prepare()
             playWhenReady = true

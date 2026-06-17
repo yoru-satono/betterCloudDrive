@@ -5,6 +5,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -28,7 +29,7 @@ fun BCDDialog(
             )
         },
         text = {
-            Column { content() }
+            Column(modifier = Modifier.testTag("dialog-body")) { content() }
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
@@ -65,7 +66,7 @@ fun InputDialog(
             onValueChange = { value = it },
             placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("dialog-input"),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.outline,

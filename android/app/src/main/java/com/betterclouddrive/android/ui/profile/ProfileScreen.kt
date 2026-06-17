@@ -7,25 +7,31 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.betterclouddrive.android.ui.components.StorageBar
 import com.betterclouddrive.android.util.FormatUtil
 import com.betterclouddrive.android.ui.auth.AuthViewModel
+import com.betterclouddrive.android.ui.navigation.MainScaffold
+import com.betterclouddrive.android.ui.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     onNavigateBack: () -> Unit,
     onNavigateToEmailVerification: () -> Unit,
+    onNavigateMain: (String) -> Unit,
     onLogout: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
 ) {
     val authState by authViewModel.uiState.collectAsState()
     val user = authState.user
 
-    Scaffold(
+    MainScaffold(
+        currentRoute = Screen.PROFILE,
+        onNavigate = onNavigateMain,
         topBar = {
             TopAppBar(
                 title = { Text("个人设置") },
@@ -74,7 +80,7 @@ fun ProfileScreen(
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     InfoRow("邮箱", user?.email ?: "未设置")
-                    InfoRow("邮箱验证", if (user?.emailVerified == true) "已验证 ✅" else "未验证")
+                    InfoRow("邮箱验证", if (user?.emailVerified == true) "已验证" else "未验证")
                     InfoRow("角色", if (user?.role == "ROLE_ADMIN") "管理员" else "普通用户")
                     InfoRow("注册时间", FormatUtil.formatDate(user?.createdAt))
                 }
@@ -95,11 +101,21 @@ fun ProfileScreen(
             }
 
             OutlinedButton(
+                onClick = { onNavigateMain(Screen.RECYCLE_BIN) },
+                modifier = Modifier.fillMaxWidth().testTag("profile-recycle-bin"),
+            ) {
+                Icon(Icons.Default.Delete, null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("回收站")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
                 onClick = {
                     authViewModel.logout()
                     onLogout()
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("profile-logout"),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
             ) {
                 Icon(Icons.Default.Logout, null)

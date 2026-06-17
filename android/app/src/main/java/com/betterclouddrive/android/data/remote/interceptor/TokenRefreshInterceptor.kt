@@ -1,9 +1,11 @@
 package com.betterclouddrive.android.data.remote.interceptor
 
 import com.betterclouddrive.android.data.local.TokenManager
+import com.betterclouddrive.android.data.local.ServerConfigStore
 import com.betterclouddrive.android.data.remote.dto.ApiResponse
 import com.betterclouddrive.android.data.remote.dto.AuthTokens
 import com.betterclouddrive.android.data.remote.dto.RefreshRequest
+import com.betterclouddrive.android.util.ServerUrlUtil
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -19,6 +21,7 @@ import javax.inject.Singleton
 @Singleton
 class TokenRefreshInterceptor @Inject constructor(
     private val tokenManager: TokenManager,
+    private val serverConfigStore: ServerConfigStore,
     private val json: Json,
 ) : Interceptor {
 
@@ -49,8 +52,12 @@ class TokenRefreshInterceptor @Inject constructor(
 
                 val refreshRequest = RefreshRequest(refreshToken)
                 val refreshBody = json.encodeToString(RefreshRequest.serializer(), refreshRequest)
+                val refreshUrl = ServerUrlUtil.apiBaseUrl(serverConfigStore.getServerBaseUrl())
+                    .newBuilder()
+                    .addPathSegments("auth/refresh")
+                    .build()
                 val refreshCall = Request.Builder()
-                    .url(originalRequest.url.toString().substringBefore("/api/v1/") + "/api/v1/auth/refresh")
+                    .url(refreshUrl)
                     .post(refreshBody.toRequestBody("application/json".toMediaType()))
                     .build()
 

@@ -13,11 +13,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.betterclouddrive.android.domain.model.FileItem
 import com.betterclouddrive.android.ui.components.EmptyState
 import com.betterclouddrive.android.ui.components.FileRow
-import com.betterclouddrive.android.util.FormatUtil
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.betterclouddrive.android.data.repository.FavoriteRepository
 import com.betterclouddrive.android.util.NetworkResult
+import com.betterclouddrive.android.ui.navigation.MainScaffold
+import com.betterclouddrive.android.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,11 +47,14 @@ class FavoritesViewModel @Inject constructor(private val repository: FavoriteRep
 @Composable
 fun FavoritesScreen(
     onNavigateBack: () -> Unit,
+    onNavigateMain: (String) -> Unit,
     viewModel: FavoritesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     LaunchedEffect(Unit) { viewModel.load() }
-    Scaffold(
+    MainScaffold(
+        currentRoute = Screen.FAVORITES,
+        onNavigate = onNavigateMain,
         topBar = {
             TopAppBar(
                 title = { Text("收藏夹") },

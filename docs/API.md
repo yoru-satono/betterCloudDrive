@@ -1177,7 +1177,7 @@ Authorization: Bearer <accessToken>
     "id": 1,
     "fileId": 42,
     "shareCode": "aB3xK9mW",
-    "passwordHash": "$2a$12$...",
+    "hasPassword": true,
     "expireAt": "2026-07-09T10:00:00",
     "maxVisits": 10,
     "downloadCount": 0,
@@ -1189,7 +1189,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> `passwordHash` 只在服务端实体响应中出现；客户端不应展示或保存该字段。`downloadCount` 当前会在公开下载或保存分享内容时递增，`maxVisits` 限制的是访问分享详情的次数。
+> 分享密码在数据库中以加密密文保存，API 响应只返回 `hasPassword`，不会返回密文或原始密码。`downloadCount` 当前会在公开下载或保存分享内容时递增，`maxVisits` 限制的是访问分享详情的次数。
 > 分享密码如果提供，长度必须为 4-16 个字符。
 
 ---
@@ -1216,7 +1216,41 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 10.4 更新分享
+### 10.4 读取分享密码
+
+```
+GET /api/v1/shares/{shareId}/password
+Authorization: Bearer <accessToken>
+```
+
+仅分享所有者可调用。用于在“我的分享”中按需查看自己创建的分享密码。
+
+**Response `200`:**
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "password": "1234"
+  }
+}
+```
+
+无密码分享返回：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "password": null
+  }
+}
+```
+
+---
+
+### 10.5 更新分享
 
 ```
 PUT /api/v1/shares/{shareId}
@@ -1236,7 +1270,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 10.5 取消分享
+### 10.6 取消分享
 
 ```
 DELETE /api/v1/shares/{shareId}
@@ -1247,7 +1281,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 10.6 访问分享（公开）
+### 10.7 访问分享（公开）
 
 ```
 POST /api/v1/shares/access/{shareCode}
@@ -1280,7 +1314,7 @@ POST /api/v1/shares/access/{shareCode}
 
 ---
 
-### 10.7 浏览分享内容（公开）
+### 10.8 浏览分享内容（公开）
 
 ```
 GET /api/v1/shares/access/{shareCode}/files?parentId=&page=1&size=20
@@ -1290,7 +1324,7 @@ GET /api/v1/shares/access/{shareCode}/files?parentId=&page=1&size=20
 
 ---
 
-### 10.8 保存分享内容到我的网盘
+### 10.9 保存分享内容到我的网盘
 
 ```
 POST /api/v1/shares/access/{shareCode}/save
@@ -1320,7 +1354,7 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 10.9 下载分享文件（公开）
+### 10.10 下载分享文件（公开）
 
 ```
 POST /api/v1/shares/access/{shareCode}/download/{fileId}
@@ -1341,7 +1375,7 @@ POST /api/v1/shares/access/{shareCode}/download/{fileId}
 
 ---
 
-### 10.10 下载分享文件夹 ZIP（公开）
+### 10.11 下载分享文件夹 ZIP（公开）
 
 ```
 POST /api/v1/shares/access/{shareCode}/download/{fileId}/zip

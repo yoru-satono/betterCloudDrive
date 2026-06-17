@@ -7,8 +7,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -17,7 +17,8 @@ import com.betterclouddrive.android.data.repository.RecycleBinRepository
 import com.betterclouddrive.android.domain.model.FileItem
 import com.betterclouddrive.android.ui.components.EmptyState
 import com.betterclouddrive.android.ui.components.FileRow
-import com.betterclouddrive.android.util.FormatUtil
+import com.betterclouddrive.android.ui.navigation.MainScaffold
+import com.betterclouddrive.android.ui.navigation.Screen
 import com.betterclouddrive.android.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,7 @@ import javax.inject.Inject
 @Composable
 fun RecycleBinScreen(
     onNavigateBack: () -> Unit,
+    onNavigateMain: (String) -> Unit,
     viewModel: RecycleBinViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -36,7 +38,10 @@ fun RecycleBinScreen(
 
     LaunchedEffect(Unit) { viewModel.loadRecycleBin() }
 
-    Scaffold(
+    MainScaffold(
+        currentRoute = Screen.RECYCLE_BIN,
+        onNavigate = onNavigateMain,
+        snackbarHostState = snackbarHostState,
         topBar = {
             TopAppBar(
                 title = { Text("回收站") },
@@ -44,14 +49,16 @@ fun RecycleBinScreen(
                     IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") }
                 },
                 actions = {
-                    TextButton(onClick = { viewModel.emptyRecycleBin() }) {
+                    TextButton(
+                        onClick = { viewModel.emptyRecycleBin() },
+                        modifier = Modifier.testTag("recycle-empty"),
+                    ) {
                         Text("清空", color = MaterialTheme.colorScheme.error)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         if (uiState.files.isEmpty() && !uiState.isLoading) {
             EmptyState(
@@ -72,10 +79,16 @@ fun RecycleBinScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                         horizontalArrangement = Arrangement.End,
                     ) {
-                        TextButton(onClick = { viewModel.restoreFile(file.id) }) {
+                        TextButton(
+                            onClick = { viewModel.restoreFile(file.id) },
+                            modifier = Modifier.testTag("recycle-restore-${file.fileName}"),
+                        ) {
                             Text("恢复", color = MaterialTheme.colorScheme.primary)
                         }
-                        TextButton(onClick = { viewModel.permanentDelete(file.id) }) {
+                        TextButton(
+                            onClick = { viewModel.permanentDelete(file.id) },
+                            modifier = Modifier.testTag("recycle-delete-${file.fileName}"),
+                        ) {
                             Text("彻底删除", color = MaterialTheme.colorScheme.error)
                         }
                     }

@@ -26,6 +26,10 @@ class ShareRepository @Inject constructor(private val api: ApiService) {
 
     suspend fun getShare(shareId: Long): NetworkResult<ShareLink> = apiCall { api.getShare(shareId) }
 
+    suspend fun getSharePassword(shareId: Long): NetworkResult<SharePasswordResponse> = apiCall {
+        api.getSharePassword(shareId)
+    }
+
     suspend fun updateShare(
         shareId: Long,
         password: String? = null,

@@ -29,8 +29,8 @@ public class ShareLinkEntity {
     @Column(name = "share_code")
     private String shareCode;
 
-    @Column(name = "password_hash")
-    private String passwordHash;
+    @Column(name = "password_ciphertext")
+    private String passwordCiphertext;
 
     @Column(name = "expire_at")
     private LocalDateTime expireAt;

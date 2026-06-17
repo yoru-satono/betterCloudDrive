@@ -30,6 +30,7 @@ data class RegisterRequest(
     val username: String,
     val password: String,
     val email: String? = null,
+    @SerialName("verificationCode") val verificationCode: String? = null,
 )
 
 @Serializable
@@ -118,6 +119,11 @@ data class UpdateShareRequest(
     val password: String? = null,
     @SerialName("expireAt") val expireAt: String? = null,
     @SerialName("maxVisits") val maxVisits: Int? = null,
+)
+
+@Serializable
+data class SharePasswordResponse(
+    val password: String? = null,
 )
 
 @Serializable

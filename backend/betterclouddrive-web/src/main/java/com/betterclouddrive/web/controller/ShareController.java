@@ -14,6 +14,8 @@ import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.dto.request.CreateShareRequest;
 import com.betterclouddrive.web.dto.request.SaveSharedItemRequest;
 import com.betterclouddrive.web.dto.request.UpdateShareRequest;
+import com.betterclouddrive.web.dto.response.ShareLinkResponse;
+import com.betterclouddrive.web.dto.response.SharePasswordResponse;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import jakarta.validation.Valid;
@@ -27,6 +29,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -40,8 +43,8 @@ public class ShareController {
     private final FolderZipDownloadService folderZipDownloadService;
 
     @PostMapping("/api/v1/shares")
-    public ApiResponse<ShareLinkEntity> createShare(@CurrentUser UserPrincipal user,
-                                                     @Valid @RequestBody CreateShareRequest request) {
+    public ApiResponse<ShareLinkResponse> createShare(@CurrentUser UserPrincipal user,
+                                                       @Valid @RequestBody CreateShareRequest request) {
         ShareLinkEntity share = shareService.createShare(
                 user.getUserId(), request.getFileId(), request.getPassword(),
                 request.getExpireAt(), request.getMaxVisits());
@@ -53,28 +56,39 @@ public class ShareController {
                     file.getFileName(), user.getUsername());
         }
 
-        return ApiResponse.success(share);
+        return ApiResponse.success(ShareLinkResponse.from(share));
     }
 
     @GetMapping("/api/v1/shares")
-    public ApiResponse<PageResult<ShareLinkEntity>> listShares(
+    public ApiResponse<PageResult<ShareLinkResponse>> listShares(
             @CurrentUser UserPrincipal user,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(shareService.listShares(user.getUserId(), page, size));
+        PageResult<ShareLinkEntity> shares = shareService.listShares(user.getUserId(), page, size);
+        List<ShareLinkResponse> records = shares.getRecords().stream()
+                .map(ShareLinkResponse::from)
+                .toList();
+        return ApiResponse.success(PageResult.of(records, shares.getTotal(), shares.getPage(), shares.getSize()));
     }
 
     @GetMapping("/api/v1/shares/{shareId}")
-    public ApiResponse<ShareLinkEntity> getShare(@CurrentUser UserPrincipal user, @PathVariable Long shareId) {
-        return ApiResponse.success(shareService.getShare(user.getUserId(), shareId));
+    public ApiResponse<ShareLinkResponse> getShare(@CurrentUser UserPrincipal user, @PathVariable Long shareId) {
+        return ApiResponse.success(ShareLinkResponse.from(shareService.getShare(user.getUserId(), shareId)));
+    }
+
+    @GetMapping("/api/v1/shares/{shareId}/password")
+    public ApiResponse<SharePasswordResponse> getSharePassword(@CurrentUser UserPrincipal user, @PathVariable Long shareId) {
+        String password = shareService.getSharePassword(user.getUserId(), shareId);
+        return ApiResponse.success(new SharePasswordResponse(password));
     }
 
     @PutMapping("/api/v1/shares/{shareId}")
-    public ApiResponse<ShareLinkEntity> updateShare(@CurrentUser UserPrincipal user,
-                                                     @PathVariable Long shareId,
-                                                     @RequestBody UpdateShareRequest request) {
-        return ApiResponse.success(shareService.updateShare(
-                user.getUserId(), shareId, request.getPassword(), request.getExpireAt(), request.getMaxVisits()));
+    public ApiResponse<ShareLinkResponse> updateShare(@CurrentUser UserPrincipal user,
+                                                       @PathVariable Long shareId,
+                                                       @RequestBody UpdateShareRequest request) {
+        ShareLinkEntity share = shareService.updateShare(
+                user.getUserId(), shareId, request.getPassword(), request.getExpireAt(), request.getMaxVisits());
+        return ApiResponse.success(ShareLinkResponse.from(share));
     }
 
     @DeleteMapping("/api/v1/shares/{shareId}")

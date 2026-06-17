@@ -126,6 +126,9 @@ describe('API endpoint contracts', () => {
     await sharesApi.getShare(9)
     expect(apiMock.get).toHaveBeenCalledWith('/shares/9')
 
+    await sharesApi.getSharePassword(9)
+    expect(apiMock.get).toHaveBeenCalledWith('/shares/9/password')
+
     await sharesApi.updateShare(9, { maxVisits: 5, expireAt: 0 })
     expect(apiMock.put).toHaveBeenCalledWith('/shares/9', { maxVisits: 5, expireAt: 0 })
 

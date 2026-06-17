@@ -160,8 +160,8 @@ describe('FileBrowserPage share dialog', () => {
     await flushPromises()
 
     expect(createShare).toHaveBeenCalledWith({ fileId: 7, maxVisits: undefined, password: 'abcd' })
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('分享链接：http://localhost:3000/s/share123\n访问密码：abcd')
-    expect(toast.success).toHaveBeenCalledWith('分享链接和密码已复制到剪贴板')
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://localhost:3000/s/share123')
+    expect(toast.success).toHaveBeenCalledWith('分享链接已复制到剪贴板')
   })
 
   it('creates a protected share with an automatically generated four-character password', async () => {
@@ -173,7 +173,7 @@ describe('FileBrowserPage share dialog', () => {
     await flushPromises()
 
     expect(createShare).toHaveBeenCalledWith({ fileId: 7, maxVisits: undefined, password: 'ABCD' })
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('分享链接：http://localhost:3000/s/share123\n访问密码：ABCD')
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://localhost:3000/s/share123')
   })
 
   it('supports automatically generated eight-character passwords', async () => {
@@ -186,7 +186,7 @@ describe('FileBrowserPage share dialog', () => {
     await flushPromises()
 
     expect(createShare).toHaveBeenCalledWith({ fileId: 7, maxVisits: undefined, password: 'ABCDEFGH' })
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('分享链接：http://localhost:3000/s/share123\n访问密码：ABCDEFGH')
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('http://localhost:3000/s/share123')
   })
 
   it('rejects manual passwords outside the allowed length', async () => {

@@ -3,6 +3,7 @@ package com.betterclouddrive.android.di
 import com.betterclouddrive.android.data.local.TokenManager
 import com.betterclouddrive.android.data.remote.ApiService
 import com.betterclouddrive.android.data.remote.interceptor.AuthInterceptor
+import com.betterclouddrive.android.data.remote.interceptor.ServerBaseUrlInterceptor
 import com.betterclouddrive.android.data.remote.interceptor.TokenRefreshInterceptor
 import com.betterclouddrive.android.util.Constants
 import dagger.Module
@@ -33,6 +34,7 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideOkHttpClient(
+        serverBaseUrlInterceptor: ServerBaseUrlInterceptor,
         authInterceptor: AuthInterceptor,
         tokenRefreshInterceptor: TokenRefreshInterceptor,
     ): OkHttpClient {
@@ -40,6 +42,7 @@ object NetworkModule {
             level = HttpLoggingInterceptor.Level.HEADERS
         }
         return OkHttpClient.Builder()
+            .addInterceptor(serverBaseUrlInterceptor)
             .addInterceptor(authInterceptor)
             .addInterceptor(tokenRefreshInterceptor)
             .addInterceptor(logging)

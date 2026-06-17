@@ -1,5 +1,5 @@
 import api from './client'
-import type { AccessShareResponse, ShareLinkEntity, CreateShareRequest, UpdateShareRequest } from '@/types/share'
+import type { AccessShareResponse, ShareLinkEntity, SharePasswordResponse, CreateShareRequest, UpdateShareRequest } from '@/types/share'
 import type { ApiResponse, PageResult } from '@/types/api'
 import type { FileEntity } from '@/types/file'
 
@@ -17,6 +17,9 @@ export const listShares = (page = 1, size = 20) =>
 
 export const getShare = (shareId: number) =>
   api.get<ApiResponse<ShareLinkEntity>>(`/shares/${shareId}`)
+
+export const getSharePassword = (shareId: number) =>
+  api.get<ApiResponse<SharePasswordResponse>>(`/shares/${shareId}/password`)
 
 export const updateShare = (shareId: number, req: UpdateShareRequest) =>
   api.put<ApiResponse<ShareLinkEntity>>(`/shares/${shareId}`, req)

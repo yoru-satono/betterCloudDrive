@@ -9,7 +9,6 @@ data class ShareLink(
     @SerialName("userId") val userId: Long = 0,
     @SerialName("fileId") val fileId: Long = 0,
     @SerialName("shareCode") val shareCode: String = "",
-    @SerialName("passwordHash") val passwordHash: String? = null,
     @SerialName("hasPassword") val hasPassword: Boolean = false,
     @SerialName("expireAt") val expireAt: String? = null,
     @SerialName("maxVisits") val maxVisits: Int? = null,

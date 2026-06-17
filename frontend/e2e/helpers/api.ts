@@ -30,7 +30,7 @@ export interface E2EShare {
   visitCount: number
   downloadCount: number
   maxVisits?: number | null
-  passwordHash?: string | null
+  hasPassword?: boolean
 }
 
 export const backendURL = process.env.E2E_BACKEND_URL || 'http://localhost:8080'
@@ -207,6 +207,27 @@ export async function getShare(request: APIRequestContext, token: string, shareI
   const body = await res.json()
   expect(body.code).toBe(200)
   return body.data as E2EShare
+}
+
+export async function listShares(request: APIRequestContext, token: string) {
+  const res = await request.get(`${backendURL}/api/v1/shares`, {
+    headers: authHeaders(token),
+    params: { page: '1', size: '100' },
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
+  return body.data.records as E2EShare[]
+}
+
+export async function getSharePassword(request: APIRequestContext, token: string, shareId: number) {
+  const res = await request.get(`${backendURL}/api/v1/shares/${shareId}/password`, {
+    headers: authHeaders(token),
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
+  return body.data as { password: string | null }
 }
 
 export async function updateShare(

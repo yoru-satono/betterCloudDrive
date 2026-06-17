@@ -60,6 +60,7 @@ betterCloudDrive/
 ```bash
 export JWT_ACCESS_SECRET=dGhpcy1pcy1hLTMyLWJ5dGUtc2VjcmV0LWtleS1mb3ItYWNjIQ==
 export JWT_REFRESH_SECRET=dGhpcy1pcy1hLTMyLWJ5dGUtcmVmcmVzaC1zZWNyZXQta2V5ISE=
+export SHARE_PASSWORD_ENCRYPTION_KEY=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=
 docker compose up -d --build
 ```
 
@@ -80,6 +81,7 @@ docker compose up -d --build
 docker compose up -d postgres redis seaweedfs mailpit
 export JWT_ACCESS_SECRET=dGhpcy1pcy1hLTMyLWJ5dGUtc2VjcmV0LWtleS1mb3ItYWNjIQ==
 export JWT_REFRESH_SECRET=dGhpcy1pcy1hLTMyLWJ5dGUtcmVmcmVzaC1zZWNyZXQta2V5ISE=
+export SHARE_PASSWORD_ENCRYPTION_KEY=MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=
 docker compose up -d --build backend
 ```
 

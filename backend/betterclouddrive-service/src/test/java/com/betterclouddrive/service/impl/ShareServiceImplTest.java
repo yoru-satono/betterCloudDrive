@@ -12,6 +12,7 @@ import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.ShareLinkRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
+import com.betterclouddrive.service.SharePasswordCryptoService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -24,7 +25,6 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.ZSetOperations;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,7 +36,7 @@ class ShareServiceImplTest {
     @Mock private ShareLinkRepository shareLinkRepository;
     @Mock private FileRepository fileRepository;
     @Mock private UserRepository userRepository;
-    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private SharePasswordCryptoService sharePasswordCryptoService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private ZSetOperations<String, String> zSetOps;
@@ -69,18 +69,18 @@ class ShareServiceImplTest {
         ShareLinkEntity share = shareService.createShare(1L, 1L, null, null, null);
 
         assertThat(share.getShareCode()).isNotBlank().hasSize(8);
-        assertThat(share.getPasswordHash()).isNull();
+        assertThat(share.getPasswordCiphertext()).isNull();
     }
 
     @Test
-    void createShare_shouldEncodePasswordWhenProvided() {
+    void createShare_shouldEncryptPasswordWhenProvided() {
         when(fileRepository.findById(1L)).thenReturn(Optional.of(ownedFile(1L, 1L)));
-        when(passwordEncoder.encode("secret")).thenReturn("encoded-secret");
+        when(sharePasswordCryptoService.encrypt("secret")).thenReturn("cipher-secret");
         when(shareLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ShareLinkEntity share = shareService.createShare(1L, 1L, "secret", null, null);
 
-        assertThat(share.getPasswordHash()).isEqualTo("encoded-secret");
+        assertThat(share.getPasswordCiphertext()).isEqualTo("cipher-secret");
     }
 
     @Test
@@ -90,8 +90,8 @@ class ShareServiceImplTest {
 
         ShareLinkEntity share = shareService.createShare(1L, 1L, "   ", null, null);
 
-        assertThat(share.getPasswordHash()).isNull();
-        verify(passwordEncoder, never()).encode(anyString());
+        assertThat(share.getPasswordCiphertext()).isNull();
+        verify(sharePasswordCryptoService, never()).encrypt(anyString());
     }
 
     @Test
@@ -117,14 +117,26 @@ class ShareServiceImplTest {
     @Test
     void updateShare_shouldRemovePasswordWhenBlank() {
         ShareLinkEntity share = activeShare("abcd1234", 1L, 1L);
-        share.setPasswordHash("existing-hash");
+        share.setPasswordCiphertext("existing-cipher");
         when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
         when(shareLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ShareLinkEntity updated = shareService.updateShare(1L, 1L, "  ", null, null);
 
-        assertThat(updated.getPasswordHash()).isNull();
-        verify(passwordEncoder, never()).encode(anyString());
+        assertThat(updated.getPasswordCiphertext()).isNull();
+        verify(sharePasswordCryptoService, never()).encrypt(anyString());
+    }
+
+    @Test
+    void getSharePassword_shouldDecryptForOwner() {
+        ShareLinkEntity share = activeShare("abcd1234", 1L, 1L);
+        share.setPasswordCiphertext("cipher");
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+        when(sharePasswordCryptoService.decrypt("cipher")).thenReturn("abcd");
+
+        String password = shareService.getSharePassword(1L, 1L);
+
+        assertThat(password).isEqualTo("abcd");
     }
 
     @Test
@@ -213,9 +225,9 @@ class ShareServiceImplTest {
     @Test
     void accessShare_shouldThrowWhenPasswordWrong() {
         ShareLinkEntity share = activeShare("code9999", 1L, 10L);
-        share.setPasswordHash("encoded-pw");
+        share.setPasswordCiphertext("cipher-pw");
         when(shareLinkRepository.findByShareCode("code9999")).thenReturn(Optional.of(share));
-        when(passwordEncoder.matches("wrong", "encoded-pw")).thenReturn(false);
+        when(sharePasswordCryptoService.matches("wrong", "cipher-pw")).thenReturn(false);
 
         assertThatThrownBy(() -> shareService.accessShare("code9999", "wrong"))
                 .isInstanceOf(BusinessException.class);
@@ -329,9 +341,9 @@ class ShareServiceImplTest {
     @Test
     void recordSharedDownload_shouldValidatePasswordAndIncrementCount() {
         ShareLinkEntity share = activeShare("zipcount", 1L, 10L);
-        share.setPasswordHash("encoded");
+        share.setPasswordCiphertext("cipher");
         when(shareLinkRepository.findByShareCode("zipcount")).thenReturn(Optional.of(share));
-        when(passwordEncoder.matches("pw1234", "encoded")).thenReturn(true);
+        when(sharePasswordCryptoService.matches("pw1234", "cipher")).thenReturn(true);
 
         shareService.recordSharedDownload("zipcount", "pw1234");
 

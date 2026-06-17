@@ -6,7 +6,9 @@ import {
   createShare,
   createUser,
   getShare,
+  getSharePassword,
   listFiles,
+  listShares,
   loginViaUi,
   lowerUserQuota,
   uploadSampleFile,
@@ -125,10 +127,23 @@ test.describe('share save, password, and visit limits', () => {
     await page.getByRole('button', { name: '自动生成' }).click()
     await page.getByRole('button', { name: '8 位' }).click()
     await page.getByRole('button', { name: '创建并复制链接' }).click()
-    await expect(page.getByText('分享链接和密码已复制到剪贴板')).toBeVisible()
+    await expect(page.getByText('分享链接已复制到剪贴板')).toBeVisible()
     const clipboard = await page.evaluate(() => navigator.clipboard.readText())
-    const generatedPassword = clipboard.match(/访问密码：(.+)/)?.[1]?.trim()
-    expect(generatedPassword).toHaveLength(8)
+    expect(clipboard).toMatch(/\/s\/[A-Za-z0-9]{8}$/)
+    expect(clipboard).not.toContain('访问密码')
+
+    await page.goto('/shares')
+    await expect(page.getByRole('heading', { name: '我的分享' })).toBeVisible()
+    const generatedShareCode = clipboard.match(/\/s\/([A-Za-z0-9]{8})$/)![1]
+    const generatedShareCard = page.locator('.share-card').filter({ hasText: generatedShareCode })
+    await expect(generatedShareCard).toBeVisible()
+    await generatedShareCard.getByRole('button', { name: '查看密码' }).click()
+    await expect(page.getByRole('dialog', { name: '分享详情' }).getByText(/密码/)).toBeVisible()
+    const generatedShare = (await listShares(request, e2eUser.accessToken)).find(share => share.shareCode === generatedShareCode)
+    expect(generatedShare).toBeTruthy()
+    const generatedPassword = await getSharePassword(request, e2eUser.accessToken, generatedShare!.id)
+    expect(generatedPassword.password).toHaveLength(8)
+    await expect(page.getByRole('dialog', { name: '分享详情' }).getByText(generatedPassword.password!)).toBeVisible()
 
     const noPasswordFile = await uploadSampleFile(request, e2eUser.accessToken, null, uniqueName('plain') + '.txt')
     const noPasswordShare = await createShare(request, e2eUser.accessToken, noPasswordFile.fileId)
@@ -156,7 +171,7 @@ test.describe('share save, password, and visit limits', () => {
     await expect(page.getByText('分享已更新')).toBeVisible()
     const updated = await getShare(request, e2eUser.accessToken, noPasswordShare.id)
     expect(updated.maxVisits).toBe(2)
-    expect(updated.passwordHash).toBeTruthy()
+    expect(updated.hasPassword).toBe(true)
 
     const updatedNoPassword = await accessShare(request, noPasswordShare.shareCode)
     expect(updatedNoPassword.body.code).toBe(419003)

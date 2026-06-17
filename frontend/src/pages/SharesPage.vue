@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { Eye } from 'lucide-vue-next'
 import OButton from '@/components/base/OButton.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
 import OSpinner from '@/components/base/OSpinner.vue'
@@ -18,6 +19,8 @@ const shares = ref<ShareLinkEntity[]>([])
 const loading = ref(false)
 const detailOpen = ref(false)
 const detailShare = ref<ShareLinkEntity | null>(null)
+const detailPassword = ref('')
+const loadingPasswordShareId = ref<number | null>(null)
 const editOpen = ref(false)
 const editShare = ref<ShareLinkEntity | null>(null)
 const editMaxVisits = ref('')
@@ -48,7 +51,20 @@ async function deleteShare(share: ShareLinkEntity) {
 async function openDetail(share: ShareLinkEntity) {
   const { data } = await sharesApi.getShare(share.id)
   detailShare.value = data.data
+  detailPassword.value = ''
   detailOpen.value = true
+}
+
+async function loadSharePassword(share: ShareLinkEntity) {
+  loadingPasswordShareId.value = share.id
+  try {
+    const { data } = await sharesApi.getSharePassword(share.id)
+    detailShare.value = share
+    detailPassword.value = data.data.password ?? ''
+    detailOpen.value = true
+  } finally {
+    loadingPasswordShareId.value = null
+  }
 }
 
 function openEdit(share: ShareLinkEntity) {
@@ -112,11 +128,22 @@ onMounted(load)
             <span v-else class="text-muted">永不过期</span>
             <span class="text-muted">· 访问 {{ share.visitCount }}{{ share.maxVisits ? `/${share.maxVisits}` : '' }} 次</span>
             <span class="text-muted">· 下载 {{ share.downloadCount }} 次</span>
-            <span v-if="share.passwordHash" class="share-card__pw">有密码</span>
+            <span v-if="share.hasPassword" class="share-card__pw">有密码</span>
           </div>
         </div>
         <div class="share-card__actions">
           <OButton variant="subtle" size="sm" @click="openDetail(share)">详情</OButton>
+          <OButton
+            v-if="share.hasPassword"
+            variant="ghost"
+            size="sm"
+            icon
+            :loading="loadingPasswordShareId === share.id"
+            aria-label="查看密码"
+            @click="loadSharePassword(share)"
+          >
+            <Eye :size="14" />
+          </OButton>
           <OButton variant="ghost" size="sm" @click="openEdit(share)">编辑</OButton>
           <OButton variant="ghost" size="sm" @click="copyLink(share)">复制链接</OButton>
           <OButton variant="danger" size="sm" @click="deleteShare(share)">取消分享</OButton>
@@ -130,7 +157,7 @@ onMounted(load)
         <div><span>文件 ID</span><strong class="font-mono">{{ detailShare.fileId }}</strong></div>
         <div><span>访问</span><strong class="font-mono">{{ detailShare.visitCount }}{{ detailShare.maxVisits ? `/${detailShare.maxVisits}` : '' }}</strong></div>
         <div><span>下载</span><strong class="font-mono">{{ detailShare.downloadCount }}</strong></div>
-        <div><span>密码</span><strong>{{ detailShare.passwordHash ? '有密码' : '无密码' }}</strong></div>
+        <div><span>密码</span><strong>{{ detailShare.hasPassword ? (detailPassword || '有密码') : '无密码' }}</strong></div>
         <div><span>过期</span><strong>{{ detailShare.expireAt ? formatDateFull(detailShare.expireAt) : '永不过期' }}</strong></div>
         <div><span>状态</span><strong>{{ detailShare.isCanceled ? '已取消' : isExpired(detailShare) ? '已过期' : '有效' }}</strong></div>
       </div>

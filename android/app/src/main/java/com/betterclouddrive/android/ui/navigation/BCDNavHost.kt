@@ -1,7 +1,8 @@
 package com.betterclouddrive.android.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -20,7 +21,10 @@ import com.betterclouddrive.android.ui.search.SearchResultScreen
 import com.betterclouddrive.android.ui.shares.SharesScreen
 import com.betterclouddrive.android.ui.tags.TagsScreen
 import com.betterclouddrive.android.ui.tags.TagFilesScreen
+import com.betterclouddrive.android.ui.transfer.TransferQueueScreen
 import com.betterclouddrive.android.ui.versions.VersionsScreen
+import com.betterclouddrive.android.util.FileTypeHelper
+import com.betterclouddrive.android.util.ServerUrlUtil
 
 @Composable
 fun BCDNavHost(
@@ -54,36 +58,44 @@ fun BCDNavHost(
         }
 
         // Main - Files
+        composable(route = Screen.FILES) {
+            FileBrowserScreen(
+                folderId = null,
+                onNavigateToPreview = { file -> navController.navigate(Screen.preview(file.id)) },
+                onNavigateToSearch = { navController.navigate(Screen.SEARCH) },
+                onNavigateToVersions = { fileId -> navController.navigate(Screen.versions(fileId)) },
+                onNavigateToProfile = { navController.navigateTopLevel(Screen.PROFILE) },
+                onNavigateToTransfers = { navController.navigateTopLevel(Screen.TRANSFERS) },
+                onNavigateMain = { route -> navController.navigateTopLevel(route) },
+            )
+        }
         composable(
-            route = Screen.FILES,
+            route = Screen.FILES_FOLDER,
             arguments = listOf(navArgument("folderId") {
                 type = NavType.StringType
-                defaultValue = "null"
             }),
         ) { backStackEntry ->
             val folderId = backStackEntry.arguments?.getString("folderId")
                 ?.toLongOrNull()
             FileBrowserScreen(
                 folderId = folderId,
-                onNavigateToPreview = { fileId -> navController.navigate(Screen.preview(fileId)) },
+                onNavigateToPreview = { file -> navController.navigate(Screen.preview(file.id)) },
                 onNavigateToSearch = { navController.navigate(Screen.SEARCH) },
                 onNavigateToVersions = { fileId -> navController.navigate(Screen.versions(fileId)) },
-                onNavigateToRecycleBin = { navController.navigate(Screen.RECYCLE_BIN) },
-                onNavigateToProfile = { navController.navigate(Screen.PROFILE) },
-                onNavigateToShares = { navController.navigate(Screen.SHARES) },
-                onNavigateToFavorites = { navController.navigate(Screen.FAVORITES) },
-                onNavigateToTags = { navController.navigate(Screen.TAGS) },
-                onLogout = {
-                    navController.navigate(Screen.LOGIN) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                },
+                onNavigateToProfile = { navController.navigateTopLevel(Screen.PROFILE) },
+                onNavigateToTransfers = { navController.navigateTopLevel(Screen.TRANSFERS) },
+                onNavigateMain = { route -> navController.navigateTopLevel(route) },
             )
         }
 
         // Search
         composable(Screen.SEARCH) {
-            SearchResultScreen(onNavigateBack = { navController.popBackStack() })
+            SearchResultScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenFile = { file -> navController.navigate(Screen.preview(file.id)) },
+                onOpenFolder = { folder -> navController.navigateTopLevel(Screen.files(folder.id)) },
+                onOpenLocation = { file -> navController.navigateTopLevel(Screen.files(file.parentId)) },
+            )
         }
 
         // Preview
@@ -92,25 +104,38 @@ fun BCDNavHost(
             arguments = listOf(navArgument("fileId") { type = NavType.LongType }),
         ) { backStackEntry ->
             val fileId = backStackEntry.arguments?.getLong("fileId") ?: return@composable
-            when {
-                // We'll resolve file type inside the screen — for now default to Image
-                else -> ImagePreviewScreen(fileId = fileId, onNavigateBack = { navController.popBackStack() })
-            }
+            PreviewRouter(fileId = fileId, onNavigateBack = { navController.popBackStack() })
         }
 
         // Recycle Bin
         composable(Screen.RECYCLE_BIN) {
-            RecycleBinScreen(onNavigateBack = { navController.popBackStack() })
+            RecycleBinScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateMain = { route -> navController.navigateTopLevel(route) },
+            )
+        }
+
+        composable(Screen.TRANSFERS) {
+            TransferQueueScreen(
+                onNavigate = { route -> navController.navigateTopLevel(route) },
+                onNavigateBack = { navController.popBackStack() },
+            )
         }
 
         // Shares
         composable(Screen.SHARES) {
-            SharesScreen(onNavigateBack = { navController.popBackStack() })
+            SharesScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateMain = { route -> navController.navigateTopLevel(route) },
+            )
         }
 
         // Favorites
         composable(Screen.FAVORITES) {
-            FavoritesScreen(onNavigateBack = { navController.popBackStack() })
+            FavoritesScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateMain = { route -> navController.navigateTopLevel(route) },
+            )
         }
 
         // Tags
@@ -118,6 +143,7 @@ fun BCDNavHost(
             TagsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToTagFiles = { tagId -> navController.navigate(Screen.tagFiles(tagId)) },
+                onNavigateMain = { route -> navController.navigateTopLevel(route) },
             )
         }
         composable(
@@ -142,6 +168,7 @@ fun BCDNavHost(
             ProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToEmailVerification = { navController.navigate(Screen.EMAIL_VERIFICATION) },
+                onNavigateMain = { route -> navController.navigateTopLevel(route) },
                 onLogout = {
                     navController.navigate(Screen.LOGIN) {
                         popUpTo(0) { inclusive = true }
@@ -154,5 +181,34 @@ fun BCDNavHost(
         composable(Screen.EMAIL_VERIFICATION) {
             EmailVerificationScreen(onNavigateBack = { navController.popBackStack() })
         }
+    }
+}
+
+private fun NavHostController.navigateTopLevel(route: String) {
+    navigate(route) {
+        launchSingleTop = true
+        restoreState = true
+        popUpTo(Screen.FILES) { saveState = true }
+    }
+}
+
+@Composable
+private fun PreviewRouter(
+    fileId: Long,
+    onNavigateBack: () -> Unit,
+    viewModel: PreviewRouterViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
+) {
+    val file by viewModel.file.collectAsState()
+    val serverBaseUrl by viewModel.serverBaseUrl.collectAsState(initial = "")
+    androidx.compose.runtime.LaunchedEffect(fileId) {
+        viewModel.load(fileId)
+    }
+    val item = file
+    val previewUrl = ServerUrlUtil.previewUrl(serverBaseUrl, fileId)
+    when {
+        item == null -> ImagePreviewScreen(previewUrl = previewUrl, onNavigateBack = onNavigateBack)
+        FileTypeHelper.isVideo(item.fileName) -> VideoPreviewScreen(previewUrl = previewUrl, onNavigateBack = onNavigateBack)
+        FileTypeHelper.isText(item.fileName) -> TextPreviewScreen(fileId = fileId, onNavigateBack = onNavigateBack)
+        else -> ImagePreviewScreen(previewUrl = previewUrl, onNavigateBack = onNavigateBack)
     }
 }

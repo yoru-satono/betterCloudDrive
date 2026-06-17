@@ -9,6 +9,7 @@ import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.ShareLinkRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
+import com.betterclouddrive.service.SharePasswordCryptoService;
 import com.betterclouddrive.service.ShareService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -38,7 +38,7 @@ public class ShareServiceImpl implements ShareService {
     private final ShareLinkRepository shareLinkRepository;
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final SharePasswordCryptoService sharePasswordCryptoService;
     private final StringRedisTemplate redisTemplate;
     private static final String SHARE_CODE_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int SHARE_CODE_LENGTH = 8;
@@ -61,7 +61,7 @@ public class ShareServiceImpl implements ShareService {
                 .userId(userId)
                 .fileId(fileId)
                 .shareCode(shareCode)
-                .passwordHash(normalizedPassword != null ? passwordEncoder.encode(normalizedPassword) : null)
+                .passwordCiphertext(normalizedPassword != null ? sharePasswordCryptoService.encrypt(normalizedPassword) : null)
                 .expireAt(expireAtMs != null ? LocalDateTime.ofInstant(Instant.ofEpochMilli(expireAtMs), ZoneId.systemDefault()) : null)
                 .maxVisits(maxVisits)
                 .downloadCount(0)
@@ -97,12 +97,18 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
+    public String getSharePassword(Long userId, Long shareId) {
+        ShareLinkEntity share = getShare(userId, shareId);
+        return share.getPasswordCiphertext() == null ? null : sharePasswordCryptoService.decrypt(share.getPasswordCiphertext());
+    }
+
+    @Override
     @Transactional
     public ShareLinkEntity updateShare(Long userId, Long shareId, String password, Long expireAtMs, Integer maxVisits) {
         ShareLinkEntity share = getShare(userId, shareId);
         if (password != null) {
             String normalizedPassword = normalizeOptionalPassword(password);
-            share.setPasswordHash(normalizedPassword == null ? null : passwordEncoder.encode(normalizedPassword));
+            share.setPasswordCiphertext(normalizedPassword == null ? null : sharePasswordCryptoService.encrypt(normalizedPassword));
         }
         if (expireAtMs != null) {
             share.setExpireAt(expireAtMs > 0 ? LocalDateTime.ofInstant(Instant.ofEpochMilli(expireAtMs), ZoneId.systemDefault()) : null);
@@ -221,8 +227,8 @@ public class ShareServiceImpl implements ShareService {
         if (share.getExpireAt() != null && share.getExpireAt().isBefore(LocalDateTime.now())) {
             throw new BusinessException(ApiCode.SHARE_EXPIRED);
         }
-        if (share.getPasswordHash() != null) {
-            if (password == null || !passwordEncoder.matches(password, share.getPasswordHash())) {
+        if (share.getPasswordCiphertext() != null) {
+            if (!sharePasswordCryptoService.matches(password, share.getPasswordCiphertext())) {
                 throw new BusinessException(ApiCode.SHARE_PASSWORD_REQUIRED);
             }
         }

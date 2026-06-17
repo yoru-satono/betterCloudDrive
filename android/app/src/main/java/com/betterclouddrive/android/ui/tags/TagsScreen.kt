@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.betterclouddrive.android.domain.model.Tag
@@ -19,6 +20,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.betterclouddrive.android.data.repository.TagRepository
 import com.betterclouddrive.android.util.NetworkResult
+import com.betterclouddrive.android.ui.navigation.MainScaffold
+import com.betterclouddrive.android.ui.navigation.Screen
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,19 +51,25 @@ class TagsViewModel @Inject constructor(private val repository: TagRepository) :
 fun TagsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToTagFiles: (Long) -> Unit,
+    onNavigateMain: (String) -> Unit,
     viewModel: TagsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showCreate by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.load() }
 
-    Scaffold(
+    MainScaffold(
+        currentRoute = Screen.TAGS,
+        onNavigate = onNavigateMain,
         topBar = {
             TopAppBar(
                 title = { Text("标签管理") },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 actions = {
-                    IconButton(onClick = { showCreate = true }) { Icon(Icons.Default.Add, "新建") }
+                    IconButton(
+                        onClick = { showCreate = true },
+                        modifier = Modifier.testTag("tags-create"),
+                    ) { Icon(Icons.Default.Add, "新建") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
@@ -76,7 +85,7 @@ fun TagsScreen(
                         leadingContent = {
                             Surface(shape = MaterialTheme.shapes.small, color = try { Color(android.graphics.Color.parseColor(tag.color)) } catch (_: Exception) { MaterialTheme.colorScheme.primary }, modifier = Modifier.size(24.dp)) {}
                         },
-                        modifier = Modifier.clickable { onNavigateToTagFiles(tag.id) },
+                        modifier = Modifier.testTag("tag-row-${tag.tagName}").clickable { onNavigateToTagFiles(tag.id) },
                     )
                 }
             }

@@ -2,6 +2,7 @@ package com.betterclouddrive.android.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.betterclouddrive.android.data.local.ServerConfigStore
 import com.betterclouddrive.android.data.repository.AuthRepository
 import com.betterclouddrive.android.domain.model.User
 import com.betterclouddrive.android.util.NetworkResult
@@ -24,10 +25,13 @@ data class AuthUiState(
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    private val serverConfigStore: ServerConfigStore,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState = _uiState.asStateFlow()
+
+    val serverBaseUrl = serverConfigStore.serverBaseUrlFlow
 
     private val _events = MutableSharedFlow<UiEvent>()
     val events = _events.asSharedFlow()
@@ -125,6 +129,20 @@ class AuthViewModel @Inject constructor(
             authRepository.logout()
             authRepository.clearTokens()
             _uiState.value = AuthUiState()
+        }
+    }
+
+    fun saveServerBaseUrl(input: String) {
+        viewModelScope.launch {
+            serverConfigStore.saveServerBaseUrl(input)
+                .onSuccess {
+                    authRepository.clearTokens()
+                    _uiState.value = AuthUiState()
+                    _events.emit(UiEvent.ShowSnackbar("服务器地址已保存，请重新登录"))
+                }
+                .onFailure { error ->
+                    _events.emit(UiEvent.ShowSnackbar(error.message ?: "服务器地址无效", true))
+                }
         }
     }
 

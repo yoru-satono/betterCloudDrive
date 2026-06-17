@@ -102,7 +102,10 @@ interface ApiService {
     // ==================== Download / Preview ====================
     @Streaming
     @GET("download/{fileId}")
-    suspend fun downloadFile(@Path("fileId") fileId: Long): ResponseBody
+    suspend fun downloadFile(
+        @Path("fileId") fileId: Long,
+        @Header("Range") range: String? = null,
+    ): ResponseBody
 
     @Streaming
     @GET("preview/{fileId}")
@@ -136,6 +139,9 @@ interface ApiService {
 
     @GET("shares/{shareId}")
     suspend fun getShare(@Path("shareId") shareId: Long): ApiResponse<ShareLink>
+
+    @GET("shares/{shareId}/password")
+    suspend fun getSharePassword(@Path("shareId") shareId: Long): ApiResponse<SharePasswordResponse>
 
     @PUT("shares/{shareId}")
     suspend fun updateShare(

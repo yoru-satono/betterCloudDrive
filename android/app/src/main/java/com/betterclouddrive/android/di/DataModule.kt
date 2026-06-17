@@ -44,6 +44,15 @@ object DataModule {
 
     @Provides
     @Singleton
+    fun provideTransferRepository(
+        apiService: ApiService,
+        @ApplicationContext context: Context,
+    ): TransferRepository {
+        return TransferRepository(apiService, context)
+    }
+
+    @Provides
+    @Singleton
     fun provideShareRepository(apiService: ApiService): ShareRepository {
         return ShareRepository(apiService)
     }

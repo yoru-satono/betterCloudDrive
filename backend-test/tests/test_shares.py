@@ -25,7 +25,13 @@ class TestCreateShare:
             "fileId": uploaded_file["fileId"], "password": "pass123"
         }, headers=auth_headers)
         data = assert_api_ok(r)
-        assert data["passwordHash"] is not None
+        assert data["hasPassword"] is True
+        assert "passwordHash" not in data
+        assert "passwordCiphertext" not in data
+
+        password_response = client.get(f"/api/v1/shares/{data['id']}/password", headers=auth_headers)
+        password_data = assert_api_ok(password_response)
+        assert password_data["password"] == "pass123"
 
     def test_create_share_with_expiry(self, client, auth_headers, uploaded_file):
         future = int((time.time() + 86400 * 7) * 1000)  # 7 days from now

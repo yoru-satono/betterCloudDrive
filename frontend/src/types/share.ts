@@ -3,7 +3,7 @@ export interface ShareLinkEntity {
   userId: number
   fileId: number
   shareCode: string
-  passwordHash: string | null
+  hasPassword: boolean
   expireAt: string | null
   maxVisits: number | null
   downloadCount: number
@@ -11,6 +11,10 @@ export interface ShareLinkEntity {
   isCanceled: boolean
   createdAt: string
   updatedAt: string
+}
+
+export interface SharePasswordResponse {
+  password: string | null
 }
 
 export interface CreateShareRequest {

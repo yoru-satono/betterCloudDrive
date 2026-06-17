@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.betterclouddrive.android.domain.model.FileVersion
@@ -71,10 +72,14 @@ fun VersionsScreen(
                         headlineContent = { Text("版本 ${v.versionNumber}") },
                         supportingContent = { Text("${FormatUtil.formatFileSize(v.fileSize)} · ${FormatUtil.formatDate(v.createdAt)}") },
                         trailingContent = {
-                            TextButton(onClick = { viewModel.delete(fileId, v.versionNumber) }) {
+                            TextButton(
+                                onClick = { viewModel.delete(fileId, v.versionNumber) },
+                                modifier = Modifier.testTag("version-delete-${v.versionNumber}"),
+                            ) {
                                 Text("删除", color = MaterialTheme.colorScheme.error)
                             }
                         },
+                        modifier = Modifier.testTag("version-row-${v.versionNumber}"),
                     )
                 }
             }

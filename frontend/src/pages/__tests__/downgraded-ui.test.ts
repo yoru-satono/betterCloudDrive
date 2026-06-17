@@ -27,6 +27,11 @@ vi.mock('@/api/shares', () => ({
   accessShare: vi.fn(),
   listSharedFiles: vi.fn(),
   saveSharedItem: vi.fn(),
+  listShares: vi.fn(),
+  getShare: vi.fn(),
+  getSharePassword: vi.fn(),
+  updateShare: vi.fn(),
+  deleteShare: vi.fn(),
 }))
 
 vi.mock('@/api/files', () => ({
@@ -51,6 +56,9 @@ vi.mock('@/api/auth', () => ({
 const accessShare = sharesApi.accessShare as Mock
 const listSharedFiles = sharesApi.listSharedFiles as Mock
 const saveSharedItem = sharesApi.saveSharedItem as Mock
+const listShares = sharesApi.listShares as Mock
+const getShare = sharesApi.getShare as Mock
+const getSharePassword = sharesApi.getSharePassword as Mock
 const listFiles = filesApi.listFiles as Mock
 const listUsers = adminApi.listUsers as Mock
 const updateUserQuota = adminApi.updateUserQuota as Mock
@@ -60,7 +68,7 @@ const updateWebDavSettings = authApi.updateWebDavSettings as Mock
 
 const baseStubs = {
   RouterLink: RouterLinkStub,
-  OButton: { template: '<button><slot /></button>' },
+  OButton: { template: '<button v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>' },
   OInput: { template: '<input />' },
   OModal: { template: '<div v-if="open"><slot /><slot name="footer" /></div>', props: ['open'] },
   OSpinner: { template: '<span>loading</span>' },
@@ -73,6 +81,9 @@ beforeEach(() => {
   accessShare.mockReset()
   listSharedFiles.mockReset()
   saveSharedItem.mockReset()
+  listShares.mockReset()
+  getShare.mockReset()
+  getSharePassword.mockReset()
   listFiles.mockReset()
   listUsers.mockReset()
   updateUserQuota.mockReset()
@@ -227,6 +238,58 @@ describe('downgraded frontend UI', () => {
 
     await wrapper.findAll('button').find(button => button.text() === '下载文件夹')!.trigger('click')
     expect(downloadSharedFolderZipMock).toHaveBeenCalledWith('share-code', 1, 'shared-folder', undefined)
+  })
+
+  it('shares page can load a share password on demand', async () => {
+    const { default: SharesPage } = await import('@/pages/SharesPage.vue')
+    listShares.mockResolvedValue({
+      data: {
+        data: {
+          records: [{
+            id: 1,
+            userId: 1,
+            fileId: 2,
+            shareCode: 'share-code',
+            hasPassword: true,
+            expireAt: null,
+            maxVisits: null,
+            downloadCount: 0,
+            visitCount: 0,
+            isCanceled: false,
+            createdAt: '2026-01-01T00:00:00',
+            updatedAt: '2026-01-01T00:00:00',
+          }],
+        },
+      },
+    })
+    getShare.mockResolvedValue({
+      data: {
+        data: {
+          id: 1,
+          userId: 1,
+          fileId: 2,
+          shareCode: 'share-code',
+          hasPassword: true,
+          expireAt: null,
+          maxVisits: null,
+          downloadCount: 0,
+          visitCount: 0,
+          isCanceled: false,
+          createdAt: '2026-01-01T00:00:00',
+          updatedAt: '2026-01-01T00:00:00',
+        },
+      },
+    })
+    getSharePassword.mockResolvedValue({ data: { data: { password: 'abcd' } } })
+
+    const wrapper = mount(SharesPage, { global: { stubs: baseStubs } })
+    await flushPromises()
+
+    await wrapper.find('button[aria-label="查看密码"]').trigger('click')
+    await flushPromises()
+
+    expect(getSharePassword).toHaveBeenCalledWith(1)
+    expect(wrapper.text()).toContain('abcd')
   })
 
   it('redirects anonymous users to login when saving a shared item', async () => {
