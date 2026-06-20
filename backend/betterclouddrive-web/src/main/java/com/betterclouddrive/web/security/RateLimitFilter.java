@@ -38,7 +38,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         String path = request.getRequestURI();
-        if (!path.startsWith("/api/")) {
+        if (!path.startsWith("/api/") || "/api/v1/grafana/auth".equals(path)) {
             filterChain.doFilter(request, response);
             return;
         }
