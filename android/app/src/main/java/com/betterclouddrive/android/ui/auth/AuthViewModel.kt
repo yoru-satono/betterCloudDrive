@@ -52,10 +52,10 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun register(username: String, password: String, email: String?) {
+    fun register(username: String, password: String, email: String, verificationCode: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            when (val result = authRepository.register(username, password, email)) {
+            when (val result = authRepository.register(username, password, email, verificationCode)) {
                 is NetworkResult.Success -> {
                     _events.emit(UiEvent.ShowSnackbar("注册成功，请登录"))
                     _events.emit(UiEvent.NavigateBack)
@@ -63,6 +63,17 @@ class AuthViewModel @Inject constructor(
                 is NetworkResult.Error -> {
                     _uiState.value = _uiState.value.copy(isLoading = false, error = result.message)
                 }
+                is NetworkResult.Loading -> { }
+            }
+        }
+    }
+
+    fun sendRegisterCode(email: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(error = null)
+            when (val result = authRepository.sendRegisterCode(email)) {
+                is NetworkResult.Success -> _events.emit(UiEvent.ShowSnackbar("验证码已发送到邮箱"))
+                is NetworkResult.Error -> _uiState.value = _uiState.value.copy(error = result.message)
                 is NetworkResult.Loading -> { }
             }
         }
@@ -97,29 +108,6 @@ class AuthViewModel @Inject constructor(
                     _uiState.value = _uiState.value.copy(isLoading = false, error = result.message)
                 }
                 is NetworkResult.Loading -> { }
-            }
-        }
-    }
-
-    fun sendVerificationCode() {
-        viewModelScope.launch {
-            when (val r = authRepository.sendVerificationCode()) {
-                is NetworkResult.Success -> _events.emit(UiEvent.ShowSnackbar("验证码已发送"))
-                is NetworkResult.Error -> _uiState.value = _uiState.value.copy(error = r.message)
-                is NetworkResult.Loading -> {}
-            }
-        }
-    }
-
-    fun verifyEmail(code: String) {
-        viewModelScope.launch {
-            when (val r = authRepository.verifyEmail(code)) {
-                is NetworkResult.Success -> {
-                    fetchUser()
-                    _events.emit(UiEvent.ShowSnackbar("邮箱验证成功"))
-                }
-                is NetworkResult.Error -> _uiState.value = _uiState.value.copy(error = r.message)
-                is NetworkResult.Loading -> {}
             }
         }
     }

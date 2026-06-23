@@ -23,7 +23,6 @@ object Screen {
     const val TAG_FILES = "tagFiles/{tagId}"
     const val VERSIONS = "versions/{fileId}"
     const val PROFILE = "profile"
-    const val EMAIL_VERIFICATION = "emailVerification"
     const val TRANSFERS = "transfers"
 
     fun files(folderId: Long? = null) = if (folderId != null) "files/$folderId" else FILES

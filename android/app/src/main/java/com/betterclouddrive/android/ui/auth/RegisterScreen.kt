@@ -24,6 +24,7 @@ fun RegisterScreen(
     val uiState by viewModel.uiState.collectAsState()
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var verificationCode by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -83,13 +84,41 @@ fun RegisterScreen(
 
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
-                label = { Text("邮箱 (可选)") },
+                onValueChange = { email = it; viewModel.clearError() },
+                label = { Text("邮箱") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary),
             )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = verificationCode,
+                    onValueChange = { input ->
+                        if (input.length <= 6 && input.all { it.isDigit() }) {
+                            verificationCode = input
+                            viewModel.clearError()
+                        }
+                    },
+                    label = { Text("验证码") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = MaterialTheme.colorScheme.primary),
+                )
+                OutlinedButton(
+                    onClick = { viewModel.sendRegisterCode(email.trim()) },
+                    enabled = email.isNotBlank() && !uiState.isLoading,
+                    modifier = Modifier.height(56.dp),
+                ) {
+                    Text("发送")
+                }
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedTextField(
@@ -128,9 +157,21 @@ fun RegisterScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Button(
-                onClick = { viewModel.register(username, password, email.ifBlank { null }) },
+                onClick = {
+                    viewModel.register(
+                        username.trim(),
+                        password,
+                        email.trim(),
+                        verificationCode,
+                    )
+                },
                 modifier = Modifier.fillMaxWidth().height(48.dp),
-                enabled = username.length >= 3 && password.length >= 8 && password == confirmPassword && !uiState.isLoading,
+                enabled = username.trim().length >= 3 &&
+                    email.isNotBlank() &&
+                    verificationCode.length == 6 &&
+                    password.length >= 8 &&
+                    password == confirmPassword &&
+                    !uiState.isLoading,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             ) {
                 if (uiState.isLoading) {

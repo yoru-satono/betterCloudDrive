@@ -14,10 +14,11 @@ class ShareRepository @Inject constructor(private val api: ApiService) {
     suspend fun createShare(
         fileId: Long,
         password: String? = null,
-        expireAt: String? = null,
+        expireAt: Long? = null,
         maxVisits: Int? = null,
+        notifyEmail: String? = null,
     ): NetworkResult<ShareLink> = apiCall {
-        api.createShare(CreateShareRequest(fileId, password, expireAt, maxVisits))
+        api.createShare(CreateShareRequest(fileId, password, expireAt, maxVisits, notifyEmail))
     }
 
     suspend fun listShares(page: Int = 1, size: Int = 20): NetworkResult<PageResult<ShareLink>> = apiCall {
@@ -33,7 +34,7 @@ class ShareRepository @Inject constructor(private val api: ApiService) {
     suspend fun updateShare(
         shareId: Long,
         password: String? = null,
-        expireAt: String? = null,
+        expireAt: Long? = null,
         maxVisits: Int? = null,
     ): NetworkResult<ShareLink> = apiCall {
         api.updateShare(shareId, UpdateShareRequest(password, expireAt, maxVisits))
@@ -47,9 +48,25 @@ class ShareRepository @Inject constructor(private val api: ApiService) {
 
     suspend fun listSharedFiles(
         shareCode: String,
+        parentId: Long? = null,
         page: Int = 1,
         size: Int = 20,
     ): NetworkResult<PageResult<FileItem>> = apiCall {
-        api.listSharedFiles(shareCode, page, size)
+        api.listSharedFiles(shareCode, parentId, page, size)
     }
+
+    suspend fun saveSharedItem(
+        shareCode: String,
+        fileId: Long? = null,
+        targetParentId: Long? = null,
+        password: String? = null,
+    ): NetworkResult<FileItem> = apiCall {
+        api.saveSharedItem(shareCode, SaveSharedItemRequest(fileId, targetParentId, password))
+    }
+
+    suspend fun downloadSharedFile(shareCode: String, fileId: Long, password: String? = null) =
+        api.downloadSharedFile(shareCode, fileId, AccessShareRequest(password))
+
+    suspend fun downloadSharedFolderZip(shareCode: String, fileId: Long, password: String? = null) =
+        api.downloadSharedFolderZip(shareCode, fileId, AccessShareRequest(password))
 }

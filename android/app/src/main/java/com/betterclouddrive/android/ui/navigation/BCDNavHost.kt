@@ -167,7 +167,6 @@ fun BCDNavHost(
         composable(Screen.PROFILE) {
             ProfileScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToEmailVerification = { navController.navigate(Screen.EMAIL_VERIFICATION) },
                 onNavigateMain = { route -> navController.navigateTopLevel(route) },
                 onLogout = {
                     navController.navigate(Screen.LOGIN) {
@@ -175,11 +174,6 @@ fun BCDNavHost(
                     }
                 },
             )
-        }
-
-        // Email Verification
-        composable(Screen.EMAIL_VERIFICATION) {
-            EmailVerificationScreen(onNavigateBack = { navController.popBackStack() })
         }
     }
 }

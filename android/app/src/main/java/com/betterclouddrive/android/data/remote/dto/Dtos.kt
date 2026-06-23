@@ -29,9 +29,12 @@ data class LoginRequest(val username: String, val password: String)
 data class RegisterRequest(
     val username: String,
     val password: String,
-    val email: String? = null,
-    @SerialName("verificationCode") val verificationCode: String? = null,
+    val email: String,
+    @SerialName("verificationCode") val verificationCode: String,
 )
+
+@Serializable
+data class RegisterCodeRequest(val email: String)
 
 @Serializable
 data class RefreshRequest(@SerialName("refreshToken") val refreshToken: String)
@@ -71,7 +74,7 @@ data class BatchDeleteRequest(@SerialName("fileIds") val fileIds: List<Long>)
 // === Upload ===
 @Serializable
 data class InitUploadRequest(
-    @SerialName("parentId") val parentId: Long,
+    @SerialName("parentId") val parentId: Long? = null,
     @SerialName("fileName") val fileName: String,
     @SerialName("fileSize") val fileSize: Long,
     @SerialName("md5Hash") val md5Hash: String? = null,
@@ -93,7 +96,7 @@ data class CompleteResult(@SerialName("fileId") val fileId: Long)
 
 @Serializable
 data class InstantUploadRequest(
-    @SerialName("parentId") val parentId: Long,
+    @SerialName("parentId") val parentId: Long? = null,
     @SerialName("fileName") val fileName: String,
     @SerialName("fileSize") val fileSize: Long,
     @SerialName("md5Hash") val md5Hash: String,
@@ -110,14 +113,15 @@ data class InstantUploadResult(
 data class CreateShareRequest(
     @SerialName("fileId") val fileId: Long,
     val password: String? = null,
-    @SerialName("expireAt") val expireAt: String? = null,
+    @SerialName("expireAt") val expireAt: Long? = null,
     @SerialName("maxVisits") val maxVisits: Int? = null,
+    @SerialName("notifyEmail") val notifyEmail: String? = null,
 )
 
 @Serializable
 data class UpdateShareRequest(
     val password: String? = null,
-    @SerialName("expireAt") val expireAt: String? = null,
+    @SerialName("expireAt") val expireAt: Long? = null,
     @SerialName("maxVisits") val maxVisits: Int? = null,
 )
 
@@ -128,6 +132,13 @@ data class SharePasswordResponse(
 
 @Serializable
 data class AccessShareRequest(val password: String? = null)
+
+@Serializable
+data class SaveSharedItemRequest(
+    @SerialName("fileId") val fileId: Long? = null,
+    @SerialName("targetParentId") val targetParentId: Long? = null,
+    val password: String? = null,
+)
 
 @Serializable
 data class ShareAccessResult(
@@ -158,10 +169,7 @@ data class UpdateTagRequest(
 @Serializable
 data class TagFilesRequest(@SerialName("fileIds") val fileIds: List<Long>)
 
-// === Email ===
-@Serializable
-data class VerifyEmailRequest(val code: String)
-
+// === Password reset ===
 @Serializable
 data class ForgotPasswordRequest(val email: String)
 

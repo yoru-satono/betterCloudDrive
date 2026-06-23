@@ -12,22 +12,13 @@ class AuthInterceptor @Inject constructor(
     private val tokenManager: TokenManager,
 ) : Interceptor {
 
-    // Public endpoints that don't need Authorization header
-    private val publicPaths = setOf(
-        "auth/register",
-        "auth/login",
-        "auth/refresh",
-        "auth/forgot-password",
-        "auth/reset-password",
-        "shares/access",
-    )
-
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
         // Skip auth header for public endpoints
         val path = originalRequest.url.encodedPath
-        val isPublic = publicPaths.any { path.contains(it) }
+        val method = originalRequest.method
+        val isPublic = isPublicEndpoint(method, path)
 
         if (isPublic) {
             return chain.proceed(originalRequest)
@@ -43,5 +34,28 @@ class AuthInterceptor @Inject constructor(
             .build()
 
         return chain.proceed(authenticatedRequest)
+    }
+
+    private fun isPublicEndpoint(method: String, path: String): Boolean {
+        if (path.contains("auth/register") ||
+            path.contains("auth/register-code/send") ||
+            path.contains("auth/login") ||
+            path.contains("auth/refresh") ||
+            path.contains("auth/forgot-password") ||
+            path.contains("auth/reset-password")
+        ) {
+            return true
+        }
+
+        if (!path.contains("shares/access")) {
+            return false
+        }
+
+        return when {
+            method == "POST" && path.contains("/download/") -> true
+            method == "GET" && path.endsWith("/files") -> true
+            method == "POST" && !path.contains("/save") && !path.contains("/download/") -> true
+            else -> false
+        }
     }
 }

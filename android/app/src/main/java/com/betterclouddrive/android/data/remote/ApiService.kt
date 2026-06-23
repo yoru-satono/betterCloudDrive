@@ -16,6 +16,9 @@ interface ApiService {
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): ApiResponse<RegisterResult>
 
+    @POST("auth/register-code/send")
+    suspend fun sendRegisterCode(@Body request: RegisterCodeRequest): ApiResponse<Unit>
+
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): ApiResponse<AuthTokens>
 
@@ -27,12 +30,6 @@ interface ApiService {
 
     @GET("auth/me")
     suspend fun getMe(): ApiResponse<User>
-
-    @POST("auth/verify-email/send")
-    suspend fun sendVerificationCode(): ApiResponse<Unit>
-
-    @POST("auth/verify-email/confirm")
-    suspend fun verifyEmail(@Body request: VerifyEmailRequest): ApiResponse<Unit>
 
     @POST("auth/forgot-password")
     suspend fun forgotPassword(@Body request: ForgotPasswordRequest): ApiResponse<Unit>
@@ -161,9 +158,32 @@ interface ApiService {
     @GET("shares/access/{shareCode}/files")
     suspend fun listSharedFiles(
         @Path("shareCode") shareCode: String,
+        @Query("parentId") parentId: Long? = null,
         @Query("page") page: Int = 1,
         @Query("size") size: Int = 20,
     ): ApiResponse<PageResult<FileItem>>
+
+    @POST("shares/access/{shareCode}/save")
+    suspend fun saveSharedItem(
+        @Path("shareCode") shareCode: String,
+        @Body request: SaveSharedItemRequest = SaveSharedItemRequest(),
+    ): ApiResponse<FileItem>
+
+    @Streaming
+    @POST("shares/access/{shareCode}/download/{fileId}")
+    suspend fun downloadSharedFile(
+        @Path("shareCode") shareCode: String,
+        @Path("fileId") fileId: Long,
+        @Body request: AccessShareRequest = AccessShareRequest(),
+    ): ResponseBody
+
+    @Streaming
+    @POST("shares/access/{shareCode}/download/{fileId}/zip")
+    suspend fun downloadSharedFolderZip(
+        @Path("shareCode") shareCode: String,
+        @Path("fileId") fileId: Long,
+        @Body request: AccessShareRequest = AccessShareRequest(),
+    ): ResponseBody
 
     // ==================== Favorites ====================
     @POST("favorites/{fileId}")

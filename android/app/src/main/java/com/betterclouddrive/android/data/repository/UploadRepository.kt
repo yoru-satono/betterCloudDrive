@@ -23,7 +23,7 @@ class UploadRepository @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
     suspend fun initUpload(
-        parentId: Long,
+        parentId: Long?,
         fileName: String,
         fileSize: Long,
         totalChunks: Int,
@@ -61,7 +61,7 @@ class UploadRepository @Inject constructor(
     }
 
     suspend fun instantUpload(
-        parentId: Long,
+        parentId: Long?,
         fileName: String,
         fileSize: Long,
         md5Hash: String,

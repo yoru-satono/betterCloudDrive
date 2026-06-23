@@ -12,7 +12,10 @@ $RECYCLE.BIN/
 
 # Editors and IDEs
 .idea/
+.idea_modules/
 *.iml
+*.ipr
+*.iws
 .vscode/*
 **/.vscode/*
 !.vscode/extensions.json
@@ -48,6 +51,7 @@ lerna-debug.log*
 *.ear
 target/
 .gradle/
+.kotlin/
 build/
 !**/src/main/**/target/
 !**/src/test/**/target/

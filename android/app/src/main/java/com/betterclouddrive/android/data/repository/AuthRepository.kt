@@ -13,8 +13,17 @@ class AuthRepository @Inject constructor(
     private val api: ApiService,
     private val tokenManager: TokenManager,
 ) {
-    suspend fun register(username: String, password: String, email: String?): NetworkResult<RegisterResult> = apiCall {
-        api.register(RegisterRequest(username, password, email))
+    suspend fun register(
+        username: String,
+        password: String,
+        email: String,
+        verificationCode: String,
+    ): NetworkResult<RegisterResult> = apiCall {
+        api.register(RegisterRequest(username, password, email, verificationCode))
+    }
+
+    suspend fun sendRegisterCode(email: String): NetworkResult<Unit> = apiCall {
+        api.sendRegisterCode(RegisterCodeRequest(email))
     }
 
     suspend fun login(username: String, password: String): NetworkResult<AuthTokens> = apiCall {
@@ -29,10 +38,6 @@ class AuthRepository @Inject constructor(
     suspend fun logout(): NetworkResult<Unit> = apiCall { api.logout() }
 
     suspend fun getMe(): NetworkResult<User> = apiCall { api.getMe() }
-
-    suspend fun sendVerificationCode(): NetworkResult<Unit> = apiCall { api.sendVerificationCode() }
-
-    suspend fun verifyEmail(code: String): NetworkResult<Unit> = apiCall { api.verifyEmail(VerifyEmailRequest(code)) }
 
     suspend fun forgotPassword(email: String): NetworkResult<Unit> = apiCall { api.forgotPassword(ForgotPasswordRequest(email)) }
 

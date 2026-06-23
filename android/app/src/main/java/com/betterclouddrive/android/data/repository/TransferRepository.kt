@@ -63,7 +63,7 @@ class TransferRepository(
             direction = TransferDirection.UPLOAD,
             fileName = getDisplayName(uri),
             bytesTotal = getSize(uri),
-            remoteParentId = parentId ?: 0,
+            remoteParentId = parentId,
             sourceUri = uri,
         )
         upsert(task)
@@ -131,7 +131,7 @@ class TransferRepository(
 
             val instant = api.instantUpload(
                 com.betterclouddrive.android.data.remote.dto.InstantUploadRequest(
-                    parentId = initialTask.remoteParentId ?: 0,
+                    parentId = initialTask.remoteParentId,
                     fileName = initialTask.fileName,
                     fileSize = fileSize,
                     md5Hash = md5,
@@ -154,7 +154,7 @@ class TransferRepository(
             val init = if (existing?.sessionId == null) {
                 api.initUpload(
                     com.betterclouddrive.android.data.remote.dto.InitUploadRequest(
-                        parentId = initialTask.remoteParentId ?: 0,
+                        parentId = initialTask.remoteParentId,
                         fileName = initialTask.fileName,
                         fileSize = fileSize,
                         md5Hash = md5,

@@ -21,7 +21,6 @@ import com.betterclouddrive.android.ui.navigation.Screen
 @Composable
 fun ProfileScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToEmailVerification: () -> Unit,
     onNavigateMain: (String) -> Unit,
     onLogout: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
@@ -86,19 +85,6 @@ fun ProfileScreen(
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))
-
-            // Actions
-            if (user?.emailVerified != true && user?.email != null) {
-                OutlinedButton(
-                    onClick = onNavigateToEmailVerification,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Default.Email, null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("验证邮箱")
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
 
             OutlinedButton(
                 onClick = { onNavigateMain(Screen.RECYCLE_BIN) },
