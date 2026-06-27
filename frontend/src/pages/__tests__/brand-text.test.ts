@@ -89,5 +89,6 @@ describe('BetterCloudDrive brand text', () => {
 
     expect(wrapper.text()).toContain('BetterCloudDrive')
     expect(wrapper.text()).not.toContain('BetterDrive')
+    expect(wrapper.text()).not.toContain('设置')
   })
 })

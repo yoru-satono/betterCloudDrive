@@ -26,7 +26,6 @@ const routes = [
       { path: 'favorites',       name: 'Favorites',   component: () => import('@/pages/FavoritesPage.vue') },
       { path: 'tags',            name: 'Tags',        component: () => import('@/pages/TagsPage.vue') },
       { path: 'profile',         name: 'Profile',     component: () => import('@/pages/ProfilePage.vue') },
-      { path: 'settings',        name: 'Settings',    component: () => import('@/pages/SettingsPage.vue'), meta: { desktopOnly: true } },
     ]
   },
   {
@@ -53,7 +52,6 @@ router.beforeEach(async (to, _from, next) => {
   const isLoggedIn = !!token
 
   if (to.meta.requiresAuth && !isLoggedIn) return next('/login')
-  if (to.meta.desktopOnly && !isDesktopRuntime()) return next('/files')
 
   if (to.meta.requiresAdmin) {
     const { useAuthStore } = await import('@/stores/auth')

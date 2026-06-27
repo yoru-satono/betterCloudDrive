@@ -8,13 +8,6 @@ import OInput from '@/components/base/OInput.vue'
 import OButton from '@/components/base/OButton.vue'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from 'vue-sonner'
-import {
-  getApiBaseUrl,
-  getWebBaseUrl,
-  isDesktopRuntime,
-  setStoredApiBaseUrl,
-  setStoredWebBaseUrl,
-} from '@/config/runtime'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -28,18 +21,9 @@ const { handleSubmit, isSubmitting } = useForm({ validationSchema: schema })
 const { value: username, errorMessage: usernameError } = useField<string>('username')
 const { value: password, errorMessage: passwordError } = useField<string>('password')
 const showPassword = ref(false)
-const showDesktopSettings = ref(isDesktopRuntime() || !!import.meta.env.VITE_API_BASE_URL)
-const apiBaseUrl = ref(getApiBaseUrl())
-const webBaseUrl = ref(getWebBaseUrl())
-
-function saveDesktopSettings() {
-  setStoredApiBaseUrl(apiBaseUrl.value)
-  setStoredWebBaseUrl(webBaseUrl.value)
-}
 
 const submit = handleSubmit(async (values) => {
   try {
-    saveDesktopSettings()
     await auth.login(values.username, values.password)
     toast.success('登录成功')
     router.push('/files')
@@ -86,21 +70,6 @@ const submit = handleSubmit(async (values) => {
         </template>
       </OInput>
 
-      <div v-if="showDesktopSettings" class="desktop-settings">
-        <OInput
-          v-model="apiBaseUrl"
-          label="API 地址"
-          placeholder="http://127.0.0.1:8080/api/v1"
-          autocomplete="off"
-        />
-        <OInput
-          v-model="webBaseUrl"
-          label="Web 分享地址"
-          placeholder="http://127.0.0.1:3000"
-          autocomplete="off"
-        />
-      </div>
-
       <OButton type="submit" variant="primary" :loading="isSubmitting" style="width:100%;justify-content:center">
         登录
       </OButton>
@@ -127,15 +96,6 @@ const submit = handleSubmit(async (values) => {
 .login-page__sub { font-size: 13px; color: var(--text-secondary); }
 .login-page__form { display: flex; flex-direction: column; gap: 14px; margin-bottom: 20px; }
 .login-page__links { display: flex; gap: 8px; font-size: 13px; color: var(--text-secondary); }
-.desktop-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-surface);
-}
 .pass-toggle { background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center; }
 .pass-toggle:hover { color: var(--text-secondary); }
 </style>

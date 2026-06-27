@@ -3,7 +3,6 @@ import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useFormatters } from '@/composables/useFormatters'
 import { useRouter, useRoute } from 'vue-router'
-import { isDesktopRuntime } from '@/config/runtime'
 
 const ui = useUIStore()
 const auth = useAuthStore()
@@ -19,10 +18,6 @@ const navItems = [
   { to: '/recycle-bin', label: '回收站',    icon: 'trash' },
 ]
 
-const desktopItems = [
-  { to: '/settings',    label: '设置',      icon: 'settings' },
-]
-
 const adminItems = [
   { to: '/admin',       label: '管理后台',  icon: 'shield' },
 ]
@@ -34,7 +29,6 @@ const iconPaths: Record<string, string> = {
   tag:    'M20.6 8.3l-13 13a2 2 0 01-2.8 0L3 19.5a2 2 0 010-2.8l13-13A2 2 0 0118 3l2.6 2.6a2 2 0 010 2.7z',
   trash:  'M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6',
   shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
-  settings:'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a7.6 7.6 0 00.15-1.5 7.6 7.6 0 00-.15-1.5l2.3-1.8a.5.5 0 00.1-.6l-2.2-3.8a.5.5 0 00-.6-.2l-2.7 1.1a7.9 7.9 0 00-2.6-1.5l-.4-2.8A.5.5 0 0012 2h-4.4a.5.5 0 00-.5.4l-.4 2.8a7.9 7.9 0 00-2.6 1.5L1.4 5.6a.5.5 0 00-.6.2L.6 9.6a.5.5 0 00.1.6l2.3 1.8a7.6 7.6 0 000 3l-2.3 1.8a.5.5 0 00-.1.6l2.2 3.8a.5.5 0 00.6.2l2.7-1.1a7.9 7.9 0 002.6 1.5l.4 2.8a.5.5 0 00.5.4H12a.5.5 0 00.5-.4l.4-2.8a7.9 7.9 0 002.6-1.5l2.7 1.1a.5.5 0 00.6-.2l2.2-3.8a.5.5 0 00-.1-.6z',
 }
 </script>
 
@@ -69,24 +63,6 @@ const iconPaths: Record<string, string> = {
           <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ item.label }}</span>
         </Transition>
       </RouterLink>
-
-      <template v-if="isDesktopRuntime()">
-        <div class="sidebar__divider" />
-        <RouterLink
-          v-for="item in desktopItems"
-          :key="item.to"
-          :to="item.to"
-          class="sidebar__item"
-          :class="{ 'sidebar__item--active': route.path.startsWith(item.to) }"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path :d="iconPaths[item.icon]" />
-          </svg>
-          <Transition name="fade">
-            <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ item.label }}</span>
-          </Transition>
-        </RouterLink>
-      </template>
 
       <div v-if="auth.isAdmin" class="sidebar__divider" />
 

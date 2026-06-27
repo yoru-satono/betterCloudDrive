@@ -34,14 +34,18 @@ const isManualProxy = computed(() => settings.value.proxyMode === 'manual')
 
 onMounted(loadSettings)
 
+function applySettings(nextSettings: DesktopSettings) {
+  settings.value = nextSettings
+  uploadLimit.value = bytesToMbps(nextSettings.uploadLimitBytesPerSec)
+  downloadLimit.value = bytesToMbps(nextSettings.downloadLimitBytesPerSec)
+  maxConcurrentUploads.value = String(nextSettings.maxConcurrentUploads)
+  maxConcurrentDownloads.value = String(nextSettings.maxConcurrentDownloads)
+}
+
 async function loadSettings() {
   loading.value = true
   try {
-    settings.value = await getDesktopSettings()
-    uploadLimit.value = bytesToMbps(settings.value.uploadLimitBytesPerSec)
-    downloadLimit.value = bytesToMbps(settings.value.downloadLimitBytesPerSec)
-    maxConcurrentUploads.value = String(settings.value.maxConcurrentUploads)
-    maxConcurrentDownloads.value = String(settings.value.maxConcurrentDownloads)
+    applySettings(await getDesktopSettings())
   } catch (e) {
     toast.error(e instanceof Error ? e.message : '读取设置失败')
   } finally {
@@ -63,7 +67,7 @@ async function saveSettings() {
 
   saving.value = true
   try {
-    settings.value = await saveDesktopSettings({
+    applySettings(await saveDesktopSettings({
       ...settings.value,
       uploadLimitBytesPerSec: mbpsToBytes(uploadLimit.value),
       downloadLimitBytesPerSec: mbpsToBytes(downloadLimit.value),
@@ -71,11 +75,7 @@ async function saveSettings() {
       maxConcurrentDownloads: Number(maxConcurrentDownloads.value),
       proxyUrl: settings.value.proxyUrl.trim(),
       proxyUsername: settings.value.proxyUsername.trim(),
-    })
-    uploadLimit.value = bytesToMbps(settings.value.uploadLimitBytesPerSec)
-    downloadLimit.value = bytesToMbps(settings.value.downloadLimitBytesPerSec)
-    maxConcurrentUploads.value = String(settings.value.maxConcurrentUploads)
-    maxConcurrentDownloads.value = String(settings.value.maxConcurrentDownloads)
+    }))
     toast.success('设置已保存')
   } catch (e) {
     toast.error(e instanceof Error ? e.message : '保存设置失败')
@@ -106,9 +106,10 @@ function validateSettings() {
 </script>
 
 <template>
-  <div class="settings-page page-enter">
-    <div class="settings-page__header">
-      <h2>设置</h2>
+  <div class="desktop-settings-panel">
+    <div class="desktop-settings-panel__toolbar">
+      <span v-if="loading" class="desktop-settings-panel__status">正在读取设置...</span>
+      <span v-else class="desktop-settings-panel__status">客户端内置上传和下载会使用这些设置。</span>
       <OButton variant="primary" :loading="saving" :disabled="loading || !isDesktop" @click="saveSettings">
         保存
       </OButton>
@@ -195,18 +196,30 @@ function validateSettings() {
 </template>
 
 <style scoped>
-.settings-page {
-  max-width: 760px;
+.desktop-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.settings-page__header {
+.desktop-settings-panel__toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.desktop-settings-panel__status,
+.settings-section__head span,
+.settings-empty {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 .settings-section {
   border-top: 1px solid var(--border);
-  padding: 22px 0;
+  padding: 20px 0;
+}
+.settings-section:last-child {
+  padding-bottom: 0;
 }
 .settings-section__head {
   margin-bottom: 14px;
@@ -214,11 +227,6 @@ function validateSettings() {
 .settings-section__head h3 {
   font-size: 14px;
   margin-bottom: 4px;
-}
-.settings-section__head span,
-.settings-empty {
-  color: var(--text-muted);
-  font-size: 12px;
 }
 .settings-grid {
   display: grid;
