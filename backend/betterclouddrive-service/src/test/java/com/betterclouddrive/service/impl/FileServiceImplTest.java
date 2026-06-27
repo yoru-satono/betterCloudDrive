@@ -198,7 +198,7 @@ class FileServiceImplTest {
         Page<FileEntity> page = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
         when(fileRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
 
-        PageResult<FileEntity> result = fileService.listRecycleBin(1L, 1, 20);
+        PageResult<FileEntity> result = fileService.listRecycleBin(1L, "deleted", 1, 20);
 
         assertThat(result.getRecords()).isNotEmpty();
         assertThat(result.getRecords()).hasSize(1);

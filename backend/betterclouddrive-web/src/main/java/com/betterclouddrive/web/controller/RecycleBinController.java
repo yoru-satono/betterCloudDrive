@@ -19,9 +19,10 @@ public class RecycleBinController {
     @GetMapping
     public ApiResponse<PageResult<FileEntity>> listRecycleBin(
             @CurrentUser UserPrincipal user,
+            @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(fileService.listRecycleBin(user.getUserId(), page, size));
+        return ApiResponse.success(fileService.listRecycleBin(user.getUserId(), q, page, size));
     }
 
     @PostMapping("/{fileId}/restore")

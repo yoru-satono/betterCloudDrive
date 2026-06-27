@@ -6,7 +6,6 @@ import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.FileTagEntity;
 import com.betterclouddrive.dal.entity.TagEntity;
-import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileTagRepository;
 import com.betterclouddrive.dal.repository.TagRepository;
 import com.betterclouddrive.service.TagService;
@@ -16,10 +15,10 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -28,7 +27,6 @@ public class TagServiceImpl implements TagService {
 
     private final TagRepository tagRepository;
     private final FileTagRepository fileTagRepository;
-    private final FileRepository fileRepository;
 
     @Override
     @Transactional
@@ -49,7 +47,10 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
-    public List<TagEntity> listTags(Long userId) {
+    public List<TagEntity> listTags(Long userId, String keyword) {
+        if (StringUtils.hasText(keyword)) {
+            return tagRepository.findByUserIdAndTagNameContainingIgnoreCaseOrderByTagNameAsc(userId, keyword.trim());
+        }
         return tagRepository.findByUserIdOrderByTagNameAsc(userId);
     }
 
@@ -114,19 +115,10 @@ public class TagServiceImpl implements TagService {
     }
 
     @Override
-    public PageResult<FileEntity> listFilesByTag(Long userId, Long tagId, int page, int size) {
-        Page<FileTagEntity> ftPage = fileTagRepository.findByTagIdOrderByCreatedAtDesc(
-                tagId, PageRequest.of(page - 1, size));
-
-        if (ftPage.getContent().isEmpty()) {
-            return PageResult.of(List.of(), 0L, page, size);
-        }
-
-        List<Long> fileIds = ftPage.getContent().stream()
-                .map(FileTagEntity::getFileId)
-                .collect(Collectors.toList());
-
-        List<FileEntity> files = fileRepository.findAllById(fileIds);
-        return PageResult.of(files, ftPage.getTotalElements(), page, size);
+    public PageResult<FileEntity> listFilesByTag(Long userId, Long tagId, String keyword, int page, int size) {
+        String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        Page<FileEntity> files = fileTagRepository.findTaggedFiles(
+                userId, tagId, normalizedKeyword, PageRequest.of(page - 1, size));
+        return PageResult.of(files.getContent(), files.getTotalElements(), page, size);
     }
 }

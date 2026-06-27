@@ -84,14 +84,12 @@ class FavoriteServiceImplTest {
 
     @Test
     void listFavorites_shouldReturnFilesInOrder() {
-        FavoriteEntity fav = FavoriteEntity.builder().userId(1L).fileId(10L).build();
-        Page<FavoriteEntity> favPage = new PageImpl<>(List.of(fav), PageRequest.of(0, 20), 1);
-        when(favoriteRepository.findByUserIdOrderByCreatedAtDesc(eq(1L), any(PageRequest.class)))
-                .thenReturn(favPage);
         FileEntity file = FileEntity.builder().id(10L).fileName("notes.txt").build();
-        when(fileRepository.findAllById(List.of(10L))).thenReturn(List.of(file));
+        Page<FileEntity> favPage = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
+        when(favoriteRepository.findFavoriteFiles(eq(1L), isNull(), any(PageRequest.class)))
+                .thenReturn(favPage);
 
-        PageResult<FileEntity> result = favoriteService.listFavorites(1L, 1, 20);
+        PageResult<FileEntity> result = favoriteService.listFavorites(1L, null, 1, 20);
 
         assertThat(result.getRecords()).hasSize(1);
         assertThat(result.getTotal()).isEqualTo(1);
@@ -100,11 +98,11 @@ class FavoriteServiceImplTest {
 
     @Test
     void listFavorites_shouldReturnEmptyWhenNone() {
-        Page<FavoriteEntity> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
-        when(favoriteRepository.findByUserIdOrderByCreatedAtDesc(eq(1L), any(PageRequest.class)))
+        Page<FileEntity> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        when(favoriteRepository.findFavoriteFiles(eq(1L), eq("report"), any(PageRequest.class)))
                 .thenReturn(emptyPage);
 
-        PageResult<FileEntity> result = favoriteService.listFavorites(1L, 1, 20);
+        PageResult<FileEntity> result = favoriteService.listFavorites(1L, " report ", 1, 20);
 
         assertThat(result.getRecords()).isEmpty();
         assertThat(result.getTotal()).isEqualTo(0);

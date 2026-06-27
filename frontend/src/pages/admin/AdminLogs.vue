@@ -28,7 +28,7 @@ const auditFilters = ref({
 })
 const auditPage = ref(1)
 const auditTotal = ref(0)
-const AUDIT_SIZE = 50
+const AUDIT_SIZE = 20
 
 const systemLogs = ref<SystemLogEntry[]>([])
 const systemLoading = ref(false)
@@ -43,6 +43,7 @@ const systemFilters = ref({
 const SYSTEM_LIMIT = 100
 
 const auditPages = computed(() => Math.max(1, Math.ceil(auditTotal.value / AUDIT_SIZE)))
+const showAuditPagination = computed(() => auditTotal.value > AUDIT_SIZE)
 
 function parseNumber(value: string) {
   if (!value.trim()) return undefined
@@ -73,9 +74,20 @@ async function loadAuditLogs() {
     })
     auditLogs.value = data.data.records
     auditTotal.value = data.data.total
+    if (auditPage.value > auditPages.value) {
+      auditPage.value = auditPages.value
+      await loadAuditLogs()
+    }
   } finally {
     auditLoading.value = false
   }
+}
+
+function goAuditPage(nextPage: number) {
+  const normalizedPage = Math.min(Math.max(nextPage, 1), auditPages.value)
+  if (normalizedPage === auditPage.value) return
+  auditPage.value = normalizedPage
+  loadAuditLogs()
 }
 
 async function loadSystemLogs() {
@@ -235,6 +247,12 @@ onMounted(loadAuditLogs)
         </div>
       </div>
 
+      <div v-if="showAuditPagination" class="pagination pagination--top">
+        <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="goAuditPage(auditPage - 1)">上一页</OButton>
+        <span class="pagination__info font-mono">第 {{ auditPage }} / {{ auditPages }} 页 · 共 {{ auditTotal }} 条审计日志</span>
+        <OButton variant="ghost" size="sm" :disabled="auditPage >= auditPages" @click="goAuditPage(auditPage + 1)">下一页</OButton>
+      </div>
+
       <div v-if="auditLoading" class="loading"><OSpinner /></div>
       <OEmptyState v-else-if="auditLogs.length === 0" title="暂无审计日志" />
       <div v-else class="log-table">
@@ -276,10 +294,10 @@ onMounted(loadAuditLogs)
         </div>
       </div>
 
-      <div v-if="auditTotal > AUDIT_SIZE" class="pagination">
-        <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="() => { auditPage--; loadAuditLogs() }">上一页</OButton>
-        <span class="pagination__info font-mono">{{ auditPage }} / {{ auditPages }}</span>
-        <OButton variant="ghost" size="sm" :disabled="auditPage * AUDIT_SIZE >= auditTotal" @click="() => { auditPage++; loadAuditLogs() }">下一页</OButton>
+      <div v-if="showAuditPagination" class="pagination pagination--bottom">
+        <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="goAuditPage(auditPage - 1)">上一页</OButton>
+        <span class="pagination__info font-mono">第 {{ auditPage }} / {{ auditPages }} 页 · 共 {{ auditTotal }} 条审计日志</span>
+        <OButton variant="ghost" size="sm" :disabled="auditPage >= auditPages" @click="goAuditPage(auditPage + 1)">下一页</OButton>
       </div>
     </section>
 
@@ -547,6 +565,20 @@ onMounted(loadAuditLogs)
   align-items: center;
   gap: 12px;
   justify-content: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+
+.pagination--top {
+  margin-top: -4px;
+}
+
+.pagination--bottom {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   margin-top: 6px;
 }
 

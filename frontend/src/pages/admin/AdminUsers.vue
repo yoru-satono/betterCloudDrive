@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
 import OInput from '@/components/base/OInput.vue'
@@ -16,13 +16,34 @@ const users = ref<UserEntity[]>([])
 const loading = ref(false)
 const search = ref('')
 const editingQuota = ref<{ id: number; val: string } | null>(null)
+const page = ref(1)
+const total = ref(0)
+const PAGE_SIZE = 20
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
 async function load() {
   loading.value = true
   try {
-    const { data } = await adminApi.listUsers(1, 100, search.value || undefined)
+    const { data } = await adminApi.listUsers(page.value, PAGE_SIZE, search.value || undefined)
     users.value = data.data.records
+    total.value = data.data.total
+    if (page.value > totalPages.value) {
+      page.value = totalPages.value
+      await load()
+    }
   } finally { loading.value = false }
+}
+
+function searchUsers() {
+  page.value = 1
+  load()
+}
+
+function goPage(nextPage: number) {
+  const normalizedPage = Math.min(Math.max(nextPage, 1), totalPages.value)
+  if (normalizedPage === page.value) return
+  page.value = normalizedPage
+  load()
 }
 
 async function toggleActive(user: UserEntity) {
@@ -54,15 +75,21 @@ onMounted(load)
     <div class="page-header">
       <h2>用户管理</h2>
       <div class="users-toolbar">
-        <OInput v-model="search" placeholder="搜索用户名..." class="users-toolbar__search" @keyup.enter="load">
+        <OInput v-model="search" placeholder="搜索用户名..." class="users-toolbar__search" @keyup.enter="searchUsers">
           <template #icon>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
           </template>
         </OInput>
-        <OButton variant="ghost" size="sm" @click="load">搜索</OButton>
+        <OButton variant="ghost" size="sm" @click="searchUsers">搜索</OButton>
       </div>
+    </div>
+
+    <div v-if="total > PAGE_SIZE" class="pagination pagination--top">
+      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">上一页</OButton>
+      <span class="pagination__info font-mono">第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 个用户</span>
+      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</OButton>
     </div>
 
     <div v-if="loading" style="display:flex;justify-content:center;padding:60px"><OSpinner /></div>
@@ -100,6 +127,12 @@ onMounted(load)
         </div>
       </div>
     </div>
+
+    <div v-if="!loading && total > PAGE_SIZE" class="pagination pagination--bottom">
+      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">上一页</OButton>
+      <span class="pagination__info font-mono">第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 个用户</span>
+      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</OButton>
+    </div>
   </div>
 </template>
 
@@ -126,6 +159,27 @@ onMounted(load)
   border-radius: 8px;
   overflow-x: auto;
   overflow-y: hidden;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+.pagination--top { margin-bottom: 12px; }
+.pagination--bottom {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: 12px;
+}
+.pagination__info {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 .users-table__header {
   display: grid;

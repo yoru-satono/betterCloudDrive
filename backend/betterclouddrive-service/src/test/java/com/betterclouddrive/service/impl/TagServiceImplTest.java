@@ -9,7 +9,6 @@ import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.FileTagEntity;
 import com.betterclouddrive.dal.entity.TagEntity;
-import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileTagRepository;
 import com.betterclouddrive.dal.repository.TagRepository;
 import org.junit.jupiter.api.Test;
@@ -29,7 +28,6 @@ class TagServiceImplTest {
 
     @Mock private TagRepository tagRepository;
     @Mock private FileTagRepository fileTagRepository;
-    @Mock private FileRepository fileRepository;
     @InjectMocks private TagServiceImpl tagService;
 
     private TagEntity tag(Long id, Long userId) {
@@ -130,14 +128,12 @@ class TagServiceImplTest {
 
     @Test
     void listFilesByTag_shouldReturnFiles() {
-        FileTagEntity ft = FileTagEntity.builder().fileId(10L).tagId(1L).build();
-        Page<FileTagEntity> ftPage = new PageImpl<>(List.of(ft), PageRequest.of(0, 20), 1);
-        when(fileTagRepository.findByTagIdOrderByCreatedAtDesc(eq(1L), any(PageRequest.class)))
-                .thenReturn(ftPage);
         FileEntity file = FileEntity.builder().id(10L).build();
-        when(fileRepository.findAllById(List.of(10L))).thenReturn(List.of(file));
+        Page<FileEntity> files = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
+        when(fileTagRepository.findTaggedFiles(eq(1L), eq(1L), eq("report"), any(PageRequest.class)))
+                .thenReturn(files);
 
-        PageResult<FileEntity> result = tagService.listFilesByTag(1L, 1L, 1, 20);
+        PageResult<FileEntity> result = tagService.listFilesByTag(1L, 1L, " report ", 1, 20);
 
         assertThat(result.getRecords()).hasSize(1);
         assertThat(result.getTotal()).isEqualTo(1);

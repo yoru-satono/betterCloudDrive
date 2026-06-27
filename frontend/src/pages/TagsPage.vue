@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import OEmptyState from '@/components/base/OEmptyState.vue'
 import OSpinner from '@/components/base/OSpinner.vue'
 import OButton from '@/components/base/OButton.vue'
@@ -9,12 +10,15 @@ import FileIcon from '@/components/file/FileIcon.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useFormatters } from '@/composables/useFormatters'
 import * as tagsApi from '@/api/tags'
+import { useSearchContextStore } from '@/stores/searchContext'
 import { toast } from 'vue-sonner'
 import type { TagEntity } from '@/types/tag'
 import type { FileEntity } from '@/types/file'
 
 const { confirm } = useConfirm()
 const { formatSize } = useFormatters()
+const searchContext = useSearchContextStore()
+const route = useRoute()
 const tags = ref<TagEntity[]>([])
 const loading = ref(false)
 const activeTag = ref<TagEntity | null>(null)
@@ -34,7 +38,15 @@ async function load() {
   try {
     const { data } = await tagsApi.listTags()
     tags.value = data.data
+    await selectTagFromQuery()
   } finally { loading.value = false }
+}
+
+async function selectTagFromQuery() {
+  const tagId = Number(route.query.tagId)
+  if (!Number.isInteger(tagId) || tagId <= 0 || activeTag.value?.id === tagId) return
+  const tag = tags.value.find(item => item.id === tagId)
+  if (tag) await selectTag(tag)
 }
 
 async function createTag() {
@@ -58,7 +70,10 @@ async function updateTag() {
   const { data } = await tagsApi.updateTag(editTarget.value.id, editTagName.value.trim(), editTagColor.value)
   toast.success('标签已更新')
   showEdit.value = false
-  if (activeTag.value?.id === editTarget.value.id) activeTag.value = data.data
+  if (activeTag.value?.id === editTarget.value.id) {
+    activeTag.value = data.data
+    searchContext.setActiveTag(data.data)
+  }
   await load()
 }
 
@@ -67,12 +82,16 @@ async function deleteTag(tag: TagEntity) {
   if (!ok) return
   await tagsApi.deleteTag(tag.id)
   toast.success('标签已删除')
-  if (activeTag.value?.id === tag.id) activeTag.value = null
+  if (activeTag.value?.id === tag.id) {
+    activeTag.value = null
+    searchContext.setActiveTag(null)
+  }
   load()
 }
 
 async function selectTag(tag: TagEntity) {
   activeTag.value = tag
+  searchContext.setActiveTag(tag)
   const { data } = await tagsApi.listFilesByTag(tag.id, 1, 50)
   tagFiles.value = data.data.records
 }
@@ -86,6 +105,8 @@ async function removeFromTag(file: FileEntity) {
 }
 
 onMounted(load)
+watch(() => route.query.tagId, () => selectTagFromQuery())
+onBeforeUnmount(() => searchContext.setActiveTag(null))
 </script>
 
 <template>

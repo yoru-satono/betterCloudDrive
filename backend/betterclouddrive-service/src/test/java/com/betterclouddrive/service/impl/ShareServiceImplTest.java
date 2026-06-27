@@ -172,7 +172,7 @@ class ShareServiceImplTest {
         Page<ShareLinkEntity> page = new PageImpl<>(List.of(share), PageRequest.of(0, 20), 1);
         when(shareLinkRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
 
-        PageResult<ShareLinkEntity> result = shareService.listShares(1L, 1, 20);
+        PageResult<ShareLinkEntity> result = shareService.listShares(1L, "abcd", 1, 20);
 
         assertThat(result.getRecords()).hasSize(1);
     }

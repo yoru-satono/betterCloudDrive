@@ -2,11 +2,18 @@
 import OButton from '@/components/base/OButton.vue'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import { useRouter } from 'vue-router'
+import { useSearchContextStore } from '@/stores/searchContext'
+import { useRoute, useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { getSearchTriggerPlaceholder, resolveSearchMode } from '@/config/search'
 
 const ui = useUIStore()
 const auth = useAuthStore()
+const searchContext = useSearchContextStore()
 const router = useRouter()
+const route = useRoute()
+const searchMode = computed(() => resolveSearchMode(route))
+const searchPlaceholder = computed(() => getSearchTriggerPlaceholder(searchMode.value, searchContext.activeTag))
 
 async function handleLogout() {
   await auth.logout()
@@ -20,7 +27,7 @@ async function handleLogout() {
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
       </svg>
-      <span>搜索文件...</span>
+      <span>{{ searchPlaceholder }}</span>
       <kbd>⌘K</kbd>
     </div>
     <div class="app-header__right">

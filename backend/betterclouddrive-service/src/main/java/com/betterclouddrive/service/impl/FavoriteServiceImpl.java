@@ -14,10 +14,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -60,20 +59,11 @@ public class FavoriteServiceImpl implements FavoriteService {
     }
 
     @Override
-    public PageResult<FileEntity> listFavorites(Long userId, int page, int size) {
-        Page<FavoriteEntity> favPage = favoriteRepository.findByUserIdOrderByCreatedAtDesc(
-                userId, PageRequest.of(page - 1, size));
-
-        if (favPage.getContent().isEmpty()) {
-            return PageResult.of(List.of(), 0L, page, size);
-        }
-
-        List<Long> fileIds = favPage.getContent().stream()
-                .map(FavoriteEntity::getFileId)
-                .collect(Collectors.toList());
-
-        List<FileEntity> files = fileRepository.findAllById(fileIds);
-        return PageResult.of(files, favPage.getTotalElements(), page, size);
+    public PageResult<FileEntity> listFavorites(Long userId, String keyword, int page, int size) {
+        String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        Page<FileEntity> favPage = favoriteRepository.findFavoriteFiles(
+                userId, normalizedKeyword, PageRequest.of(page - 1, size));
+        return PageResult.of(favPage.getContent(), favPage.getTotalElements(), page, size);
     }
 
 }

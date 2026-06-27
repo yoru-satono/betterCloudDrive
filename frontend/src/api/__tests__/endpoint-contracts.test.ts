@@ -97,6 +97,11 @@ describe('API endpoint contracts', () => {
   })
 
   it('maps recycle bin batch actions to per-file backend calls', async () => {
+    await recycleApi.listRecycleBin(1, 20, 'deleted')
+    expect(apiMock.get).toHaveBeenCalledWith('/recycle-bin', {
+      params: { page: 1, size: 20, q: 'deleted' },
+    })
+
     await recycleApi.restoreFiles([1, 2])
     expect(apiMock.post).toHaveBeenCalledWith('/recycle-bin/1/restore')
     expect(apiMock.post).toHaveBeenCalledWith('/recycle-bin/2/restore')
@@ -110,8 +115,21 @@ describe('API endpoint contracts', () => {
   })
 
   it('uses backend favorite and tag file association routes', async () => {
+    await favoritesApi.listFavorites(1, 20, 'report')
+    expect(apiMock.get).toHaveBeenCalledWith('/favorites', {
+      params: { page: 1, size: 20, q: 'report' },
+    })
+
     await favoritesApi.addFavorite(9)
     expect(apiMock.post).toHaveBeenCalledWith('/favorites/9')
+
+    await tagsApi.listTags('work')
+    expect(apiMock.get).toHaveBeenCalledWith('/tags', { params: { q: 'work' } })
+
+    await tagsApi.listFilesByTag(7, 1, 20, 'report')
+    expect(apiMock.get).toHaveBeenCalledWith('/tags/7/files', {
+      params: { page: 1, size: 20, q: 'report' },
+    })
 
     await tagsApi.addFileTag(9, 7)
     expect(apiMock.post).toHaveBeenCalledWith('/tags/7/files', { fileIds: [9] })
@@ -124,6 +142,11 @@ describe('API endpoint contracts', () => {
   })
 
   it('uses public share access and shared file list routes', async () => {
+    await sharesApi.listShares(1, 20, 'abc123')
+    expect(apiMock.get).toHaveBeenCalledWith('/shares', {
+      params: { page: 1, size: 20, q: 'abc123' },
+    })
+
     await sharesApi.createShare({ fileId: 6, maxVisits: 12 })
     expect(apiMock.post).toHaveBeenCalledWith('/shares', { fileId: 6, maxVisits: 12 })
 

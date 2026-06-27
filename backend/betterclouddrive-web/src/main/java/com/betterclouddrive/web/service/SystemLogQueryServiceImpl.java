@@ -8,33 +8,43 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.time.Instant;
+import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SystemLogQueryServiceImpl implements SystemLogQueryService {
 
-    private static final Duration DEFAULT_RANGE = Duration.ofHours(1);
+    private static final Duration DEFAULT_RANGE = Duration.ofHours(24);
     private static final Duration GRAFANA_LINK_RANGE = Duration.ofMinutes(5);
     private static final String DEFAULT_LOG_TYPE = "runtime";
+    private static final int LOCAL_LOG_FILE_LIMIT = 3;
 
     private final ObservabilityProperties properties;
     private final RestClient.Builder restClientBuilder;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${logging.file.path:./logs}")
+    private String logDirectory = "./logs";
 
     @Override
     public List<SystemLogEntryResponse> listSystemLogs(String traceId, String requestId, String level, String logType,
@@ -56,14 +66,22 @@ public class SystemLogQueryServiceImpl implements SystemLogQueryService {
                 .encode()
                 .toUri();
 
-        String responseBody = restClientBuilder.build()
-                .get()
-                .uri(uri)
-                .retrieve()
-                .body(String.class);
+        List<SystemLogEntryResponse> entries = new ArrayList<>();
+        try {
+            String responseBody = restClientBuilder.build()
+                    .get()
+                    .uri(uri)
+                    .retrieve()
+                    .body(String.class);
 
-        JsonNode response = parseLokiResponseBody(responseBody);
-        List<SystemLogEntryResponse> entries = parseLokiResponse(response, normalizedLogType, level, sanitizedLimit);
+            JsonNode response = parseLokiResponseBody(responseBody);
+            entries = parseLokiResponse(response, normalizedLogType, level, sanitizedLimit);
+        } catch (Exception e) {
+            log.warn("Failed to query Loki system logs: {}", e.getMessage());
+        }
+        if (entries.isEmpty()) {
+            entries = readLocalLogFallback(normalizedLogType, traceId, requestId, level, keyword, start, end, sanitizedLimit);
+        }
         entries.sort(Comparator.comparing(SystemLogEntryResponse::getTimestamp,
                 Comparator.nullsLast(Comparator.reverseOrder())));
         return entries.size() > sanitizedLimit ? entries.subList(0, sanitizedLimit) : entries;
@@ -142,6 +160,88 @@ public class SystemLogQueryServiceImpl implements SystemLogQueryService {
             }
         }
         return entries;
+    }
+
+    private List<SystemLogEntryResponse> readLocalLogFallback(String logType, String traceId, String requestId,
+                                                              String levelFilter, String keyword, Instant start,
+                                                              Instant end, int limit) {
+        List<Path> files = localLogFiles(logType);
+        if (files.isEmpty()) {
+            return List.of();
+        }
+        int maxLines = Math.min(10_000, Math.max(1_000, limit * 20));
+        ArrayDeque<String> lines = new ArrayDeque<>(maxLines);
+        for (Path file : files) {
+            try (Stream<String> stream = Files.lines(file, StandardCharsets.UTF_8)) {
+                stream.forEach(line -> {
+                    if (lines.size() == maxLines) {
+                        lines.removeFirst();
+                    }
+                    lines.addLast(line);
+                });
+            } catch (IOException e) {
+                log.debug("Failed to read local log file {}: {}", file, e.getMessage());
+            }
+        }
+
+        List<String> orderedLines = new ArrayList<>(lines);
+        List<SystemLogEntryResponse> entries = new ArrayList<>();
+        String fallbackNanos = toEpochNanos(Instant.now());
+        for (int i = orderedLines.size() - 1; i >= 0; i--) {
+            String line = orderedLines.get(i);
+            if (!lineMatches(line, traceId) || !lineMatches(line, requestId) || !lineMatches(line, keyword)) {
+                continue;
+            }
+            SystemLogEntryResponse entry = toEntry(fallbackNanos, line, logType);
+            if (!matchesLevel(entry, levelFilter) || !withinRange(entry.getTimestamp(), start, end)) {
+                continue;
+            }
+            entries.add(entry);
+            if (entries.size() >= limit) {
+                break;
+            }
+        }
+        return entries;
+    }
+
+    private List<Path> localLogFiles(String logType) {
+        Path directory = Path.of(logDirectory);
+        if (!Files.isDirectory(directory)) {
+            return List.of();
+        }
+        String prefix = "audit".equals(logType) ? "audit.log" : "runtime.log";
+        try (Stream<Path> paths = Files.list(directory)) {
+            return paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> {
+                        String name = path.getFileName().toString();
+                        return name.startsWith(prefix) && !name.endsWith(".gz");
+                    })
+                    .sorted(Comparator.comparing(this::lastModified).reversed())
+                    .limit(LOCAL_LOG_FILE_LIMIT)
+                    .sorted(Comparator.comparing(this::lastModified))
+                    .toList();
+        } catch (IOException e) {
+            log.debug("Failed to list local log directory {}: {}", directory, e.getMessage());
+            return List.of();
+        }
+    }
+
+    private Instant lastModified(Path path) {
+        try {
+            return Files.getLastModifiedTime(path).toInstant();
+        } catch (IOException e) {
+            return Instant.EPOCH;
+        }
+    }
+
+    private boolean lineMatches(String line, String value) {
+        return !StringUtils.hasText(value) || line.contains(value.trim());
+    }
+
+    private boolean withinRange(String timestamp, Instant start, Instant end) {
+        Instant instant = parseInstant(timestamp);
+        return !instant.isBefore(start) && !instant.isAfter(end);
     }
 
     private SystemLogEntryResponse toEntry(String lokiTimestampNanos, String line, String logType) {

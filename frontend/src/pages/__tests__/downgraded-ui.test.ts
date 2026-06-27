@@ -18,7 +18,7 @@ vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
   return {
     ...actual,
-    useRoute: () => ({ params: { shareCode: 'share-code' } }),
+    useRoute: () => ({ params: { shareCode: 'share-code' }, query: {} }),
     useRouter: () => ({ push: routerPush }),
   }
 })
@@ -259,6 +259,10 @@ describe('downgraded frontend UI', () => {
             createdAt: '2026-01-01T00:00:00',
             updatedAt: '2026-01-01T00:00:00',
           }],
+          total: 1,
+          page: 1,
+          size: 20,
+          pages: 1,
         },
       },
     })
@@ -413,6 +417,10 @@ describe('downgraded frontend UI', () => {
             createdAt: '2026-01-01T00:00:00',
             updatedAt: '2026-01-01T00:00:00',
           }],
+          total: 1,
+          page: 1,
+          size: 20,
+          pages: 1,
         },
       },
     })
@@ -463,5 +471,58 @@ describe('downgraded frontend UI', () => {
 
     expect(updateUserQuota).toHaveBeenCalledWith(1, 2684354560)
     expect(toast.success).toHaveBeenCalledWith('配额已更新')
+  })
+
+  it('admin users page can move to the next page', async () => {
+    listUsers.mockResolvedValueOnce({
+      data: {
+        data: {
+          records: [{
+            id: 1,
+            username: 'page-one-user',
+            email: 'page1@example.com',
+            role: 'ROLE_USER',
+            status: 1,
+            storageUsed: 0,
+            storageQuota: 10 * 1024 * 1024 * 1024,
+            createdAt: '2026-01-01T00:00:00',
+            updatedAt: '2026-01-01T00:00:00',
+          }],
+          total: 21,
+          page: 1,
+          size: 20,
+          pages: 2,
+        },
+      },
+    }).mockResolvedValueOnce({
+      data: {
+        data: {
+          records: [{
+            id: 2,
+            username: 'page-two-user',
+            email: 'page2@example.com',
+            role: 'ROLE_USER',
+            status: 1,
+            storageUsed: 0,
+            storageQuota: 10 * 1024 * 1024 * 1024,
+            createdAt: '2026-01-02T00:00:00',
+            updatedAt: '2026-01-02T00:00:00',
+          }],
+          total: 21,
+          page: 2,
+          size: 20,
+          pages: 2,
+        },
+      },
+    })
+
+    const wrapper = mount(AdminUsers, { global: { stubs: baseStubs } })
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '下一页')!.trigger('click')
+    await flushPromises()
+
+    expect(listUsers).toHaveBeenNthCalledWith(1, 1, 20, undefined)
+    expect(listUsers).toHaveBeenNthCalledWith(2, 2, 20, undefined)
+    expect(wrapper.text()).toContain('page-two-user')
   })
 })

@@ -16,6 +16,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -177,11 +178,16 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public PageResult<FileEntity> listRecycleBin(Long userId, int page, int size) {
-        Specification<FileEntity> spec = (root, query, cb) -> cb.and(
-                cb.equal(root.get("userId"), userId),
-                cb.equal(root.get("isDeleted"), true)
-        );
+    public PageResult<FileEntity> listRecycleBin(Long userId, String keyword, int page, int size) {
+        Specification<FileEntity> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("userId"), userId));
+            predicates.add(cb.equal(root.get("isDeleted"), true));
+            if (StringUtils.hasText(keyword)) {
+                predicates.add(cb.like(cb.lower(root.get("fileName")), "%" + keyword.trim().toLowerCase() + "%"));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
         PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "deletedAt"));
         Page<FileEntity> result = fileRepository.findAll(spec, pageable);
         return PageResult.of(result.getContent(), result.getTotalElements(), page, size);

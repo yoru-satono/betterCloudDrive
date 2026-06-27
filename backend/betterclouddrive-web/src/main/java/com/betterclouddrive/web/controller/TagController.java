@@ -38,8 +38,10 @@ public class TagController {
     }
 
     @GetMapping
-    public ApiResponse<List<TagEntity>> listTags(@CurrentUser UserPrincipal user) {
-        return ApiResponse.success(tagService.listTags(user.getUserId()));
+    public ApiResponse<List<TagEntity>> listTags(
+            @CurrentUser UserPrincipal user,
+            @RequestParam(required = false) String q) {
+        return ApiResponse.success(tagService.listTags(user.getUserId(), q));
     }
 
     @PutMapping("/{tagId}")
@@ -75,8 +77,9 @@ public class TagController {
     public ApiResponse<PageResult<FileEntity>> listFilesByTag(
             @CurrentUser UserPrincipal user,
             @PathVariable Long tagId,
+            @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(tagService.listFilesByTag(user.getUserId(), tagId, page, size));
+        return ApiResponse.success(tagService.listFilesByTag(user.getUserId(), tagId, q, page, size));
     }
 }

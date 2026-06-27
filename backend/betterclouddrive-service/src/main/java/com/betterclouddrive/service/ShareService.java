@@ -6,7 +6,7 @@ import com.betterclouddrive.dal.entity.ShareLinkEntity;
 
 public interface ShareService {
     ShareLinkEntity createShare(Long userId, Long fileId, String password, Long expireAtMs, Integer maxVisits);
-    PageResult<ShareLinkEntity> listShares(Long userId, int page, int size);
+    PageResult<ShareLinkEntity> listShares(Long userId, String keyword, int page, int size);
     ShareLinkEntity getShare(Long userId, Long shareId);
     String getSharePassword(Long userId, Long shareId);
     ShareLinkEntity updateShare(Long userId, Long shareId, String password, Long expireAtMs, Integer maxVisits);

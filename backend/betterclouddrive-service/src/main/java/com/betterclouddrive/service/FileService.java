@@ -14,7 +14,7 @@ public interface FileService {
     void copyFile(Long userId, Long fileId, Long targetParentId);
     void deleteFiles(Long userId, List<Long> fileIds);
     void restoreFile(Long userId, Long fileId);
-    PageResult<FileEntity> listRecycleBin(Long userId, int page, int size);
+    PageResult<FileEntity> listRecycleBin(Long userId, String keyword, int page, int size);
     void permanentDelete(Long userId, Long fileId);
     void emptyRecycleBin(Long userId);
     PageResult<FileEntity> searchFiles(Long userId, String keyword, int page, int size);

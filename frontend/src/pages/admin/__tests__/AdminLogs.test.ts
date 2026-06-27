@@ -48,6 +48,65 @@ beforeEach(() => {
 })
 
 describe('AdminLogs', () => {
+  it('paginates audit logs from the visible controls', async () => {
+    listLogs.mockResolvedValueOnce({
+      data: {
+        data: {
+          records: [{
+            id: 1,
+            userId: 1,
+            actionType: 'READ',
+            targetType: 'FILE',
+            targetId: null,
+            detail: null,
+            ipAddress: null,
+            userAgent: null,
+            result: 1,
+            durationMs: 5,
+            requestId: 'req-1',
+            traceId: 'trace-1',
+            statusCode: 200,
+            errorCode: null,
+            createdAt: '2026-06-17T08:00:00',
+          }],
+          total: 21,
+        },
+      },
+    }).mockResolvedValueOnce({
+      data: {
+        data: {
+          records: [{
+            id: 2,
+            userId: 2,
+            actionType: 'LOGIN',
+            targetType: 'USER',
+            targetId: null,
+            detail: null,
+            ipAddress: null,
+            userAgent: null,
+            result: 1,
+            durationMs: 8,
+            requestId: 'req-2',
+            traceId: 'trace-2',
+            statusCode: 200,
+            errorCode: null,
+            createdAt: '2026-06-17T08:01:00',
+          }],
+          total: 21,
+        },
+      },
+    })
+
+    const wrapper = mount(AdminLogs, { global: { stubs } })
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '下一页')!.trigger('click')
+    await flushPromises()
+
+    expect(listLogs).toHaveBeenNthCalledWith(1, expect.objectContaining({ page: 1, size: 20 }))
+    expect(listLogs).toHaveBeenNthCalledWith(2, expect.objectContaining({ page: 2, size: 20 }))
+    expect(wrapper.text()).toContain('LOGIN')
+  })
+
   it('creates a Grafana admin session before opening a system log link', async () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     createGrafanaSession.mockImplementation(async () => {

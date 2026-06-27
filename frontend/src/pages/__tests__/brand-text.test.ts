@@ -13,7 +13,7 @@ vi.mock('vue-router', async () => {
   const actual = await vi.importActual<typeof import('vue-router')>('vue-router')
   return {
     ...actual,
-    useRoute: () => ({ path: '/files', params: { shareCode: 'share-code' } }),
+    useRoute: () => ({ path: '/files', params: { shareCode: 'share-code' }, query: {} }),
     useRouter: () => ({ push: vi.fn() }),
   }
 })

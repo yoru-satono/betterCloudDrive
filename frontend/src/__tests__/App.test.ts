@@ -5,6 +5,8 @@ const isDesktopRuntime = vi.hoisted(() => vi.fn())
 
 vi.mock('@/config/runtime', () => ({
   isDesktopRuntime,
+  getApiBaseUrl: () => 'http://localhost:8080/api/v1',
+  getWebBaseUrl: () => 'http://localhost:3000',
 }))
 
 vi.mock('@tauri-apps/api/window', () => ({
@@ -35,6 +37,7 @@ describe('App desktop shell', () => {
       global: {
         stubs: {
           RouterView: { template: '<main />' },
+          UploadQueue: { template: '<div />' },
           OConfirmDialog: { template: '<div />' },
         },
       },
@@ -53,6 +56,7 @@ describe('App desktop shell', () => {
       global: {
         stubs: {
           RouterView: { template: '<main />' },
+          UploadQueue: { template: '<div />' },
           OConfirmDialog: { template: '<div />' },
         },
       },

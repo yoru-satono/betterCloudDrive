@@ -62,9 +62,10 @@ public class ShareController {
     @GetMapping("/api/v1/shares")
     public ApiResponse<PageResult<ShareLinkResponse>> listShares(
             @CurrentUser UserPrincipal user,
+            @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResult<ShareLinkEntity> shares = shareService.listShares(user.getUserId(), page, size);
+        PageResult<ShareLinkEntity> shares = shareService.listShares(user.getUserId(), q, page, size);
         List<ShareLinkResponse> records = shares.getRecords().stream()
                 .map(ShareLinkResponse::from)
                 .toList();

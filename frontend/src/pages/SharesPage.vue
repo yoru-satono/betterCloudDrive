@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { Eye } from 'lucide-vue-next'
 import OButton from '@/components/base/OButton.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
@@ -15,6 +16,7 @@ import { buildShareUrl } from '@/config/runtime'
 
 const { formatDateFull } = useFormatters()
 const { confirm } = useConfirm()
+const route = useRoute()
 const shares = ref<ShareLinkEntity[]>([])
 const loading = ref(false)
 const detailOpen = ref(false)
@@ -32,7 +34,22 @@ async function load() {
   try {
     const { data } = await sharesApi.listShares(1, 100)
     shares.value = data.data.records
+    await openShareFromQuery()
   } finally { loading.value = false }
+}
+
+async function openShareFromQuery() {
+  const shareId = Number(route.query.shareId)
+  if (!Number.isInteger(shareId) || shareId <= 0) return
+  const share = shares.value.find(item => item.id === shareId)
+  if (share) {
+    await openDetail(share)
+    return
+  }
+  const { data } = await sharesApi.getShare(shareId)
+  detailShare.value = data.data
+  detailPassword.value = ''
+  detailOpen.value = true
 }
 
 async function copyLink(share: ShareLinkEntity) {
@@ -102,6 +119,7 @@ function isExpired(share: ShareLinkEntity) {
 }
 
 onMounted(load)
+watch(() => route.query.shareId, () => openShareFromQuery())
 </script>
 
 <template>

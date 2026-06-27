@@ -42,9 +42,10 @@ public class FavoriteController {
     @GetMapping
     public ApiResponse<PageResult<FileEntity>> listFavorites(
             @CurrentUser UserPrincipal user,
+            @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(favoriteService.listFavorites(user.getUserId(), page, size));
+        return ApiResponse.success(favoriteService.listFavorites(user.getUserId(), q, page, size));
     }
 
 }
