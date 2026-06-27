@@ -1,4 +1,5 @@
 import * as filesApi from './files'
+import { ensureFreshAccessToken, refreshAccessToken } from './client'
 import { getApiBaseUrl, isDesktopRuntime } from '@/config/runtime'
 import type { FileEntity } from '@/types/file'
 import { invoke } from '@tauri-apps/api/core'
@@ -33,6 +34,28 @@ export function getBearerToken() {
   return localStorage.getItem('accessToken') || undefined
 }
 
+function isAuthExpiredError(error: unknown) {
+  return String(error).includes('AUTH_EXPIRED')
+}
+
+async function getFreshBearerToken() {
+  return ensureFreshAccessToken()
+}
+
+async function invokeDownloadWithToken<T>(
+  command: string,
+  buildArgs: (token: string | undefined) => Record<string, unknown>,
+) {
+  const token = await getFreshBearerToken()
+  try {
+    return await invoke<T>(command, buildArgs(token))
+  } catch (error) {
+    if (!isAuthExpiredError(error)) throw error
+    const refreshedToken = await refreshAccessToken()
+    return invoke<T>(command, buildArgs(refreshedToken))
+  }
+}
+
 export function buildDownloadUrl(fileId: number) {
   return `${getApiBaseUrl()}/download/${fileId}`
 }
@@ -56,21 +79,22 @@ export function buildUniquePathName(fileName: string, index: number) {
 }
 
 export async function downloadDesktopFile(fileId: number, fileName: string) {
-  const result = await invoke<DesktopDownloadResult>('download_desktop_file', {
+  const result = await invokeDownloadWithToken<DesktopDownloadResult>('download_desktop_file', (token) => ({
     url: buildDownloadUrl(fileId),
     fileName,
-    token: getBearerToken(),
-  })
+    token,
+  }))
   return result.saved
 }
 
 export async function startQueuedDesktopFileDownload(file: Pick<FileEntity, 'id' | 'fileName' | 'fileSize'>) {
+  const token = await getFreshBearerToken()
   const result = await invoke<DesktopDownloadResult>('start_desktop_download_file', {
     request: {
       fileId: file.id,
       fileName: file.fileName,
       fileSize: file.fileSize,
-      token: getBearerToken(),
+      token,
       apiBaseUrl: getApiBaseUrl(),
     },
   })
@@ -79,10 +103,11 @@ export async function startQueuedDesktopFileDownload(file: Pick<FileEntity, 'id'
 
 export async function startQueuedDesktopFolderDownload(folder: Pick<FileEntity, 'id' | 'fileName' | 'fileSize'>) {
   const tree = await buildDownloadTree(folder.id, folder.fileName, 'folder', folder.fileSize)
+  const token = await getFreshBearerToken()
   const result = await invoke<DesktopDownloadResult>('start_desktop_download_folder', {
     request: {
       root: tree,
-      token: getBearerToken(),
+      token,
       apiBaseUrl: getApiBaseUrl(),
     },
   })
@@ -95,12 +120,12 @@ export async function downloadDesktopFolder(folder: Pick<FileEntity, 'id' | 'fil
   const tasks: DownloadTask[] = []
   await collectDownloadTasks(folder.id, root.path, tasks)
   await runPool(tasks, 3, async (task) => {
-    await invoke<DesktopDownloadResult>('download_desktop_file_to_path', {
+    await invokeDownloadWithToken<DesktopDownloadResult>('download_desktop_file_to_path', (token) => ({
       url: buildDownloadUrl(task.fileId),
       fileName: task.fileName,
       directoryPath: task.directoryPath,
-      token: getBearerToken(),
-    })
+      token,
+    }))
   })
   return true
 }

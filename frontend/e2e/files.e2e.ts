@@ -18,12 +18,11 @@ test('manages a file through upload, rename, download, recycle restore, and perm
   await expect(page.getByTestId(`file-card-${folderName}`)).toBeVisible()
 
   await page.getByTestId(`file-card-${folderName}`).dblclick()
-  await expect(page.getByText(folderName)).toBeVisible()
+  await expect(page).toHaveURL(/\/files\/\d+$/)
+  await expect(page.locator('.breadcrumb__item--active').filter({ hasText: folderName })).toBeVisible()
 
-  const fileChooserPromise = page.waitForEvent('filechooser')
-  await page.getByRole('button', { name: '上传文件' }).click()
-  const fileChooser = await fileChooserPromise
-  await fileChooser.setFiles(samplePath)
+  await expect(page.getByRole('button', { name: '上传文件' })).toBeVisible()
+  await page.getByTestId('file-upload-input').setInputFiles(samplePath)
   await expect(page.getByTestId('file-card-sample.txt')).toBeVisible()
 
   const downloadPromise = page.waitForEvent('download')

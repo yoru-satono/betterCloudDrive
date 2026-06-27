@@ -479,6 +479,10 @@ Authorization: Bearer <accessToken>
 }
 ```
 
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| targetParentId | Long | 否 | 目标文件夹 ID；`null` 表示移动到根目录 |
+
 **Response `200`:**
 ```json
 {
@@ -502,6 +506,10 @@ Authorization: Bearer <accessToken>
   "targetParentId": 20
 }
 ```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| targetParentId | Long | 否 | 目标文件夹 ID；`null` 表示复制到根目录 |
 
 **Response `200`:**
 ```json
@@ -555,11 +563,13 @@ Authorization: Bearer <accessToken>
 {
   "parentId": 10,                // 可选，目标文件夹 ID；null 表示根目录
   "fileName": "report.pdf",     // 必填
-  "fileSize": 10485760,         // 必填，文件总大小（字节）
+  "fileSize": 10485760,         // 必填，文件总大小（字节），可为 0
   "md5Hash": "d41d8cd...",      // 可选，完整文件 MD5
-  "totalChunks": 3              // 必填，分片总数；当前服务端分片大小为 5MB
+  "totalChunks": 3              // 必填，分片总数；0 字节文件传 0
 }
 ```
+
+> 当前服务端分片大小为 5MB。0 字节文件应使用 `fileSize: 0` 和 `totalChunks: 0` 初始化，会话创建后直接调用 `complete`，不上传分片。
 
 **Response `200`:**
 ```json
@@ -1189,7 +1199,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> 分享密码在数据库中以加密密文保存，API 响应只返回 `hasPassword`，不会返回密文或原始密码。`downloadCount` 当前会在公开下载或保存分享内容时递增，`maxVisits` 限制的是访问分享详情的次数。
+> 分享密码在数据库中以加密密文保存，API 响应只返回 `hasPassword`，不会返回密文或原始密码。`downloadCount` 当前会在公开下载或保存分享内容时递增，`maxVisits` 会限制公开访问详情、浏览内容、下载和保存分享内容。
 > 分享密码如果提供，长度必须为 4-16 个字符。
 
 ---
@@ -1317,10 +1327,19 @@ POST /api/v1/shares/access/{shareCode}
 ### 10.8 浏览分享内容（公开）
 
 ```
-GET /api/v1/shares/access/{shareCode}/files?parentId=&page=1&size=20
+GET /api/v1/shares/access/{shareCode}/files?parentId=&page=1&size=20&password=1234
 ```
 
-无需认证。浏览分享的文件/文件夹内容，支持分页。
+无需认证。浏览分享的文件/文件夹内容，支持分页。分享设置了密码时必须通过 `password` 查询参数提供密码。
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|:--:|------|
+| parentId | Long | 否 | 要浏览的分享内文件夹 ID；省略或空值表示分享根节点 |
+| page | int | 否 | 页码，默认 1 |
+| size | int | 否 | 每页数量，默认 20 |
+| password | String | 否 | 分享密码 |
+
+**错误码:** 419002（无效分享码）、419003（需要密码/密码错误）、419004（已过期）、419005（访问次数达上限）
 
 ---
 
@@ -1350,7 +1369,7 @@ Authorization: Bearer <accessToken>
 
 **Response `200`:** 返回保存后的根文件或文件夹实体。
 
-**错误码:** 409001（目标目录同名冲突）、419001（配额不足）、419002/419003/419004（分享无效、密码错误或过期）
+**错误码:** 409001（目标目录同名冲突）、419001（配额不足）、419002/419003/419004/419005（分享无效、密码错误、过期或访问次数达上限）
 
 ---
 
@@ -1373,6 +1392,8 @@ POST /api/v1/shares/access/{shareCode}/download/{fileId}
 
 > 当前分享文件下载响应声明支持 Range，但接口实现会返回完整文件内容，不处理 `Range` 请求头。需要严格断点续传时使用登录态下载接口 `/api/v1/download/{fileId}`。
 
+**错误码:** 419002（无效分享码）、419003（需要密码/密码错误）、419004（已过期）、419005（访问次数达上限）
+
 ---
 
 ### 10.11 下载分享文件夹 ZIP（公开）
@@ -1393,6 +1414,8 @@ POST /api/v1/shares/access/{shareCode}/download/{fileId}/zip
 **Response:** 二进制 ZIP 流，`Content-Disposition: attachment`。
 
 > 该公开 ZIP 接口为即时打包流，不使用 4.4 的登录态 ZIP 缓存，也不支持 Range 续传。
+
+**错误码:** 419002（无效分享码）、419003（需要密码/密码错误）、419004（已过期）、419005（访问次数达上限）
 
 ---
 

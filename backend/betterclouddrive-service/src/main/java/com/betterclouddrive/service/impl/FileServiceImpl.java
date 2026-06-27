@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -108,6 +109,13 @@ public class FileServiceImpl implements FileService {
     @Transactional
     public void moveFile(Long userId, Long fileId, Long targetParentId) {
         FileEntity file = getFile(userId, fileId);
+        FileEntity targetParent = validateTargetParent(userId, targetParentId);
+        if ("folder".equals(file.getFileType()) && targetParent != null && isSameOrDescendant(targetParent, file)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Cannot move a folder into itself or its subfolder");
+        }
+        if (!Objects.equals(file.getParentId(), targetParentId) && nameExists(userId, targetParentId, file.getFileName())) {
+            throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
+        }
         file.setParentId(targetParentId);
         file.setUpdatedAt(LocalDateTime.now());
         fileRepository.save(file);
@@ -117,10 +125,18 @@ public class FileServiceImpl implements FileService {
     @Transactional
     public void copyFile(Long userId, Long fileId, Long targetParentId) {
         FileEntity source = getFile(userId, fileId);
+        FileEntity targetParent = validateTargetParent(userId, targetParentId);
+        if ("folder".equals(source.getFileType()) && targetParent != null && isSameOrDescendant(targetParent, source)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Cannot copy a folder into itself or its subfolder");
+        }
+        String copyName = source.getFileName() + " (copy)";
+        if (nameExists(userId, targetParentId, copyName)) {
+            throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
+        }
         FileEntity copy = FileEntity.builder()
                 .userId(userId)
                 .parentId(targetParentId)
-                .fileName(source.getFileName() + " (copy)")
+                .fileName(copyName)
                 .fileType(source.getFileType())
                 .mimeType(source.getMimeType())
                 .fileSize(source.getFileSize())
@@ -237,5 +253,44 @@ public class FileServiceImpl implements FileService {
                 .updatedAt(LocalDateTime.now())
                 .build();
         return fileRepository.save(copy);
+    }
+
+    private FileEntity validateTargetParent(Long userId, Long targetParentId) {
+        if (targetParentId == null) {
+            return null;
+        }
+        FileEntity targetParent = fileRepository.findById(targetParentId).orElse(null);
+        if (targetParent == null
+                || targetParent.getIsDeleted()
+                || !targetParent.getUserId().equals(userId)
+                || !"folder".equals(targetParent.getFileType())) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND);
+        }
+        return targetParent;
+    }
+
+    private boolean isSameOrDescendant(FileEntity targetParent, FileEntity sourceFolder) {
+        FileEntity current = targetParent;
+        while (current != null) {
+            if (current.getId().equals(sourceFolder.getId())) {
+                return true;
+            }
+            Long parentId = current.getParentId();
+            if (parentId == null) {
+                return false;
+            }
+            current = fileRepository.findById(parentId).orElse(null);
+            if (current == null || current.getIsDeleted() || !current.getUserId().equals(sourceFolder.getUserId())) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private boolean nameExists(Long userId, Long targetParentId, String fileName) {
+        if (targetParentId == null) {
+            return fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(userId, fileName);
+        }
+        return fileRepository.existsByUserIdAndParentIdAndFileNameAndIsDeletedFalse(userId, targetParentId, fileName);
     }
 }

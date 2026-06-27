@@ -10,6 +10,36 @@ import {
 } from './helpers/api'
 
 test.describe('file actions', () => {
+  test('moves and copies files to the root folder through the picker', async ({ page, request, e2eUser }) => {
+    const sourceFolder = await createFolder(request, e2eUser.accessToken, uniqueName('root-source'))
+    const file = await uploadSampleFile(request, e2eUser.accessToken, sourceFolder.id, uniqueName('root-action') + '.txt', 'root move copy')
+
+    await loginViaUi(page, e2eUser)
+    await page.getByTestId(`file-card-${sourceFolder.fileName}`).dblclick()
+    await expect(page.getByTestId(`file-card-${file.fileName}`)).toBeVisible()
+
+    await page.getByTestId(`file-card-${file.fileName}`).click({ button: 'right' })
+    await page.getByRole('menu').getByRole('menuitem', { name: '复制到' }).click()
+    await expect(page.getByRole('dialog', { name: '复制到' })).toBeVisible()
+    await page.getByRole('button', { name: '复制到此处' }).click()
+    await expect(page.getByText('已复制')).toBeVisible()
+
+    let rootFiles = await listFiles(request, e2eUser.accessToken)
+    expect(rootFiles.some(item => item.fileName === `${file.fileName} (copy)`)).toBe(true)
+
+    await page.getByTestId(`file-card-${file.fileName}`).click({ button: 'right' })
+    await page.getByRole('menu').getByRole('menuitem', { name: '移动到' }).click()
+    await expect(page.getByRole('dialog', { name: '移动到' })).toBeVisible()
+    await page.getByRole('button', { name: '移动到此处' }).click()
+    await expect(page.getByText('已移动')).toBeVisible()
+
+    const sourceFiles = await listFiles(request, e2eUser.accessToken, sourceFolder.id)
+    rootFiles = await listFiles(request, e2eUser.accessToken)
+    expect(sourceFiles.some(item => item.fileName === file.fileName)).toBe(false)
+    expect(rootFiles.some(item => item.fileName === file.fileName)).toBe(true)
+    expect(rootFiles.some(item => item.fileName === `${file.fileName} (copy)`)).toBe(true)
+  })
+
   test('opens details and previews, then moves and copies files through the folder picker', async ({ page, request, e2eUser }) => {
     const sourceFolder = await createFolder(request, e2eUser.accessToken, uniqueName('source'))
     const moveTarget = await createFolder(request, e2eUser.accessToken, uniqueName('move-target'))
@@ -73,10 +103,8 @@ test.describe('file actions', () => {
       await new Promise(resolve => setTimeout(resolve, 5_000))
       await route.continue()
     })
-    const fileChooserPromise = page.waitForEvent('filechooser')
-    await page.getByRole('button', { name: '上传文件' }).click()
-    const chooser = await fileChooserPromise
-    await chooser.setFiles(largeFilePath)
+    await expect(page.getByRole('button', { name: '上传文件' })).toBeVisible()
+    await page.getByTestId('file-upload-input').setInputFiles(largeFilePath)
 
     await expect(page.getByText(largeFileName)).toBeVisible()
     await expect(page.locator('.upload-queue__status').filter({ hasText: /计算中|上传中/ })).toBeVisible()
@@ -86,5 +114,20 @@ test.describe('file actions', () => {
     await refresh.click()
     await cancel.click()
     await expect(page.getByText('已取消')).toBeVisible()
+  })
+
+  test('uploads a zero byte file through the browser picker', async ({ page, request, e2eUser }) => {
+    const emptyFileName = uniqueName('empty-upload') + '.txt'
+    const emptyFilePath = writeTempFile(emptyFileName, 0)
+
+    await loginViaUi(page, e2eUser)
+    await expect(page.getByRole('button', { name: '上传文件' })).toBeVisible()
+    await page.getByTestId('file-upload-input').setInputFiles(emptyFilePath)
+
+    await expect(page.getByTestId(`file-card-${emptyFileName}`)).toBeVisible()
+    await expect.poll(async () => {
+      const rootFiles = await listFiles(request, e2eUser.accessToken)
+      return rootFiles.find(item => item.fileName === emptyFileName)?.fileSize
+    }).toBe(0)
   })
 })

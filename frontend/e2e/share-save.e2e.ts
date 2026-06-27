@@ -8,6 +8,7 @@ import {
   getShare,
   getSharePassword,
   listFiles,
+  listSharedFiles,
   listShares,
   loginViaUi,
   lowerUserQuota,
@@ -16,6 +17,38 @@ import {
 } from './helpers/api'
 
 test.describe('share save, password, and visit limits', () => {
+  test('passes share passwords to folder browsing and enforces visit limits on shared file lists', async ({ page, request, e2eUser }) => {
+    const sharedFolder = await createFolder(request, e2eUser.accessToken, uniqueName('password-folder'))
+    const child = await uploadSampleFile(request, e2eUser.accessToken, sharedFolder.id, uniqueName('private-child') + '.txt')
+    const password = 'pw1234'
+    const passwordShare = await createShare(request, e2eUser.accessToken, sharedFolder.id, { password })
+
+    const wrongList = await listSharedFiles(request, passwordShare.shareCode, { password: 'wrong' })
+    expect(wrongList.body.code).toBe(419003)
+    const correctList = await listSharedFiles(request, passwordShare.shareCode, { password })
+    expect(correctList.body.code).toBe(200)
+    expect(correctList.body.data.records.some((item: { fileName: string }) => item.fileName === child.fileName)).toBe(true)
+
+    await page.goto(`/s/${passwordShare.shareCode}`)
+    await expect(page.getByText('此分享需要密码')).toBeVisible()
+    await page.getByLabel('访问密码').fill('wrong')
+    await page.getByRole('button', { name: '确认' }).click()
+    await expect(page.getByText('此分享需要密码')).toBeVisible()
+    await page.getByLabel('访问密码').fill(password)
+    await page.getByRole('button', { name: '确认' }).click()
+    await expect(page.getByText(child.fileName).first()).toBeVisible()
+
+    const limitedFile = await uploadSampleFile(request, e2eUser.accessToken, null, uniqueName('list-limited') + '.txt')
+    const limitedShare = await createShare(request, e2eUser.accessToken, limitedFile.fileId, { maxVisits: 1 })
+    const firstList = await listSharedFiles(request, limitedShare.shareCode)
+    expect(firstList.body.code).toBe(200)
+    const secondList = await listSharedFiles(request, limitedShare.shareCode)
+    expect(secondList.body.code).toBe(419005)
+
+    await page.goto(`/s/${limitedShare.shareCode}`)
+    await expect(page.getByText('访问次数已达上限')).toBeVisible()
+  })
+
   test('saves shared folder roots and child files into the receiver drive', async ({ browser, page, request, e2eUser }) => {
     const receiver = await createUser(request)
     const sharedFolder = await createFolder(request, e2eUser.accessToken, uniqueName('shared-root'))
@@ -165,12 +198,12 @@ test.describe('share save, password, and visit limits', () => {
     await expect(page.getByRole('dialog', { name: '分享详情' }).getByText('无密码')).toBeVisible()
     await page.keyboard.press('Escape')
     await shareCard.getByRole('button', { name: '编辑' }).click()
-    await page.getByLabel('访问次数限制').fill('2')
+    await page.getByLabel('访问次数限制').fill('3')
     await page.getByLabel('新访问密码').fill('newpass')
     await page.getByRole('button', { name: '保存' }).click()
     await expect(page.getByText('分享已更新')).toBeVisible()
     const updated = await getShare(request, e2eUser.accessToken, noPasswordShare.id)
-    expect(updated.maxVisits).toBe(2)
+    expect(updated.maxVisits).toBe(3)
     expect(updated.hasPassword).toBe(true)
 
     const updatedNoPassword = await accessShare(request, noPasswordShare.shareCode)

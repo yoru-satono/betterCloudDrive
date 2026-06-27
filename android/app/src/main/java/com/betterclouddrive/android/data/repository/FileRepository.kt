@@ -28,11 +28,11 @@ class FileRepository @Inject constructor(private val api: ApiService) {
         api.renameFile(fileId, RenameRequest(newName))
     }
 
-    suspend fun moveFile(fileId: Long, targetParentId: Long): NetworkResult<Unit> = apiCall {
+    suspend fun moveFile(fileId: Long, targetParentId: Long?): NetworkResult<Unit> = apiCall {
         api.moveFile(fileId, MoveRequest(targetParentId))
     }
 
-    suspend fun copyFile(fileId: Long, targetParentId: Long): NetworkResult<Unit> = apiCall {
+    suspend fun copyFile(fileId: Long, targetParentId: Long?): NetworkResult<Unit> = apiCall {
         api.copyFile(fileId, CopyRequest(targetParentId))
     }
 

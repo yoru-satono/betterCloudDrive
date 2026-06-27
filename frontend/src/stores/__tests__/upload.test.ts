@@ -256,6 +256,26 @@ describe('upload store', () => {
     expect(toastError).not.toHaveBeenCalledWith(expect.stringContaining('no matching'))
   })
 
+  it('completes zero-byte uploads without sending chunks', async () => {
+    instantUpload.mockRejectedValue({ response: { data: { code: 419010 } } })
+    initMultipart.mockResolvedValue({ data: { data: { sessionId: 'empty-session', totalChunks: 0, chunkSize: 5 * 1024 * 1024 } } })
+    completeMultipart.mockResolvedValue({ data: { data: { fileId: 9 } } })
+    const refresh = mockFilesRefresh()
+
+    const store = useUploadStore()
+    store.addFiles([makeFile(0, 'empty.txt')], null)
+    await vi.waitFor(() => expect(completeMultipart).toHaveBeenCalled())
+    await flushAsync()
+
+    expect(instantUpload).toHaveBeenCalledWith(null, 'empty.txt', 0, expect.any(String), 'text/plain')
+    expect(initMultipart).toHaveBeenCalledWith(null, 'empty.txt', 0, expect.any(String), 0, 'text/plain')
+    expect(uploadChunk).not.toHaveBeenCalled()
+    expect(saveResumableUpload).not.toHaveBeenCalled()
+    expect(removeResumableUpload).not.toHaveBeenCalledWith('empty-session')
+    expect(store.queue[0]).toMatchObject({ status: 'done', progress: 100, chunkProgress: '' })
+    expect(refresh).toHaveBeenCalled()
+  })
+
   it('uploads every chunk and records progress for larger files', async () => {
     instantUpload.mockRejectedValue({ response: { data: { code: 419010 } } })
     initMultipart.mockResolvedValue({ data: { data: { sessionId: 'session-large', totalChunks: 2 } } })

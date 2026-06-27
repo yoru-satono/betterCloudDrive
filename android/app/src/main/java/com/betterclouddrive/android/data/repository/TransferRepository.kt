@@ -127,7 +127,7 @@ class TransferRepository(
             val md5 = initialTask.md5Hash ?: computeMd5(sourceUri)
             ensureNotPausedOrCanceled(initialTask.id)
             val fileSize = max(initialTask.bytesTotal, getSize(sourceUri))
-            val totalChunks = ((fileSize + Constants.CHUNK_SIZE - 1) / Constants.CHUNK_SIZE).toInt().coerceAtLeast(1)
+            val totalChunks = calculateUploadTotalChunks(fileSize)
 
             val instant = api.instantUpload(
                 com.betterclouddrive.android.data.remote.dto.InstantUploadRequest(
@@ -190,7 +190,7 @@ class TransferRepository(
                 )
             }
 
-            for (chunkNumber in 0 until totalChunks) {
+            for (chunkNumber in uploadChunkNumbers(totalChunks)) {
                 ensureNotPausedOrCanceled(initialTask.id)
                 if (chunkNumber in current(initialTask.id)?.completedChunks.orEmpty()) continue
                 val chunk = readChunk(sourceUri, chunkNumber * chunkSize, chunkSize)
@@ -372,3 +372,13 @@ class TransferRepository(
         update(taskId) { it.copy(status = TransferStatus.ERROR, error = message) }
     }
 }
+
+internal fun calculateUploadTotalChunks(fileSize: Long, chunkSize: Long = Constants.CHUNK_SIZE): Int {
+    return if (fileSize == 0L) {
+        0
+    } else {
+        ((fileSize + chunkSize - 1) / chunkSize).toInt()
+    }
+}
+
+internal fun uploadChunkNumbers(totalChunks: Int): IntRange = 0 until totalChunks

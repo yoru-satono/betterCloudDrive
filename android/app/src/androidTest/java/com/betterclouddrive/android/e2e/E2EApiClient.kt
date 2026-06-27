@@ -1,6 +1,7 @@
 package com.betterclouddrive.android.e2e
 
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -123,6 +124,7 @@ class E2EApiClient(
     ): E2EFile {
         val bytes = content.toByteArray(Charsets.UTF_8)
         val md5 = md5(bytes)
+        val totalChunks = if (bytes.isEmpty()) 0 else 1
         val initBody = postJson(
             "$baseUrl/upload/init",
             JSONObject()
@@ -130,14 +132,20 @@ class E2EApiClient(
                 .put("fileName", fileName)
                 .put("fileSize", bytes.size)
                 .put("md5Hash", md5)
-                .put("totalChunks", 1),
+                .put("totalChunks", totalChunks),
             token,
         )
         val sessionId = initBody.getJSONObject("data").getString("sessionId")
-        uploadChunk(token, sessionId, fileName, bytes)
+        if (totalChunks > 0) {
+            uploadChunk(token, sessionId, fileName, bytes)
+        }
         val complete = postJson("$baseUrl/upload/$sessionId/complete", JSONObject(), token)
         val fileId = complete.getJSONObject("data").getLong("fileId")
         return getFile(token, fileId)
+    }
+
+    fun uploadEmptyFile(token: String, parentId: Long?, fileName: String): E2EFile {
+        return uploadTextFile(token, parentId, fileName, "")
     }
 
     fun addFavorite(token: String, fileId: Long) {
@@ -148,6 +156,46 @@ class E2EApiClient(
         val payload = JSONObject().put("fileId", fileId)
         if (password != null) payload.put("password", password)
         return parseShare(postJson("$baseUrl/shares", payload, token).getJSONObject("data"))
+    }
+
+    fun listSharedFiles(shareCode: String, password: String? = null, parentId: Long? = null): JSONObject {
+        val url = "$baseUrl/shares/access/$shareCode/files".toHttpUrl().newBuilder()
+            .addQueryParameter("page", "1")
+            .addQueryParameter("size", "100")
+            .apply {
+                if (parentId != null) addQueryParameter("parentId", parentId.toString())
+                if (password != null) addQueryParameter("password", password)
+            }
+            .build()
+        val request = Request.Builder().url(url).get().build()
+        return expectHttpJson(client.newCall(request).execute())
+    }
+
+    fun listFiles(token: String, parentId: Long? = null): List<E2EFile> {
+        val url = "$baseUrl/files".toHttpUrl().newBuilder()
+            .addQueryParameter("page", "1")
+            .addQueryParameter("size", "100")
+            .apply {
+                if (parentId != null) addQueryParameter("parentId", parentId.toString())
+            }
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute())
+            .getJSONObject("data")
+            .getJSONArray("records")
+        return (0 until records.length()).map { index -> parseFile(records.getJSONObject(index)) }
+    }
+
+    fun moveFile(token: String, fileId: Long, targetParentId: Long?) {
+        postJson("$baseUrl/files/$fileId/move", targetParentBody(targetParentId), token)
+    }
+
+    fun copyFile(token: String, fileId: Long, targetParentId: Long?) {
+        postJson("$baseUrl/files/$fileId/copy", targetParentBody(targetParentId), token)
     }
 
     fun deleteFiles(token: String, fileIds: List<Long>) {
@@ -269,6 +317,14 @@ class E2EApiClient(
         return expectApiSuccess(client.newCall(builder.build()).execute())
     }
 
+    private fun expectHttpJson(response: okhttp3.Response): JSONObject {
+        response.use {
+            val body = it.body?.string().orEmpty()
+            if (body.isBlank()) throw AssertionError("HTTP ${it.code}: empty body")
+            return JSONObject(body)
+        }
+    }
+
     private fun expectApiSuccess(response: okhttp3.Response): JSONObject {
         expectOk(response).use {
             val json = JSONObject(it.body?.string().orEmpty())
@@ -322,5 +378,9 @@ class E2EApiClient(
         return MessageDigest.getInstance("MD5")
             .digest(bytes)
             .joinToString("") { "%02x".format(it) }
+    }
+
+    private fun targetParentBody(targetParentId: Long?): JSONObject {
+        return JSONObject().put("targetParentId", if (targetParentId == null) JSONObject.NULL else targetParentId)
     }
 }

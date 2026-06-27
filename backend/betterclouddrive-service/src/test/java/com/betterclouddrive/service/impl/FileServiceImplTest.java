@@ -114,7 +114,9 @@ class FileServiceImplTest {
     @Test
     void moveFile_shouldSucceed() {
         FileEntity file = FileEntity.builder().id(1L).userId(1L).parentId(50L).isDeleted(false).build();
+        FileEntity target = FileEntity.builder().id(100L).userId(1L).fileType("folder").isDeleted(false).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findById(100L)).thenReturn(Optional.of(target));
         when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
 
         fileService.moveFile(1L, 1L, 100L);
@@ -127,7 +129,9 @@ class FileServiceImplTest {
         FileEntity source = FileEntity.builder()
                 .id(1L).userId(1L).fileName("doc.txt")
                 .fileType("file").isDeleted(false).build();
+        FileEntity target = FileEntity.builder().id(100L).userId(1L).fileType("folder").isDeleted(false).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(source));
+        when(fileRepository.findById(100L)).thenReturn(Optional.of(target));
         ArgumentCaptor<FileEntity> captor = ArgumentCaptor.forClass(FileEntity.class);
         when(fileRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -135,6 +139,31 @@ class FileServiceImplTest {
 
         assertThat(captor.getValue().getFileName()).isEqualTo("doc.txt (copy)");
         assertThat(captor.getValue().getParentId()).isEqualTo(100L);
+    }
+
+    @Test
+    void moveFile_shouldAllowRootTarget() {
+        FileEntity file = FileEntity.builder().id(1L).userId(1L).fileName("doc.txt").parentId(50L).isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(1L, "doc.txt")).thenReturn(false);
+        when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
+
+        fileService.moveFile(1L, 1L, null);
+
+        assertThat(file.getParentId()).isNull();
+    }
+
+    @Test
+    void moveFile_shouldRejectFolderMovedIntoChild() {
+        FileEntity folder = FileEntity.builder().id(1L).userId(1L).fileName("docs").fileType("folder").isDeleted(false).build();
+        FileEntity child = FileEntity.builder().id(2L).userId(1L).parentId(1L).fileType("folder").isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(folder));
+        when(fileRepository.findById(2L)).thenReturn(Optional.of(child));
+
+        assertThatThrownBy(() -> fileService.moveFile(1L, 1L, 2L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
+        verify(fileRepository, never()).save(any(FileEntity.class));
     }
 
     @Test

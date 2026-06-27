@@ -11,6 +11,7 @@ import FolderPickerModal from '@/components/file/FolderPickerModal.vue'
 import OModal from '@/components/base/OModal.vue'
 import OInput from '@/components/base/OInput.vue'
 import OButton from '@/components/base/OButton.vue'
+import OSpinner from '@/components/base/OSpinner.vue'
 import { useFilesStore } from '@/stores/files'
 import { useFileSelection } from '@/composables/useFileSelection'
 import { useUpload } from '@/composables/useUpload'
@@ -28,7 +29,7 @@ import { toast } from 'vue-sonner'
 import type { FileEntity } from '@/types/file'
 import type { TagEntity } from '@/types/tag'
 import type { FileVersionEntity } from '@/types/file'
-import { buildShareUrl } from '@/config/runtime'
+import { buildShareUrl, isDesktopRuntime } from '@/config/runtime'
 import { onFileAction, type FileActionDetail } from '@/components/file/fileActions'
 
 const route = useRoute()
@@ -40,6 +41,8 @@ const ctx = useContextMenu()
 const { confirm } = useConfirm()
 const { formatSize, formatDateFull } = useFormatters()
 const preview = usePreviewStore()
+const fileInput = ref<HTMLInputElement | null>(null)
+const desktopRuntime = isDesktopRuntime()
 
 const showNewFolder = ref(false)
 const newFolderName = ref('')
@@ -344,6 +347,31 @@ function handleDblclick(file: FileEntity) {
   if (file.fileType === 'folder') router.push({ name: 'Folder', params: { folderId: file.id } })
   else downloadFile(file.id, file.fileName)
 }
+
+function triggerUpload() {
+  if (desktopRuntime) {
+    upload.triggerFilePicker()
+    return
+  }
+  const input = fileInput.value
+  if (!input) return
+  const pickerInput = input as HTMLInputElement & { showPicker?: () => void }
+  if (typeof pickerInput.showPicker === 'function') {
+    try {
+      pickerInput.showPicker()
+      return
+    } catch {
+      // Fall back to click for browsers without a usable picker API.
+    }
+  }
+  input.click()
+}
+
+function handleFileInputChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input.files?.length) upload.uploadFiles(Array.from(input.files))
+  input.value = ''
+}
 </script>
 
 <template>
@@ -355,11 +383,21 @@ function handleDblclick(file: FileEntity) {
     @drop="upload.onDrop"
   >
     <FileToolbar
-      @upload="upload.triggerFilePicker"
+      @upload="triggerUpload"
       @upload-folder="upload.triggerFolderPicker"
       @new-folder="showNewFolder = true"
       @delete="deleteSelected"
       @refresh="store.refresh"
+    />
+    <input
+      ref="fileInput"
+      class="file-browser__file-input"
+      data-testid="file-upload-input"
+      type="file"
+      multiple
+      aria-hidden="true"
+      tabindex="-1"
+      @change="handleFileInputChange"
     />
     <FileBreadcrumb />
 
@@ -550,6 +588,15 @@ function handleDblclick(file: FileEntity) {
 <style scoped>
 .file-browser { display: flex; flex-direction: column; gap: 12px; height: 100%; }
 .file-browser__view { flex: 1; min-height: 0; overflow-y: auto; }
+.file-browser__file-input {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
 .share-form { display: flex; flex-direction: column; gap: 12px; }
 .share-form__name { font-size: 13px; color: var(--text-secondary); overflow-wrap: anywhere; }
 .share-password-toggle {

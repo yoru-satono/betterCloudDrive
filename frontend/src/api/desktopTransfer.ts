@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { ensureFreshAccessToken } from './client'
 import { getApiBaseUrl, isDesktopRuntime } from '@/config/runtime'
 import {
   readResumableDirectories,
@@ -70,9 +71,10 @@ export async function getTransferQueue() {
 
 export async function restoreDesktopTransfers() {
   if (!isDesktopTransferRuntime()) return EMPTY_TRANSFER_QUEUE
+  const token = await ensureFreshAccessToken()
   return invoke<TransferQueue>('restore_desktop_transfers', {
     request: {
-      token: getTransferToken(),
+      token: token || '',
       apiBaseUrl: getApiBaseUrl(),
       resumableUploads: readResumableUploads(),
       resumableDirectories: readResumableDirectories(),
@@ -85,9 +87,10 @@ export async function pauseTransferNode(nodeId: string) {
 }
 
 export async function resumeTransferNode(nodeId: string) {
+  const token = await ensureFreshAccessToken()
   return invoke<TransferQueue>('resume_transfer_node', {
     nodeId,
-    token: getTransferToken(),
+    token: token || '',
     apiBaseUrl: getApiBaseUrl(),
   })
 }

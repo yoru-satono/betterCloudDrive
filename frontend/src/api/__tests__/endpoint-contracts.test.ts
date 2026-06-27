@@ -55,6 +55,13 @@ describe('API endpoint contracts', () => {
       { suppressToast: true },
     )
 
+    await uploadApi.initMultipart(null, 'empty.txt', 0, 'd41d8cd98f00b204e9800998ecf8427e', 0)
+    expect(apiMock.post).toHaveBeenCalledWith(
+      '/upload/init',
+      { parentId: null, fileName: 'empty.txt', fileSize: 0, md5Hash: 'd41d8cd98f00b204e9800998ecf8427e', totalChunks: 0 },
+      { suppressToast: true },
+    )
+
     await uploadApi.uploadChunk('session-1', 1, new Blob(['x']))
     expect(apiMock.post).toHaveBeenCalledWith(
       '/upload/session-1/chunk',
@@ -138,9 +145,9 @@ describe('API endpoint contracts', () => {
     await sharesApi.accessShare('abc123')
     expect(apiMock.post).toHaveBeenCalledWith('/shares/access/abc123', undefined, { suppressToast: true })
 
-    await sharesApi.listSharedFiles('abc123', 5, 2, 50)
+    await sharesApi.listSharedFiles('abc123', 5, 2, 50, 'pw')
     expect(apiMock.get).toHaveBeenCalledWith('/shares/access/abc123/files', {
-      params: { parentId: 5, page: 2, size: 50 },
+      params: { parentId: 5, page: 2, size: 50, password: 'pw' },
       suppressToast: true,
     })
 

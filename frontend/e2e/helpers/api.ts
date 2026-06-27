@@ -34,6 +34,7 @@ export interface E2EShare {
 }
 
 export const backendURL = process.env.E2E_BACKEND_URL || 'http://localhost:8080'
+export const frontendURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5173'
 export const mailpitURL = process.env.E2E_MAILPIT_URL || 'http://localhost:8025'
 const postgresHost = process.env.E2E_POSTGRES_HOST || '127.0.0.1'
 const postgresPort = Number(process.env.E2E_POSTGRES_PORT || '5432')
@@ -99,7 +100,7 @@ export async function createAuthenticatedContext(browser: Browser, user: E2EUser
       cookies: [],
       origins: [
         {
-          origin: process.env.E2E_BASE_URL || 'http://127.0.0.1:3000',
+          origin: frontendURL,
           localStorage: [
             { name: 'accessToken', value: user.accessToken },
             { name: 'refreshToken', value: user.refreshToken },
@@ -155,24 +156,30 @@ export async function uploadSampleFile(
   if (instantBody.code === 200) return { fileId: instantBody.data.fileId as number, fileName }
   expect(instantBody.code).toBe(419010)
 
+  const chunkSize = 5 * 1024 * 1024
+  const totalChunks = data.length === 0 ? 0 : Math.ceil(data.length / chunkSize)
   const init = await request.post(`${backendURL}/api/v1/upload/init`, {
     headers: authHeaders(token),
-    data: { parentId, fileName, fileSize: data.length, md5Hash, totalChunks: 1 },
+    data: { parentId, fileName, fileSize: data.length, md5Hash, totalChunks },
   })
   await expect(init, await init.text()).toBeOK()
   const sessionId = (await init.json()).data.sessionId as string
 
-  const chunk = await request.post(`${backendURL}/api/v1/upload/${sessionId}/chunk?chunkNumber=0`, {
-    headers: authHeaders(token),
-    multipart: {
-      file: {
-        name: fileName,
-        mimeType: 'text/plain',
-        buffer: data,
+  for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
+    const start = chunkNumber * chunkSize
+    const chunkData = data.subarray(start, start + chunkSize)
+    const chunk = await request.post(`${backendURL}/api/v1/upload/${sessionId}/chunk?chunkNumber=${chunkNumber}`, {
+      headers: authHeaders(token),
+      multipart: {
+        file: {
+          name: fileName,
+          mimeType: 'text/plain',
+          buffer: chunkData,
+        },
       },
-    },
-  })
-  await expect(chunk, await chunk.text()).toBeOK()
+    })
+    await expect(chunk, await chunk.text()).toBeOK()
+  }
 
   const complete = await request.post(`${backendURL}/api/v1/upload/${sessionId}/complete`, {
     headers: authHeaders(token),
@@ -252,6 +259,52 @@ export async function accessShare(request: APIRequestContext, shareCode: string,
   })
   const body = await res.json()
   return { res, body }
+}
+
+export async function listSharedFiles(
+  request: APIRequestContext,
+  shareCode: string,
+  options: { parentId?: number | null; page?: number; size?: number; password?: string } = {},
+) {
+  const params: Record<string, string> = {
+    page: String(options.page ?? 1),
+    size: String(options.size ?? 100),
+  }
+  if (options.parentId !== undefined && options.parentId !== null) params.parentId = String(options.parentId)
+  if (options.password !== undefined) params.password = options.password
+  const res = await request.get(`${backendURL}/api/v1/shares/access/${shareCode}/files`, { params })
+  const body = await res.json()
+  return { res, body }
+}
+
+export async function moveFile(
+  request: APIRequestContext,
+  token: string,
+  fileId: number,
+  targetParentId: number | null,
+) {
+  const res = await request.post(`${backendURL}/api/v1/files/${fileId}/move`, {
+    headers: authHeaders(token),
+    data: { targetParentId },
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
+}
+
+export async function copyFile(
+  request: APIRequestContext,
+  token: string,
+  fileId: number,
+  targetParentId: number | null,
+) {
+  const res = await request.post(`${backendURL}/api/v1/files/${fileId}/copy`, {
+    headers: authHeaders(token),
+    data: { targetParentId },
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
 }
 
 export async function saveSharedItem(

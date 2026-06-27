@@ -255,10 +255,56 @@ class ShareServiceImplTest {
         when(shareLinkRepository.findByShareCode("codeXYZ")).thenReturn(Optional.of(share));
         when(fileRepository.findById(5L)).thenReturn(Optional.of(sharedFile));
 
-        PageResult<FileEntity> result = shareService.listSharedFiles("codeXYZ", null, 1, 20);
+        PageResult<FileEntity> result = shareService.listSharedFiles("codeXYZ", null, 1, 20, null);
 
         assertThat(result.getRecords()).hasSize(1);
         assertThat(result.getRecords().get(0).getId()).isEqualTo(5L);
+    }
+
+    @Test
+    void listSharedFiles_shouldValidatePasswordAndVisitLimit() {
+        ShareLinkEntity share = activeShare("locked", 1L, 10L);
+        share.setPasswordCiphertext("cipher");
+        share.setMaxVisits(1);
+        FileEntity root = ownedFolder(10L, 1L);
+        when(shareLinkRepository.findByShareCode("locked")).thenReturn(Optional.of(share));
+        when(sharePasswordCryptoService.matches("pw1234", "cipher")).thenReturn(true);
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOps);
+        when(zSetOps.score("share:visits", "locked")).thenReturn(0D);
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(root));
+        Page<FileEntity> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        when(fileRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+
+        shareService.listSharedFiles("locked", null, 1, 20, "pw1234");
+
+        verify(zSetOps).incrementScore("share:visits", "locked", 1);
+    }
+
+    @Test
+    void listSharedFiles_shouldRejectWrongPassword() {
+        ShareLinkEntity share = activeShare("locked", 1L, 10L);
+        share.setPasswordCiphertext("cipher");
+        when(shareLinkRepository.findByShareCode("locked")).thenReturn(Optional.of(share));
+        when(sharePasswordCryptoService.matches("bad", "cipher")).thenReturn(false);
+
+        assertThatThrownBy(() -> shareService.listSharedFiles("locked", null, 1, 20, "bad"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419003));
+    }
+
+    @Test
+    void listSharedFiles_shouldRejectParentOutsideSharedScope() {
+        ShareLinkEntity share = activeShare("scope", 1L, 10L);
+        FileEntity root = ownedFolder(10L, 1L);
+        FileEntity outside = ownedFolder(99L, 1L);
+        outside.setParentId(null);
+        when(shareLinkRepository.findByShareCode("scope")).thenReturn(Optional.of(share));
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(root));
+        when(fileRepository.findById(99L)).thenReturn(Optional.of(outside));
+
+        assertThatThrownBy(() -> shareService.listSharedFiles("scope", 99L, 1, 20, null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404001));
     }
 
     @Test
@@ -303,6 +349,22 @@ class ShareServiceImplTest {
 
         assertThatThrownBy(() -> shareService.downloadSharedFile("folder2", 12L, null))
                 .isInstanceOf(BusinessException.class);
+        verify(shareLinkRepository, never()).incrementDownloadCount(anyLong());
+    }
+
+    @Test
+    void downloadSharedFile_shouldRejectWhenVisitLimitReached() {
+        ShareLinkEntity share = activeShare("downloadLimit", 1L, 5L);
+        share.setMaxVisits(1);
+        share.setVisitCount(1);
+        when(shareLinkRepository.findByShareCode("downloadLimit")).thenReturn(Optional.of(share));
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOps);
+        when(zSetOps.score("share:visits", "downloadLimit")).thenReturn(0D);
+
+        assertThatThrownBy(() -> shareService.downloadSharedFile("downloadLimit", 5L, null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419005));
+        verify(fileRepository, never()).findById(5L);
         verify(shareLinkRepository, never()).incrementDownloadCount(anyLong());
     }
 
@@ -529,28 +591,18 @@ class ShareServiceImplTest {
     }
 
     @Test
-    void saveSharedItem_shouldIgnoreVisitLimitAndIncrementDownloadCount() {
+    void saveSharedItem_shouldRejectWhenVisitLimitReached() {
         ShareLinkEntity share = activeShare("limit", 1L, 10L);
         share.setMaxVisits(1);
         share.setVisitCount(1);
-        FileEntity source = ownedFile(10L, 1L);
-        source.setFileName("limited.txt");
-        source.setFileSize(10L);
         when(shareLinkRepository.findByShareCode("limit")).thenReturn(Optional.of(share));
-        when(fileRepository.findById(10L)).thenReturn(Optional.of(source));
-        when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(2L, "limited.txt")).thenReturn(false);
-        when(userRepository.findById(2L)).thenReturn(Optional.of(quotaUser(2L, 100L, 0L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:2")).thenReturn(null);
-        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
-            FileEntity saved = inv.getArgument(0);
-            saved.setId(100L);
-            return saved;
-        });
+        when(redisTemplate.opsForZSet()).thenReturn(zSetOps);
+        when(zSetOps.score("share:visits", "limit")).thenReturn(0D);
 
-        FileEntity saved = shareService.saveSharedItem("limit", null, null, 2L, null);
-
-        assertThat(saved.getFileName()).isEqualTo("limited.txt");
-        verify(shareLinkRepository).incrementDownloadCount(share.getId());
+        assertThatThrownBy(() -> shareService.saveSharedItem("limit", null, null, 2L, null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419005));
+        verify(fileRepository, never()).save(any(FileEntity.class));
+        verify(shareLinkRepository, never()).incrementDownloadCount(anyLong());
     }
 }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as filesApi from '@/api/files'
+import { ensureFreshAccessToken, refreshAccessToken } from '@/api/client'
 import {
   buildDownloadUrl,
   buildUniquePathName,
@@ -18,6 +19,11 @@ vi.mock('@/api/files', () => ({
   listFiles: vi.fn(),
 }))
 
+vi.mock('@/api/client', () => ({
+  ensureFreshAccessToken: vi.fn(() => Promise.resolve(undefined)),
+  refreshAccessToken: vi.fn(),
+}))
+
 vi.mock('@/config/runtime', () => ({
   getApiBaseUrl: () => 'http://127.0.0.1:8080/api/v1',
   isDesktopRuntime: () => true,
@@ -33,6 +39,8 @@ vi.mock('@/api/desktopSettings', () => ({
 
 const listFiles = vi.mocked(filesApi.listFiles)
 const invokeMock = vi.mocked(invoke)
+const ensureFreshAccessTokenMock = vi.mocked(ensureFreshAccessToken)
+const refreshAccessTokenMock = vi.mocked(refreshAccessToken)
 
 function file(id: number, parentId: number | null, fileName: string): FileEntity {
   return {
@@ -85,6 +93,9 @@ describe('desktop downloads', () => {
   beforeEach(() => {
     listFiles.mockReset()
     invokeMock.mockReset()
+    ensureFreshAccessTokenMock.mockReset()
+    ensureFreshAccessTokenMock.mockResolvedValue(undefined)
+    refreshAccessTokenMock.mockReset()
   })
 
   it('builds authenticated download URLs from the current API base', () => {
@@ -128,6 +139,7 @@ describe('desktop downloads', () => {
   })
 
   it('starts one queued desktop file download', async () => {
+    ensureFreshAccessTokenMock.mockResolvedValue('fresh-token')
     invokeMock.mockResolvedValue({ saved: true, path: 'queued/a.txt' })
 
     await expect(startQueuedDesktopFileDownload({ id: 3, fileName: 'a.txt', fileSize: 42 })).resolves.toBe(true)
@@ -137,9 +149,30 @@ describe('desktop downloads', () => {
         fileId: 3,
         fileName: 'a.txt',
         fileSize: 42,
-        token: undefined,
+        token: 'fresh-token',
         apiBaseUrl: 'http://127.0.0.1:8080/api/v1',
       },
+    })
+  })
+
+  it('refreshes and retries direct desktop downloads when Tauri reports expired auth', async () => {
+    ensureFreshAccessTokenMock.mockResolvedValue('expired-token')
+    refreshAccessTokenMock.mockResolvedValue('retried-token')
+    invokeMock
+      .mockRejectedValueOnce('AUTH_EXPIRED')
+      .mockResolvedValueOnce({ saved: true, path: 'chosen/a.txt' })
+
+    await expect(downloadDesktopFile(3, 'a.txt')).resolves.toBe(true)
+
+    expect(invokeMock).toHaveBeenNthCalledWith(1, 'download_desktop_file', {
+      url: 'http://127.0.0.1:8080/api/v1/download/3',
+      fileName: 'a.txt',
+      token: 'expired-token',
+    })
+    expect(invokeMock).toHaveBeenNthCalledWith(2, 'download_desktop_file', {
+      url: 'http://127.0.0.1:8080/api/v1/download/3',
+      fileName: 'a.txt',
+      token: 'retried-token',
     })
   })
 
@@ -178,6 +211,7 @@ describe('desktop downloads', () => {
   })
 
   it('starts a queued folder download with a recursive tree', async () => {
+    ensureFreshAccessTokenMock.mockResolvedValue('fresh-token')
     listFiles.mockImplementation(async (params) => {
       if (params.parentId === 10) return page([folder(11, 10, 'child'), file(12, 10, 'root.txt')])
       if (params.parentId === 11) return page([file(13, 11, 'nested.txt')])
@@ -207,7 +241,7 @@ describe('desktop downloads', () => {
             { id: 12, fileName: 'root.txt', fileType: 'file', fileSize: 1, children: [] },
           ],
         },
-        token: undefined,
+        token: 'fresh-token',
         apiBaseUrl: 'http://127.0.0.1:8080/api/v1',
       },
     })

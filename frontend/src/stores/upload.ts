@@ -195,7 +195,7 @@ export const useUploadStore = defineStore('upload', () => {
         })
         return
       }
-      const totalChunks = Math.max(1, Math.ceil(item.file.size / CHUNK_SIZE))
+      const totalChunks = item.file.size === 0 ? 0 : Math.ceil(item.file.size / CHUNK_SIZE)
       update({
         fileSize: item.file.size,
         md5Hash: md5,
@@ -241,6 +241,13 @@ export const useUploadStore = defineStore('upload', () => {
         totalChunks: session.totalChunks,
         resumable: true,
       })
+      if (session.totalChunks === 0) {
+        await uploadApi.completeMultipart(session.sessionId)
+        update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
+        toast.success(`${label} 上传完成`)
+        useFilesStore().refresh()
+        return
+      }
       saveResumableUpload({
         sessionId: session.sessionId,
         parentId: item.parentId,
@@ -431,7 +438,7 @@ async function getOrCreateUploadSession(item: UploadItem, md5Hash: string, total
     }
   }
 
-  const initRes = await uploadApi.initMultipart(item.parentId, item.fileName, item.fileSize || item.file!.size, md5Hash, totalChunks, item.file?.type || undefined)
+  const initRes = await uploadApi.initMultipart(item.parentId, item.fileName, item.fileSize ?? item.file!.size, md5Hash, totalChunks, item.file?.type || undefined)
   return {
     sessionId: initRes.data.data.sessionId,
     totalChunks: initRes.data.data.totalChunks || totalChunks,

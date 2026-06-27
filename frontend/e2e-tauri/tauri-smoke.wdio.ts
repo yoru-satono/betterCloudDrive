@@ -19,6 +19,7 @@ import {
   expectFileVisible,
   loginViaWindow,
   readCapturedClipboardText,
+  setAuthTokens,
   uploadFolderViaPicker,
   waitForTauriWindow,
 } from './helpers/wdio-ui'
@@ -48,8 +49,10 @@ describe('Tauri desktop window smoke', () => {
       await expectFolderUploadAvailable()
       await captureClipboardWrites()
 
-      const folderName = await uploadFolderViaPicker(uniqueName('tauri-folder'), 'nested.txt')
+      const emptyUploadName = 'empty.txt'
+      const folderName = await uploadFolderViaPicker(uniqueName('tauri-folder'), emptyUploadName, '')
 
+      await setAuthTokens('expired-access-token', user.refreshToken)
       const partial = fileContents.slice(0, 8)
       await fs.writeFile(path.join(downloadDir, `${file.fileName}.part`), partial)
       await downloadFromContextMenu(file.fileName)
@@ -61,7 +64,7 @@ describe('Tauri desktop window smoke', () => {
       const downloadedFolderFile = path.join(downloadDir, folder.fileName, 'nested.txt')
       await waitForFileContents(downloadedFolderFile, childContents)
 
-      await expectApiChildFile(request, user.accessToken, folderName, 'nested.txt')
+      await expectApiChildFile(request, user.accessToken, folderName, emptyUploadName, 0)
 
       await createShareFromContextMenu(file.fileName)
       const clipboardText = await readCapturedClipboardText()
@@ -106,11 +109,12 @@ async function expectApiChildFile(
   token: string,
   folderName: string,
   childName: string,
+  expectedSize?: number,
 ) {
   const folder = await rootFileByName(request, token, folderName)
   await browser.waitUntil(async () => {
     const children = await listFiles(request, token, folder.id)
-    return children.some(item => item.fileName === childName)
+    return children.some(item => item.fileName === childName && (expectedSize === undefined || item.fileSize === expectedSize))
   }, {
     timeout: 20_000,
     timeoutMsg: `Uploaded folder ${folderName} did not contain ${childName}`,

@@ -17,6 +17,8 @@ use std::{
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 
+const AUTH_EXPIRED_ERROR: &str = "AUTH_EXPIRED";
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopDownloadResult {
@@ -285,8 +287,8 @@ pub async fn download_url_to_path<R: Runtime>(
         fs::remove_file(&part_path).map_err(|e| format!("重置半成品失败: {e}"))?;
         return download_from_start(&client, &settings, &limiter, url, token, target).await;
     }
-    if !response.status().is_success() {
-        return Err(format!("下载失败 ({})", response.status()));
+    if let Some(error) = download_status_error(response.status()) {
+        return Err(error);
     }
     if start > 0 && response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
         fs::remove_file(&part_path).map_err(|e| format!("重置半成品失败: {e}"))?;
@@ -517,8 +519,8 @@ async fn download_url_to_path_with_progress<R: Runtime>(
         fs::remove_file(&part_path).map_err(|e| format!("重置半成品失败: {e}"))?;
         return download_from_start_with_progress(app, transfer_state, client, settings, &limiter, node_id, url, token, target).await;
     }
-    if !response.status().is_success() {
-        return Err(format!("下载失败 ({})", response.status()));
+    if let Some(error) = download_status_error(response.status()) {
+        return Err(error);
     }
     if start > 0 && response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
         fs::remove_file(&part_path).map_err(|e| format!("重置半成品失败: {e}"))?;
@@ -588,8 +590,8 @@ async fn download_from_start_with_progress<R: Runtime>(
         request = request.bearer_auth(token);
     }
     let mut response = request.send().await.map_err(|e| format!("下载请求失败: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("下载失败 ({})", response.status()));
+    if let Some(error) = download_status_error(response.status()) {
+        return Err(error);
     }
     let expected_total = response_total_size(&response, 0).unwrap_or(0);
     let mut file = fs::File::create(&part_path).map_err(|e| format!("创建半成品失败: {e}"))?;
@@ -630,8 +632,8 @@ async fn download_from_start(
         request = request.bearer_auth(token);
     }
     let mut response = request.send().await.map_err(|e| format!("下载请求失败: {e}"))?;
-    if !response.status().is_success() {
-        return Err(format!("下载失败 ({})", response.status()));
+    if let Some(error) = download_status_error(response.status()) {
+        return Err(error);
     }
     let mut file = fs::File::create(&part_path).map_err(|e| format!("创建半成品失败: {e}"))?;
     while let Some(chunk) = response.chunk().await.map_err(|e| format!("读取下载数据失败: {e}"))? {
@@ -834,6 +836,16 @@ fn response_total_size(response: &reqwest::Response, start: u64) -> Option<u64> 
         .map(|length| start + length)
 }
 
+fn download_status_error(status: reqwest::StatusCode) -> Option<String> {
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Some(AUTH_EXPIRED_ERROR.to_string());
+    }
+    if !status.is_success() {
+        return Some(format!("下载失败 ({status})"));
+    }
+    None
+}
+
 fn part_path(target: &Path) -> PathBuf {
     let file_name = target
         .file_name()
@@ -918,7 +930,8 @@ fn sanitize_path_segment(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_unique_path_name, part_path, sanitize_path_segment};
+    use super::{build_unique_path_name, download_status_error, part_path, sanitize_path_segment, AUTH_EXPIRED_ERROR};
+    use reqwest::StatusCode;
     use std::path::Path;
 
     #[test]
@@ -936,5 +949,18 @@ mod tests {
     #[test]
     fn appends_part_suffix_to_full_file_name() {
         assert_eq!(part_path(Path::new("demo.tar.gz")).to_string_lossy(), "demo.tar.gz.part");
+    }
+
+    #[test]
+    fn maps_download_auth_status_to_refresh_signal() {
+        assert_eq!(
+            download_status_error(StatusCode::UNAUTHORIZED),
+            Some(AUTH_EXPIRED_ERROR.to_string())
+        );
+        assert_eq!(download_status_error(StatusCode::OK), None);
+        assert_eq!(download_status_error(StatusCode::PARTIAL_CONTENT), None);
+        assert!(download_status_error(StatusCode::FORBIDDEN)
+            .expect("forbidden should return a download error")
+            .contains("403"));
     }
 }

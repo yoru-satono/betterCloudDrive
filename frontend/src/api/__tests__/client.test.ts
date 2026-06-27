@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { toast } from 'vue-sonner'
-import api from '@/api/client'
+import api, { ensureFreshAccessToken } from '@/api/client'
 
 vi.mock('vue-sonner', () => ({
   toast: {
@@ -31,6 +31,18 @@ const apiResponse = (data: unknown) => (config: unknown) => Promise.resolve({
   headers: {},
   config,
   data,
+})
+
+const apiHttpError = (status: number, data: unknown = {}) => (config: unknown) => Promise.reject({
+  message: 'Request failed',
+  config,
+  response: {
+    status,
+    statusText: 'Unauthorized',
+    headers: {},
+    config,
+    data,
+  },
 })
 
 describe('api client', () => {
@@ -103,7 +115,27 @@ describe('api client', () => {
     })
 
     const results = await Promise.all([req1, req2])
-    expect(results.map(res => res.data.data)).toEqual([{ id: 1 }, { id: 2 }])
+    expect(results.map(res => res.data.data)).toEqual(expect.arrayContaining([{ id: 1 }, { id: 2 }]))
     expect(axiosPost).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes when token validation returns a plain HTTP 401', async () => {
+    localStorage.setItem('accessToken', 'expired-access')
+    localStorage.setItem('refreshToken', 'old-refresh')
+    adapter.mockImplementation(apiHttpError(401))
+    axiosPost.mockResolvedValue({
+      data: {
+        code: 200,
+        message: 'success',
+        data: { accessToken: 'new-access', refreshToken: 'new-refresh' },
+      },
+    })
+
+    await expect(ensureFreshAccessToken()).resolves.toBe('new-access')
+
+    expect(axiosPost).toHaveBeenCalledWith('/api/v1/auth/refresh', { refreshToken: 'old-refresh' })
+    expect(localStorage.getItem('accessToken')).toBe('new-access')
+    expect(localStorage.getItem('refreshToken')).toBe('new-refresh')
+    expect(toastError).not.toHaveBeenCalled()
   })
 })

@@ -161,6 +161,7 @@ interface ApiService {
         @Query("parentId") parentId: Long? = null,
         @Query("page") page: Int = 1,
         @Query("size") size: Int = 20,
+        @Query("password") password: String? = null,
     ): ApiResponse<PageResult<FileItem>>
 
     @POST("shares/access/{shareCode}/save")

@@ -4,6 +4,8 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
 import com.betterclouddrive.android.MainActivity
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -42,5 +44,24 @@ class AndroidTransferE2ETest {
         composeRule.waitForTag("files-transfers").performClick()
         composeRule.waitForTag("transfer-tab-下载").performClick()
         composeRule.waitForText(remoteFile.fileName).assertIsDisplayed()
+    }
+
+    @Test
+    fun uploadsZeroByteFileFromSystemPicker() {
+        val emptyFile = systemUi.seedDownloadFile(uniqueName("empty_upload") + ".txt", "")
+
+        composeRule.loginViaUi(user)
+        composeRule.waitForTag("files-upload").performClick()
+        systemUi.pickFileFromSystemPicker(emptyFile.name)
+        systemUi.grantPermissionIfPrompted()
+        composeRule.waitForTag("files-transfers").performClick()
+        composeRule.waitForTag("transfer-tab-上传").performClick()
+        composeRule.waitForText(emptyFile.name).assertIsDisplayed()
+
+        composeRule.waitForTag("nav-files").performClick()
+        composeRule.waitForTag("file-row-${emptyFile.name}").assertIsDisplayed()
+        val uploaded = api.listFiles(user.accessToken).find { it.fileName == emptyFile.name }
+        assertNotNull(uploaded)
+        assertEquals(0L, uploaded!!.fileSize)
     }
 }

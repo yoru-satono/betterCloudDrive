@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import OConfirmDialog from '@/components/base/OConfirmDialog.vue'
+import UploadQueue from '@/components/file/UploadQueue.vue'
 import DesktopTitleBar from '@/components/layout/DesktopTitleBar.vue'
 import { isDesktopRuntime } from '@/config/runtime'
 import { Toaster } from 'vue-sonner'
@@ -13,6 +14,7 @@ const desktopRuntime = isDesktopRuntime()
     <div class="app-shell__content">
       <RouterView />
     </div>
+    <UploadQueue />
     <OConfirmDialog />
     <Toaster
       position="bottom-right"

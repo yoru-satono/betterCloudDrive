@@ -63,10 +63,10 @@ data class CreateFolderRequest(
 data class RenameRequest(@SerialName("newName") val newName: String)
 
 @Serializable
-data class MoveRequest(@SerialName("targetParentId") val targetParentId: Long)
+data class MoveRequest(@SerialName("targetParentId") val targetParentId: Long?)
 
 @Serializable
-data class CopyRequest(@SerialName("targetParentId") val targetParentId: Long)
+data class CopyRequest(@SerialName("targetParentId") val targetParentId: Long?)
 
 @Serializable
 data class BatchDeleteRequest(@SerialName("fileIds") val fileIds: List<Long>)

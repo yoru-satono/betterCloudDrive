@@ -22,5 +22,5 @@ public interface ShareService {
     /** Save the shared file or folder, or one item inside it, into the current user's drive. */
     FileEntity saveSharedItem(String shareCode, Long fileId, Long targetParentId, Long userId, String password);
     /** List contents of a shared folder */
-    PageResult<FileEntity> listSharedFiles(String shareCode, Long parentId, int page, int size);
+    PageResult<FileEntity> listSharedFiles(String shareCode, Long parentId, int page, int size, String password);
 }

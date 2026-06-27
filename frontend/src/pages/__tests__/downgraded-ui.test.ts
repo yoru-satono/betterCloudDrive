@@ -227,7 +227,7 @@ describe('downgraded frontend UI', () => {
     await flushPromises()
 
     expect(accessShare).toHaveBeenCalledWith('share-code', undefined)
-    expect(listSharedFiles).toHaveBeenCalledWith('share-code', null, 1, 100)
+    expect(listSharedFiles).toHaveBeenCalledWith('share-code', null, 1, 100, undefined)
     expect(wrapper.text()).toContain('BetterCloudDrive')
     expect(wrapper.text()).toContain('shared-folder')
     expect(wrapper.text()).toContain('child.txt')

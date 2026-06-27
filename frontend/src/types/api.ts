@@ -1,7 +1,11 @@
+type ApiResponseData<T> = T extends void ? T | null | undefined : T
+
 export interface ApiResponse<T> {
   code: number
   message: string
-  data: T
+  data: ApiResponseData<T>
+  timestamp?: number
+  requestId?: string
 }
 
 export interface PageResult<T> {

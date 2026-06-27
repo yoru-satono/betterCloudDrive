@@ -43,6 +43,7 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public UploadSessionEntity initUpload(Long userId, Long parentId, String fileName, Long fileSize, String md5Hash, int totalChunks) {
+        validateUploadShape(fileSize, totalChunks);
         checkStorageQuota(userId, fileSize);
 
         String sessionId = UUID.randomUUID().toString();
@@ -136,7 +137,11 @@ public class UploadServiceImpl implements UploadService {
 
         String objectKey = generateStoragePath(userId, session.getFileName());
         String chunkPrefix = "uploads/" + userId + "/" + sessionId + "/chunks";
-        storageService.composeParts(objectKey, chunkPrefix, session.getTotalChunks());
+        if (session.getFileSize() != null && session.getFileSize() == 0L) {
+            storageService.uploadObject(objectKey, new ByteArrayInputStream(new byte[0]), 0, guessMimeType(session.getFileName()));
+        } else {
+            storageService.composeParts(objectKey, chunkPrefix, session.getTotalChunks());
+        }
 
         FileEntity file = buildFileEntity(userId, session.getParentId(), session.getFileName(),
                 session.getFileSize(), session.getMd5Hash(), objectKey);
@@ -148,7 +153,9 @@ public class UploadServiceImpl implements UploadService {
         uploadSessionRepository.save(session);
 
         redisTemplate.delete(bitmapKey);
-        redisTemplate.opsForValue().increment("storage:incr:" + userId, session.getFileSize());
+        if (session.getFileSize() != null && session.getFileSize() > 0) {
+            redisTemplate.opsForValue().increment("storage:incr:" + userId, session.getFileSize());
+        }
 
         return file.getId();
     }
@@ -229,13 +236,31 @@ public class UploadServiceImpl implements UploadService {
         }
 
         String objectKey = generateStoragePath(userId, fileName);
-        storageService.composeParts(objectKey, chunkPrefix, totalChunks);
+        if (fileSize == 0L) {
+            storageService.uploadObject(objectKey, new ByteArrayInputStream(new byte[0]), 0, guessMimeType(fileName));
+        } else {
+            storageService.composeParts(objectKey, chunkPrefix, totalChunks);
+        }
 
         FileEntity file = buildFileEntity(userId, parentId, fileName, fileSize, md5Hash, objectKey);
         fileRepository.save(file);
 
-        redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, fileSize);
+        if (fileSize > 0) {
+            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, fileSize);
+        }
         return file.getId();
+    }
+
+    private void validateUploadShape(Long fileSize, int totalChunks) {
+        if (fileSize == null || fileSize < 0 || totalChunks < 0) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Invalid upload size or chunk count");
+        }
+        if (fileSize == 0 && totalChunks != 0) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Zero-byte uploads must not include chunks");
+        }
+        if (fileSize > 0 && totalChunks <= 0) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Chunk count is required for non-empty uploads");
+        }
     }
 
     private String generateStoragePath(Long userId, String fileName) {
@@ -277,10 +302,12 @@ public class UploadServiceImpl implements UploadService {
             } catch (NumberFormatException ignored) {
             }
         }
-        long currentUsed = user.getStorageUsed() + pendingIncr;
-        if (currentUsed + fileSize > user.getStorageQuota()) {
+        long storageUsed = user.getStorageUsed() != null ? user.getStorageUsed() : 0L;
+        long storageQuota = user.getStorageQuota() != null ? user.getStorageQuota() : 0L;
+        long currentUsed = storageUsed + pendingIncr;
+        if (currentUsed + fileSize > storageQuota) {
             throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
-                    "Storage quota exceeded. Used: " + currentUsed + ", Quota: " + user.getStorageQuota());
+                    "Storage quota exceeded. Used: " + currentUsed + ", Quota: " + storageQuota);
         }
     }
 

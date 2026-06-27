@@ -73,6 +73,13 @@ export async function uploadFolderViaPicker(folderName: string, fileName: string
   return folderName
 }
 
+export async function setAuthTokens(accessToken: string, refreshToken: string) {
+  await browser.execute((access, refresh) => {
+    localStorage.setItem('accessToken', access)
+    localStorage.setItem('refreshToken', refresh)
+  }, accessToken, refreshToken)
+}
+
 export async function captureClipboardWrites() {
   await browser.execute(() => {
     const win = globalThis as typeof globalThis & {

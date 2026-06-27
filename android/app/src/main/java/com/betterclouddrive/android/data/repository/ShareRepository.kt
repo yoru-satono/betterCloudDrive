@@ -51,8 +51,9 @@ class ShareRepository @Inject constructor(private val api: ApiService) {
         parentId: Long? = null,
         page: Int = 1,
         size: Int = 20,
+        password: String? = null,
     ): NetworkResult<PageResult<FileItem>> = apiCall {
-        api.listSharedFiles(shareCode, parentId, page, size)
+        api.listSharedFiles(shareCode, parentId, page, size, password)
     }
 
     suspend fun saveSharedItem(

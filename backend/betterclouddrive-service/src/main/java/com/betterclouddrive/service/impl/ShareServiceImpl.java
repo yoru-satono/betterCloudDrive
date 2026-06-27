@@ -143,9 +143,7 @@ public class ShareServiceImpl implements ShareService {
 
     @Override
     public FileEntity accessShare(String shareCode, String password) {
-        ShareLinkEntity share = validateShare(shareCode, password);
-        validateVisitLimit(share, shareCode);
-        redisTemplate.opsForZSet().incrementScore("share:visits", shareCode, 1);
+        ShareLinkEntity share = validateShareAccess(shareCode, password, true);
 
         FileEntity file = fileRepository.findById(share.getFileId()).orElse(null);
         if (file == null || file.getIsDeleted()) {
@@ -157,7 +155,7 @@ public class ShareServiceImpl implements ShareService {
     @Override
     @Transactional
     public FileEntity downloadSharedFile(String shareCode, Long fileId, String password) {
-        ShareLinkEntity share = validateShare(shareCode, password);
+        ShareLinkEntity share = validateShareAccess(shareCode, password, true);
         FileEntity downloadFile = resolveSharedDownloadTarget(share, fileId);
         if (!"file".equals(downloadFile.getFileType())) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND, "Cannot download a folder");
@@ -169,7 +167,7 @@ public class ShareServiceImpl implements ShareService {
 
     @Override
     public FileEntity resolveSharedFolderDownload(String shareCode, Long fileId, String password) {
-        ShareLinkEntity share = validateShare(shareCode, password);
+        ShareLinkEntity share = validateShareAccess(shareCode, password, false);
         FileEntity downloadFolder = resolveSharedDownloadTarget(share, fileId);
         if (!"folder".equals(downloadFolder.getFileType())) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "Only folders can be downloaded as ZIP");
@@ -180,14 +178,14 @@ public class ShareServiceImpl implements ShareService {
     @Override
     @Transactional
     public void recordSharedDownload(String shareCode, String password) {
-        ShareLinkEntity share = validateShare(shareCode, password);
+        ShareLinkEntity share = validateShareAccess(shareCode, password, true);
         shareLinkRepository.incrementDownloadCount(share.getId());
     }
 
     @Override
     @Transactional
     public FileEntity saveSharedItem(String shareCode, Long fileId, Long targetParentId, Long userId, String password) {
-        ShareLinkEntity share = validateShare(shareCode, password);
+        ShareLinkEntity share = validateShareAccess(shareCode, password, true);
         FileEntity sharedRoot = fileRepository.findById(share.getFileId()).orElse(null);
         if (sharedRoot == null || sharedRoot.getIsDeleted()) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
@@ -214,6 +212,18 @@ public class ShareServiceImpl implements ShareService {
         }
         shareLinkRepository.incrementDownloadCount(share.getId());
         return savedRoot;
+    }
+
+    private ShareLinkEntity validateShareAccess(String shareCode, String password, boolean recordVisit) {
+        ShareLinkEntity share = validateShare(shareCode, password);
+        validateVisitLimit(share, shareCode);
+        if (recordVisit) {
+            var zSetOps = redisTemplate.opsForZSet();
+            if (zSetOps != null) {
+                zSetOps.incrementScore("share:visits", shareCode, 1);
+            }
+        }
+        return share;
     }
 
     private ShareLinkEntity validateShare(String shareCode, String password) {
@@ -399,14 +409,11 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
-    public PageResult<FileEntity> listSharedFiles(String shareCode, Long parentId, int page, int size) {
-        ShareLinkEntity share = shareLinkRepository.findByShareCode(shareCode).orElse(null);
-        if (share == null || share.getIsCanceled()) {
-            throw new BusinessException(ApiCode.INVALID_SHARE_CODE);
-        }
+    public PageResult<FileEntity> listSharedFiles(String shareCode, Long parentId, int page, int size, String password) {
+        ShareLinkEntity share = validateShareAccess(shareCode, password, true);
 
         FileEntity sharedFile = fileRepository.findById(share.getFileId()).orElse(null);
-        if (sharedFile == null) {
+        if (sharedFile == null || sharedFile.getIsDeleted()) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
 
@@ -414,7 +421,12 @@ public class ShareServiceImpl implements ShareService {
             return PageResult.of(List.of(sharedFile), 1, page, size);
         }
 
-        Long targetParentId = parentId != null ? parentId : sharedFile.getId();
+        FileEntity targetParent = parentId != null ? resolveSharedSource(sharedFile, parentId) : sharedFile;
+        if (!"folder".equals(targetParent.getFileType())) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND);
+        }
+
+        Long targetParentId = targetParent.getId();
         final Long finalParentId = targetParentId;
         Specification<FileEntity> spec = (root, query, cb) -> cb.and(
                 cb.equal(root.get("userId"), sharedFile.getUserId()),

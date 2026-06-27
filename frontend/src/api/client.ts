@@ -55,6 +55,57 @@ const redirectToLogin = () => {
   window.location.href = '/login'
 }
 
+export async function refreshAccessToken() {
+  if (isRefreshing) {
+    return new Promise<string>((resolve, reject) => {
+      failedQueue.push({ resolve, reject })
+    })
+  }
+
+  const refreshToken = localStorage.getItem('refreshToken')
+  if (!refreshToken) {
+    redirectToLogin()
+    throw new Error('缺少刷新令牌')
+  }
+
+  isRefreshing = true
+  try {
+    const { data } = await axios.post<ApiEnvelope & { data?: { accessToken: string; refreshToken: string } }>(
+      `${getApiBaseUrl()}/auth/refresh`,
+      { refreshToken }
+    )
+    if (data.code !== 200 || !data.data) throw new Error(data.message || '刷新令牌失败')
+    const { accessToken, refreshToken: newRefresh } = data.data
+    localStorage.setItem('accessToken', accessToken)
+    localStorage.setItem('refreshToken', newRefresh)
+    processQueue(null, accessToken)
+    return accessToken
+  } catch (e) {
+    processQueue(e, null)
+    redirectToLogin()
+    throw e
+  } finally {
+    isRefreshing = false
+  }
+}
+
+export async function ensureFreshAccessToken() {
+  const token = localStorage.getItem('accessToken')
+  if (!token) return undefined
+  try {
+    await api.get('/auth/me', { suppressToast: true })
+  } catch (error) {
+    if (isRefreshableUnauthorized(error)) return refreshAccessToken()
+    throw error
+  }
+  return localStorage.getItem('accessToken') || undefined
+}
+
+const isRefreshableUnauthorized = (error: unknown) => {
+  const axiosError = error as AxiosError<ApiEnvelope>
+  return axiosError.response?.status === 401 || axiosError.response?.data?.code === 401001
+}
+
 const handleApiError = async (error: AxiosError<ApiEnvelope>) => {
   const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean } | undefined
   const code = error.response?.data?.code
@@ -70,33 +121,12 @@ const handleApiError = async (error: AxiosError<ApiEnvelope>) => {
     }
 
     originalRequest._retry = true
-    isRefreshing = true
-
-    const refreshToken = localStorage.getItem('refreshToken')
-    if (!refreshToken) {
-      isRefreshing = false
-      redirectToLogin()
-      return Promise.reject(error)
-    }
-
     try {
-      const { data } = await axios.post<ApiEnvelope & { data?: { accessToken: string; refreshToken: string } }>(
-        `${getApiBaseUrl()}/auth/refresh`,
-        { refreshToken }
-      )
-      if (data.code !== 200 || !data.data) throw new Error(data.message || '刷新令牌失败')
-      const { accessToken, refreshToken: newRefresh } = data.data
-      localStorage.setItem('accessToken', accessToken)
-      localStorage.setItem('refreshToken', newRefresh)
-      processQueue(null, accessToken)
+      const accessToken = await refreshAccessToken()
       originalRequest.headers.Authorization = `Bearer ${accessToken}`
       return api(originalRequest)
     } catch (e) {
-      processQueue(e, null)
-      redirectToLogin()
       return Promise.reject(e)
-    } finally {
-      isRefreshing = false
     }
   }
 

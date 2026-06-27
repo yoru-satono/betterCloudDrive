@@ -38,7 +38,7 @@ async function load(pw?: string) {
   try {
     const { data } = await sharesApi.accessShare(shareCode.value, pw)
     file.value = data.data
-    const filesRes = await sharesApi.listSharedFiles(shareCode.value, null, 1, 100)
+    const filesRes = await sharesApi.listSharedFiles(shareCode.value, null, 1, 100, pw)
     sharedFiles.value = filesRes.data.data.records
     needPassword.value = false
     accessPassword.value = pw

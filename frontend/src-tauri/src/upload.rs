@@ -1069,7 +1069,11 @@ fn read_chunk(path: &Path, chunk_number: u64, chunk_size: u64) -> std::io::Resul
 }
 
 fn total_chunks(file_size: u64) -> u64 {
-    std::cmp::max(1, (file_size + CHUNK_SIZE - 1) / CHUNK_SIZE)
+    if file_size == 0 {
+        0
+    } else {
+        (file_size + CHUNK_SIZE - 1) / CHUNK_SIZE
+    }
 }
 
 fn upload_progress(total_chunks: u64, uploaded_chunks: u64) -> f64 {
@@ -1215,7 +1219,7 @@ mod tests {
 
     #[test]
     fn calculates_total_chunks() {
-        assert_eq!(total_chunks(0), 1);
+        assert_eq!(total_chunks(0), 0);
         assert_eq!(total_chunks(1), 1);
         assert_eq!(total_chunks(CHUNK_SIZE), 1);
         assert_eq!(total_chunks(CHUNK_SIZE + 1), 2);

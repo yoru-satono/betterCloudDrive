@@ -84,6 +84,28 @@ class UploadServiceImplTest {
         verify(uploadSessionRepository).save(any(UploadSessionEntity.class));
     }
 
+    @Test
+    void initUpload_shouldAllowZeroByteFilesWithoutChunks() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("storage:incr:1")).thenReturn(null);
+        when(uploadSessionRepository.save(any(UploadSessionEntity.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        UploadSessionEntity session = uploadService.initUpload(1L, null, "empty.txt", 0L, "d41d8cd98f00b204e9800998ecf8427e", 0);
+
+        assertThat(session.getFileSize()).isZero();
+        assertThat(session.getTotalChunks()).isZero();
+    }
+
+    @Test
+    void initUpload_shouldRejectPositiveFilesWithoutChunks() {
+        assertThatThrownBy(() -> uploadService.initUpload(1L, null, "bad.bin", 10L, null, 0))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
+        verifyNoInteractions(userRepository);
+    }
+
     // ── uploadChunk ───────────────────────────────────────────────────────────
 
     @Test
@@ -174,6 +196,29 @@ class UploadServiceImplTest {
         assertThat(fileId).isEqualTo(99L);
         verify(storageService).composeParts(anyString(), eq("uploads/1/sess-5/chunks"), eq(1));
         verify(redisTemplate).delete("upload:bitmap:sess-5");
+    }
+
+    @Test
+    void completeUpload_shouldCreateZeroByteObjectWithoutPartsOrStorageIncrement() {
+        UploadSessionEntity session = UploadSessionEntity.builder()
+                .id("empty-session").userId(1L).fileName("empty.txt").fileSize(0L)
+                .md5Hash("d41d8cd98f00b204e9800998ecf8427e")
+                .totalChunks(0).status(1).build();
+        when(uploadSessionRepository.findById("empty-session")).thenReturn(Optional.of(session));
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
+            FileEntity f = inv.getArgument(0);
+            f.setId(100L);
+            return f;
+        });
+        when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Long fileId = uploadService.completeUpload("empty-session", 1L);
+
+        assertThat(fileId).isEqualTo(100L);
+        verify(storageService).uploadObject(anyString(), any(InputStream.class), eq(0L), eq("text/plain"));
+        verify(storageService, never()).composeParts(anyString(), anyString(), anyInt());
+        verify(redisTemplate).delete("upload:bitmap:empty-session");
+        verify(valueOps, never()).increment(anyString(), anyLong());
     }
 
     @Test

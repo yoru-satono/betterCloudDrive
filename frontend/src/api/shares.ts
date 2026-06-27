@@ -30,9 +30,9 @@ export const deleteShare = (shareId: number) =>
 export const accessShare = (shareCode: string, password?: string) =>
   api.post<ApiResponse<AccessShareResponse>>(`/shares/access/${shareCode}`, password ? { password } : undefined, { suppressToast: true })
 
-export const listSharedFiles = (shareCode: string, parentId?: number | null, page = 1, size = 20) =>
+export const listSharedFiles = (shareCode: string, parentId?: number | null, page = 1, size = 20, password?: string) =>
   api.get<ApiResponse<PageResult<FileEntity>>>(`/shares/access/${shareCode}/files`, {
-    params: { parentId: parentId ?? undefined, page, size },
+    params: { parentId: parentId ?? undefined, page, size, password },
     suppressToast: true
   })
 

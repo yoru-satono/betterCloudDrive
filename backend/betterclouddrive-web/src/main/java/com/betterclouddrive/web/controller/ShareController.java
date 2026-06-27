@@ -117,8 +117,9 @@ public class ShareController {
             @PathVariable String shareCode,
             @RequestParam(required = false) Long parentId,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(shareService.listSharedFiles(shareCode, parentId, page, size));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String password) {
+        return ApiResponse.success(shareService.listSharedFiles(shareCode, parentId, page, size, password));
     }
 
     /** Authenticated endpoint: save a shared file or folder into the current user's drive */
