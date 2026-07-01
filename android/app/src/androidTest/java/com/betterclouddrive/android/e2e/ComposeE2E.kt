@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import com.betterclouddrive.android.MainActivity
@@ -28,6 +29,10 @@ fun BCDComposeRule.waitForText(text: String, timeoutMs: Long = 15_000): Semantic
 }
 
 fun BCDComposeRule.loginViaUi(user: E2EUser) {
+    waitForTag("login-settings").performClick()
+    waitForTag("server-url-input").performTextClearance()
+    waitForTag("server-url-input").performTextInput(E2EConfig.serverBaseUrl)
+    waitForTag("server-url-save").performClick()
     waitForTag("login-username").performTextInput(user.username)
     waitForTag("login-password").performTextInput(user.password)
     waitForTag("login-submit").performClick()

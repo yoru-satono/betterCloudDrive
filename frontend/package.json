@@ -10,10 +10,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:docker": "E2E_USE_DOCKER=1 E2E_BASE_URL=http://127.0.0.1:3000 E2E_BACKEND_URL=http://127.0.0.1:8080 playwright test",
+    "test:e2e:docker": "node scripts/run-playwright-docker.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui": "playwright test --ui",
-    "tauri:e2e:build": "tauri build",
+    "tauri:e2e:build": "tauri build --no-bundle",
     "test:e2e:tauri": "node scripts/run-tauri-e2e.mjs",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

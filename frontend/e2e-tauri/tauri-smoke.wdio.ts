@@ -4,20 +4,27 @@ import os from 'node:os'
 import path from 'node:path'
 import {
   createFolder,
+  createTeam,
+  createTeamFolder,
   createUser,
   listFiles,
   uniqueName,
   uploadSampleFile,
+  uploadTeamSampleFile,
 } from '../e2e/helpers/api'
 import { createApiRequestContext } from './helpers/api-request'
 import {
   captureClipboardWrites,
   createShareFromContextMenu,
+  createTeamShareFromContextMenu,
   downloadFromContextMenu,
   expectFolderUploadAvailable,
   expectDesktopSettings,
   expectFileVisible,
   loginViaWindow,
+  openSidebarLink,
+  openTeamRecycleBin,
+  openTeamSettings,
   readCapturedClipboardText,
   setAuthTokens,
   uploadFolderViaPicker,
@@ -40,6 +47,16 @@ describe('Tauri desktop window smoke', () => {
       const folder = await createFolder(request, user.accessToken, uniqueName('tauri-download-folder'))
       const childContents = `desktop folder download ${Date.now()}`
       await uploadSampleFile(request, user.accessToken, folder.id, 'nested.txt', childContents)
+      const team = await createTeam(request, user.accessToken, uniqueName('tauri-team'))
+      const teamFile = await uploadTeamSampleFile(
+        request,
+        user.accessToken,
+        team.id,
+        null,
+        `${uniqueName('tauri-team-file')}.txt`,
+        `desktop team file ${Date.now()}`,
+      )
+      const teamFolder = await createTeamFolder(request, user.accessToken, team.id, uniqueName('tauri-team-folder'))
 
       await waitForTauriWindow()
       await expectDesktopSettings()
@@ -69,6 +86,16 @@ describe('Tauri desktop window smoke', () => {
       await createShareFromContextMenu(file.fileName)
       const clipboardText = await readCapturedClipboardText()
       assert.match(clipboardText, /^http:\/\/127\.0\.0\.1:3000\/s\/\S+/)
+
+      await openSidebarLink(team.name)
+      await expectFileVisible(teamFile.fileName)
+      await expectFileVisible(teamFolder.fileName)
+      await createTeamShareFromContextMenu(teamFile.fileName)
+      const teamClipboardText = await readCapturedClipboardText()
+      assert.match(teamClipboardText, /^http:\/\/127\.0\.0\.1:3000\/s\/\S+/)
+      await openTeamSettings()
+      await openSidebarLink(team.name)
+      await openTeamRecycleBin()
     } finally {
       await request.dispose()
     }

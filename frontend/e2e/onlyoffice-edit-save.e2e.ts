@@ -1,0 +1,134 @@
+import { APIRequestContext, Page } from '@playwright/test'
+import crypto from 'node:crypto'
+import { test, expect } from './fixtures/test'
+import {
+  createMinimalDocx,
+  createTeam,
+  downloadTeamFileBytes,
+  getTeamFile,
+  getTeamOfficeConfig,
+  listTeamVersions,
+  loginViaUi,
+  uniqueName,
+  uploadTeamSampleFile,
+  zipContainsText,
+} from './helpers/api'
+
+const onlyOfficeURL = process.env.E2E_ONLYOFFICE_URL || 'http://127.0.0.1:8082'
+const onlyOfficeJwtSecret = process.env.ONLYOFFICE_JWT_SECRET || 'betterclouddrive-onlyoffice-dev-secret'
+
+test.describe('onlyoffice edit save', () => {
+  test.describe.configure({ timeout: 180_000 })
+  test.skip(process.env.E2E_ONLYOFFICE !== '1', 'OnlyOffice E2E is opt-in with E2E_ONLYOFFICE=1')
+
+  test('saves team docx edits through the real OnlyOffice forcesave callback and creates a version', async ({ page, request, e2eUser }) => {
+    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`).catch(() => null)
+    test.skip(!api?.ok(), `OnlyOffice Document Server is not reachable at ${onlyOfficeURL}`)
+
+    const team = await createTeam(request, e2eUser.accessToken, uniqueName('oo_team'))
+    const upload = await uploadTeamSampleFile(
+      request,
+      e2eUser.accessToken,
+      team.id,
+      null,
+      `${uniqueName('onlyoffice')}.docx`,
+      createMinimalDocx('OnlyOffice edit save baseline'),
+    )
+    const fileId = upload.fileId
+    const beforeFile = await getTeamFile(request, e2eUser.accessToken, team.id, fileId)
+    const beforeVersions = await listTeamVersions(request, e2eUser.accessToken, team.id, fileId)
+    const officeConfig = await getTeamOfficeConfig(request, e2eUser.accessToken, team.id, fileId)
+    const marker = `OO_E2E_${Date.now()}`
+
+    await loginViaUi(page, e2eUser)
+    await page.goto(`/teams/${team.id}/files`)
+    await expect(page.getByTestId(`file-card-${upload.fileName}`)).toBeVisible()
+
+    await page.getByTestId(`file-card-${upload.fileName}`).click({ button: 'right' })
+    await page.getByRole('menu').getByRole('menuitem', { name: '打开文档' }).click()
+    const dialog = page.getByRole('dialog', { name: '文件预览' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText('可编辑')).toBeVisible()
+
+    await typeIntoOnlyOffice(page, marker)
+    await forceSaveOnlyOfficeDocument(request, officeConfig.config)
+
+    await expect.poll(async () => {
+      const current = await getTeamFile(request, e2eUser.accessToken, team.id, fileId)
+      const versions = await listTeamVersions(request, e2eUser.accessToken, team.id, fileId)
+      const downloaded = await downloadTeamFileBytes(request, e2eUser.accessToken, team.id, fileId)
+      const fileChanged = current.md5Hash !== beforeFile.md5Hash || current.fileSize !== beforeFile.fileSize
+      const versionAdded = versions.length > beforeVersions.length && (current.versionCount ?? 0) > (beforeFile.versionCount ?? 0)
+      const markerSaved = zipContainsText(downloaded, marker)
+      return fileChanged && versionAdded && markerSaved ? 'saved' : `waiting ${versions.length}/${current.versionCount}`
+    }, { timeout: 120_000, intervals: [2_000, 5_000, 10_000] }).toBe('saved')
+
+    const downloaded = await downloadTeamFileBytes(request, e2eUser.accessToken, team.id, fileId)
+    expect(downloaded.length).toBeGreaterThan(0)
+    expect(downloaded.subarray(0, 2).toString()).toBe('PK')
+    expect(zipContainsText(downloaded, marker)).toBe(true)
+    await dialog.getByRole('button', { name: '关闭' }).last().click()
+  })
+})
+
+async function typeIntoOnlyOffice(page: Page, marker: string) {
+  const iframe = page.getByRole('dialog', { name: '文件预览' }).locator('iframe').first()
+  await expect(iframe).toBeVisible({ timeout: 60_000 })
+  await page.waitForTimeout(8_000)
+
+  const frameHandle = await iframe.elementHandle()
+  const frame = await frameHandle?.contentFrame()
+  if (frame) {
+    await frame.getByRole('button', { name: /知道了|Got it|OK/i }).click({ timeout: 5_000 }).catch(() => null)
+    await frame.locator('body').click({ position: { x: 520, y: 360 }, timeout: 10_000 })
+  }
+
+  const box = await iframe.boundingBox()
+  if (!box) throw new Error('OnlyOffice iframe has no bounding box')
+  await page.mouse.click(box.x + Math.min(box.width * 0.48, box.width - 120), box.y + Math.min(box.height * 0.48, box.height - 120))
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type(marker, { delay: 20 })
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')
+  await page.waitForTimeout(4_000)
+}
+
+async function forceSaveOnlyOfficeDocument(request: APIRequestContext, config: Record<string, unknown>) {
+  const document = config.document as { key?: string } | undefined
+  if (!document?.key) throw new Error('OnlyOffice document key is missing')
+  const payload = { c: 'forcesave', key: document.key }
+  const body = { ...payload, token: signOnlyOfficeJwt(payload) }
+  const endpoints = [`${onlyOfficeURL}/command`, `${onlyOfficeURL}/coauthoring/CommandService.ashx`]
+  let lastBody: unknown = null
+  for (const endpoint of endpoints) {
+    const res = await request.post(endpoint, {
+      headers: { Authorization: `Bearer ${body.token}` },
+      data: body,
+    }).catch(() => null)
+    if (!res) continue
+    const text = await res.text()
+    if (!res.ok()) {
+      lastBody = text
+      continue
+    }
+    const json = JSON.parse(text) as { error?: number }
+    lastBody = json
+    if (json.error === 0) return
+  }
+  throw new Error(`OnlyOffice forcesave failed: ${JSON.stringify(lastBody)}`)
+}
+
+function signOnlyOfficeJwt(payload: Record<string, unknown>) {
+  const header = { alg: 'HS256', typ: 'JWT' }
+  const encodedHeader = base64Url(Buffer.from(JSON.stringify(header)))
+  const encodedPayload = base64Url(Buffer.from(JSON.stringify(payload)))
+  const signature = crypto
+    .createHmac('sha256', onlyOfficeJwtSecret)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest()
+  return `${encodedHeader}.${encodedPayload}.${base64Url(signature)}`
+}
+
+function base64Url(buffer: Buffer) {
+  return buffer.toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+}

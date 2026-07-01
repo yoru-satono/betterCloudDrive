@@ -8,9 +8,12 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 data class E2EUser(
     val userId: Long,
@@ -27,9 +30,18 @@ data class E2EFile(
     val fileType: String,
     val parentId: Long?,
     val fileSize: Long,
+    val md5Hash: String? = null,
+    val versionCount: Int = 1,
 ) {
     val isFolder: Boolean get() = fileType == "folder"
 }
+
+data class E2EOfficeConfig(
+    val editable: Boolean,
+    val mode: String?,
+    val callbackUrl: String?,
+    val documentServerUrl: String,
+)
 
 data class E2EShare(
     val id: Long,
@@ -42,6 +54,27 @@ data class E2ETag(
     val id: Long,
     val tagName: String,
     val color: String,
+)
+
+data class E2ETeamInvite(
+    val id: Long,
+    val teamId: Long,
+    val email: String,
+    val role: String,
+    val status: String,
+)
+
+data class E2ETeamAuditLog(
+    val id: Long,
+    val action: String,
+    val targetType: String?,
+    val targetId: Long?,
+)
+
+data class E2ETeam(
+    val id: Long,
+    val name: String,
+    val role: String,
 )
 
 class E2EApiClient(
@@ -116,6 +149,80 @@ class E2EApiClient(
         return parseFile(postJson("$baseUrl/files/folder", requestBody, token).getJSONObject("data"))
     }
 
+    fun createTeam(token: String, name: String): E2ETeam {
+        return parseTeam(postJson("$baseUrl/teams", JSONObject().put("name", name), token).getJSONObject("data"))
+    }
+
+    fun addTeamMember(token: String, teamId: Long, username: String, role: String = "VIEWER") {
+        postJson("$baseUrl/teams/$teamId/members", JSONObject().put("username", username).put("role", role), token)
+    }
+
+    fun createTeamInvite(token: String, teamId: Long, email: String, role: String = "VIEWER"): E2ETeamInvite {
+        return parseTeamInvite(
+            postJson("$baseUrl/teams/$teamId/invites", JSONObject().put("email", email).put("role", role), token)
+                .getJSONObject("data"),
+        )
+    }
+
+    fun listTeamInvites(token: String, teamId: Long): List<E2ETeamInvite> {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/invites")
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute()).getJSONArray("data")
+        return (0 until records.length()).map { index -> parseTeamInvite(records.getJSONObject(index)) }
+    }
+
+    fun resendTeamInvite(token: String, teamId: Long, inviteId: Long): E2ETeamInvite {
+        return parseTeamInvite(
+            postJson("$baseUrl/teams/$teamId/invites/$inviteId/resend", JSONObject(), token).getJSONObject("data"),
+        )
+    }
+
+    fun cancelTeamInvite(token: String, teamId: Long, inviteId: Long) {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/invites/$inviteId")
+            .delete()
+            .header("Authorization", "Bearer $token")
+            .build()
+        expectApiSuccess(client.newCall(request).execute())
+    }
+
+    fun latestTeamInviteToken(email: String): String {
+        val deadline = System.currentTimeMillis() + 20_000
+        while (System.currentTimeMillis() < deadline) {
+            val text = latestMailText(email, "team-invites/")
+            val match = Regex("""team-invites/([A-Za-z0-9]+)""").find(text)
+            if (match != null) return match.groupValues[1]
+            Thread.sleep(500)
+        }
+        throw AssertionError("No team invite token received for $email")
+    }
+
+    fun listTeamAuditLogs(token: String, teamId: Long): List<E2ETeamAuditLog> {
+        val url = "$baseUrl/teams/$teamId/audit-logs".toHttpUrl().newBuilder()
+            .addQueryParameter("page", "1")
+            .addQueryParameter("size", "100")
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute())
+            .getJSONObject("data")
+            .getJSONArray("records")
+        return (0 until records.length()).map { index -> parseTeamAuditLog(records.getJSONObject(index)) }
+    }
+
+    fun createTeamFolder(token: String, teamId: Long, folderName: String, parentId: Long? = null): E2EFile {
+        val requestBody = JSONObject()
+            .put("folderName", folderName)
+            .put("parentId", parentId)
+        return parseFile(postJson("$baseUrl/teams/$teamId/files/folder", requestBody, token).getJSONObject("data"))
+    }
+
     fun uploadTextFile(
         token: String,
         parentId: Long?,
@@ -144,6 +251,63 @@ class E2EApiClient(
         return getFile(token, fileId)
     }
 
+    fun uploadTeamTextFile(
+        token: String,
+        teamId: Long,
+        parentId: Long?,
+        fileName: String,
+        content: String = "android team e2e sample\n",
+    ): E2EFile {
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        return uploadTeamFile(token, teamId, parentId, fileName, bytes, "text/plain")
+    }
+
+    fun uploadTeamDocxFile(
+        token: String,
+        teamId: Long,
+        parentId: Long?,
+        fileName: String,
+        text: String = "BetterCloudDrive Android OnlyOffice E2E",
+    ): E2EFile {
+        return uploadTeamFile(
+            token = token,
+            teamId = teamId,
+            parentId = parentId,
+            fileName = fileName,
+            bytes = minimalDocxBytes(text),
+            mediaType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    }
+
+    fun uploadTeamFile(
+        token: String,
+        teamId: Long,
+        parentId: Long?,
+        fileName: String,
+        bytes: ByteArray,
+        mediaType: String,
+    ): E2EFile {
+        val md5 = md5(bytes)
+        val totalChunks = if (bytes.isEmpty()) 0 else 1
+        val initBody = postJson(
+            "$baseUrl/teams/$teamId/upload/init",
+            JSONObject()
+                .put("parentId", parentId)
+                .put("fileName", fileName)
+                .put("fileSize", bytes.size)
+                .put("md5Hash", md5)
+                .put("totalChunks", totalChunks),
+            token,
+        )
+        val sessionId = initBody.getJSONObject("data").getString("sessionId")
+        if (totalChunks > 0) {
+            uploadTeamChunk(token, teamId, sessionId, fileName, bytes, mediaType)
+        }
+        val complete = postJson("$baseUrl/teams/$teamId/upload/$sessionId/complete", JSONObject(), token)
+        val fileId = complete.getJSONObject("data").getLong("fileId")
+        return getTeamFile(token, teamId, fileId)
+    }
+
     fun uploadEmptyFile(token: String, parentId: Long?, fileName: String): E2EFile {
         return uploadTextFile(token, parentId, fileName, "")
     }
@@ -152,10 +316,45 @@ class E2EApiClient(
         postJson("$baseUrl/favorites/$fileId", JSONObject(), token)
     }
 
+    fun addTeamFavorite(token: String, teamId: Long, fileId: Long) {
+        postJson("$baseUrl/teams/$teamId/favorites/$fileId", JSONObject(), token)
+    }
+
+    fun getTeamFavoriteStatus(token: String, teamId: Long, fileId: Long): Boolean {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/favorites/$fileId/status")
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        return expectApiSuccess(client.newCall(request).execute()).getBoolean("data")
+    }
+
+    fun listTeamFavorites(token: String, teamId: Long): List<E2EFile> {
+        val url = "$baseUrl/teams/$teamId/favorites".toHttpUrl().newBuilder()
+            .addQueryParameter("page", "1")
+            .addQueryParameter("size", "100")
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute())
+            .getJSONObject("data")
+            .getJSONArray("records")
+        return (0 until records.length()).map { index -> parseFile(records.getJSONObject(index)) }
+    }
+
     fun createShare(token: String, fileId: Long, password: String? = null): E2EShare {
         val payload = JSONObject().put("fileId", fileId)
         if (password != null) payload.put("password", password)
         return parseShare(postJson("$baseUrl/shares", payload, token).getJSONObject("data"))
+    }
+
+    fun createTeamShare(token: String, teamId: Long, fileId: Long, password: String? = null): E2EShare {
+        val payload = JSONObject().put("fileId", fileId)
+        if (password != null) payload.put("password", password)
+        return parseShare(postJson("$baseUrl/teams/$teamId/shares", payload, token).getJSONObject("data"))
     }
 
     fun listSharedFiles(shareCode: String, password: String? = null, parentId: Long? = null): JSONObject {
@@ -207,8 +406,21 @@ class E2EApiClient(
         expectOk(client.newCall(request).execute()).close()
     }
 
+    fun deleteTeamFiles(token: String, teamId: Long, fileIds: List<Long>) {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/files")
+            .delete(JSONObject().put("fileIds", JSONArray(fileIds)).toString().toRequestBody(jsonMediaType))
+            .header("Authorization", "Bearer $token")
+            .build()
+        expectOk(client.newCall(request).execute()).close()
+    }
+
     fun restoreFile(token: String, fileId: Long) {
         postJson("$baseUrl/recycle-bin/$fileId/restore", JSONObject(), token)
+    }
+
+    fun restoreTeamFile(token: String, teamId: Long, fileId: Long) {
+        postJson("$baseUrl/teams/$teamId/recycle-bin/$fileId/restore", JSONObject(), token)
     }
 
     fun permanentDeleteFile(token: String, fileId: Long) {
@@ -218,6 +430,22 @@ class E2EApiClient(
             .header("Authorization", "Bearer $token")
             .build()
         expectApiSuccess(client.newCall(request).execute())
+    }
+
+    fun listTeamRecycleBin(token: String, teamId: Long): List<E2EFile> {
+        val url = "$baseUrl/teams/$teamId/recycle-bin".toHttpUrl().newBuilder()
+            .addQueryParameter("page", "1")
+            .addQueryParameter("size", "100")
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute())
+            .getJSONObject("data")
+            .getJSONArray("records")
+        return (0 until records.length()).map { index -> parseFile(records.getJSONObject(index)) }
     }
 
     fun emptyRecycleBin(token: String) {
@@ -240,6 +468,43 @@ class E2EApiClient(
         postJson("$baseUrl/tags/$tagId/files", JSONObject().put("fileIds", JSONArray(listOf(fileId))), token)
     }
 
+    fun createTeamTag(token: String, teamId: Long, tagName: String, color: String = "#1890ff"): E2ETag {
+        return parseTag(
+            postJson("$baseUrl/teams/$teamId/tags", JSONObject().put("tagName", tagName).put("color", color), token)
+                .getJSONObject("data"),
+        )
+    }
+
+    fun listTeamTags(token: String, teamId: Long): List<E2ETag> {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/tags")
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute()).getJSONArray("data")
+        return (0 until records.length()).map { index -> parseTag(records.getJSONObject(index)) }
+    }
+
+    fun tagTeamFile(token: String, teamId: Long, tagId: Long, fileId: Long) {
+        postJson("$baseUrl/teams/$teamId/tags/$tagId/files", JSONObject().put("fileIds", JSONArray(listOf(fileId))), token)
+    }
+
+    fun listTeamFilesByTag(token: String, teamId: Long, tagId: Long): List<E2EFile> {
+        val url = "$baseUrl/teams/$teamId/tags/$tagId/files".toHttpUrl().newBuilder()
+            .addQueryParameter("page", "1")
+            .addQueryParameter("size", "100")
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute())
+            .getJSONObject("data")
+            .getJSONArray("records")
+        return (0 until records.length()).map { index -> parseFile(records.getJSONObject(index)) }
+    }
+
     fun cancelShare(token: String, shareId: Long) {
         val request = Request.Builder()
             .url("$baseUrl/shares/$shareId")
@@ -258,6 +523,32 @@ class E2EApiClient(
         return parseFile(expectApiSuccess(client.newCall(request).execute()).getJSONObject("data"))
     }
 
+    fun getTeamFile(token: String, teamId: Long, fileId: Long): E2EFile {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/files/$fileId")
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        return parseFile(expectApiSuccess(client.newCall(request).execute()).getJSONObject("data"))
+    }
+
+    fun getTeamOfficeConfig(token: String, teamId: Long, fileId: Long): E2EOfficeConfig {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/office/files/$fileId/config")
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val data = expectApiSuccess(client.newCall(request).execute()).getJSONObject("data")
+        val config = data.getJSONObject("config")
+        val editorConfig = config.getJSONObject("editorConfig")
+        return E2EOfficeConfig(
+            editable = data.getBoolean("editable"),
+            mode = editorConfig.optString("mode").takeIf { it.isNotBlank() },
+            callbackUrl = editorConfig.optString("callbackUrl").takeIf { it.isNotBlank() },
+            documentServerUrl = data.getString("documentServerUrl"),
+        )
+    }
+
     private fun sendRegisterCode(email: String) {
         postJson("$baseUrl/auth/register-code/send", JSONObject().put("email", email))
     }
@@ -273,7 +564,7 @@ class E2EApiClient(
         throw AssertionError("No verification code received for $email")
     }
 
-    private fun latestMailText(email: String): String {
+    private fun latestMailText(email: String, requiredText: String? = null): String {
         val listRequest = Request.Builder().url("$mailpitUrl/messages").get().build()
         val listResponse = client.newCall(listRequest).execute()
         if (!listResponse.isSuccessful) return ""
@@ -287,7 +578,8 @@ class E2EApiClient(
             val detailRequest = Request.Builder().url("$mailpitUrl/message/$id").get().build()
             val detailResponse = client.newCall(detailRequest).execute()
             if (!detailResponse.isSuccessful) continue
-            return detailResponse.body?.string().orEmpty()
+            val text = detailResponse.body?.string().orEmpty()
+            if (requiredText == null || text.contains(requiredText)) return text
         }
         return ""
     }
@@ -303,6 +595,30 @@ class E2EApiClient(
             .build()
         val request = Request.Builder()
             .url("$baseUrl/upload/$sessionId/chunk?chunkNumber=0")
+            .post(requestBody)
+            .header("Authorization", "Bearer $token")
+            .build()
+        expectApiSuccess(client.newCall(request).execute())
+    }
+
+    private fun uploadTeamChunk(
+        token: String,
+        teamId: Long,
+        sessionId: String,
+        fileName: String,
+        bytes: ByteArray,
+        mediaType: String = "text/plain",
+    ) {
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "file",
+                fileName,
+                bytes.toRequestBody(mediaType.toMediaType()),
+            )
+            .build()
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/upload/$sessionId/chunk?chunkNumber=0")
             .post(requestBody)
             .header("Authorization", "Bearer $token")
             .build()
@@ -350,6 +666,8 @@ class E2EApiClient(
             fileType = json.optString("fileType", "file"),
             parentId = if (json.isNull("parentId")) null else json.getLong("parentId"),
             fileSize = json.optLong("fileSize", 0),
+            md5Hash = json.optString("md5Hash").takeIf { it.isNotBlank() },
+            versionCount = json.optInt("versionCount", 1),
         )
     }
 
@@ -370,6 +688,33 @@ class E2EApiClient(
         )
     }
 
+    private fun parseTeamInvite(json: JSONObject): E2ETeamInvite {
+        return E2ETeamInvite(
+            id = json.getLong("id"),
+            teamId = json.getLong("teamId"),
+            email = json.getString("email"),
+            role = json.optString("role", "VIEWER"),
+            status = json.optString("status", ""),
+        )
+    }
+
+    private fun parseTeamAuditLog(json: JSONObject): E2ETeamAuditLog {
+        return E2ETeamAuditLog(
+            id = json.getLong("id"),
+            action = json.getString("action"),
+            targetType = json.optString("targetType").takeIf { it.isNotBlank() },
+            targetId = if (json.isNull("targetId")) null else json.getLong("targetId"),
+        )
+    }
+
+    private fun parseTeam(json: JSONObject): E2ETeam {
+        return E2ETeam(
+            id = json.getLong("id"),
+            name = json.getString("name"),
+            role = json.optString("role", "VIEWER"),
+        )
+    }
+
     private fun uniqueSuffix(): String {
         return "${System.currentTimeMillis()}_${UUID.randomUUID().toString().replace("-", "").take(6)}"
     }
@@ -378,6 +723,60 @@ class E2EApiClient(
         return MessageDigest.getInstance("MD5")
             .digest(bytes)
             .joinToString("") { "%02x".format(it) }
+    }
+
+    private fun minimalDocxBytes(text: String): ByteArray {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry("[Content_Types].xml"))
+            zip.write(
+                """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+                  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+                  <Default Extension="xml" ContentType="application/xml"/>
+                  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+                </Types>
+                """.trimIndent().toByteArray(Charsets.UTF_8),
+            )
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry("_rels/.rels"))
+            zip.write(
+                """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+                </Relationships>
+                """.trimIndent().toByteArray(Charsets.UTF_8),
+            )
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry("word/document.xml"))
+            zip.write(
+                """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                  <w:body>
+                    <w:p><w:r><w:t>${escapeXml(text)}</w:t></w:r></w:p>
+                    <w:sectPr>
+                      <w:pgSz w:w="12240" w:h="15840"/>
+                      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+                    </w:sectPr>
+                  </w:body>
+                </w:document>
+                """.trimIndent().toByteArray(Charsets.UTF_8),
+            )
+            zip.closeEntry()
+        }
+        return output.toByteArray()
+    }
+
+    private fun escapeXml(value: String): String {
+        return value
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;")
     }
 
     private fun targetParentBody(targetParentId: Long?): JSONObject {

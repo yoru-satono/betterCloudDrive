@@ -3,6 +3,7 @@ package com.betterclouddrive.android.e2e
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import com.betterclouddrive.android.MainActivity
 import org.junit.Before
@@ -84,6 +85,10 @@ class AndroidCoreE2ETest {
     }
 
     private fun loginViaUi(user: E2EUser) {
+        composeRule.waitForTag("login-settings").performClick()
+        composeRule.waitForTag("server-url-input").performTextClearance()
+        composeRule.waitForTag("server-url-input").performTextInput(E2EConfig.serverBaseUrl)
+        composeRule.waitForTag("server-url-save").performClick()
         composeRule.waitForTag("login-username").performTextInput(user.username)
         composeRule.waitForTag("login-password").performTextInput(user.password)
         composeRule.waitForTag("login-submit").performClick()

@@ -19,14 +19,14 @@ class TestInitUpload:
         assert data["totalChunks"] == 2
 
     def test_init_upload_missing_parent(self, client, auth_headers):
-        # Backend accepts any parentId at init time (validation happens at complete)
+        # Backend validates parentId at init time to avoid dangling sessions.
         r = client.post("/api/v1/upload/init", json={
             "parentId": 99999,
             "fileName": "test.bin",
             "fileSize": 100,
             "totalChunks": 1,
         }, headers=auth_headers)
-        assert_api_ok(r)  # Init succeeds even with nonexistent parent
+        assert_api_error(r, 404001)
 
 
 class TestUploadChunk:

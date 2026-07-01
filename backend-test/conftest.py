@@ -1,14 +1,20 @@
 """Session-scoped fixtures for the backend-test project."""
 
+import base64
+import json
 import pytest
 import httpx
 import uuid
 import os
 import re
+import subprocess
 import time
+from pathlib import Path
 
 BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8080")
 MAILPIT_URL = os.getenv("MAILPIT_URL", "http://localhost:8025")
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DATABASE_ENV_FILE = REPO_ROOT / "config" / "env-files" / "database.env"
 
 
 @pytest.fixture(scope="session")
@@ -84,6 +90,105 @@ def request_registration_code(client, email: str):
     raise AssertionError(f"Verification code email was not received for {email}")
 
 
+def _decode_user_id(token: str) -> int | None:
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * ((4 - len(payload) % 4) % 4)
+        return int(json.loads(base64.urlsafe_b64decode(payload))["sub"])
+    except Exception:
+        return None
+
+
+def _read_env_file(path: Path) -> dict[str, str]:
+    values = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip('"').strip("'")
+    return values
+
+
+def _compose_database_config() -> dict[str, str]:
+    file_values = _read_env_file(DATABASE_ENV_FILE)
+    return {
+        "POSTGRES_USER": file_values.get("POSTGRES_USER") or os.getenv("POSTGRES_USER") or "bcd_user",
+        "POSTGRES_DB": file_values.get("POSTGRES_DB") or os.getenv("POSTGRES_DB") or "better_cloud_drive",
+    }
+
+
+def _promote_user_to_admin(username: str):
+    db = _compose_database_config()
+    escaped_username = username.replace("'", "''")
+    sql = f"UPDATE users SET role = 'ROLE_ADMIN', status = 1 WHERE username = '{escaped_username}';"
+    command = [
+        "docker", "compose", "exec", "-T", "postgres",
+        "psql", "-v", "ON_ERROR_STOP=1",
+        "-U", db["POSTGRES_USER"],
+        "-d", db["POSTGRES_DB"],
+        "-c", sql,
+    ]
+    result = subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Failed to promote backend-test user to ROLE_ADMIN via Docker Compose PostgreSQL.\n"
+            f"Command: {' '.join(command)}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}\n"
+            "Set ADMIN_TOKEN to a valid admin JWT to override this fixture in non-Compose environments."
+        )
+    if "UPDATE 1" not in result.stdout:
+        raise RuntimeError(
+            f"Admin promotion did not update exactly one user for username={username!r}.\n"
+            f"psql output:\n{result.stdout}\n{result.stderr}"
+        )
+
+
+def _login_user(client, username: str, password: str):
+    response = client.post("/api/v1/auth/login", json={
+        "username": username,
+        "password": password,
+    })
+    assert response.json()["code"] == 200, f"Login failed: {response.json()}"
+    return response.json()["data"]
+
+
+def _create_test_user(client, prefix: str = "test"):
+    username = f"{prefix}_{uuid.uuid4().hex[:10]}"
+    password = "TestPass123!"
+    email = f"{username}@test.local"
+    verification_code = request_registration_code(client, email)
+
+    response = client.post("/api/v1/auth/register", json={
+        "username": username,
+        "password": password,
+        "email": email,
+        "verificationCode": verification_code,
+    })
+    assert response.json()["code"] == 200, f"Register failed: {response.json()}"
+
+    data = _login_user(client, username, password)
+    access_token = data["accessToken"]
+    return {
+        "username": username,
+        "password": password,
+        "email": email,
+        "userId": data.get("userId") or _decode_user_id(access_token),
+        "accessToken": access_token,
+        "refreshToken": data["refreshToken"],
+    }
+
+
 @pytest.fixture
 def registration_code_for(client):
     return lambda email: request_registration_code(client, email)
@@ -98,29 +203,26 @@ def auth_headers(test_user):
 @pytest.fixture(scope="session")
 def test_user(client):
     """Create a unique test user once per session. Returns credentials dict."""
-    username = f"test_{uuid.uuid4().hex[:10]}"
-    password = "TestPass123!"
-    email = f"{username}@test.local"
-    verification_code = request_registration_code(client, email)
+    yield _create_test_user(client)
 
-    r = client.post("/api/v1/auth/register", json={
-        "username": username,
-        "password": password,
-        "email": email,
-        "verificationCode": verification_code,
-    })
-    assert r.json()["code"] == 200, f"Register failed: {r.json()}"
 
-    r = client.post("/api/v1/auth/login", json={
-        "username": username, "password": password
-    })
-    data = r.json()["data"]
+@pytest.fixture(scope="session")
+def admin_user(client):
+    """Create or load an admin user for black-box admin API tests."""
+    token = os.getenv("ADMIN_TOKEN")
+    if token:
+        return {"userId": _decode_user_id(token), "adminToken": token}
 
-    yield {
-        "username": username,
-        "password": password,
-        "email": email,
-        "userId": data.get("userId"),
-        "accessToken": data["accessToken"],
-        "refreshToken": data["refreshToken"],
-    }
+    user = _create_test_user(client, "admin")
+    _promote_user_to_admin(user["username"])
+    data = _login_user(client, user["username"], user["password"])
+    user["accessToken"] = data["accessToken"]
+    user["refreshToken"] = data["refreshToken"]
+    user["userId"] = data.get("userId") or _decode_user_id(data["accessToken"])
+    user["adminToken"] = data["accessToken"]
+    return user
+
+
+@pytest.fixture(scope="session")
+def admin_headers(admin_user):
+    return {"Authorization": f"Bearer {admin_user['adminToken']}"}

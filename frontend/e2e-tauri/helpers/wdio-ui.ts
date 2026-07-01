@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { $, browser, expect } from '@wdio/globals'
+import { $, $$, browser, expect } from '@wdio/globals'
 
 export async function waitForTauriWindow() {
   try {
@@ -21,8 +21,15 @@ export async function loginViaWindow(username: string, password: string) {
 }
 
 export async function expectDesktopSettings() {
-  await expect(await inputByLabel('API 地址')).toHaveValue('http://127.0.0.1:8080/api/v1')
-  await expect(await inputByLabel('Web 分享地址')).toHaveValue('http://127.0.0.1:3000')
+  await (await buttonByLabel('连接设置')).click()
+  const apiInput = await inputByLabel('API 地址')
+  const webInput = await inputByLabel('Web 分享地址')
+  await apiInput.setValue('http://127.0.0.1:8080/api/v1')
+  await webInput.setValue('http://127.0.0.1:3000')
+  await expect(apiInput).toHaveValue('http://127.0.0.1:8080/api/v1')
+  await expect(webInput).toHaveValue('http://127.0.0.1:3000')
+  await (await buttonByText('保存')).click()
+  await expect(apiInput).not.toBeDisplayed()
 }
 
 export async function expectFileVisible(fileName: string) {
@@ -48,6 +55,73 @@ export async function createShareFromContextMenu(fileName: string) {
   await expect(await $('[data-testid="share-modal"]')).toBeDisplayed()
   await (await buttonByText('创建并复制链接')).click()
   await expect(await $('[data-testid="share-modal"]')).not.toBeDisplayed()
+}
+
+export async function openSidebarLink(text: string) {
+  await (await linkByText(text)).click()
+  await expectTextVisible(text)
+}
+
+export async function createTeamShareFromContextMenu(fileName: string) {
+  await openFileContextMenu(fileName)
+  await (await menuItemByText('分享')).click()
+  await expect(await $('[data-testid="team-share-modal"]')).toBeDisplayed()
+  await (await buttonByText('创建并复制链接')).click()
+  await expect(await $('[data-testid="team-share-modal"]')).not.toBeDisplayed()
+}
+
+export async function openOfficeFromContextMenu(fileName: string) {
+  await openFileContextMenu(fileName)
+  await (await menuItemByText('打开文档')).click()
+  await expectTextVisible('文件预览')
+  await expect(await $('[data-testid="onlyoffice-shell"]')).toBeDisplayed()
+}
+
+export async function expectOfficePreviewMode(text: '只读预览' | '可编辑') {
+  await expectTextVisible(text)
+  await browser.waitUntil(async () => (await $('iframe').isDisplayed().catch(() => false)), {
+    timeout: 60_000,
+    timeoutMsg: `OnlyOffice iframe did not become visible in ${text} mode`,
+  })
+}
+
+export async function closePreviewModal() {
+  const buttons = await $$('//button[normalize-space(.)="关闭"]')
+  if (!buttons.length) throw new Error('Close button was not found')
+  await buttons[buttons.length - 1].click()
+  await browser.waitUntil(async () => !(await textElementContaining('文件预览').isDisplayed().catch(() => false)), {
+    timeout: 10_000,
+    timeoutMsg: 'Preview modal did not close',
+  })
+}
+
+export async function expectContextMenuItemVisible(text: string) {
+  await expect(await menuItemByText(text)).toBeDisplayed()
+}
+
+export async function expectContextMenuItemNotVisible(text: string) {
+  await browser.waitUntil(async () => !(await $(`//*[@role="menuitem" and normalize-space(.)="${text}"]`).isDisplayed().catch(() => false)), {
+    timeout: 5_000,
+    timeoutMsg: `Context menu item "${text}" was still displayed`,
+  })
+}
+
+export async function openTeamSettings() {
+  await (await buttonByText('设置')).click()
+  await expectTextVisible('团队设置')
+}
+
+export async function openTeamRecycleBin() {
+  await (await buttonByText('回收站')).click()
+  await browser.waitUntil(async () => (await textElementContaining('回收站').isDisplayed().catch(() => false)), {
+    timeout: 10_000,
+    timeoutMsg: 'Team recycle bin did not become visible',
+  })
+}
+
+export async function expectWriteActionsUnavailable() {
+  await expectButtonNotDisplayed('上传文件')
+  await expectButtonNotDisplayed('新建文件夹')
 }
 
 export async function downloadFromContextMenu(fileName: string) {
@@ -249,10 +323,32 @@ async function buttonByText(text: string) {
   return button
 }
 
+async function buttonByLabel(label: string) {
+  const button = await $(`//button[@aria-label="${label}"]`)
+  await button.waitForClickable()
+  return button
+}
+
 async function linkByText(text: string) {
   const link = await $(`//a[normalize-space(.)="${text}"]`)
   await link.waitForDisplayed()
   return link
+}
+
+async function expectTextVisible(text: string) {
+  const element = await $(`//*[normalize-space(.)="${text}"]`)
+  await element.waitForDisplayed()
+}
+
+async function expectButtonNotDisplayed(text: string) {
+  await browser.waitUntil(async () => !(await $(`//button[normalize-space(.)="${text}"]`).isDisplayed().catch(() => false)), {
+    timeout: 5_000,
+    timeoutMsg: `Button "${text}" was still displayed`,
+  })
+}
+
+function textElementContaining(text: string) {
+  return $(`//*[contains(normalize-space(.), "${text}")]`)
 }
 
 async function menuItemByText(text: string) {

@@ -1,39 +1,11 @@
 """Tests for /api/v1/admin endpoints (requires ROLE_ADMIN).
 
-Set ADMIN_TOKEN env var to a valid admin JWT before running these tests:
-  UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'your_admin_user';
-  export ADMIN_TOKEN=$(curl .../auth/login ... | jq -r .data.accessToken)
-
-All tests in this module are skipped automatically when ADMIN_TOKEN is unset.
+The admin_user fixture creates and promotes an isolated test account when ADMIN_TOKEN is unset.
 """
 
-import base64
-import json
-import os
-import pytest
+import uuid
+
 from tests.helpers.assert_helper import assert_api_ok, assert_api_error, assert_paginated
-
-
-def _decode_user_id(token: str) -> int:
-    try:
-        payload = token.split(".")[1]
-        payload += "=" * (4 - len(payload) % 4)
-        return int(json.loads(base64.urlsafe_b64decode(payload))["sub"])
-    except Exception:
-        return 1
-
-
-@pytest.fixture(scope="session")
-def admin_user():
-    token = os.getenv("ADMIN_TOKEN")
-    if not token:
-        pytest.skip("ADMIN_TOKEN not set — skipping admin tests")
-    return {"userId": _decode_user_id(token), "adminToken": token}
-
-
-@pytest.fixture(scope="session")
-def admin_headers(admin_user):
-    return {"Authorization": f"Bearer {admin_user['adminToken']}"}
 
 
 class TestAdminAccess:
@@ -93,3 +65,38 @@ class TestAdminStats:
             "storageQuota": 21474836480  # 20GB
         }, headers=admin_headers)
         assert_api_ok(r)
+
+
+class TestAdminTeams:
+    def test_admin_team_detail_members_files_audit_and_quota(self, client, admin_headers):
+        team_name = f"admin_team_{uuid.uuid4().hex[:8]}"
+        team = assert_api_ok(client.post("/api/v1/teams", json={"name": team_name}, headers=admin_headers))
+        team_id = team["id"]
+
+        detail = assert_api_ok(client.get(f"/api/v1/admin/teams/{team_id}", headers=admin_headers))
+        assert detail["id"] == team_id
+
+        members = assert_api_ok(client.get(f"/api/v1/admin/teams/{team_id}/members", headers=admin_headers))
+        assert any(member["role"] == "OWNER" for member in members)
+
+        folder = assert_api_ok(client.post(
+            f"/api/v1/teams/{team_id}/files/folder",
+            json={"parentId": None, "folderName": f"admin-folder-{uuid.uuid4().hex[:6]}"},
+            headers=admin_headers,
+        ))
+        files = assert_paginated(client.get(f"/api/v1/admin/teams/{team_id}/files", headers=admin_headers))
+        assert any(item["id"] == folder["id"] for item in files["records"])
+
+        new_quota = 32212254720
+        quota = assert_api_ok(client.patch(
+            f"/api/v1/admin/teams/{team_id}/quota",
+            json={"storageQuota": new_quota},
+            headers=admin_headers,
+        ))
+        assert quota["storageQuota"] == new_quota
+
+        audit = assert_paginated(client.get(
+            f"/api/v1/admin/teams/{team_id}/audit-logs?action=QUOTA_UPDATE",
+            headers=admin_headers,
+        ))
+        assert any(item["action"] == "QUOTA_UPDATE" for item in audit["records"])
