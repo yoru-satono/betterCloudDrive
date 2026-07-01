@@ -277,6 +277,8 @@ npm run build
 | `HOST_OTEL_HTTP_PORT` | `4318` | OTLP HTTP 宿主机端口 |
 | `HOST_BACKEND_PORT` | `8080` | 后端宿主机端口 |
 | `HOST_FRONTEND_PORT` | `3000` | 前端宿主机端口 |
+| `HOST_ONLYOFFICE_PORT` | `8082` | OnlyOffice Document Server 宿主机端口 |
+| `ONLYOFFICE_JWT_SECRET` | 本地开发密钥 | OnlyOffice Document Server 和后端共享的 JWT 密钥，生产必须替换 |
 | `VITE_API_BASE_URL` | 空 | Web 前端构建时 API 根地址。空值表示使用 `/api/v1` |
 | `VITE_WEB_BASE_URL` | 空 | Web 前端构建时 Web 根地址。空值表示使用当前 origin |
 | `VITE_DESKTOP_API_BASE_URL` | `http://127.0.0.1:8080/api/v1` | Tauri 客户端默认 API 根地址 |
@@ -340,6 +342,12 @@ npm run build
 | `BACKEND_PORT` | 后端端口标记。Spring Boot 实际端口由 `server.port` 控制，默认 8080 |
 | `LOG_DIR` | 后端日志输出目录。Docker Compose 默认为 `/var/log/cloud-drive` |
 | `BACKEND_LOG_DIR` | 后端日志目录标记，主要供外部脚本或部署系统引用 |
+| `ONLYOFFICE_INTERNAL_URL` | 后端容器访问 OnlyOffice 的内部地址，Docker Compose 默认 `http://onlyoffice-documentserver` |
+| `ONLYOFFICE_PUBLIC_URL` | 浏览器访问 OnlyOffice 的外部地址，本地默认 `http://localhost:8082` |
+| `APP_INTERNAL_API_BASE_URL` | OnlyOffice 回调和内容 URL 使用的后端内部 API 地址，Docker Compose 默认 `http://backend:8080/api/v1` |
+| `ONLYOFFICE_JWT_SECRET` | OnlyOffice JWT 密钥，必须与根目录 `.env` 中传给 Document Server 的值一致 |
+| `ONLYOFFICE_TOKEN_TTL_SECONDS` | OnlyOffice 内容和回调 token 有效期，默认 86400 秒 |
+| `ONLYOFFICE_CALLBACK_DOWNLOAD_TIMEOUT_SECONDS` | 后端从 Document Server 下载编辑结果的超时时间，默认 30 秒 |
 
 后端日志包含：
 
@@ -362,6 +370,8 @@ npm run build
 | `ANDROID_DEFAULT_SERVER_BASE_URL` | Android 默认服务器地址构建参数 |
 | `ANDROID_E2E_SERVER_BASE_URL` | Android E2E 后端地址 |
 | `ANDROID_E2E_MAILPIT_BASE_URL` | Android E2E Mailpit 地址 |
+
+Android E2E 的 ADB 设备 serial 不从 `frontend.env` 读取，由 `scripts/verify-all.ps1 -AndroidSerial` 控制；当前 Android 15 默认值是 `localhost:16416`。
 
 Web 前端地址解析顺序：
 
@@ -534,14 +544,17 @@ Docker Compose 使用这些 volume：
 | `lokidata` | Loki 数据 |
 | `tempodata` | Tempo 数据 |
 | `grafanadata` | Grafana 数据 |
+| `onlyofficedata` | OnlyOffice Document Server 数据 |
+| `onlyofficelogs` | OnlyOffice Document Server 日志 |
 
 生产备份优先级：
 
 1. PostgreSQL：必须定期备份。
 2. 对象存储：必须备份或使用高可靠存储。
 3. Redis：视业务数据重要性开启持久化和备份。
-4. `security.env` 中的密钥：必须安全备份，尤其 `SHARE_PASSWORD_ENCRYPTION_KEY`。
-5. 日志和 Trace：按合规要求设置保留期。
+4. OnlyOffice：如生产保留 Document Server 本地状态，需要备份 `onlyofficedata`。
+5. `security.env` 中的密钥：必须安全备份，尤其 `SHARE_PASSWORD_ENCRYPTION_KEY`。
+6. 日志和 Trace：按合规要求设置保留期。
 
 ## 安全建议
 
@@ -586,14 +599,14 @@ Docker Compose 使用这些 volume：
 | `-SkipTauri` | 跳过 Tauri 构建和 E2E |
 | `-SkipAndroid` | 跳过 Android 单元测试和 Android E2E |
 | `-SkipOnlyOffice` | 不等待 OnlyOffice，Web E2E 不设置 `E2E_ONLYOFFICE=1` |
-| `-AndroidSerial <serial>` | 指定 Android E2E 设备，默认 `localhost:16448` |
+| `-AndroidSerial <serial>` | 指定 Android E2E 设备，默认 `localhost:16416` |
 | `-KeepGoing` | 单个阶段失败后继续执行剩余阶段，最后汇总失败并返回非零退出码 |
 
 Android 注意事项：
 
-- 默认模拟器端口是 `localhost:16448`。
-- 如果 ADB 同时显示 `emulator-5558` 和 `localhost:16448`，必须通过 `ANDROID_SERIAL` 限定单设备，否则 Gradle 可能对同一模拟器并发安装测试 APK，导致 instrumentation 启动即崩溃。
-- 使用脚本时默认会执行 `adb connect localhost:16448` 并设置 `ANDROID_SERIAL=localhost:16448`。
+- 默认 Android 15 设备 serial 是 `localhost:16416`。
+- 如果 ADB 同时显示 `emulator-*` 和 `localhost:16416`，必须通过 `ANDROID_SERIAL` 限定单设备，否则 Gradle 可能对同一模拟器并发安装测试 APK，导致 instrumentation 启动即崩溃。
+- 使用脚本时默认会执行 `adb connect localhost:16416` 并设置 `ANDROID_SERIAL=localhost:16416`。
 
 OnlyOffice 注意事项：
 
@@ -613,11 +626,11 @@ OnlyOffice 注意事项：
 
 | 检查项 | 要求 |
 |--------|------|
-| `.env` | 宿主机端口没有冲突 |
+| `.env` | 宿主机端口没有冲突，`HOST_ONLYOFFICE_PORT` 与 `ONLYOFFICE_JWT_SECRET` 已确认 |
 | `database.env` | 数据库密码已替换，连接地址正确 |
 | `storage.env` | S3 endpoint 和密钥正确，bucket 可用 |
 | `security.env` | JWT 和分享密码密钥已替换并备份 |
-| `backend.env` | `LOG_DIR` 可写 |
+| `backend.env` | `LOG_DIR` 可写，OnlyOffice internal/public URL 和 JWT secret 与部署一致 |
 | `frontend.env` | `FRONTEND_BACKEND_PROXY_BASE` 指向后端内网地址 |
 | `observability.env` | Grafana、Loki、Tempo、OTel 地址正确 |
 | Grafana | `/grafana/` 未登录返回 401，管理员入口可进入 |

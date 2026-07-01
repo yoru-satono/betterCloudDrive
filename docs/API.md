@@ -1788,20 +1788,30 @@ GET /api/v1/admin/teams/{teamId}
 GET /api/v1/admin/teams/{teamId}/members
 GET /api/v1/admin/teams/{teamId}/files?parentId=&deleted=&keyword=&page=1&size=20&sortBy=fileName&order=asc
 GET /api/v1/admin/teams/{teamId}/audit-logs?action=&targetType=&actorUserId=&result=&page=1&size=20
+GET /api/v1/admin/teams/{teamId}/audit-logs/export?action=&targetType=&actorUserId=&result=&startAt=&endAt=
 PATCH /api/v1/admin/teams/{teamId}/quota
+POST /api/v1/admin/teams/{teamId}/archive
+POST /api/v1/admin/teams/{teamId}/unarchive
+POST /api/v1/admin/teams/{teamId}/restore
+DELETE /api/v1/admin/teams/{teamId}/purge
 Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 ```
 
-团队管理端点用于运维排障和配额调整，不要求管理员加入团队：
+团队管理端点用于运维排障、配额调整和删除后恢复/清理，不要求管理员加入团队：
 
 | 端点 | 说明 |
 |------|------|
-| `GET /admin/teams` | 分页搜索未删除团队 |
+| `GET /admin/teams` | 分页搜索团队，`status=active|archived|deleted|all` |
 | `GET /admin/teams/{teamId}` | 查看团队元数据 |
 | `GET /admin/teams/{teamId}/members` | 查看团队成员和角色 |
 | `GET /admin/teams/{teamId}/files` | 查看团队文件或回收站文件，`deleted=true` 表示回收站 |
 | `GET /admin/teams/{teamId}/audit-logs` | 查看团队审计日志，支持动作、目标、用户和结果过滤 |
+| `GET /admin/teams/{teamId}/audit-logs/export` | 导出团队审计日志 CSV，最多 10000 行 |
 | `PATCH /admin/teams/{teamId}/quota` | 修改团队配额，单位为字节，并写入团队审计日志 |
+| `POST /admin/teams/{teamId}/archive` | 归档团队，归档后普通团队列表不展示 |
+| `POST /admin/teams/{teamId}/unarchive` | 取消归档 |
+| `POST /admin/teams/{teamId}/restore` | 恢复已删除团队 |
+| `DELETE /admin/teams/{teamId}/purge` | 永久清理已删除团队及关联数据 |
 
 **修改团队配额 Request Body:**
 ```json
@@ -1809,6 +1819,10 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
   "storageQuota": 32212254720
 }
 ```
+
+**Response `200`:** `GET/PATCH/POST` 返回团队实体或分页结果；`DELETE /purge` 返回统一成功响应。
+
+**错误码:** 403（非管理员）、404（团队不存在）、409（状态不允许，如未删除团队执行 purge）、419001（配额小于已用空间或写入超限）。
 
 ---
 
@@ -1851,3 +1865,237 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
   }
 }
 ```
+
+---
+
+## 十六、团队协作 `/api/v1/teams`
+
+> 所有团队端点都需要登录。团队角色为 `OWNER`、`ADMIN`、`EDITOR`、`VIEWER`。文件权限会先校验团队成员身份，再应用文件级权限覆盖。
+
+### 16.1 团队和成员
+
+| 方法 | 路径 | 权限 | 请求 | 响应 |
+|------|------|------|------|------|
+| GET | `/api/v1/teams` | 登录用户 | 无 | 当前用户加入的团队列表 |
+| POST | `/api/v1/teams` | 登录用户 | `{ "name": "研发团队" }` | `TeamResponse` |
+| GET | `/api/v1/teams/{teamId}` | 团队成员 | 无 | `TeamResponse` |
+| PUT | `/api/v1/teams/{teamId}` | OWNER/ADMIN | `{ "name": "新名称" }` | `TeamResponse` |
+| DELETE | `/api/v1/teams/{teamId}` | OWNER | 无 | 软删除团队 |
+| POST | `/api/v1/teams/{teamId}/leave` | 非唯一 OWNER | 无 | 退出团队 |
+| POST | `/api/v1/teams/{teamId}/owner` | OWNER | `{ "userId": 12 }` | 转让后的 `TeamResponse` |
+| GET | `/api/v1/teams/{teamId}/members` | 团队成员 | 无 | `TeamMemberResponse[]` |
+| POST | `/api/v1/teams/{teamId}/members` | OWNER/ADMIN | `{ "username": "lisi", "role": "VIEWER" }` | `TeamMemberResponse` |
+| PUT | `/api/v1/teams/{teamId}/members/{userId}` | OWNER/ADMIN | `{ "role": "EDITOR" }` | `TeamMemberResponse` |
+| DELETE | `/api/v1/teams/{teamId}/members/{userId}` | OWNER/ADMIN | 无 | 移除成员 |
+
+**TeamResponse 字段:** `id`、`name`、`ownerId`、`storageQuota`、`storageUsed`、`role`、`createdAt`、`updatedAt`。
+
+**错误码:** 403（非成员或角色不足）、404（团队/成员不存在）、409（重名或状态冲突）。
+
+### 16.2 邀请链接
+
+| 方法 | 路径 | 权限 | 请求 | 响应 |
+|------|------|------|------|------|
+| POST | `/api/v1/teams/{teamId}/invites` | OWNER/ADMIN | `{ "email": "user@example.com", "role": "VIEWER" }` | `TeamInviteResponse` |
+| GET | `/api/v1/teams/{teamId}/invites` | OWNER/ADMIN | 无 | 邀请列表 |
+| POST | `/api/v1/teams/{teamId}/invites/{inviteId}/resend` | OWNER/ADMIN | 无 | 重新发送后的邀请 |
+| DELETE | `/api/v1/teams/{teamId}/invites/{inviteId}` | OWNER/ADMIN | 无 | 取消邀请 |
+| GET | `/api/v1/team-invites/{token}` | 登录用户 | 无 | 邀请详情 |
+| POST | `/api/v1/team-invites/{token}/accept` | 登录用户 | 无 | 加入后的成员信息 |
+| POST | `/api/v1/team-invites/{token}/reject` | 登录用户 | 无 | 拒绝邀请 |
+
+**TeamInviteResponse 字段:** `id`、`teamId`、`teamName`、`email`、`role`、`status`、`invitedByUserId`、`invitedByUsername`、`expiresAt`、`acceptedAt`、`rejectedAt`、`createdAt`、`updatedAt`。
+
+**错误码:** 403（无管理成员权限）、404（邀请不存在）、409（邀请已处理或已过期）。
+
+### 16.3 团队文件、回收站、上传下载
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/v1/teams/{teamId}/files?parentId=&page=&size=&sortBy=&order=` | 可读 | 列出团队文件 |
+| GET | `/api/v1/teams/{teamId}/files/search?q=&page=&size=` | 团队成员 | 搜索可读文件 |
+| GET | `/api/v1/teams/{teamId}/files/{fileId}` | 可读 | 获取文件元数据 |
+| POST | `/api/v1/teams/{teamId}/files/folder` | 父目录可写 | 创建文件夹，Body 同个人文件夹创建 |
+| PUT | `/api/v1/teams/{teamId}/files/{fileId}` | 可写 | 重命名文件 |
+| POST | `/api/v1/teams/{teamId}/files/{fileId}/move` | 源可写且目标父目录可写 | 移动文件 |
+| DELETE | `/api/v1/teams/{teamId}/files` | 可删除 | Body `{ "fileIds": [1, 2] }`，移入团队回收站 |
+| GET | `/api/v1/teams/{teamId}/recycle-bin?q=&page=&size=` | 团队成员 | 团队回收站 |
+| POST | `/api/v1/teams/{teamId}/recycle-bin/{fileId}/restore` | 可写 | 从团队回收站恢复 |
+| DELETE | `/api/v1/teams/{teamId}/recycle-bin/{fileId}` | OWNER/ADMIN | 永久删除单个回收站文件 |
+| DELETE | `/api/v1/teams/{teamId}/recycle-bin` | OWNER/ADMIN | 清空团队回收站 |
+| POST | `/api/v1/teams/{teamId}/upload/init` | 父目录可写 | 初始化分片上传，Body 同个人上传 |
+| POST | `/api/v1/teams/{teamId}/upload/{sessionId}/chunk` | 上传会话所有者 | 上传分片 |
+| GET | `/api/v1/teams/{teamId}/upload/{sessionId}/status` | 上传会话所有者 | 查询上传状态 |
+| POST | `/api/v1/teams/{teamId}/upload/{sessionId}/complete` | 上传会话所有者 | 完成上传 |
+| POST | `/api/v1/teams/{teamId}/upload/{sessionId}/cancel` | 上传会话所有者 | 取消上传 |
+| POST | `/api/v1/teams/{teamId}/upload/instant` | 父目录可写 | 秒传 |
+| POST | `/api/v1/teams/{teamId}/download/{fileId}/ticket` | 可读 | 创建团队文件下载 ticket |
+| POST | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip/ticket` | 可读 | 创建团队文件夹 ZIP ticket |
+| GET | `/api/v1/teams/{teamId}/download/{fileId}?ticket=` | 可读或有效 ticket | 下载文件，支持 Range |
+| GET | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip?ticket=` | 可读或有效 ticket | 下载 ZIP，支持 Range |
+| GET | `/api/v1/teams/{teamId}/preview/{fileId}` | 可读 | 内联预览文件内容 |
+
+**错误码:** 403（权限不足）、404001（文件不存在）、409001（同名冲突）、419001（团队配额不足）、419006/419007（上传状态或分片 MD5 错误）、419015（ZIP 超限）。
+
+### 16.4 团队分享、收藏和标签
+
+| 方法 | 路径 | 权限 | 请求/响应 |
+|------|------|------|------|
+| POST | `/api/v1/teams/{teamId}/shares` | 可分享 | Body 同个人分享；响应 `ShareLinkResponse`，含 `teamId` |
+| GET | `/api/v1/teams/{teamId}/shares?q=&page=&size=` | 团队成员 | 返回当前用户可读文件对应的分享 |
+| GET | `/api/v1/teams/{teamId}/shares/{shareId}` | 分享文件可读 | 分享详情 |
+| GET | `/api/v1/teams/{teamId}/shares/{shareId}/password` | 可分享 | 读取分享密码 |
+| PUT | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | 更新分享密码、过期时间或访问次数 |
+| DELETE | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | 取消分享 |
+| POST | `/api/v1/teams/{teamId}/favorites/{fileId}` | 可读 | 添加团队收藏 |
+| DELETE | `/api/v1/teams/{teamId}/favorites/{fileId}` | 登录用户 | 取消团队收藏 |
+| GET | `/api/v1/teams/{teamId}/favorites/{fileId}/status` | 可读 | 返回 boolean |
+| GET | `/api/v1/teams/{teamId}/favorites?q=&page=&size=` | 团队成员 | 返回可读收藏文件 |
+| POST | `/api/v1/teams/{teamId}/tags` | OWNER/ADMIN/EDITOR | `{ "tagName": "重要", "color": "#00d0b8" }` |
+| GET | `/api/v1/teams/{teamId}/tags?q=` | 团队成员 | 团队标签列表 |
+| PUT | `/api/v1/teams/{teamId}/tags/{tagId}` | OWNER/ADMIN/EDITOR | 更新标签 |
+| DELETE | `/api/v1/teams/{teamId}/tags/{tagId}` | OWNER/ADMIN/EDITOR | 删除标签 |
+| POST | `/api/v1/teams/{teamId}/tags/{tagId}/files` | 文件可写 | `{ "fileIds": [10, 11] }` |
+| DELETE | `/api/v1/teams/{teamId}/tags/{tagId}/files/{fileId}` | 文件可写 | 取消标签 |
+| GET | `/api/v1/teams/{teamId}/tags/{tagId}/files?q=&page=&size=` | 团队成员 | 返回可读标签文件 |
+
+**错误码:** 403（文件权限不足）、404（标签/分享不存在）、409（标签名重复）、419002-419005（公开分享访问限制）。
+
+### 16.5 文件权限覆盖
+
+```
+GET /api/v1/teams/{teamId}/files/{fileId}/effective-permission
+GET /api/v1/teams/{teamId}/files/{fileId}/permissions
+PUT /api/v1/teams/{teamId}/files/{fileId}/permissions
+DELETE /api/v1/teams/{teamId}/files/{fileId}/permissions/{permissionId}
+Authorization: Bearer <accessToken>
+```
+
+| 端点 | 权限 | 响应 |
+|------|------|------|
+| `GET effective-permission` | 可读 | 当前用户的 `canRead/canWrite/canShare/canDelete/canManage/isOwner` |
+| `GET permissions` | 可管理 | 文件权限覆盖列表 |
+| `PUT permissions` | 可管理 | 新增或更新覆盖规则 |
+| `DELETE permissions/{permissionId}` | 可管理 | 删除覆盖规则 |
+
+**PUT Request Body:**
+```json
+{
+  "subjectType": "USER",
+  "subjectUserId": 12,
+  "subjectRole": null,
+  "canRead": true,
+  "canWrite": true,
+  "canShare": false,
+  "canDelete": false,
+  "canManage": false
+}
+```
+
+`subjectType` 支持 `USER` 或 `ROLE`；用户维度使用 `subjectUserId`，角色维度使用 `subjectRole=ADMIN|EDITOR|VIEWER`。缺省布尔值按 `false` 处理。
+
+**错误码:** 400（subject 参数非法、自锁或 OWNER 覆盖被拒绝）、403（不可管理文件）、404（文件或权限规则不存在）。
+
+### 16.6 团队版本
+
+```
+GET /api/v1/teams/{teamId}/files/{fileId}/versions
+GET /api/v1/teams/{teamId}/files/{fileId}/versions/{versionNumber}/download
+POST /api/v1/teams/{teamId}/files/{fileId}/versions/{versionNumber}/restore
+DELETE /api/v1/teams/{teamId}/files/{fileId}/versions/{versionNumber}
+Authorization: Bearer <accessToken>
+```
+
+| 端点 | 权限 | 响应 |
+|------|------|------|
+| `GET versions` | 可读 | `FileVersionEntity[]`，按版本号降序 |
+| `GET download` | 可读 | 二进制流，`Content-Disposition: attachment`，支持 Range |
+| `POST restore` | 可写 | 恢复后的 `FileEntity`，并保留当前内容为新版本 |
+| `DELETE` | 可删除 | 删除指定历史版本 |
+
+**错误码:** 403（权限不足）、404（版本不存在）、419009（不能删除唯一版本或版本限制冲突）。
+
+### 16.7 团队审计
+
+```
+GET /api/v1/teams/{teamId}/audit-logs?action=&targetType=&actorUserId=&result=&startAt=&endAt=&page=1&size=20
+GET /api/v1/teams/{teamId}/audit-logs/export?action=&targetType=&actorUserId=&result=&startAt=&endAt=
+Authorization: Bearer <accessToken>
+```
+
+OWNER/ADMIN 可查看和导出团队审计日志。导出响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。
+
+**错误码:** 403（非 OWNER/ADMIN）、404（团队不存在）。
+
+---
+
+## 十七、通知 `/api/v1/notifications`
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/v1/notifications?unreadOnly=&type=&page=1&size=20` | 登录用户 | 分页列出站内通知 |
+| GET | `/api/v1/notifications/unread-count` | 登录用户 | 返回未读数量 |
+| POST | `/api/v1/notifications/{notificationId}/read` | 通知所有者 | 标记单条已读 |
+| POST | `/api/v1/notifications/read-all` | 登录用户 | 标记当前用户全部通知已读 |
+
+**Notification 字段:** `id`、`userId`、`teamId`、`type`、`title`、`content`、`link`、`readAt`、`createdAt`、`isRead`。
+
+**错误码:** 403（读取他人通知）、404（通知不存在）。
+
+---
+
+## 十八、OnlyOffice 文档 `/api/v1/office` 和 `/api/v1/teams/{teamId}/office`
+
+OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只读预览；团队文件根据团队角色返回只读或可编辑配置，保存通过 Document Server callback 写入新版本。
+
+### 18.1 配置接口
+
+| 方法 | 路径 | 权限 | 响应 |
+|------|------|------|------|
+| GET | `/api/v1/office/files/{fileId}/config` | 文件所有者 | 个人只读 `OfficeConfigResponse` |
+| GET | `/api/v1/teams/{teamId}/office/files/{fileId}/config` | 团队成员 | 团队 `OfficeConfigResponse`，OWNER/ADMIN/EDITOR 为可编辑 |
+
+**OfficeConfigResponse:**
+```json
+{
+  "documentServerUrl": "http://localhost:8082",
+  "editable": false,
+  "config": {
+    "documentType": "word",
+    "document": {
+      "fileType": "docx",
+      "key": "stable-document-key",
+      "title": "test.docx",
+      "url": "http://backend:8080/api/v1/office/files/7/content?token=..."
+    },
+    "editorConfig": {
+      "mode": "view",
+      "callbackUrl": null
+    }
+  }
+}
+```
+
+### 18.2 内容和回调接口
+
+| 方法 | 路径 | 权限 | 说明 |
+|------|------|------|------|
+| GET | `/api/v1/office/files/{fileId}/content?token=` | 有效内容 token | 个人文件内容流 |
+| GET | `/api/v1/teams/{teamId}/office/files/{fileId}/content?token=` | 有效内容 token + 团队可读 | 团队文件内容流 |
+| POST | `/api/v1/teams/{teamId}/office/files/{fileId}/callback?token=` | 有效回调 token + 团队可写 | OnlyOffice 保存回调 |
+
+**Callback Request Body:**
+```json
+{
+  "status": 2,
+  "url": "http://onlyoffice-documentserver/cache/files/data/edit/output.docx/output.docx",
+  "key": "document-key",
+  "error": 0,
+  "users": ["2"],
+  "token": "<document-server-jwt>"
+}
+```
+
+`status` 为 `2` 或 `6` 时，后端从 `url` 下载编辑结果并调用团队版本服务保存为新版本；其他状态返回 `{ "error": 0 }` 但不写版本。个人文件没有 callback，始终只读。
+
+**错误码:** 400（非 Office 文件或 callback 参数无效）、403（token 无效或团队不可写）、404001（文件不存在）、500003（下载编辑结果失败）。

@@ -4,7 +4,7 @@ param(
     [switch]$SkipTauri,
     [switch]$SkipAndroid,
     [switch]$SkipOnlyOffice,
-    [string]$AndroidSerial = "localhost:16448",
+    [string]$AndroidSerial = "localhost:16416",
     [switch]$KeepGoing
 )
 

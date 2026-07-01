@@ -28,12 +28,14 @@
 
 - 目标：丢失 `.env` 后可以按模板重建本地环境。
 - 范围：新增或更新 `.env.example`、后端 env、前端 env、Android 测试配置、OnlyOffice 配置。
-- 验收：按文档复制模板后，Docker Compose 和本地测试能启动。
+- 状态：已完成。
+- 验收：模板已覆盖 Docker Compose、OnlyOffice、Web/Tauri、Android E2E 和一键验证默认配置；按文档复制模板后可启动 Docker Compose 和本地测试。
 
 ### REL-04 API 文档同步
 
 - 目标：让 `docs/API.md` 与当前团队和 OnlyOffice 实现一致。
 - 范围：补 admin team archive/restore/purge/export、团队通知、权限覆盖、OnlyOffice config/callback、团队版本接口。
+- 状态：已完成。
 - 验收：新增接口均有路径、方法、权限、请求、响应、错误说明。
 
 ### REL-05 发布说明整理
@@ -334,7 +336,7 @@
 
 - 目标：模拟器覆盖 Android 团队核心流程。
 - 范围：邀请深链、团队文件、分享、通知、OnlyOffice、权限矩阵。
-- 验收：在 `localhost:16448` 模拟器环境通过。
+- 验收：在 `localhost:16416` Android 15 模拟器环境通过。
 
 ### TEST-08 契约测试补齐
 

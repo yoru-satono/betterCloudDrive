@@ -94,6 +94,7 @@ docker compose up -d --build
 - Web 前端：`http://localhost:3000`
 - 后端 API：`http://localhost:8080`
 - Mailpit：`http://localhost:8025`
+- OnlyOffice Document Server：`http://localhost:8082`
 - SeaweedFS S3：`http://localhost:8333`
 - Grafana：通过管理后台日志中心的 Grafana 链接访问，同域路径为 `/grafana/`，仅系统管理员可进入。
 
@@ -150,7 +151,7 @@ APK 输出在 `android/app/build/outputs/apk/debug/`。
 
 ## API 文档
 
-完整 API 文档见 [docs/API.md](docs/API.md)，涵盖认证、文件管理、上传下载、回收站、分享、收藏、标签、版本管理、注册验证码、密码重置、管理员面板。
+完整 API 文档见 [docs/API.md](docs/API.md)，涵盖认证、文件管理、上传下载、回收站、分享、收藏、标签、版本管理、团队协作、通知、OnlyOffice、注册验证码、密码重置、管理员面板。
 
 ## 配置文档
 
@@ -204,7 +205,7 @@ UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
 - 自动执行 `docker compose up -d --build` 启动全栈，包括 OnlyOffice Document Server。
 - 依次运行后端单元测试、Python 黑盒 API 测试、前端单元测试、Web E2E、Tauri E2E、Android 单元测试和 Android E2E。
 - Web E2E 默认开启 `E2E_ONLYOFFICE=1`，会覆盖 OnlyOffice 真实预览和编辑保存。
-- Android E2E 默认使用 `ANDROID_SERIAL=localhost:16448`，避免同一模拟器暴露多个 ADB serial 时并发运行失败。
+- Android E2E 默认使用 `ANDROID_SERIAL=localhost:16416`，对应当前 Android 15 设备；如需旧设备可通过 `-AndroidSerial` 覆盖。
 - Python 黑盒 admin 测试会自动创建测试用户并通过 Docker Compose PostgreSQL 提升为 `ROLE_ADMIN`；非 Compose 环境可设置 `ADMIN_TOKEN` 覆盖。
 
 常用参数：
@@ -212,7 +213,7 @@ UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
 ```powershell
 .\scripts\verify-all.ps1 -SkipTauri -SkipAndroid
 .\scripts\verify-all.ps1 -SkipDockerBuild
-.\scripts\verify-all.ps1 -AndroidSerial localhost:16448
+.\scripts\verify-all.ps1 -AndroidSerial localhost:16416
 .\scripts\verify-all.ps1 -KeepGoing
 ```
 
@@ -234,6 +235,6 @@ npm run test:e2e:tauri
 
 cd ..\android
 .\gradlew.bat testDebugUnitTest
-$env:ANDROID_SERIAL = 'localhost:16448'
+$env:ANDROID_SERIAL = 'localhost:16416'
 .\gradlew.bat connectedDebugAndroidTest
 ```
