@@ -11,6 +11,7 @@ const routes = [
       { path: 'register',         name: 'Register',       component: () => import('@/pages/auth/RegisterPage.vue'),       meta: { guest: true } },
       { path: 'forgot-password',  name: 'ForgotPassword', component: () => import('@/pages/auth/ForgotPasswordPage.vue'), meta: { guest: true } },
       { path: 's/:shareCode',     name: 'PublicShare',    component: () => import('@/pages/PublicSharePage.vue') },
+      { path: 'team-invites/:token', name: 'TeamInvite', component: () => import('@/pages/TeamInvitePage.vue') },
     ]
   },
   {
@@ -25,6 +26,11 @@ const routes = [
       { path: 'shares',          name: 'Shares',      component: () => import('@/pages/SharesPage.vue') },
       { path: 'favorites',       name: 'Favorites',   component: () => import('@/pages/FavoritesPage.vue') },
       { path: 'tags',            name: 'Tags',        component: () => import('@/pages/TagsPage.vue') },
+      { path: 'notifications',   name: 'Notifications', component: () => import('@/pages/NotificationsPage.vue') },
+      { path: 'teams/:teamId/files', name: 'TeamFiles', component: () => import('@/pages/TeamFilesPage.vue') },
+      { path: 'teams/:teamId/files/:folderId', name: 'TeamFolder', component: () => import('@/pages/TeamFilesPage.vue') },
+      { path: 'teams/:teamId/settings', name: 'TeamSettings', component: () => import('@/pages/TeamSettingsPage.vue') },
+      { path: 'teams/:teamId/recycle-bin', name: 'TeamRecycleBin', component: () => import('@/pages/TeamRecycleBinPage.vue') },
       { path: 'profile',         name: 'Profile',     component: () => import('@/pages/ProfilePage.vue') },
     ]
   },
@@ -35,6 +41,7 @@ const routes = [
     children: [
       { path: '',       name: 'AdminDashboard', component: () => import('@/pages/admin/AdminDashboard.vue') },
       { path: 'users',  name: 'AdminUsers',     component: () => import('@/pages/admin/AdminUsers.vue') },
+      { path: 'teams',  name: 'AdminTeams',     component: () => import('@/pages/admin/AdminTeams.vue') },
       { path: 'users/:userId/files', name: 'AdminUserFiles', component: () => import('@/pages/admin/AdminUserFiles.vue') },
       { path: 'logs',   name: 'AdminLogs',      component: () => import('@/pages/admin/AdminLogs.vue') },
     ]

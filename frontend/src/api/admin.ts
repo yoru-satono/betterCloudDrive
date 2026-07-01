@@ -2,6 +2,22 @@ import api from './client'
 import type { UserEntity } from '@/types/user'
 import type { FileEntity } from '@/types/file'
 import type { ApiResponse, PageResult } from '@/types/api'
+import type { TeamMember, TeamOperationLog } from '@/types/team'
+
+export interface AdminTeam {
+  id: number
+  name: string
+  ownerId: number
+  storageQuota: number
+  storageUsed: number
+  createdAt: string
+  updatedAt: string
+  archivedAt?: string | null
+  archivedBy?: number | null
+  deletedAt?: string | null
+  deletedBy?: number | null
+  purgeAfter?: string | null
+}
 
 export interface OperationLog {
   id: number
@@ -53,6 +69,70 @@ export const updateUserStatus = (userId: number, status: number) =>
 
 export const updateUserQuota = (userId: number, storageQuota: number) =>
   api.patch<ApiResponse<void>>(`/admin/users/${userId}/quota`, { storageQuota })
+
+export type AdminTeamStatus = 'active' | 'archived' | 'deleted' | 'all'
+
+export const listTeams = (page = 1, size = 20, keyword?: string, status: AdminTeamStatus = 'active') =>
+  api.get<ApiResponse<PageResult<AdminTeam>>>('/admin/teams', { params: { page, size, keyword, status } })
+
+export const getTeam = (teamId: number) =>
+  api.get<ApiResponse<AdminTeam>>(`/admin/teams/${teamId}`)
+
+export const updateTeamQuota = (teamId: number, storageQuota: number) =>
+  api.patch<ApiResponse<AdminTeam>>(`/admin/teams/${teamId}/quota`, { storageQuota })
+
+export const archiveTeam = (teamId: number) =>
+  api.post<ApiResponse<AdminTeam>>(`/admin/teams/${teamId}/archive`)
+
+export const unarchiveTeam = (teamId: number) =>
+  api.post<ApiResponse<AdminTeam>>(`/admin/teams/${teamId}/unarchive`)
+
+export const restoreTeam = (teamId: number) =>
+  api.post<ApiResponse<AdminTeam>>(`/admin/teams/${teamId}/restore`)
+
+export const purgeTeam = (teamId: number) =>
+  api.delete<ApiResponse<void>>(`/admin/teams/${teamId}/purge`)
+
+export const listTeamMembers = (teamId: number) =>
+  api.get<ApiResponse<TeamMember[]>>(`/admin/teams/${teamId}/members`)
+
+export const listTeamFiles = (
+  teamId: number,
+  params: {
+    parentId?: number | null
+    deleted?: boolean
+    keyword?: string
+    page?: number
+    size?: number
+    sortBy?: string
+    order?: string
+  } = {},
+) =>
+  api.get<ApiResponse<PageResult<FileEntity>>>(`/admin/teams/${teamId}/files`, {
+    params: { ...params, parentId: params.parentId ?? undefined },
+  })
+
+export const listTeamAuditLogs = (teamId: number, params: {
+  actorUserId?: number
+  action?: string
+  targetType?: string
+  result?: number
+  startAt?: string
+  endAt?: string
+  page?: number
+  size?: number
+} = {}) =>
+  api.get<ApiResponse<PageResult<TeamOperationLog>>>(`/admin/teams/${teamId}/audit-logs`, { params })
+
+export const exportTeamAuditLogs = (teamId: number, params: {
+  actorUserId?: number
+  action?: string
+  targetType?: string
+  result?: number
+  startAt?: string
+  endAt?: string
+} = {}) =>
+  api.get<Blob>(`/admin/teams/${teamId}/audit-logs/export`, { params, responseType: 'blob' })
 
 export const listUserFiles = (
   userId: number,

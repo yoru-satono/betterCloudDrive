@@ -29,4 +29,14 @@ object ServerUrlUtil {
             .build()
             .toString()
     }
+
+    fun teamPreviewUrl(serverBaseUrl: String, teamId: Long, fileId: Long): String {
+        return apiBaseUrl(serverBaseUrl).newBuilder()
+            .addPathSegment("teams")
+            .addPathSegment(teamId.toString())
+            .addPathSegment("preview")
+            .addPathSegment(fileId.toString())
+            .build()
+            .toString()
+    }
 }

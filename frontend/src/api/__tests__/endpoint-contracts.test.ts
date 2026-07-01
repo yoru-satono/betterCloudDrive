@@ -8,6 +8,10 @@ import * as sharesApi from '@/api/shares'
 import * as adminApi from '@/api/admin'
 import * as filesApi from '@/api/files'
 import * as authApi from '@/api/auth'
+import * as teamsApi from '@/api/teams'
+import * as officeApi from '@/api/office'
+import * as versionsApi from '@/api/versions'
+import * as notificationsApi from '@/api/notifications'
 import { downloadFolderZip, downloadSharedFile, downloadSharedFolderZip, previewFile } from '@/api/download'
 
 vi.mock('@/api/client', () => ({
@@ -79,6 +83,176 @@ describe('API endpoint contracts', () => {
     expect(apiMock.get).toHaveBeenCalledWith('/upload/session-1/status', { suppressToast: true })
   })
 
+  it('uses team management and team file routes', async () => {
+    await teamsApi.listTeams()
+    expect(apiMock.get).toHaveBeenCalledWith('/teams')
+
+    await teamsApi.createTeam('Product')
+    expect(apiMock.post).toHaveBeenCalledWith('/teams', { name: 'Product' })
+
+    await teamsApi.getTeam(10)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10')
+
+    await teamsApi.updateTeam(10, 'Product Docs')
+    expect(apiMock.put).toHaveBeenCalledWith('/teams/10', { name: 'Product Docs' })
+
+    await teamsApi.leaveTeam(10)
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/leave')
+
+    await teamsApi.transferTeamOwner(10, 5)
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/owner', { userId: 5 })
+
+    await teamsApi.addMember(10, 'chain', 'EDITOR')
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/members', { username: 'chain', role: 'EDITOR' })
+
+    await teamsApi.listTeamFiles(10, { parentId: 5, page: 1, size: 50 })
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files', {
+      params: { parentId: 5, page: 1, size: 50 },
+    })
+
+    await teamsApi.getTeamFileEffectivePermission(10, 7)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files/7/effective-permission')
+
+    await teamsApi.listTeamFilePermissions(10, 7)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files/7/permissions')
+
+    await teamsApi.upsertTeamFilePermission(10, 7, {
+      subjectType: 'ROLE',
+      subjectRole: 'VIEWER',
+      canRead: true,
+      canWrite: false,
+      canShare: false,
+      canDelete: false,
+      canManage: false,
+    })
+    expect(apiMock.put).toHaveBeenCalledWith('/teams/10/files/7/permissions', {
+      subjectType: 'ROLE',
+      subjectRole: 'VIEWER',
+      canRead: true,
+      canWrite: false,
+      canShare: false,
+      canDelete: false,
+      canManage: false,
+    })
+
+    await teamsApi.deleteTeamFilePermission(10, 7, 3)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/files/7/permissions/3')
+
+    await teamsApi.createTeamFolder(10, null, 'Docs')
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/files/folder', { parentId: null, folderName: 'Docs' })
+
+    await teamsApi.renameTeamFile(10, 7, 'New.txt')
+    expect(apiMock.put).toHaveBeenCalledWith('/teams/10/files/7', { newName: 'New.txt' })
+
+    await teamsApi.moveTeamFile(10, 7, null)
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/files/7/move', { targetParentId: null })
+
+    await teamsApi.deleteTeamFiles(10, [7])
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/files', { data: { fileIds: [7] } })
+
+    await teamsApi.listTeamRecycleBin(10, 2, 30, 'old')
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/recycle-bin', {
+      params: { page: 2, size: 30, q: 'old' },
+    })
+
+    await teamsApi.restoreTeamFiles(10, [7, 8])
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/recycle-bin/7/restore')
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/recycle-bin/8/restore')
+
+    await teamsApi.permanentDeleteTeamFiles(10, [7, 8])
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/recycle-bin/7')
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/recycle-bin/8')
+
+    await teamsApi.emptyTeamRecycleBin(10)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/recycle-bin')
+
+    await teamsApi.createTeamShare(10, { fileId: 7, maxVisits: 3 })
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/shares', { fileId: 7, maxVisits: 3 })
+
+    await teamsApi.listTeamShares(10, 1, 20, 'share')
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/shares', {
+      params: { page: 1, size: 20, q: 'share' },
+    })
+
+    await teamsApi.getTeamShare(10, 9)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/shares/9')
+
+    await teamsApi.getTeamSharePassword(10, 9)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/shares/9/password')
+
+    await teamsApi.updateTeamShare(10, 9, { maxVisits: 5, expireAt: 0 })
+    expect(apiMock.put).toHaveBeenCalledWith('/teams/10/shares/9', { maxVisits: 5, expireAt: 0 })
+
+    await teamsApi.deleteTeamShare(10, 9)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/shares/9')
+
+    await teamsApi.exportTeamAuditLogs(10, { action: 'FILE_DELETE' })
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/audit-logs/export', {
+      params: { action: 'FILE_DELETE' },
+      responseType: 'blob',
+    })
+
+    await versionsApi.listTeamVersions(10, 7)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files/7/versions')
+
+    await versionsApi.deleteTeamVersion(10, 7, 2)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/files/7/versions/2')
+
+    await versionsApi.restoreTeamVersion(10, 7, 2)
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/files/7/versions/2/restore')
+  })
+
+  it('uses OnlyOffice config routes', async () => {
+    await officeApi.getOfficeConfig(7)
+    expect(apiMock.get).toHaveBeenCalledWith('/office/files/7/config')
+
+    await officeApi.getTeamOfficeConfig(10, 7)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/office/files/7/config')
+  })
+
+  it('uses notification routes', async () => {
+    await notificationsApi.listNotifications(2, 30, true)
+    expect(apiMock.get).toHaveBeenCalledWith('/notifications', {
+      params: { page: 2, size: 30, unreadOnly: true },
+    })
+
+    await notificationsApi.listNotifications(1, 20, false, 'TEAM_QUOTA_ALERT')
+    expect(apiMock.get).toHaveBeenCalledWith('/notifications', {
+      params: { page: 1, size: 20, unreadOnly: false, type: 'TEAM_QUOTA_ALERT' },
+    })
+
+    await notificationsApi.getUnreadCount()
+    expect(apiMock.get).toHaveBeenCalledWith('/notifications/unread-count')
+
+    await notificationsApi.markNotificationRead(7)
+    expect(apiMock.post).toHaveBeenCalledWith('/notifications/7/read')
+
+    await notificationsApi.markAllNotificationsRead()
+    expect(apiMock.post).toHaveBeenCalledWith('/notifications/read-all')
+  })
+
+  it('uses team upload and preview routes', async () => {
+    await uploadApi.initMultipart(null, 'team.txt', 12, 'hash', 1, undefined, { teamId: 10 })
+    expect(apiMock.post).toHaveBeenCalledWith(
+      '/teams/10/upload/init',
+      { parentId: null, fileName: 'team.txt', fileSize: 12, md5Hash: 'hash', totalChunks: 1 },
+      { suppressToast: true },
+    )
+
+    await uploadApi.uploadChunk('team-session', 0, new Blob(['x']), undefined, { teamId: 10 })
+    expect(apiMock.post).toHaveBeenCalledWith(
+      '/teams/10/upload/team-session/chunk',
+      expect.any(FormData),
+      expect.objectContaining({ params: { chunkNumber: 0 }, suppressToast: true }),
+    )
+
+    await uploadApi.completeMultipart('team-session', { teamId: 10 })
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/upload/team-session/complete', undefined, { suppressToast: true })
+
+    await previewFile(7, 10)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/preview/7', { responseType: 'blob', suppressToast: true })
+  })
+
   it('uses file detail, move, copy, and preview routes', async () => {
     await filesApi.getFile(5)
     expect(apiMock.get).toHaveBeenCalledWith('/files/5')
@@ -112,6 +286,9 @@ describe('API endpoint contracts', () => {
 
     await recycleApi.emptyRecycleBin()
     expect(apiMock.delete).toHaveBeenCalledWith('/recycle-bin')
+
+    await versionsApi.restoreVersion(7, 2)
+    expect(apiMock.post).toHaveBeenCalledWith('/files/7/versions/2/restore')
   })
 
   it('uses backend favorite and tag file association routes', async () => {
@@ -207,6 +384,48 @@ describe('API endpoint contracts', () => {
 
     await adminApi.updateUserQuota(5, 1024)
     expect(apiMock.patch).toHaveBeenCalledWith('/admin/users/5/quota', { storageQuota: 1024 })
+
+    await adminApi.listTeams(1, 20, 'product')
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/teams', {
+      params: { page: 1, size: 20, keyword: 'product', status: 'active' },
+    })
+
+    await adminApi.getTeam(10)
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10')
+
+    await adminApi.updateTeamQuota(10, 2048)
+    expect(apiMock.patch).toHaveBeenCalledWith('/admin/teams/10/quota', { storageQuota: 2048 })
+
+    await adminApi.archiveTeam(10)
+    expect(apiMock.post).toHaveBeenCalledWith('/admin/teams/10/archive')
+
+    await adminApi.unarchiveTeam(10)
+    expect(apiMock.post).toHaveBeenCalledWith('/admin/teams/10/unarchive')
+
+    await adminApi.restoreTeam(10)
+    expect(apiMock.post).toHaveBeenCalledWith('/admin/teams/10/restore')
+
+    await adminApi.purgeTeam(10)
+    expect(apiMock.delete).toHaveBeenCalledWith('/admin/teams/10/purge')
+
+    await adminApi.listTeamMembers(10)
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10/members')
+
+    await adminApi.listTeamFiles(10, { parentId: null, deleted: false, keyword: 'doc', page: 1, size: 10 })
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10/files', {
+      params: { parentId: undefined, deleted: false, keyword: 'doc', page: 1, size: 10 },
+    })
+
+    await adminApi.listTeamAuditLogs(10, { action: 'QUOTA_UPDATE', page: 1, size: 10 })
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10/audit-logs', {
+      params: { action: 'QUOTA_UPDATE', page: 1, size: 10 },
+    })
+
+    await adminApi.exportTeamAuditLogs(10, { action: 'QUOTA_UPDATE' })
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10/audit-logs/export', {
+      params: { action: 'QUOTA_UPDATE' },
+      responseType: 'blob',
+    })
 
     await adminApi.listUserFiles(5, { parentId: 3, page: 1, size: 50 })
     expect(apiMock.get).toHaveBeenCalledWith('/admin/users/5/files', {

@@ -79,7 +79,8 @@ public class FolderZipDownloadServiceImpl implements FolderZipDownloadService {
 
         Path zipPath = writeZipTempFile(folder);
         long zipSize = zipPath.toFile().length();
-        String objectKey = "folder-zips/" + folder.getUserId() + "/" + folder.getId() + "/"
+        String ownerPath = folder.getTeamId() != null ? "teams/" + folder.getTeamId() : String.valueOf(folder.getUserId());
+        String objectKey = "folder-zips/" + ownerPath + "/" + folder.getId() + "/"
                 + UUID.randomUUID().toString().replace("-", "") + ".zip";
         try (InputStream inputStream = new FileInputStream(zipPath.toFile())) {
             storageService.uploadObject(objectKey, inputStream, zipSize, "application/zip");
@@ -114,8 +115,7 @@ public class FolderZipDownloadServiceImpl implements FolderZipDownloadService {
     }
 
     private void collectStats(FileEntity folder, FolderStats stats) {
-        List<FileEntity> children = fileRepository.findByUserIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
-                folder.getUserId(), folder.getId());
+        List<FileEntity> children = listChildren(folder);
         for (FileEntity child : children) {
             if ("folder".equals(child.getFileType())) {
                 collectStats(child, stats);
@@ -167,8 +167,7 @@ public class FolderZipDownloadServiceImpl implements FolderZipDownloadService {
         if (!"folder".equals(node.getFileType())) {
             return;
         }
-        List<FileEntity> children = fileRepository.findByUserIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
-                node.getUserId(), node.getId());
+        List<FileEntity> children = listChildren(node);
         for (FileEntity child : children) {
             updateSignature(digest, child);
         }
@@ -181,8 +180,7 @@ public class FolderZipDownloadServiceImpl implements FolderZipDownloadService {
 
     private void writeChildren(FileEntity folder, String parentPath, ZipOutputStream zip,
                                Set<String> writtenDirectories) throws IOException {
-        List<FileEntity> children = fileRepository.findByUserIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
-                folder.getUserId(), folder.getId());
+        List<FileEntity> children = listChildren(folder);
         for (FileEntity child : children) {
             String entryPath = parentPath + normalizeEntryName(child.getFileName());
             if ("folder".equals(child.getFileType())) {
@@ -217,6 +215,15 @@ public class FolderZipDownloadServiceImpl implements FolderZipDownloadService {
         }
         normalized = normalized.replace("../", "").replace("..", "");
         return normalized.isBlank() ? "未命名" : normalized;
+    }
+
+    private List<FileEntity> listChildren(FileEntity folder) {
+        if (folder.getTeamId() != null) {
+            return fileRepository.findByTeamIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
+                    folder.getTeamId(), folder.getId());
+        }
+        return fileRepository.findByUserIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
+                folder.getUserId(), folder.getId());
     }
 
     private static class FolderStats {

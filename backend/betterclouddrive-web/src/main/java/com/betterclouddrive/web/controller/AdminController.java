@@ -4,24 +4,37 @@ import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.OperationLogEntity;
+import com.betterclouddrive.dal.entity.TeamEntity;
+import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.service.AdminService;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.OperationLogService;
+import com.betterclouddrive.web.dto.request.AdminUpdateTeamQuotaRequest;
 import com.betterclouddrive.web.dto.request.AdminUpdateUserQuotaRequest;
 import com.betterclouddrive.web.dto.request.AdminUpdateUserStatusRequest;
 import com.betterclouddrive.web.dto.response.SystemLogEntryResponse;
+import com.betterclouddrive.web.dto.response.TeamMemberResponse;
+import com.betterclouddrive.web.security.CurrentUser;
+import com.betterclouddrive.web.security.UserPrincipal;
 import com.betterclouddrive.web.service.GrafanaAuthService;
 import com.betterclouddrive.web.service.SystemLogQueryService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +42,9 @@ import java.util.Map;
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
 public class AdminController {
+
+    private static final int AUDIT_EXPORT_LIMIT = 10000;
+    private static final DateTimeFormatter EXPORT_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final AdminService adminService;
     private final FileService fileService;
@@ -60,6 +76,108 @@ public class AdminController {
             @PathVariable Long userId,
             @Valid @RequestBody AdminUpdateUserQuotaRequest request) {
         adminService.updateUserQuota(userId, request.getStorageQuota());
+        return ApiResponse.success();
+    }
+
+    // ==================== Team Management ====================
+
+    @GetMapping("/teams")
+    public ApiResponse<PageResult<TeamEntity>> listTeams(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "active") String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(adminService.listTeams(keyword, status, page, size));
+    }
+
+    @GetMapping("/teams/{teamId}")
+    public ApiResponse<TeamEntity> getTeam(@PathVariable Long teamId) {
+        return ApiResponse.success(adminService.getTeam(teamId));
+    }
+
+    @GetMapping("/teams/{teamId}/members")
+    public ApiResponse<List<TeamMemberResponse>> listTeamMembers(@PathVariable Long teamId) {
+        return ApiResponse.success(adminService.listTeamMembers(teamId).stream()
+                .map(TeamMemberResponse::from)
+                .toList());
+    }
+
+    @GetMapping("/teams/{teamId}/files")
+    public ApiResponse<PageResult<FileEntity>> listTeamFiles(
+            @PathVariable Long teamId,
+            @RequestParam(required = false) Long parentId,
+            @RequestParam(required = false) Boolean deleted,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") @Max(100) int size,
+            @RequestParam(defaultValue = "fileName") String sortBy,
+            @RequestParam(defaultValue = "asc") String order) {
+        return ApiResponse.success(adminService.listTeamFiles(teamId, parentId, deleted, keyword, page, size, sortBy, order));
+    }
+
+    @GetMapping("/teams/{teamId}/audit-logs")
+    public ApiResponse<PageResult<TeamOperationLogEntity>> listTeamAuditLogs(
+            @PathVariable Long teamId,
+            @RequestParam(required = false) Long actorUserId,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String targetType,
+            @RequestParam(required = false) Integer result,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startAt,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") @Max(100) int size) {
+        return ApiResponse.success(adminService.listTeamAuditLogs(
+                teamId, actorUserId, action, targetType, result, startAt, endAt, page, size));
+    }
+
+    @GetMapping(value = "/teams/{teamId}/audit-logs/export", produces = "text/csv")
+    public ResponseEntity<String> exportTeamAuditLogs(
+            @PathVariable Long teamId,
+            @RequestParam(required = false) Long actorUserId,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String targetType,
+            @RequestParam(required = false) Integer result,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startAt,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt) {
+        PageResult<TeamOperationLogEntity> logs = adminService.exportTeamAuditLogs(
+                teamId, actorUserId, action, targetType, result, startAt, endAt, AUDIT_EXPORT_LIMIT);
+        return csvResponse(auditFileName(teamId), auditCsv(logs.getRecords()));
+    }
+
+    @PatchMapping("/teams/{teamId}/quota")
+    public ApiResponse<TeamEntity> updateTeamQuota(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @Valid @RequestBody AdminUpdateTeamQuotaRequest request) {
+        return ApiResponse.success(adminService.updateTeamQuota(user.getUserId(), teamId, request.getStorageQuota()));
+    }
+
+    @PostMapping("/teams/{teamId}/archive")
+    public ApiResponse<TeamEntity> archiveTeam(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId) {
+        return ApiResponse.success(adminService.archiveTeam(user.getUserId(), teamId));
+    }
+
+    @PostMapping("/teams/{teamId}/unarchive")
+    public ApiResponse<TeamEntity> unarchiveTeam(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId) {
+        return ApiResponse.success(adminService.unarchiveTeam(user.getUserId(), teamId));
+    }
+
+    @PostMapping("/teams/{teamId}/restore")
+    public ApiResponse<TeamEntity> restoreTeam(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId) {
+        return ApiResponse.success(adminService.restoreTeam(user.getUserId(), teamId));
+    }
+
+    @DeleteMapping("/teams/{teamId}/purge")
+    public ApiResponse<Void> purgeTeam(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId) {
+        adminService.purgeTeam(user.getUserId(), teamId);
         return ApiResponse.success();
     }
 
@@ -131,5 +249,40 @@ public class AdminController {
     @GetMapping("/stats")
     public ApiResponse<Map<String, Object>> getStats() {
         return ApiResponse.success(adminService.getSystemStats());
+    }
+
+    private ResponseEntity<String> csvResponse(String fileName, String body) {
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                .body(body);
+    }
+
+    private String auditFileName(Long teamId) {
+        return "team-" + teamId + "-audit-" + LocalDateTime.now().format(EXPORT_TIME_FORMAT) + ".csv";
+    }
+
+    private String auditCsv(List<TeamOperationLogEntity> logs) {
+        List<String> rows = new ArrayList<>();
+        rows.add("createdAt,teamId,actorUserId,action,targetType,targetId,result,statusCode,traceId,details");
+        logs.forEach(log -> rows.add(String.join(",",
+                csv(log.getCreatedAt()),
+                csv(log.getTeamId()),
+                csv(log.getActorUserId()),
+                csv(log.getAction()),
+                csv(log.getTargetType()),
+                csv(log.getTargetId()),
+                csv(log.getResult()),
+                csv(log.getStatusCode()),
+                csv(log.getTraceId()),
+                csv(log.getDetails()))));
+        return String.join("\n", rows) + "\n";
+    }
+
+    private String csv(Object value) {
+        if (value == null) {
+            return "";
+        }
+        return "\"" + String.valueOf(value).replace("\"", "\"\"") + "\"";
     }
 }

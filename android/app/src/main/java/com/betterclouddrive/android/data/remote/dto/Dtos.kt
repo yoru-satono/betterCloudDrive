@@ -71,6 +71,48 @@ data class CopyRequest(@SerialName("targetParentId") val targetParentId: Long?)
 @Serializable
 data class BatchDeleteRequest(@SerialName("fileIds") val fileIds: List<Long>)
 
+// === Teams ===
+@Serializable
+data class CreateTeamRequest(val name: String)
+
+@Serializable
+data class UpdateTeamRequest(val name: String)
+
+@Serializable
+data class TransferTeamOwnerRequest(@SerialName("userId") val userId: Long)
+
+@Serializable
+data class AddTeamMemberRequest(
+    val username: String,
+    val role: String,
+)
+
+@Serializable
+data class UpdateTeamMemberRequest(val role: String)
+
+@Serializable
+data class CreateTeamInviteRequest(
+    val email: String,
+    val role: String,
+)
+
+@Serializable
+data class UpdateTeamFilePermissionRequest(
+    @SerialName("subjectType") val subjectType: String,
+    @SerialName("subjectUserId") val subjectUserId: Long? = null,
+    @SerialName("subjectRole") val subjectRole: String? = null,
+    @SerialName("canRead") val canRead: Boolean,
+    @SerialName("canWrite") val canWrite: Boolean,
+    @SerialName("canShare") val canShare: Boolean,
+    @SerialName("canDelete") val canDelete: Boolean,
+    @SerialName("canManage") val canManage: Boolean,
+)
+
+@Serializable
+data class DownloadTicketResponse(
+    @SerialName("downloadUrl") val downloadUrl: String,
+)
+
 // === Upload ===
 @Serializable
 data class InitUploadRequest(

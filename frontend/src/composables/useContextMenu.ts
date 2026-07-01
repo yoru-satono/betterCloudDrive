@@ -24,9 +24,12 @@ export function useContextMenu() {
     const H = window.innerHeight
     const menuW = 200
     const menuH = menuItems.length * 36 + 16
+    const margin = 8
 
-    x.value = event.clientX + menuW > W ? event.clientX - menuW : event.clientX
-    y.value = event.clientY + menuH > H ? event.clientY - menuH : event.clientY
+    const nextX = event.clientX + menuW > W ? event.clientX - menuW : event.clientX
+    const nextY = event.clientY + menuH > H ? event.clientY - menuH : event.clientY
+    x.value = Math.min(Math.max(nextX, margin), Math.max(W - menuW - margin, margin))
+    y.value = Math.min(Math.max(nextY, margin), Math.max(H - menuH - margin, margin))
   }
 
   function close() {

@@ -1,14 +1,23 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import OButton from '@/components/base/OButton.vue'
+import OInput from '@/components/base/OInput.vue'
+import OModal from '@/components/base/OModal.vue'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
+import { useTeamsStore } from '@/stores/teams'
 import { useFormatters } from '@/composables/useFormatters'
 import { useRouter, useRoute } from 'vue-router'
+import { toast } from 'vue-sonner'
 
 const ui = useUIStore()
 const auth = useAuthStore()
+const teams = useTeamsStore()
 const router = useRouter()
 const route = useRoute()
 const { formatSize } = useFormatters()
+const showCreateTeam = ref(false)
+const teamName = ref('')
 
 const navItems = [
   { to: '/files',       label: '全部文件',  icon: 'folder' },
@@ -29,6 +38,24 @@ const iconPaths: Record<string, string> = {
   tag:    'M20.6 8.3l-13 13a2 2 0 01-2.8 0L3 19.5a2 2 0 010-2.8l13-13A2 2 0 0118 3l2.6 2.6a2 2 0 010 2.7z',
   trash:  'M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6',
   shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  team:   'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 7a4 4 0 100-8 4 4 0 000 8M22 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75',
+  plus:   'M12 5v14M5 12h14',
+}
+
+onMounted(() => {
+  if (auth.user) {
+    void teams.fetchTeams()
+  }
+})
+
+async function createTeam() {
+  const name = teamName.value.trim()
+  if (!name) return
+  const team = await teams.createTeam(name)
+  teamName.value = ''
+  showCreateTeam.value = false
+  toast.success('团队已创建')
+  router.push({ name: 'TeamFiles', params: { teamId: team.id } })
 }
 </script>
 
@@ -61,6 +88,36 @@ const iconPaths: Record<string, string> = {
         </svg>
         <Transition name="fade">
           <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ item.label }}</span>
+        </Transition>
+      </RouterLink>
+
+      <div class="sidebar__divider" />
+      <div v-if="ui.sidebarExpanded" class="sidebar__section-head">
+        <span>团队</span>
+        <button type="button" class="sidebar__section-action" @click="showCreateTeam = true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path :d="iconPaths.plus" />
+          </svg>
+        </button>
+      </div>
+      <button v-else type="button" class="sidebar__item sidebar__item--button" @click="showCreateTeam = true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path :d="iconPaths.plus" />
+        </svg>
+      </button>
+
+      <RouterLink
+        v-for="team in teams.teams"
+        :key="team.id"
+        :to="{ name: 'TeamFiles', params: { teamId: team.id } }"
+        class="sidebar__item"
+        :class="{ 'sidebar__item--active': route.path.startsWith(`/teams/${team.id}`) }"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path :d="iconPaths.team" />
+        </svg>
+        <Transition name="fade">
+          <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ team.name }}</span>
         </Transition>
       </RouterLink>
 
@@ -103,6 +160,14 @@ const iconPaths: Record<string, string> = {
         </div>
       </Transition>
     </RouterLink>
+
+    <OModal title="新建团队" :open="showCreateTeam" @close="showCreateTeam = false">
+      <OInput v-model="teamName" label="团队名称" placeholder="输入团队名称" @keyup.enter="createTeam" />
+      <template #footer>
+        <OButton variant="ghost" @click="showCreateTeam = false">取消</OButton>
+        <OButton variant="primary" @click="createTeam">创建</OButton>
+      </template>
+    </OModal>
   </aside>
 </template>
 
@@ -153,6 +218,36 @@ const iconPaths: Record<string, string> = {
 }
 .sidebar__label { font-size: 13px; }
 .sidebar__divider { height: 1px; background: var(--border); margin: 6px 0; }
+.sidebar__section-head {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 2px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.sidebar__section-action {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.sidebar__section-action:hover {
+  color: var(--accent);
+  border-color: var(--border-hover);
+  background: var(--bg-elevated);
+}
+.sidebar__item--button {
+  width: 100%;
+  font-family: var(--font-sans);
+}
 
 .sidebar__quota { padding: 12px; border-top: 1px solid var(--border); }
 .sidebar__quota-bar {

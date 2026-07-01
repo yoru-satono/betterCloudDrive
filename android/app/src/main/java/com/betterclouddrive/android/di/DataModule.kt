@@ -74,4 +74,10 @@ object DataModule {
     fun provideRecycleBinRepository(apiService: ApiService): RecycleBinRepository {
         return RecycleBinRepository(apiService)
     }
+
+    @Provides
+    @Singleton
+    fun provideTeamRepository(apiService: ApiService): TeamRepository {
+        return TeamRepository(apiService)
+    }
 }

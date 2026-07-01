@@ -43,11 +43,11 @@ class TextPreviewViewModel @Inject constructor(
     private val _content = MutableStateFlow("加载中...")
     val content = _content.asStateFlow()
 
-    fun load(fileId: Long) {
+    fun load(fileId: Long, teamId: Long? = null) {
         viewModelScope.launch {
             _content.value = withContext(Dispatchers.IO) {
                 try {
-                    val body = api.previewFile(fileId)
+                    val body = if (teamId == null) api.previewFile(fileId) else api.previewTeamFile(teamId, fileId)
                     body.byteStream().bufferedReader(Charset.forName("UTF-8")).use { it.readText() }
                 } catch (e: Exception) {
                     "加载失败: ${e.message}"
@@ -61,11 +61,12 @@ class TextPreviewViewModel @Inject constructor(
 @Composable
 fun TextPreviewScreen(
     fileId: Long,
+    teamId: Long? = null,
     onNavigateBack: () -> Unit,
     viewModel: TextPreviewViewModel = hiltViewModel(),
 ) {
     val content by viewModel.content.collectAsState()
-    LaunchedEffect(fileId) { viewModel.load(fileId) }
+    LaunchedEffect(fileId, teamId) { viewModel.load(fileId, teamId) }
 
     Scaffold(
         topBar = {

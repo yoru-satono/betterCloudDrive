@@ -1,5 +1,6 @@
 package com.betterclouddrive.scheduler.task;
 
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,6 +18,7 @@ class StorageQuotaSyncTaskTest {
 
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private UserRepository userRepository;
+    @Mock private TeamRepository teamRepository;
     @Mock private ValueOperations<String, String> valueOps;
     @InjectMocks private StorageQuotaSyncTask task;
 
@@ -24,6 +26,7 @@ class StorageQuotaSyncTaskTest {
     void shouldSyncQuotaIncrements() {
         when(redisTemplate.keys("storage:incr:*"))
                 .thenReturn(Set.of("storage:incr:1", "storage:incr:2"));
+        when(redisTemplate.keys("team:storage:incr:*")).thenReturn(Set.of());
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get("storage:incr:1")).thenReturn("1024");
         when(valueOps.get("storage:incr:2")).thenReturn("-512");
@@ -34,6 +37,20 @@ class StorageQuotaSyncTaskTest {
         verify(userRepository).updateStorageUsed(2L, -512L);
         verify(redisTemplate).delete("storage:incr:1");
         verify(redisTemplate).delete("storage:incr:2");
+    }
+
+    @Test
+    void shouldSyncTeamQuotaIncrements() {
+        when(redisTemplate.keys("storage:incr:*")).thenReturn(Set.of());
+        when(redisTemplate.keys("team:storage:incr:*"))
+                .thenReturn(Set.of("team:storage:incr:10"));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("team:storage:incr:10")).thenReturn("2048");
+
+        task.syncStorageQuota();
+
+        verify(teamRepository).updateStorageUsed(10L, 2048L);
+        verify(redisTemplate).delete("team:storage:incr:10");
     }
 
     @Test

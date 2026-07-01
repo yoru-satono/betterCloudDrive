@@ -9,7 +9,13 @@ public interface TagRepository extends JpaRepository<TagEntity, Long> {
 
     List<TagEntity> findByUserIdOrderByTagNameAsc(Long userId);
 
+    List<TagEntity> findByTeamIdOrderByTagNameAsc(Long teamId);
+
     List<TagEntity> findByUserIdAndTagNameContainingIgnoreCaseOrderByTagNameAsc(Long userId, String keyword);
 
+    List<TagEntity> findByTeamIdAndTagNameContainingIgnoreCaseOrderByTagNameAsc(Long teamId, String keyword);
+
     boolean existsByUserIdAndTagName(Long userId, String tagName);
+
+    boolean existsByTeamIdAndTagName(Long teamId, String tagName);
 }

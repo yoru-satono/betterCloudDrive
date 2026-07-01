@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 data class FileItem(
     val id: Long = 0,
     @SerialName("userId") val userId: Long = 0,
+    @SerialName("teamId") val teamId: Long? = null,
     @SerialName("parentId") val parentId: Long? = null,
     @SerialName("fileName") val fileName: String = "",
     @SerialName("fileType") val fileType: String = "file", // "file" | "folder"

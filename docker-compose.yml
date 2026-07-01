@@ -72,6 +72,23 @@ services:
     networks:
       - bcd-network
 
+  onlyoffice-documentserver:
+    image: onlyoffice/documentserver:latest
+    container_name: bcd-onlyoffice
+    restart: unless-stopped
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-betterclouddrive-onlyoffice-dev-secret}
+      JWT_HEADER: Authorization
+      JWT_IN_BODY: "true"
+    ports:
+      - "${HOST_ONLYOFFICE_PORT:-8082}:80"
+    volumes:
+      - onlyofficedata:/var/www/onlyoffice/Data
+      - onlyofficelogs:/var/log/onlyoffice
+    networks:
+      - bcd-network
+
   loki:
     image: grafana/loki:2.9.8
     container_name: bcd-loki
@@ -192,6 +209,8 @@ services:
         condition: service_healthy
       seaweedfs:
         condition: service_healthy
+      onlyoffice-documentserver:
+        condition: service_started
     env_file:
       - ./config/env-files/database.env
       - ./config/env-files/storage.env
@@ -245,6 +264,10 @@ volumes:
   tempodata:
     driver: local
   grafanadata:
+    driver: local
+  onlyofficedata:
+    driver: local
+  onlyofficelogs:
     driver: local
 
 networks:

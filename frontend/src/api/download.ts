@@ -60,6 +60,22 @@ export const downloadFile = async (fileId: number, fileName: string) => {
   }
 }
 
+export const downloadTeamFile = async (teamId: number, fileId: number, fileName: string) => {
+  try {
+    if (isDesktopDownloadRuntime()) {
+      const saved = await startQueuedDesktopFileDownload({ id: fileId, fileName, fileSize: 0 }, { teamId })
+      if (saved) toast.success('已加入传输队列')
+      return
+    }
+
+    const { data } = await api.post<{ code: number; data: { url: string } }>(`/teams/${teamId}/download/${fileId}/ticket`, undefined, { suppressToast: true })
+    triggerBrowserDownload(data.data.url, fileName)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '下载失败'
+    toast.error(msg)
+  }
+}
+
 export const downloadFolderZip = async (fileId: number, folderName: string) => {
   try {
     if (isDesktopDownloadRuntime()) {
@@ -76,10 +92,29 @@ export const downloadFolderZip = async (fileId: number, folderName: string) => {
   }
 }
 
+export const downloadTeamFolderZip = async (teamId: number, fileId: number, folderName: string) => {
+  try {
+    if (isDesktopDownloadRuntime()) {
+      const saved = await startQueuedDesktopFolderDownload({ id: fileId, fileName: folderName, fileSize: 0 }, { teamId })
+      if (saved) toast.success('已加入传输队列')
+      return
+    }
+
+    const { data } = await api.post<{ code: number; data: { url: string } }>(`/teams/${teamId}/download/folders/${fileId}/zip/ticket`, undefined, { suppressToast: true })
+    triggerBrowserDownload(data.data.url, `${folderName}.zip`)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '下载失败'
+    toast.error(msg)
+  }
+}
+
 export const previewFileUrl = (fileId: number) => `${getApiBaseUrl()}/preview/${fileId}`
 
-export const previewFile = (fileId: number) =>
-  api.get<Blob>(`/preview/${fileId}`, { responseType: 'blob', suppressToast: true })
+export const previewFileUrlFor = (fileId: number, teamId?: number) =>
+  teamId ? `${getApiBaseUrl()}/teams/${teamId}/preview/${fileId}` : previewFileUrl(fileId)
+
+export const previewFile = (fileId: number, teamId?: number) =>
+  api.get<Blob>(teamId ? `/teams/${teamId}/preview/${fileId}` : `/preview/${fileId}`, { responseType: 'blob', suppressToast: true })
 
 export const downloadSharedFile = async (shareCode: string, fileId: number, fileName: string, password?: string) => {
   try {

@@ -26,6 +26,9 @@ public class FileTagEntity {
     @Column(name = "file_id")
     private Long fileId;
 
+    @Column(name = "team_id")
+    private Long teamId;
+
     @Column(name = "tag_id")
     private Long tagId;
 

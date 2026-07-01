@@ -1,6 +1,7 @@
 export interface FileEntity {
   id: number
   userId: number
+  teamId?: number | null
   parentId: number | null
   fileName: string
   fileType: 'file' | 'folder'

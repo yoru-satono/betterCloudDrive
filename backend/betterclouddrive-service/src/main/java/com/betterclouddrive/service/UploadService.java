@@ -23,6 +23,18 @@ public interface UploadService {
     /** Instant upload: if MD5 matches an existing file, link it directly */
     Long instantUpload(Long userId, Long parentId, String fileName, Long fileSize, String md5Hash);
 
+    UploadSessionEntity initTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash, int totalChunks);
+
+    void uploadTeamChunk(Long teamId, String sessionId, Long userId, int chunkNumber, byte[] data, String chunkMd5);
+
+    Map<String, Object> getTeamUploadStatus(Long teamId, String sessionId, Long userId);
+
+    Long completeTeamUpload(Long teamId, String sessionId, Long userId);
+
+    void cancelTeamUpload(Long teamId, String sessionId, Long userId);
+
+    Long instantTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash);
+
     /**
      * Server-side streaming upload: auto-chunks the InputStream internally and runs
      * the full SeaweedFS multipart flow. Intended for callers (e.g. WebDAV PUT) that

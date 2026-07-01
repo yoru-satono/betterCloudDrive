@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 data class ShareLink(
     val id: Long = 0,
     @SerialName("userId") val userId: Long = 0,
+    @SerialName("teamId") val teamId: Long? = null,
     @SerialName("fileId") val fileId: Long = 0,
     @SerialName("shareCode") val shareCode: String = "",
     @SerialName("hasPassword") val hasPassword: Boolean = false,

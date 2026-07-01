@@ -5,8 +5,8 @@ import com.betterclouddrive.android.ui.navigation.BCDNavHost
 import com.betterclouddrive.android.ui.theme.BCDTheme
 
 @Composable
-fun BCDApp() {
+fun BCDApp(initialTeamInviteToken: String? = null) {
     BCDTheme {
-        BCDNavHost()
+        BCDNavHost(initialTeamInviteToken = initialTeamInviteToken)
     }
 }

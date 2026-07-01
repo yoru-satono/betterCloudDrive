@@ -1,5 +1,6 @@
 package com.betterclouddrive.android.ui.navigation
 
+import android.net.Uri
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -10,6 +11,7 @@ object Screen {
     const val LOGIN = "login"
     const val REGISTER = "register"
     const val FORGOT_PASSWORD = "forgotPassword"
+    const val TEAM_INVITE = "teamInvites/{token}"
 
     // Main
     const val FILES = "files"
@@ -22,13 +24,31 @@ object Screen {
     const val TAGS = "tags"
     const val TAG_FILES = "tagFiles/{tagId}"
     const val VERSIONS = "versions/{fileId}"
+    const val TEAMS = "teams"
+    const val TEAM_FILES = "teams/{teamId}/files"
+    const val TEAM_FOLDER = "teams/{teamId}/files/{folderId}"
+    const val TEAM_MEMBERS = "teams/{teamId}/members"
+    const val TEAM_SETTINGS = "teams/{teamId}/settings"
+    const val TEAM_RECYCLE_BIN = "teams/{teamId}/recycleBin"
+    const val TEAM_VERSIONS = "teams/{teamId}/versions/{fileId}"
+    const val TEAM_OFFICE = "teams/{teamId}/office/{fileId}"
+    const val TEAM_PREVIEW = "teams/{teamId}/preview/{fileId}"
+    const val NOTIFICATIONS = "notifications"
     const val PROFILE = "profile"
     const val TRANSFERS = "transfers"
 
     fun files(folderId: Long? = null) = if (folderId != null) "files/$folderId" else FILES
+    fun teamInvite(token: String) = "teamInvites/${Uri.encode(token)}"
     fun preview(fileId: Long) = "preview/$fileId"
     fun tagFiles(tagId: Long) = "tagFiles/$tagId"
     fun versions(fileId: Long) = "versions/$fileId"
+    fun teamFiles(teamId: Long, folderId: Long? = null) = if (folderId != null) "teams/$teamId/files/$folderId" else "teams/$teamId/files"
+    fun teamMembers(teamId: Long) = "teams/$teamId/members"
+    fun teamSettings(teamId: Long) = "teams/$teamId/settings"
+    fun teamRecycleBin(teamId: Long) = "teams/$teamId/recycleBin"
+    fun teamVersions(teamId: Long, fileId: Long) = "teams/$teamId/versions/$fileId"
+    fun teamOffice(teamId: Long, fileId: Long) = "teams/$teamId/office/$fileId"
+    fun teamPreview(teamId: Long, fileId: Long) = "teams/$teamId/preview/$fileId"
 }
 
 data class BottomNavItem(
@@ -41,6 +61,7 @@ data class BottomNavItem(
 
 val bottomNavItems = listOf(
     BottomNavItem(Screen.files(null), "files", "文件", Icons.Filled.Folder, Icons.Outlined.Folder),
+    BottomNavItem(Screen.TEAMS, Screen.TEAMS, "团队", Icons.Filled.Groups, Icons.Outlined.Groups),
     BottomNavItem(Screen.SHARES, Screen.SHARES, "分享", Icons.Filled.Share, Icons.Outlined.Share),
     BottomNavItem(Screen.FAVORITES, Screen.FAVORITES, "收藏", Icons.Filled.Star, Icons.Outlined.Star),
     BottomNavItem(Screen.TAGS, Screen.TAGS, "标签", Icons.Filled.Label, Icons.Outlined.Label),
@@ -49,6 +70,7 @@ val bottomNavItems = listOf(
 
 val railNavItems = listOf(
     BottomNavItem(Screen.files(null), "files", "文件", Icons.Filled.Folder, Icons.Outlined.Folder),
+    BottomNavItem(Screen.TEAMS, Screen.TEAMS, "团队", Icons.Filled.Groups, Icons.Outlined.Groups),
     BottomNavItem(Screen.SHARES, Screen.SHARES, "分享", Icons.Filled.Share, Icons.Outlined.Share),
     BottomNavItem(Screen.FAVORITES, Screen.FAVORITES, "收藏", Icons.Filled.Star, Icons.Outlined.Star),
     BottomNavItem(Screen.TAGS, Screen.TAGS, "标签", Icons.Filled.Label, Icons.Outlined.Label),

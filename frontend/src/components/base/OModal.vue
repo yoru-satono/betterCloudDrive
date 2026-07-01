@@ -2,7 +2,7 @@
 import { onBeforeUnmount, watch } from 'vue'
 
 defineOptions({ inheritAttrs: false })
-const props = defineProps<{ title?: string; open: boolean; width?: string }>()
+const props = defineProps<{ title?: string; open: boolean; width?: string; height?: string; bodyClass?: string }>()
 const emit = defineEmits<{ close: [] }>()
 
 function onKeydown(event: KeyboardEvent) {
@@ -30,7 +30,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           role="dialog"
           aria-modal="true"
           :aria-label="title"
-          :style="{ width: props.width || '440px' }"
+          :style="{ width: props.width || '440px', height: props.height }"
         >
           <div v-if="title" class="o-modal__header">
             <span class="o-modal__title">{{ title }}</span>
@@ -40,7 +40,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
               </svg>
             </button>
           </div>
-          <div class="o-modal__body">
+          <div class="o-modal__body" :class="props.bodyClass">
             <slot />
           </div>
           <div v-if="$slots.footer" class="o-modal__footer">
@@ -85,7 +85,17 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   transition: all var(--fast);
 }
 .o-modal__close:hover { background: var(--bg-overlay); color: var(--text-primary); }
-.o-modal__body { padding: 20px; overflow-y: auto; }
+.o-modal__body {
+  padding: 20px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.o-modal__body--fill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 .o-modal__footer {
   padding: 12px 20px;
   border-top: 1px solid var(--border);

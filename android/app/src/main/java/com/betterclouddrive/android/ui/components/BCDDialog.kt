@@ -32,12 +32,12 @@ fun BCDDialog(
             Column(modifier = Modifier.testTag("dialog-body")) { content() }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(onClick = onConfirm, modifier = Modifier.testTag("dialog-confirm")) {
                 Text(confirmText, color = MaterialTheme.colorScheme.primary)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("dialog-dismiss")) {
                 Text(dismissText, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },

@@ -72,6 +72,11 @@ object FileTypeHelper {
         return ext in setOf("txt", "md", "json", "xml", "html", "css", "js", "kt", "java", "py", "csv", "log", "yaml", "yml", "ini", "cfg", "sh", "bat")
     }
 
+    fun isOffice(fileName: String): Boolean {
+        val ext = getExtension(fileName)
+        return ext in setOf("doc", "docx", "odt", "rtf", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp")
+    }
+
     fun isArchive(fileName: String): Boolean {
         val ext = getExtension(fileName)
         return ext in setOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz")

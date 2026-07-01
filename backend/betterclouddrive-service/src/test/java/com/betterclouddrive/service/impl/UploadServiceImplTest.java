@@ -2,11 +2,16 @@ package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.UploadSessionEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UploadSessionRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
+import com.betterclouddrive.service.NotificationService;
+import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.storage.StorageService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,9 +36,13 @@ class UploadServiceImplTest {
     @Mock private UploadSessionRepository uploadSessionRepository;
     @Mock private FileRepository fileRepository;
     @Mock private UserRepository userRepository;
+    @Mock private TeamRepository teamRepository;
     @Mock private StorageService storageService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
+    @Mock private TeamAuditService teamAuditService;
+    @Mock private NotificationService notificationService;
+    @Mock private TeamPermissionService teamPermissionService;
     @InjectMocks private UploadServiceImpl uploadService;
 
     private UserEntity quotaUser(long quota, long used) {
@@ -45,6 +54,16 @@ class UploadServiceImplTest {
                 .id(id).userId(1L).fileName("test.bin")
                 .fileSize(1024L).totalChunks(totalChunks)
                 .receivedChunks(0).status(1).build();
+    }
+
+    private FileEntity folder(Long id, Long userId, Long teamId) {
+        return FileEntity.builder()
+                .id(id)
+                .userId(userId)
+                .teamId(teamId)
+                .fileType("folder")
+                .isDeleted(false)
+                .build();
     }
 
     // ── initUpload quota ──────────────────────────────────────────────────────
@@ -85,6 +104,17 @@ class UploadServiceImplTest {
     }
 
     @Test
+    void initUpload_shouldRejectTeamParent() {
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(folder(10L, 2L, 99L)));
+
+        assertThatThrownBy(() -> uploadService.initUpload(1L, 10L, "bad.bin", 100L, null, 1))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404001));
+
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
     void initUpload_shouldAllowZeroByteFilesWithoutChunks() {
         when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
@@ -104,6 +134,21 @@ class UploadServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
         verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void initTeamUpload_shouldUseTeamQuotaAndPersistTeamId() {
+        TeamEntity team = TeamEntity.builder().id(10L).storageQuota(1024L).storageUsed(0L).build();
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("team:storage:incr:10")).thenReturn(null);
+        when(uploadSessionRepository.save(any(UploadSessionEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UploadSessionEntity session = uploadService.initTeamUpload(10L, 2L, null, "team.bin", 100L, "md5", 1);
+
+        assertThat(session.getTeamId()).isEqualTo(10L);
+        assertThat(session.getUserId()).isEqualTo(2L);
+        assertThat(session.getFileName()).isEqualTo("team.bin");
     }
 
     // ── uploadChunk ───────────────────────────────────────────────────────────
@@ -233,6 +278,70 @@ class UploadServiceImplTest {
                 .isInstanceOf(BusinessException.class);
     }
 
+    @Test
+    void completeTeamUpload_shouldCreateTeamFileAndIncrementTeamStorage() {
+        UploadSessionEntity session = UploadSessionEntity.builder()
+                .id("team-session").userId(2L).teamId(10L).fileName("team.txt").fileSize(128L)
+                .totalChunks(1).status(1).build();
+        when(uploadSessionRepository.findById("team-session")).thenReturn(Optional.of(session));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.getBit("upload:bitmap:team-session", 0)).thenReturn(true);
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
+            FileEntity file = inv.getArgument(0);
+            file.setId(50L);
+            return file;
+        });
+        when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Long fileId = uploadService.completeTeamUpload(10L, "team-session", 2L);
+
+        assertThat(fileId).isEqualTo(50L);
+        org.mockito.ArgumentCaptor<FileEntity> captor = org.mockito.ArgumentCaptor.forClass(FileEntity.class);
+        verify(fileRepository).save(captor.capture());
+        assertThat(captor.getValue().getTeamId()).isEqualTo(10L);
+        verify(storageService).composeParts(anyString(), eq("uploads/teams/10/team-session/chunks"), eq(1));
+        verify(valueOps).increment("team:storage:incr:10", 128L);
+        verify(teamAuditService).record(eq(10L), eq(2L), eq("UPLOAD_COMPLETE"), eq("FILE"), eq(50L), eq("team.txt"));
+    }
+
+    @Test
+    void cancelTeamUpload_shouldMarkSessionCanceledAndWriteAuditLog() {
+        UploadSessionEntity session = UploadSessionEntity.builder()
+                .id("team-cancel").userId(2L).teamId(10L).fileName("team.txt").fileSize(128L)
+                .totalChunks(2).status(1).build();
+        when(uploadSessionRepository.findById("team-cancel")).thenReturn(Optional.of(session));
+        when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        uploadService.cancelTeamUpload(10L, "team-cancel", 2L);
+
+        assertThat(session.getStatus()).isEqualTo(3);
+        verify(storageService).deleteParts("uploads/teams/10/team-cancel/chunks", 2);
+        verify(redisTemplate).delete("upload:bitmap:team-cancel");
+        verify(teamAuditService).record(10L, 2L, "UPLOAD_CANCEL", "UPLOAD", null, "team-cancel");
+    }
+
+    @Test
+    void instantTeamUpload_shouldCreateTeamFileAndWriteAuditLog() {
+        TeamEntity team = TeamEntity.builder().id(10L).storageQuota(1024L).storageUsed(0L).build();
+        FileEntity existing = FileEntity.builder().id(3L).storagePath("objects/existing").build();
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("team:storage:incr:10")).thenReturn(null);
+        when(fileRepository.findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc("md5"))
+                .thenReturn(Optional.of(existing));
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
+            FileEntity file = inv.getArgument(0);
+            file.setId(51L);
+            return file;
+        });
+
+        Long fileId = uploadService.instantTeamUpload(10L, 2L, null, "copy.txt", 64L, "md5");
+
+        assertThat(fileId).isEqualTo(51L);
+        verify(valueOps).increment("team:storage:incr:10", 64L);
+        verify(teamAuditService).record(10L, 2L, "UPLOAD_INSTANT", "FILE", 51L, "copy.txt");
+    }
+
     // ── cancelUpload ──────────────────────────────────────────────────────────
 
     @Test
@@ -290,6 +399,7 @@ class UploadServiceImplTest {
         byte[] data = new byte[dataSize];
         InputStream stream = new ByteArrayInputStream(data);
 
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(folder(10L, 1L, null)));
         when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get("storage:incr:1")).thenReturn(null);

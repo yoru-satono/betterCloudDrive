@@ -1,5 +1,6 @@
 package com.betterclouddrive.scheduler.task;
 
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,25 +18,32 @@ public class StorageQuotaSyncTask {
 
     private final StringRedisTemplate redisTemplate;
     private final UserRepository userRepository;
+    private final TeamRepository teamRepository;
 
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
+    private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
 
     @Scheduled(fixedRateString = "${drive.storage.quota-sync-interval-ms:60000}")
     @Transactional
     public void syncStorageQuota() {
-        Set<String> keys = redisTemplate.keys(STORAGE_INCR_PREFIX + "*");
+        syncKeys(STORAGE_INCR_PREFIX, (id, delta) -> userRepository.updateStorageUsed(id, delta));
+        syncKeys(TEAM_STORAGE_INCR_PREFIX, (id, delta) -> teamRepository.updateStorageUsed(id, delta));
+    }
+
+    private void syncKeys(String prefix, StorageUpdater updater) {
+        Set<String> keys = redisTemplate.keys(prefix + "*");
         if (keys == null || keys.isEmpty()) {
             return;
         }
 
         for (String key : keys) {
             try {
-                Long userId = Long.parseLong(key.substring(STORAGE_INCR_PREFIX.length()));
+                Long id = Long.parseLong(key.substring(prefix.length()));
                 String deltaStr = redisTemplate.opsForValue().get(key);
                 if (deltaStr != null) {
                     long delta = Long.parseLong(deltaStr);
                     if (delta != 0) {
-                        userRepository.updateStorageUsed(userId, delta);
+                        updater.update(id, delta);
                     }
                 }
                 redisTemplate.delete(key);
@@ -43,5 +51,9 @@ public class StorageQuotaSyncTask {
                 log.warn("Failed to sync storage quota for key: {}", key, e);
             }
         }
+    }
+
+    private interface StorageUpdater {
+        void update(Long id, long delta);
     }
 }

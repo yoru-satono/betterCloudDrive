@@ -9,4 +9,6 @@ import java.util.List;
 public interface UploadSessionRepository extends JpaRepository<UploadSessionEntity, String> {
 
     List<UploadSessionEntity> findByStatusAndCreatedAtLessThanEqual(Integer status, LocalDateTime cutoff);
+
+    List<UploadSessionEntity> findByTeamId(Long teamId);
 }

@@ -23,6 +23,9 @@ public class UploadSessionEntity {
     @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "team_id")
+    private Long teamId;
+
     @Column(name = "parent_id")
     private Long parentId;
 

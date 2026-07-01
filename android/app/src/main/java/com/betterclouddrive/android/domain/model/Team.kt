@@ -1,0 +1,113 @@
+package com.betterclouddrive.android.domain.model
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
+enum class TeamRole {
+    OWNER,
+    ADMIN,
+    EDITOR,
+    VIEWER,
+}
+
+@Serializable
+data class Team(
+    val id: Long = 0,
+    val name: String = "",
+    @SerialName("ownerId") val ownerId: Long = 0,
+    @SerialName("storageQuota") val storageQuota: Long = 0,
+    @SerialName("storageUsed") val storageUsed: Long = 0,
+    val role: TeamRole = TeamRole.VIEWER,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+) {
+    val canWrite: Boolean get() = role in setOf(TeamRole.OWNER, TeamRole.ADMIN, TeamRole.EDITOR)
+    val canManageMembers: Boolean get() = role in setOf(TeamRole.OWNER, TeamRole.ADMIN)
+}
+
+@Serializable
+data class TeamMember(
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("userId") val userId: Long = 0,
+    val username: String? = null,
+    val email: String? = null,
+    val role: TeamRole = TeamRole.VIEWER,
+    val status: Int = 1,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+)
+
+@Serializable
+data class TeamEffectivePermission(
+    @SerialName("canRead") val canRead: Boolean = true,
+    @SerialName("canWrite") val canWrite: Boolean = false,
+    @SerialName("canShare") val canShare: Boolean = false,
+    @SerialName("canDelete") val canDelete: Boolean = false,
+    @SerialName("canManage") val canManage: Boolean = false,
+)
+
+@Serializable
+data class TeamFilePermission(
+    val id: Long = 0,
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("fileId") val fileId: Long = 0,
+    @SerialName("subjectType") val subjectType: String = "ROLE",
+    @SerialName("subjectUserId") val subjectUserId: Long? = null,
+    @SerialName("subjectRole") val subjectRole: TeamRole? = null,
+    @SerialName("canRead") val canRead: Boolean = true,
+    @SerialName("canWrite") val canWrite: Boolean = false,
+    @SerialName("canShare") val canShare: Boolean = false,
+    @SerialName("canDelete") val canDelete: Boolean = false,
+    @SerialName("canManage") val canManage: Boolean = false,
+    @SerialName("createdBy") val createdBy: Long? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+)
+
+@Serializable
+data class NotificationItem(
+    val id: Long = 0,
+    @SerialName("userId") val userId: Long = 0,
+    @SerialName("teamId") val teamId: Long? = null,
+    val type: String = "",
+    val title: String = "",
+    val content: String = "",
+    val link: String? = null,
+    @SerialName("isRead") val isRead: Boolean = false,
+    @SerialName("readAt") val readAt: String? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+)
+
+@Serializable
+data class TeamInvite(
+    val id: Long = 0,
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("teamName") val teamName: String? = null,
+    val email: String = "",
+    val role: TeamRole = TeamRole.VIEWER,
+    val status: String = "",
+    @SerialName("invitedByUserId") val invitedByUserId: Long = 0,
+    @SerialName("invitedByUsername") val invitedByUsername: String? = null,
+    @SerialName("expiresAt") val expiresAt: String? = null,
+    @SerialName("acceptedAt") val acceptedAt: String? = null,
+    @SerialName("rejectedAt") val rejectedAt: String? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+)
+
+@Serializable
+data class TeamOperationLog(
+    val id: Long = 0,
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("actorUserId") val actorUserId: Long? = null,
+    val action: String = "",
+    @SerialName("targetType") val targetType: String? = null,
+    @SerialName("targetId") val targetId: Long? = null,
+    val result: Int = 0,
+    @SerialName("statusCode") val statusCode: Int? = null,
+    @SerialName("requestId") val requestId: String? = null,
+    @SerialName("traceId") val traceId: String? = null,
+    val details: String? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+)

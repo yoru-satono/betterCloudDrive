@@ -4,6 +4,7 @@ const SESSION_TTL_MS = 24 * 60 * 60 * 1000
 
 export interface ResumableUploadRecord {
   sessionId: string
+  teamId?: number | null
   parentId: number | null
   fileName: string
   displayName: string
@@ -16,6 +17,7 @@ export interface ResumableUploadRecord {
 }
 
 export interface UploadRecordIdentity {
+  teamId?: number | null
   parentId: number | null
   fileName: string
   displayName: string
@@ -25,6 +27,7 @@ export interface UploadRecordIdentity {
 
 export interface ResumableDirectoryRecord {
   pathKey: string
+  teamId?: number | null
   parentPathKey: string | null
   baseParentId: number | null
   remoteId: number
@@ -107,7 +110,8 @@ function writeResumableDirectories(records: ResumableDirectoryRecord[]) {
 }
 
 function isSameUpload(record: UploadRecordIdentity, identity: UploadRecordIdentity) {
-  return record.parentId === identity.parentId
+  return (record.teamId ?? null) === (identity.teamId ?? null)
+    && record.parentId === identity.parentId
     && record.fileName === identity.fileName
     && record.displayName === identity.displayName
     && record.fileSize === identity.fileSize
@@ -117,6 +121,7 @@ function isSameUpload(record: UploadRecordIdentity, identity: UploadRecordIdenti
 function isValidRecord(record: ResumableUploadRecord) {
   return !!record
     && typeof record.sessionId === 'string'
+    && (record.teamId === undefined || record.teamId === null || typeof record.teamId === 'number')
     && (record.parentId === null || typeof record.parentId === 'number')
     && typeof record.fileName === 'string'
     && typeof record.displayName === 'string'
@@ -131,6 +136,7 @@ function isValidRecord(record: ResumableUploadRecord) {
 function isValidDirectoryRecord(record: ResumableDirectoryRecord) {
   return !!record
     && typeof record.pathKey === 'string'
+    && (record.teamId === undefined || record.teamId === null || typeof record.teamId === 'number')
     && (record.parentPathKey === null || typeof record.parentPathKey === 'string')
     && (record.baseParentId === null || typeof record.baseParentId === 'number')
     && typeof record.remoteId === 'number'

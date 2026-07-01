@@ -4,8 +4,10 @@ import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useSearchContextStore } from '@/stores/searchContext'
 import { useRoute, useRouter } from 'vue-router'
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getSearchTriggerPlaceholder, resolveSearchMode } from '@/config/search'
+import { Bell } from 'lucide-vue-next'
+import * as notificationsApi from '@/api/notifications'
 
 const ui = useUIStore()
 const auth = useAuthStore()
@@ -14,11 +16,34 @@ const router = useRouter()
 const route = useRoute()
 const searchMode = computed(() => resolveSearchMode(route))
 const searchPlaceholder = computed(() => getSearchTriggerPlaceholder(searchMode.value, searchContext.activeTag))
+const unreadCount = ref(0)
+
+async function loadUnreadCount() {
+  try {
+    const { data } = await notificationsApi.getUnreadCount()
+    unreadCount.value = Number(data.data || 0)
+  } catch {
+    unreadCount.value = 0
+  }
+}
 
 async function handleLogout() {
   await auth.logout()
   router.push('/login')
 }
+
+onMounted(() => {
+  loadUnreadCount()
+  window.addEventListener('bcd:notifications-changed', loadUnreadCount)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('bcd:notifications-changed', loadUnreadCount)
+})
+
+watch(() => route.fullPath, () => {
+  loadUnreadCount()
+})
 </script>
 
 <template>
@@ -31,6 +56,10 @@ async function handleLogout() {
       <kbd>⌘K</kbd>
     </div>
     <div class="app-header__right">
+      <OButton class="app-header__notification" variant="subtle" size="sm" :icon="true" @click="router.push('/notifications')">
+        <Bell :size="14" />
+        <span v-if="unreadCount > 0" class="app-header__badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+      </OButton>
       <OButton variant="subtle" size="sm" :icon="true" @click="handleLogout">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
@@ -64,4 +93,22 @@ async function handleLogout() {
   border-radius: 4px; padding: 1px 5px;
 }
 .app-header__right { display: flex; align-items: center; gap: 6px; }
+.app-header__notification {
+  position: relative;
+}
+.app-header__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: white;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 600;
+}
 </style>

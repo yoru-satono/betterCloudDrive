@@ -21,6 +21,7 @@ interface DesktopFolderUploadStart {
 export interface DesktopUploadItemEvent {
   id: string
   batchId: string
+  teamId?: number | null
   fileName: string
   displayName: string
   parentId: number | null
@@ -41,24 +42,28 @@ export function getDesktopUploadToken() {
   return localStorage.getItem('accessToken') || ''
 }
 
-export async function uploadDesktopFolder(parentId: number | null) {
+export async function uploadDesktopFolder(parentId: number | null, teamId?: number) {
+  const apiBaseUrl = teamId ? `${getApiBaseUrl()}/teams/${teamId}` : getApiBaseUrl()
   return invoke<DesktopFolderUploadStart>('upload_desktop_folder', {
     request: {
+      teamId: teamId ?? null,
       parentId,
       token: getDesktopUploadToken(),
-      apiBaseUrl: getApiBaseUrl(),
+      apiBaseUrl,
       resumableUploads: readResumableUploads(),
       resumableDirectories: readResumableDirectories(),
     },
   })
 }
 
-export async function uploadDesktopFiles(parentId: number | null) {
+export async function uploadDesktopFiles(parentId: number | null, teamId?: number) {
+  const apiBaseUrl = teamId ? `${getApiBaseUrl()}/teams/${teamId}` : getApiBaseUrl()
   return invoke<DesktopFolderUploadStart>('upload_desktop_files', {
     request: {
+      teamId: teamId ?? null,
       parentId,
       token: getDesktopUploadToken(),
-      apiBaseUrl: getApiBaseUrl(),
+      apiBaseUrl,
       resumableUploads: readResumableUploads(),
       resumableDirectories: readResumableDirectories(),
     },

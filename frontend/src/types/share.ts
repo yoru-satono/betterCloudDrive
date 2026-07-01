@@ -1,6 +1,7 @@
 export interface ShareLinkEntity {
   id: number
   userId: number
+  teamId: number | null
   fileId: number
   shareCode: string
   hasPassword: boolean

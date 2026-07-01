@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.betterclouddrive.android.data.local.ServerConfigStore
 import com.betterclouddrive.android.data.repository.FileRepository
+import com.betterclouddrive.android.data.repository.TeamRepository
 import com.betterclouddrive.android.domain.model.FileItem
 import com.betterclouddrive.android.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,6 +25,25 @@ class PreviewRouterViewModel @Inject constructor(
     fun load(fileId: Long) {
         viewModelScope.launch {
             when (val result = repository.getFile(fileId)) {
+                is NetworkResult.Success -> _file.value = result.data
+                else -> Unit
+            }
+        }
+    }
+}
+
+@HiltViewModel
+class TeamPreviewRouterViewModel @Inject constructor(
+    private val repository: TeamRepository,
+    serverConfigStore: ServerConfigStore,
+) : ViewModel() {
+    private val _file = MutableStateFlow<FileItem?>(null)
+    val file = _file.asStateFlow()
+    val serverBaseUrl = serverConfigStore.serverBaseUrlFlow
+
+    fun load(teamId: Long, fileId: Long) {
+        viewModelScope.launch {
+            when (val result = repository.getFile(teamId, fileId)) {
                 is NetworkResult.Success -> _file.value = result.data
                 else -> Unit
             }

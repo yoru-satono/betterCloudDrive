@@ -41,4 +41,34 @@ class JwtAuthenticationFilterTest {
         assertThat(response.getContentAsString()).contains("\"code\":401001");
         assertThat(response.getContentAsString()).contains("\"message\":\"token expired\"");
     }
+
+    @Test
+    void onlyOfficeContentEndpointSkipsJwtHeaderValidation() throws Exception {
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(new JwtTokenProvider(), null, null);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/office/files/506/content");
+        request.addHeader("Authorization", "Bearer not-a-drive-access-token");
+        request.addParameter("token", "office-content-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        filter.doFilter(request, response, (req, res) -> chainCalled.set(true));
+
+        assertThat(chainCalled).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void onlyOfficeTeamCallbackEndpointSkipsJwtHeaderValidation() throws Exception {
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(new JwtTokenProvider(), null, null);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/teams/10/office/files/506/callback");
+        request.addHeader("Authorization", "Bearer onlyoffice-document-server-token");
+        request.addParameter("token", "office-callback-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        filter.doFilter(request, response, (req, res) -> chainCalled.set(true));
+
+        assertThat(chainCalled).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
 }

@@ -2,16 +2,23 @@ import api from './client'
 import type { UploadSession } from '@/types/file'
 import type { ApiResponse } from '@/types/api'
 
-export const instantUpload = (parentId: number | null, fileName: string, fileSize: number, md5: string, mimeType?: string) =>
-  api.post<ApiResponse<{ fileId: number; instant: true }>>('/upload/instant', { parentId, fileName, fileSize, md5Hash: md5 }, { suppressToast: true })
+export interface UploadContext {
+  teamId?: number
+}
 
-export const initMultipart = (parentId: number | null, fileName: string, fileSize: number, md5Hash: string, totalChunks: number, mimeType?: string) =>
-  api.post<ApiResponse<UploadSession>>('/upload/init', { parentId, fileName, fileSize, md5Hash, totalChunks }, { suppressToast: true })
+const uploadBase = (context?: UploadContext) =>
+  context?.teamId ? `/teams/${context.teamId}/upload` : '/upload'
 
-export const uploadChunk = (uploadId: string, chunkIndex: number, data: Blob, onProgress?: (pct: number) => void) => {
+export const instantUpload = (parentId: number | null, fileName: string, fileSize: number, md5: string, mimeType?: string, context?: UploadContext) =>
+  api.post<ApiResponse<{ fileId: number; instant: true }>>(`${uploadBase(context)}/instant`, { parentId, fileName, fileSize, md5Hash: md5 }, { suppressToast: true })
+
+export const initMultipart = (parentId: number | null, fileName: string, fileSize: number, md5Hash: string, totalChunks: number, mimeType?: string, context?: UploadContext) =>
+  api.post<ApiResponse<UploadSession>>(`${uploadBase(context)}/init`, { parentId, fileName, fileSize, md5Hash, totalChunks }, { suppressToast: true })
+
+export const uploadChunk = (uploadId: string, chunkIndex: number, data: Blob, onProgress?: (pct: number) => void, context?: UploadContext) => {
   const form = new FormData()
   form.append('file', data)
-  return api.post<ApiResponse<{ chunkNumber: number }>>(`/upload/${uploadId}/chunk`, form, {
+  return api.post<ApiResponse<{ chunkNumber: number }>>(`${uploadBase(context)}/${uploadId}/chunk`, form, {
     params: { chunkNumber: chunkIndex },
     headers: { 'Content-Type': 'multipart/form-data' },
     suppressToast: true,
@@ -19,11 +26,11 @@ export const uploadChunk = (uploadId: string, chunkIndex: number, data: Blob, on
   })
 }
 
-export const completeMultipart = (uploadId: string) =>
-  api.post<ApiResponse<{ fileId: number }>>(`/upload/${uploadId}/complete`, undefined, { suppressToast: true })
+export const completeMultipart = (uploadId: string, context?: UploadContext) =>
+  api.post<ApiResponse<{ fileId: number }>>(`${uploadBase(context)}/${uploadId}/complete`, undefined, { suppressToast: true })
 
-export const abortMultipart = (uploadId: string) =>
-  api.post<ApiResponse<void>>(`/upload/${uploadId}/cancel`, undefined, { suppressToast: true })
+export const abortMultipart = (uploadId: string, context?: UploadContext) =>
+  api.post<ApiResponse<void>>(`${uploadBase(context)}/${uploadId}/cancel`, undefined, { suppressToast: true })
 
-export const getUploadStatus = (uploadId: string) =>
-  api.get<ApiResponse<UploadSession>>(`/upload/${uploadId}/status`, { suppressToast: true })
+export const getUploadStatus = (uploadId: string, context?: UploadContext) =>
+  api.get<ApiResponse<UploadSession>>(`${uploadBase(context)}/${uploadId}/status`, { suppressToast: true })

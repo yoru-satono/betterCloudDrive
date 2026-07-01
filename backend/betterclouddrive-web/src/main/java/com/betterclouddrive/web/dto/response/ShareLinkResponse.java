@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 public class ShareLinkResponse {
     private Long id;
     private Long userId;
+    private Long teamId;
     private Long fileId;
     private String shareCode;
     private boolean hasPassword;
@@ -26,6 +27,7 @@ public class ShareLinkResponse {
         return ShareLinkResponse.builder()
                 .id(share.getId())
                 .userId(share.getUserId())
+                .teamId(share.getTeamId())
                 .fileId(share.getFileId())
                 .shareCode(share.getShareCode())
                 .hasPassword(share.getPasswordCiphertext() != null)

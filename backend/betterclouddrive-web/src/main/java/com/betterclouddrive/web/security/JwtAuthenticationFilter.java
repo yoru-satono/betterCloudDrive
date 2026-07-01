@@ -19,6 +19,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -31,6 +32,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final StringRedisTemplate redisTemplate;
     private final UserTokenRepository userTokenRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
                                     StringRedisTemplate redisTemplate,
@@ -38,6 +40,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.jwtTokenProvider = jwtTokenProvider;
         this.redisTemplate = redisTemplate;
         this.userTokenRepository = userTokenRepository;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = requestPath(request);
+        String method = request.getMethod();
+        return ("GET".equals(method) && pathMatcher.match("/api/v1/office/files/*/content", path))
+                || ("GET".equals(method) && pathMatcher.match("/api/v1/teams/*/office/files/*/content", path))
+                || ("POST".equals(method) && pathMatcher.match("/api/v1/teams/*/office/files/*/callback", path));
     }
 
     @Override
@@ -100,5 +111,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return bearerToken.substring(7);
         }
         return null;
+    }
+
+    private String requestPath(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        if (StringUtils.hasText(contextPath) && path.startsWith(contextPath)) {
+            return path.substring(contextPath.length());
+        }
+        return path;
     }
 }

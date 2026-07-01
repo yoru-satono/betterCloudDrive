@@ -18,6 +18,7 @@ onMounted(() => { if (!auth.isAdmin) router.push('/files') })
     <nav class="admin-layout__nav">
       <RouterLink to="/admin" exact-active-class="admin-nav--active" class="admin-nav-link">概览</RouterLink>
       <RouterLink to="/admin/users" active-class="admin-nav--active" class="admin-nav-link">用户管理</RouterLink>
+      <RouterLink to="/admin/teams" active-class="admin-nav--active" class="admin-nav-link">团队管理</RouterLink>
       <RouterLink to="/admin/logs" active-class="admin-nav--active" class="admin-nav-link">日志中心</RouterLink>
     </nav>
     <main class="admin-layout__content">

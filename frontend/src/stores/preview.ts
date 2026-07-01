@@ -2,23 +2,38 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { FileEntity } from '@/types/file'
 import { previewFile } from '@/api/download'
+import { getOfficeConfig, getTeamOfficeConfig } from '@/api/office'
+import type { OnlyOfficeConfigResponse } from '@/types/office'
+
+const OFFICE_EXTENSIONS = new Set(['doc', 'docx', 'odt', 'rtf', 'xls', 'xlsx', 'ods', 'csv', 'ppt', 'pptx', 'odp'])
 
 export const usePreviewStore = defineStore('preview', () => {
   const open = ref(false)
   const target = ref<FileEntity | null>(null)
+  const teamId = ref<number | null>(null)
   const url = ref('')
   const error = ref('')
   const loading = ref(false)
+  const officeConfig = ref<OnlyOfficeConfigResponse | null>(null)
+  const officeMode = ref(false)
 
-  async function openPreview(file: FileEntity) {
+  async function openPreview(file: FileEntity, context?: { teamId?: number }) {
     target.value = file
+    teamId.value = context?.teamId ?? null
     open.value = true
     loading.value = true
     error.value = ''
+    officeConfig.value = null
+    officeMode.value = isOfficeFile(file)
     revokeUrl()
     try {
-      const res = await previewFile(file.id)
-      url.value = URL.createObjectURL(res.data)
+      if (officeMode.value) {
+        const res = teamId.value ? await getTeamOfficeConfig(teamId.value, file.id) : await getOfficeConfig(file.id)
+        officeConfig.value = res.data.data
+      } else {
+        const res = teamId.value ? await previewFile(file.id, teamId.value) : await previewFile(file.id)
+        url.value = URL.createObjectURL(res.data)
+      }
     } catch {
       error.value = '此文件暂时无法预览'
     } finally {
@@ -29,8 +44,11 @@ export const usePreviewStore = defineStore('preview', () => {
   function closePreview() {
     open.value = false
     target.value = null
+    teamId.value = null
     error.value = ''
     loading.value = false
+    officeConfig.value = null
+    officeMode.value = false
     revokeUrl()
   }
 
@@ -41,5 +59,11 @@ export const usePreviewStore = defineStore('preview', () => {
     }
   }
 
-  return { open, target, url, error, loading, openPreview, closePreview }
+  return { open, target, teamId, url, error, loading, officeConfig, officeMode, openPreview, closePreview }
 })
+
+function isOfficeFile(file: FileEntity) {
+  const dot = file.fileName.lastIndexOf('.')
+  if (dot < 0) return false
+  return OFFICE_EXTENSIONS.has(file.fileName.slice(dot + 1).toLowerCase())
+}

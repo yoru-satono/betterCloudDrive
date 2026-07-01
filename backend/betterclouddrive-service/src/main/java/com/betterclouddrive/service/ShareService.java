@@ -6,11 +6,17 @@ import com.betterclouddrive.dal.entity.ShareLinkEntity;
 
 public interface ShareService {
     ShareLinkEntity createShare(Long userId, Long fileId, String password, Long expireAtMs, Integer maxVisits);
+    ShareLinkEntity createTeamShare(Long userId, Long teamId, Long fileId, String password, Long expireAtMs, Integer maxVisits);
     PageResult<ShareLinkEntity> listShares(Long userId, String keyword, int page, int size);
+    PageResult<ShareLinkEntity> listTeamShares(Long teamId, String keyword, int page, int size);
     ShareLinkEntity getShare(Long userId, Long shareId);
+    ShareLinkEntity getTeamShare(Long teamId, Long shareId);
     String getSharePassword(Long userId, Long shareId);
+    String getTeamSharePassword(Long teamId, Long shareId);
     ShareLinkEntity updateShare(Long userId, Long shareId, String password, Long expireAtMs, Integer maxVisits);
+    ShareLinkEntity updateTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId, String password, Long expireAtMs, Integer maxVisits);
     void cancelShare(Long userId, Long shareId);
+    void cancelTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId);
     /** Access a shared link: verify code + password, return the shared file info */
     FileEntity accessShare(String shareCode, String password);
     /** Resolve and record a public share download for a file inside the shared scope. */

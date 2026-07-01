@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 data class Tag(
     val id: Long = 0,
     @SerialName("userId") val userId: Long = 0,
+    @SerialName("teamId") val teamId: Long? = null,
     @SerialName("tagName") val tagName: String = "",
     val color: String = "#1890ff",
     @SerialName("createdAt") val createdAt: String? = null,

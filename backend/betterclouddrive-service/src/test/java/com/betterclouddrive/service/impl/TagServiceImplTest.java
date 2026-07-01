@@ -9,8 +9,11 @@ import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.FileTagEntity;
 import com.betterclouddrive.dal.entity.TagEntity;
+import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileTagRepository;
 import com.betterclouddrive.dal.repository.TagRepository;
+import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,6 +31,9 @@ class TagServiceImplTest {
 
     @Mock private TagRepository tagRepository;
     @Mock private FileTagRepository fileTagRepository;
+    @Mock private FileRepository fileRepository;
+    @Mock private TeamService teamService;
+    @Mock private TeamAuditService teamAuditService;
     @InjectMocks private TagServiceImpl tagService;
 
     private TagEntity tag(Long id, Long userId) {
@@ -98,6 +104,8 @@ class TagServiceImplTest {
     @Test
     void tagFiles_shouldCreateFileTagRecords() {
         when(tagRepository.findById(1L)).thenReturn(Optional.of(tag(1L, 1L)));
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(FileEntity.builder().id(10L).userId(1L).isDeleted(false).build()));
+        when(fileRepository.findById(11L)).thenReturn(Optional.of(FileEntity.builder().id(11L).userId(1L).isDeleted(false).build()));
         when(fileTagRepository.existsByFileIdAndTagId(10L, 1L)).thenReturn(false);
         when(fileTagRepository.existsByFileIdAndTagId(11L, 1L)).thenReturn(false);
 
@@ -109,6 +117,7 @@ class TagServiceImplTest {
     @Test
     void tagFiles_shouldSkipAlreadyTaggedFiles() {
         when(tagRepository.findById(1L)).thenReturn(Optional.of(tag(1L, 1L)));
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(FileEntity.builder().id(10L).userId(1L).isDeleted(false).build()));
         when(fileTagRepository.existsByFileIdAndTagId(10L, 1L)).thenReturn(true);
 
         tagService.tagFiles(1L, 1L, List.of(10L));
@@ -119,6 +128,8 @@ class TagServiceImplTest {
     @Test
     void untagFile_shouldDeleteAssociation() {
         FileTagEntity ft = FileTagEntity.builder().id(99L).fileId(10L).tagId(1L).build();
+        when(tagRepository.findById(1L)).thenReturn(Optional.of(tag(1L, 1L)));
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(FileEntity.builder().id(10L).userId(1L).isDeleted(false).build()));
         when(fileTagRepository.findByFileIdAndTagId(10L, 1L)).thenReturn(Optional.of(ft));
 
         tagService.untagFile(1L, 1L, 10L);
@@ -130,7 +141,7 @@ class TagServiceImplTest {
     void listFilesByTag_shouldReturnFiles() {
         FileEntity file = FileEntity.builder().id(10L).build();
         Page<FileEntity> files = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
-        when(fileTagRepository.findTaggedFiles(eq(1L), eq(1L), eq("report"), any(PageRequest.class)))
+        when(fileTagRepository.findTaggedFilesByKeyword(eq(1L), eq(1L), eq("report"), any(PageRequest.class)))
                 .thenReturn(files);
 
         PageResult<FileEntity> result = tagService.listFilesByTag(1L, 1L, " report ", 1, 20);

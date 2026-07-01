@@ -31,7 +31,7 @@ class FavoriteServiceImplTest {
 
     @Test
     void addFavorite_shouldSaveFavoriteRecord() {
-        FileEntity file = FileEntity.builder().id(1L).isDeleted(false).build();
+        FileEntity file = FileEntity.builder().id(1L).userId(1L).isDeleted(false).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
         when(favoriteRepository.existsByUserIdAndFileId(1L, 1L)).thenReturn(false);
 
@@ -50,7 +50,7 @@ class FavoriteServiceImplTest {
 
     @Test
     void addFavorite_shouldThrowWhenFileDeleted() {
-        FileEntity file = FileEntity.builder().id(2L).isDeleted(true).build();
+        FileEntity file = FileEntity.builder().id(2L).userId(1L).isDeleted(true).build();
         when(fileRepository.findById(2L)).thenReturn(Optional.of(file));
 
         assertThatThrownBy(() -> favoriteService.addFavorite(1L, 2L))
@@ -59,7 +59,7 @@ class FavoriteServiceImplTest {
 
     @Test
     void addFavorite_shouldBeIdempotentWhenAlreadyFavorited() {
-        FileEntity file = FileEntity.builder().id(1L).isDeleted(false).build();
+        FileEntity file = FileEntity.builder().id(1L).userId(1L).isDeleted(false).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
         when(favoriteRepository.existsByUserIdAndFileId(1L, 1L)).thenReturn(true);
 
@@ -86,7 +86,7 @@ class FavoriteServiceImplTest {
     void listFavorites_shouldReturnFilesInOrder() {
         FileEntity file = FileEntity.builder().id(10L).fileName("notes.txt").build();
         Page<FileEntity> favPage = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
-        when(favoriteRepository.findFavoriteFiles(eq(1L), isNull(), any(PageRequest.class)))
+        when(favoriteRepository.findFavoriteFiles(eq(1L), any(PageRequest.class)))
                 .thenReturn(favPage);
 
         PageResult<FileEntity> result = favoriteService.listFavorites(1L, null, 1, 20);
@@ -99,7 +99,7 @@ class FavoriteServiceImplTest {
     @Test
     void listFavorites_shouldReturnEmptyWhenNone() {
         Page<FileEntity> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
-        when(favoriteRepository.findFavoriteFiles(eq(1L), eq("report"), any(PageRequest.class)))
+        when(favoriteRepository.findFavoriteFilesByKeyword(eq(1L), eq("report"), any(PageRequest.class)))
                 .thenReturn(emptyPage);
 
         PageResult<FileEntity> result = favoriteService.listFavorites(1L, " report ", 1, 20);

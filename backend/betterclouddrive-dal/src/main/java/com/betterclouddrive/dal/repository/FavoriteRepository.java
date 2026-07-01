@@ -22,21 +22,107 @@ public interface FavoriteRepository extends JpaRepository<FavoriteEntity, Long> 
             value = """
                     SELECT f FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
                     WHERE fav.userId = :userId
-                      AND f.userId = :userId
                       AND f.isDeleted = false
-                      AND (:keyword IS NULL OR LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%')))
+                      AND (
+                        (f.teamId IS NULL AND f.userId = :userId)
+                        OR EXISTS (
+                          SELECT 1 FROM TeamMemberEntity tm
+                          WHERE tm.teamId = f.teamId AND tm.userId = :userId AND tm.status = 1
+                        )
+                      )
                     ORDER BY fav.createdAt DESC
                     """,
             countQuery = """
                     SELECT COUNT(f) FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
                     WHERE fav.userId = :userId
-                      AND f.userId = :userId
                       AND f.isDeleted = false
-                      AND (:keyword IS NULL OR LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%')))
+                      AND (
+                        (f.teamId IS NULL AND f.userId = :userId)
+                        OR EXISTS (
+                          SELECT 1 FROM TeamMemberEntity tm
+                          WHERE tm.teamId = f.teamId AND tm.userId = :userId AND tm.status = 1
+                        )
+                      )
                     """
     )
     Page<FileEntity> findFavoriteFiles(
             @Param("userId") Long userId,
+            Pageable pageable);
+
+    @Query(
+            value = """
+                    SELECT f FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
+                    WHERE fav.userId = :userId
+                      AND f.isDeleted = false
+                      AND (
+                        (f.teamId IS NULL AND f.userId = :userId)
+                        OR EXISTS (
+                          SELECT 1 FROM TeamMemberEntity tm
+                          WHERE tm.teamId = f.teamId AND tm.userId = :userId AND tm.status = 1
+                        )
+                      )
+                      AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    ORDER BY fav.createdAt DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(f) FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
+                    WHERE fav.userId = :userId
+                      AND f.isDeleted = false
+                      AND (
+                        (f.teamId IS NULL AND f.userId = :userId)
+                        OR EXISTS (
+                          SELECT 1 FROM TeamMemberEntity tm
+                          WHERE tm.teamId = f.teamId AND tm.userId = :userId AND tm.status = 1
+                        )
+                      )
+                      AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    """
+    )
+    Page<FileEntity> findFavoriteFilesByKeyword(
+            @Param("userId") Long userId,
+            @Param("keyword") String keyword,
+            Pageable pageable);
+
+    @Query(
+            value = """
+                    SELECT f FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
+                    WHERE fav.userId = :userId
+                      AND f.teamId = :teamId
+                      AND f.isDeleted = false
+                    ORDER BY fav.createdAt DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(f) FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
+                    WHERE fav.userId = :userId
+                      AND f.teamId = :teamId
+                      AND f.isDeleted = false
+                    """
+    )
+    Page<FileEntity> findTeamFavoriteFiles(
+            @Param("userId") Long userId,
+            @Param("teamId") Long teamId,
+            Pageable pageable);
+
+    @Query(
+            value = """
+                    SELECT f FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
+                    WHERE fav.userId = :userId
+                      AND f.teamId = :teamId
+                      AND f.isDeleted = false
+                      AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    ORDER BY fav.createdAt DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(f) FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
+                    WHERE fav.userId = :userId
+                      AND f.teamId = :teamId
+                      AND f.isDeleted = false
+                      AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                    """
+    )
+    Page<FileEntity> findTeamFavoriteFilesByKeyword(
+            @Param("userId") Long userId,
+            @Param("teamId") Long teamId,
             @Param("keyword") String keyword,
             Pageable pageable);
 

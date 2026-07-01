@@ -1,0 +1,34 @@
+package com.betterclouddrive.service;
+
+import com.betterclouddrive.common.dto.PageResult;
+import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
+
+import java.time.LocalDateTime;
+
+public interface TeamAuditService {
+
+    void record(Long teamId, Long actorUserId, String action, String targetType, Long targetId, String details);
+
+    PageResult<TeamOperationLogEntity> listLogs(
+            Long requesterUserId,
+            Long teamId,
+            Long actorUserId,
+            String action,
+            String targetType,
+            Integer result,
+            LocalDateTime startAt,
+            LocalDateTime endAt,
+            int page,
+            int size);
+
+    PageResult<TeamOperationLogEntity> exportLogs(
+            Long requesterUserId,
+            Long teamId,
+            Long actorUserId,
+            String action,
+            String targetType,
+            Integer result,
+            LocalDateTime startAt,
+            LocalDateTime endAt,
+            int limit);
+}

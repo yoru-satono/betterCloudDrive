@@ -9,4 +9,10 @@ public interface EmailService {
 
     /** Send share notification to recipient */
     void sendShareNotification(String toEmail, String shareCode, String fileName, String sharedBy);
+
+    /** Send team invitation email */
+    void sendTeamInvite(String toEmail, String teamName, String role, String inviteLink, java.time.LocalDateTime expiresAt);
+
+    /** Send a generic notification email */
+    void sendNotification(String toEmail, String title, String content, String link);
 }

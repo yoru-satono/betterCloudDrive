@@ -11,6 +11,7 @@ import com.betterclouddrive.dal.repository.ShareLinkRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.SharePasswordCryptoService;
 import com.betterclouddrive.service.ShareService;
+import com.betterclouddrive.service.TeamAuditService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,7 @@ public class ShareServiceImpl implements ShareService {
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
     private final SharePasswordCryptoService sharePasswordCryptoService;
+    private final TeamAuditService teamAuditService;
     private final StringRedisTemplate redisTemplate;
     private static final String SHARE_CODE_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int SHARE_CODE_LENGTH = 8;
@@ -51,14 +53,32 @@ public class ShareServiceImpl implements ShareService {
     @Transactional
     public ShareLinkEntity createShare(Long userId, Long fileId, String password, Long expireAtMs, Integer maxVisits) {
         FileEntity file = fileRepository.findById(fileId).orElse(null);
-        if (file == null || !file.getUserId().equals(userId) || file.getIsDeleted()) {
+        if (file == null || file.getTeamId() != null || !file.getUserId().equals(userId) || file.getIsDeleted()) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
 
+        return createShareRecord(userId, null, fileId, password, expireAtMs, maxVisits);
+    }
+
+    @Override
+    @Transactional
+    public ShareLinkEntity createTeamShare(Long userId, Long teamId, Long fileId, String password, Long expireAtMs, Integer maxVisits) {
+        FileEntity file = fileRepository.findById(fileId).orElse(null);
+        if (file == null || !teamId.equals(file.getTeamId()) || file.getIsDeleted()) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND);
+        }
+        ShareLinkEntity share = createShareRecord(userId, teamId, fileId, password, expireAtMs, maxVisits);
+        teamAuditService.record(teamId, userId, "SHARE_CREATE", "SHARE", share.getId(),
+                "share " + share.getShareCode() + " file " + fileId);
+        return share;
+    }
+
+    private ShareLinkEntity createShareRecord(Long userId, Long teamId, Long fileId, String password, Long expireAtMs, Integer maxVisits) {
         String normalizedPassword = normalizeOptionalPassword(password);
         String shareCode = generateShareCode();
         ShareLinkEntity share = ShareLinkEntity.builder()
                 .userId(userId)
+                .teamId(teamId)
                 .fileId(fileId)
                 .shareCode(shareCode)
                 .passwordCiphertext(normalizedPassword != null ? sharePasswordCryptoService.encrypt(normalizedPassword) : null)
@@ -78,6 +98,7 @@ public class ShareServiceImpl implements ShareService {
         Specification<ShareLinkEntity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("userId"), userId));
+            predicates.add(cb.isNull(root.get("teamId")));
             predicates.add(cb.equal(root.get("isCanceled"), false));
             if (StringUtils.hasText(keyword)) {
                 String normalizedKeyword = keyword.trim().toLowerCase();
@@ -120,9 +141,50 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
+    public PageResult<ShareLinkEntity> listTeamShares(Long teamId, String keyword, int page, int size) {
+        Specification<ShareLinkEntity> spec = shareListSpec(null, teamId, keyword);
+        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<ShareLinkEntity> result = shareLinkRepository.findAll(spec, pageable);
+        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
+    }
+
+    private Specification<ShareLinkEntity> shareListSpec(Long userId, Long teamId, String keyword) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (teamId != null) {
+                predicates.add(cb.equal(root.get("teamId"), teamId));
+            } else {
+                predicates.add(cb.equal(root.get("userId"), userId));
+                predicates.add(cb.isNull(root.get("teamId")));
+            }
+            predicates.add(cb.equal(root.get("isCanceled"), false));
+            if (StringUtils.hasText(keyword)) {
+                String normalizedKeyword = keyword.trim().toLowerCase();
+                List<Predicate> keywordPredicates = new ArrayList<>();
+                keywordPredicates.add(cb.like(cb.lower(root.get("shareCode")), "%" + normalizedKeyword + "%"));
+                try {
+                    keywordPredicates.add(cb.equal(root.get("fileId"), Long.parseLong(normalizedKeyword)));
+                } catch (NumberFormatException ignored) {
+                }
+                predicates.add(cb.or(keywordPredicates.toArray(new Predicate[0])));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    @Override
     public ShareLinkEntity getShare(Long userId, Long shareId) {
         ShareLinkEntity share = shareLinkRepository.findById(shareId).orElse(null);
-        if (share == null || !share.getUserId().equals(userId)) {
+        if (share == null || share.getTeamId() != null || !share.getUserId().equals(userId)) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND);
+        }
+        return share;
+    }
+
+    @Override
+    public ShareLinkEntity getTeamShare(Long teamId, Long shareId) {
+        ShareLinkEntity share = shareLinkRepository.findById(shareId).orElse(null);
+        if (share == null || !teamId.equals(share.getTeamId())) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         return share;
@@ -135,9 +197,31 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
+    public String getTeamSharePassword(Long teamId, Long shareId) {
+        ShareLinkEntity share = getTeamShare(teamId, shareId);
+        return share.getPasswordCiphertext() == null ? null : sharePasswordCryptoService.decrypt(share.getPasswordCiphertext());
+    }
+
+    @Override
     @Transactional
     public ShareLinkEntity updateShare(Long userId, Long shareId, String password, Long expireAtMs, Integer maxVisits) {
         ShareLinkEntity share = getShare(userId, shareId);
+        return updateShareRecord(share, password, expireAtMs, maxVisits);
+    }
+
+    @Override
+    @Transactional
+    public ShareLinkEntity updateTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId,
+                                           String password, Long expireAtMs, Integer maxVisits) {
+        ShareLinkEntity share = getTeamShare(teamId, shareId);
+        requireShareEditor(actorUserId, canManageAll, share);
+        ShareLinkEntity updated = updateShareRecord(share, password, expireAtMs, maxVisits);
+        teamAuditService.record(teamId, actorUserId, "SHARE_UPDATE", "SHARE", updated.getId(),
+                "share " + updated.getShareCode() + " file " + updated.getFileId());
+        return updated;
+    }
+
+    private ShareLinkEntity updateShareRecord(ShareLinkEntity share, String password, Long expireAtMs, Integer maxVisits) {
         if (password != null) {
             String normalizedPassword = normalizeOptionalPassword(password);
             share.setPasswordCiphertext(normalizedPassword == null ? null : sharePasswordCryptoService.encrypt(normalizedPassword));
@@ -168,9 +252,29 @@ public class ShareServiceImpl implements ShareService {
     @Transactional
     public void cancelShare(Long userId, Long shareId) {
         ShareLinkEntity share = getShare(userId, shareId);
+        cancelShareRecord(share);
+    }
+
+    @Override
+    @Transactional
+    public void cancelTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId) {
+        ShareLinkEntity share = getTeamShare(teamId, shareId);
+        requireShareEditor(actorUserId, canManageAll, share);
+        cancelShareRecord(share);
+        teamAuditService.record(teamId, actorUserId, "SHARE_CANCEL", "SHARE", share.getId(),
+                "share " + share.getShareCode() + " file " + share.getFileId());
+    }
+
+    private void cancelShareRecord(ShareLinkEntity share) {
         share.setIsCanceled(true);
         share.setUpdatedAt(LocalDateTime.now());
         shareLinkRepository.save(share);
+    }
+
+    private void requireShareEditor(Long actorUserId, boolean canManageAll, ShareLinkEntity share) {
+        if (!canManageAll && !share.getUserId().equals(actorUserId)) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Team role cannot manage this share");
+        }
     }
 
     @Override
@@ -290,7 +394,7 @@ public class ShareServiceImpl implements ShareService {
     }
 
     private boolean isWithinSharedScope(FileEntity sharedFile, FileEntity downloadFile) {
-        if (!sharedFile.getUserId().equals(downloadFile.getUserId())) {
+        if (!sameFileSpace(sharedFile, downloadFile)) {
             return false;
         }
         if (sharedFile.getId().equals(downloadFile.getId())) {
@@ -306,12 +410,19 @@ public class ShareServiceImpl implements ShareService {
                 return true;
             }
             FileEntity parent = fileRepository.findById(parentId).orElse(null);
-            if (parent == null || parent.getIsDeleted() || !sharedFile.getUserId().equals(parent.getUserId())) {
+            if (parent == null || parent.getIsDeleted() || !sameFileSpace(sharedFile, parent)) {
                 return false;
             }
             parentId = parent.getParentId();
         }
         return false;
+    }
+
+    private boolean sameFileSpace(FileEntity left, FileEntity right) {
+        if (left.getTeamId() != null || right.getTeamId() != null) {
+            return left.getTeamId() != null && left.getTeamId().equals(right.getTeamId());
+        }
+        return left.getUserId().equals(right.getUserId());
     }
 
     private FileEntity resolveSharedDownloadTarget(ShareLinkEntity share, Long fileId) {
@@ -363,7 +474,7 @@ public class ShareServiceImpl implements ShareService {
                 return false;
             }
             current = fileRepository.findById(parentId).orElse(null);
-            if (current == null || current.getIsDeleted() || !current.getUserId().equals(sourceFolder.getUserId())) {
+            if (current == null || current.getIsDeleted() || !sameFileSpace(current, sourceFolder)) {
                 return false;
             }
         }
@@ -381,8 +492,7 @@ public class ShareServiceImpl implements ShareService {
         if ("file".equals(source.getFileType())) {
             return source.getFileSize() != null ? source.getFileSize() : 0L;
         }
-        return fileRepository.findByUserIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
-                        source.getUserId(), source.getId())
+        return activeChildren(source)
                 .stream()
                 .mapToLong(this::calculateTreeFileSize)
                 .sum();
@@ -431,13 +541,20 @@ public class ShareServiceImpl implements ShareService {
         FileEntity saved = fileRepository.save(copy);
 
         if ("folder".equals(source.getFileType())) {
-            List<FileEntity> children = fileRepository.findByUserIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
-                    source.getUserId(), source.getId());
-            for (FileEntity child : children) {
+            for (FileEntity child : activeChildren(source)) {
                 copyTree(child, targetUserId, saved.getId());
             }
         }
         return saved;
+    }
+
+    private List<FileEntity> activeChildren(FileEntity source) {
+        if (source.getTeamId() != null) {
+            return fileRepository.findByTeamIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
+                    source.getTeamId(), source.getId());
+        }
+        return fileRepository.findByUserIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(
+                source.getUserId(), source.getId());
     }
 
     @Override
@@ -460,11 +577,18 @@ public class ShareServiceImpl implements ShareService {
 
         Long targetParentId = targetParent.getId();
         final Long finalParentId = targetParentId;
-        Specification<FileEntity> spec = (root, query, cb) -> cb.and(
-                cb.equal(root.get("userId"), sharedFile.getUserId()),
-                cb.equal(root.get("parentId"), finalParentId),
-                cb.equal(root.get("isDeleted"), false)
-        );
+        Specification<FileEntity> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (sharedFile.getTeamId() != null) {
+                predicates.add(cb.equal(root.get("teamId"), sharedFile.getTeamId()));
+            } else {
+                predicates.add(cb.equal(root.get("userId"), sharedFile.getUserId()));
+                predicates.add(cb.isNull(root.get("teamId")));
+            }
+            predicates.add(cb.equal(root.get("parentId"), finalParentId));
+            predicates.add(cb.equal(root.get("isDeleted"), false));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
         PageRequest pageable = PageRequest.of(page - 1, size,
                 Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()));
         Page<FileEntity> result = fileRepository.findAll(spec, pageable);

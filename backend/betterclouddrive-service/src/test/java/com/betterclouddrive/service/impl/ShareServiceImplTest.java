@@ -13,6 +13,7 @@ import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.ShareLinkRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.SharePasswordCryptoService;
+import com.betterclouddrive.service.TeamAuditService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -37,6 +38,7 @@ class ShareServiceImplTest {
     @Mock private FileRepository fileRepository;
     @Mock private UserRepository userRepository;
     @Mock private SharePasswordCryptoService sharePasswordCryptoService;
+    @Mock private TeamAuditService teamAuditService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private ZSetOperations<String, String> zSetOps;
@@ -44,6 +46,10 @@ class ShareServiceImplTest {
 
     private FileEntity ownedFile(Long id, Long userId) {
         return FileEntity.builder().id(id).userId(userId).fileType("file").isDeleted(false).build();
+    }
+
+    private FileEntity teamFile(Long id, Long userId, Long teamId) {
+        return FileEntity.builder().id(id).userId(userId).teamId(teamId).fileType("file").isDeleted(false).build();
     }
 
     private FileEntity ownedFolder(Long id, Long userId) {
@@ -70,6 +76,46 @@ class ShareServiceImplTest {
 
         assertThat(share.getShareCode()).isNotBlank().hasSize(8);
         assertThat(share.getPasswordCiphertext()).isNull();
+    }
+
+    @Test
+    void createTeamShare_shouldWriteAuditLog() {
+        when(fileRepository.findById(5L)).thenReturn(Optional.of(teamFile(5L, 2L, 10L)));
+        when(shareLinkRepository.save(any(ShareLinkEntity.class))).thenAnswer(inv -> {
+            ShareLinkEntity share = inv.getArgument(0);
+            share.setId(9L);
+            return share;
+        });
+
+        ShareLinkEntity share = shareService.createTeamShare(2L, 10L, 5L, null, null, null);
+
+        assertThat(share.getId()).isEqualTo(9L);
+        verify(teamAuditService).record(eq(10L), eq(2L), eq("SHARE_CREATE"), eq("SHARE"), eq(9L), contains("file 5"));
+    }
+
+    @Test
+    void updateTeamShare_shouldWriteAuditLog() {
+        ShareLinkEntity share = activeShare("teamshare", 2L, 5L);
+        share.setTeamId(10L);
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+        when(shareLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        shareService.updateTeamShare(2L, true, 10L, 1L, null, null, 5);
+
+        verify(teamAuditService).record(eq(10L), eq(2L), eq("SHARE_UPDATE"), eq("SHARE"), eq(1L), contains("teamshare"));
+    }
+
+    @Test
+    void cancelTeamShare_shouldWriteAuditLog() {
+        ShareLinkEntity share = activeShare("teamshare", 2L, 5L);
+        share.setTeamId(10L);
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+        when(shareLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        shareService.cancelTeamShare(3L, true, 10L, 1L);
+
+        assertThat(share.getIsCanceled()).isTrue();
+        verify(teamAuditService).record(eq(10L), eq(3L), eq("SHARE_CANCEL"), eq("SHARE"), eq(1L), contains("teamshare"));
     }
 
     @Test

@@ -5,6 +5,7 @@ import OModal from '@/components/base/OModal.vue'
 import OSpinner from '@/components/base/OSpinner.vue'
 import FileIcon from '@/components/file/FileIcon.vue'
 import * as filesApi from '@/api/files'
+import * as teamsApi from '@/api/teams'
 import type { FileEntity } from '@/types/file'
 
 const props = withDefaults(defineProps<{
@@ -14,6 +15,8 @@ const props = withDefaults(defineProps<{
   confirmText?: string
   loading?: boolean
   excludeFolderId?: number
+  teamId?: number
+  rootName?: string
 }>(), {
   title: '选择文件夹',
   confirmText: '选择此处',
@@ -28,12 +31,12 @@ const foldersLoading = ref(false)
 const folders = ref<FileEntity[]>([])
 const error = ref('')
 const currentParentId = ref<number | null>(null)
-const folderStack = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: '我的网盘' }])
+const folderStack = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: props.rootName || '我的网盘' }])
 const currentFolder = computed(() => folderStack.value[folderStack.value.length - 1])
 
 watch(() => props.open, async open => {
   if (open) {
-    folderStack.value = [{ id: null, name: '我的网盘' }]
+    folderStack.value = [{ id: null, name: props.rootName || '我的网盘' }]
     await loadFolders(null)
   }
 })
@@ -43,7 +46,9 @@ async function loadFolders(parentId: number | null) {
   error.value = ''
   currentParentId.value = parentId
   try {
-    const { data } = await filesApi.listFiles({ parentId, page: 1, size: 100 })
+    const { data } = props.teamId
+      ? await teamsApi.listTeamFiles(props.teamId, { parentId, page: 1, size: 100 })
+      : await filesApi.listFiles({ parentId, page: 1, size: 100 })
     folders.value = data.data.records.filter(item => item.fileType === 'folder' && item.id !== props.excludeFolderId)
   } catch {
     error.value = '文件夹加载失败'

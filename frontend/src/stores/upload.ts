@@ -11,6 +11,7 @@ import {
   type ResumableUploadRecord,
 } from '@/api/resumableUpload'
 import { useFilesStore } from './files'
+import { useTeamFilesStore } from './teamFiles'
 import { toast } from 'vue-sonner'
 import { getDesktopSettings, isDesktopSettingsRuntime } from '@/api/desktopSettings'
 
@@ -21,6 +22,7 @@ const DEFAULT_MAX_CONCURRENT_UPLOADS = 3
 
 export interface UploadItem {
   id: string
+  teamId?: number | null
   file?: File
   fileName: string
   displayName: string
@@ -41,9 +43,27 @@ export interface UploadItem {
 
 export interface UploadFileEntry {
   file: File
+  teamId?: number | null
   parentId: number | null
   fileName?: string
   displayName?: string
+}
+
+interface DesktopUploadPatch {
+  id: string
+  teamId?: number | null
+  fileName: string
+  displayName: string
+  parentId: number | null
+  status: UploadStatus
+  progress: number
+  chunkProgress: string
+  error?: string | null
+  uploadId?: string | null
+  fileSize: number
+  md5Hash?: string | null
+  totalChunks: number
+  resumable: boolean
 }
 
 export const useUploadStore = defineStore('upload', () => {
@@ -51,14 +71,15 @@ export const useUploadStore = defineStore('upload', () => {
   const isOpen = ref(false)
   let scheduling = false
 
-  function addFiles(files: File[], parentId: number | null) {
-    addUploadFiles(files.map(file => ({ file, parentId })))
+  function addFiles(files: File[], parentId: number | null, teamId?: number | null) {
+    addUploadFiles(files.map(file => ({ file, parentId, teamId: teamId ?? null })))
   }
 
   function addUploadFiles(entries: UploadFileEntry[]) {
     if (!entries.length) return
     const items: UploadItem[] = entries.map(entry => ({
       id: crypto.randomUUID(),
+      teamId: entry.teamId ?? null,
       file: entry.file,
       fileName: entry.fileName || entry.file.name,
       displayName: entry.displayName || entry.fileName || entry.file.name,
@@ -79,6 +100,7 @@ export const useUploadStore = defineStore('upload', () => {
     queue.value = records.map(record => ({
       id: crypto.randomUUID(),
       fileName: record.fileName,
+      teamId: record.teamId ?? null,
       displayName: record.displayName,
       parentId: record.parentId,
       status: 'resume_required',
@@ -111,9 +133,15 @@ export const useUploadStore = defineStore('upload', () => {
     queue.value = queue.value.filter(i => i.status !== 'done' && i.status !== 'instant')
   }
 
-  function applyDesktopUploadItem(item: Omit<UploadItem, 'file'>) {
+  function applyDesktopUploadItem(item: DesktopUploadPatch) {
     const existing = queue.value.find(entry => entry.id === item.id)
-    const next = normalizeUploadPatch({ ...item, desktop: true })
+    const next = normalizeUploadPatch({
+      ...item,
+      error: item.error ?? null,
+      uploadId: item.uploadId ?? undefined,
+      md5Hash: item.md5Hash ?? undefined,
+      desktop: true,
+    })
     if (existing) {
       Object.assign(existing, next)
     } else {
@@ -204,6 +232,7 @@ export const useUploadStore = defineStore('upload', () => {
 
       const uploadIdentity = {
         parentId: item.parentId,
+        teamId: item.teamId ?? null,
         fileName: item.fileName,
         displayName: item.displayName,
         fileSize: item.file.size,
@@ -217,14 +246,15 @@ export const useUploadStore = defineStore('upload', () => {
       }
       if (isCanceled()) return
 
-      const instant = await tryInstantUpload(item.parentId, item.fileName, item.file.size, md5, item.file.type || undefined)
+      const uploadContext = item.teamId ? { teamId: item.teamId } : undefined
+      const instant = await tryInstantUpload(item.parentId, item.fileName, item.file.size, md5, item.file.type || undefined, uploadContext)
       if (isCanceled()) return
       if (!await waitWhilePaused(item.id)) return
       if (instant) {
         removeResumableUpload(resumeRecord?.sessionId || item.uploadId)
         update({ status: 'instant', progress: 100, resumable: false })
         toast.success(`${label} 秒传成功`)
-        useFilesStore().refresh()
+        refreshFileSpace(item.teamId)
         return
       }
 
@@ -232,7 +262,7 @@ export const useUploadStore = defineStore('upload', () => {
 
       const session = await getOrCreateUploadSession(item, md5, totalChunks, resumeRecord)
       if (isCanceled()) {
-        await uploadApi.abortMultipart(session.sessionId).catch(() => {})
+        await abortMultipart(session.sessionId, uploadContext).catch(() => {})
         removeResumableUpload(session.sessionId)
         return
       }
@@ -242,14 +272,15 @@ export const useUploadStore = defineStore('upload', () => {
         resumable: true,
       })
       if (session.totalChunks === 0) {
-        await uploadApi.completeMultipart(session.sessionId)
+        await completeMultipart(session.sessionId, uploadContext)
         update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
         toast.success(`${label} 上传完成`)
-        useFilesStore().refresh()
+        refreshFileSpace(item.teamId)
         return
       }
       saveResumableUpload({
         sessionId: session.sessionId,
+        teamId: item.teamId ?? null,
         parentId: item.parentId,
         fileName: item.fileName,
         displayName: item.displayName,
@@ -271,22 +302,22 @@ export const useUploadStore = defineStore('upload', () => {
         if (!await waitWhilePaused(item.id)) return
         const chunk = item.file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
         const missingIndex = missingChunks.indexOf(i)
-        await uploadApi.uploadChunk(session.sessionId, i, chunk, (pct) => {
+        await uploadChunk(session.sessionId, i, chunk, (pct) => {
           const completedBeforeChunk = session.totalChunks - missingChunks.length
           const completedEquivalent = completedBeforeChunk + missingIndex + pct / 100
           const overall = 30 + (completedEquivalent / session.totalChunks) * 65
           update({ progress: overall, chunkProgress: `${Math.min(session.totalChunks, Math.floor(completedEquivalent))}/${session.totalChunks}` })
-        })
+        }, uploadContext)
         if (!await waitWhilePaused(item.id)) return
         updateProgressFromChunks(update, session.totalChunks, session.totalChunks - missingChunks.length + missingIndex + 1)
       }
 
       if (!await waitWhilePaused(item.id)) return
-      await uploadApi.completeMultipart(session.sessionId)
+      await completeMultipart(session.sessionId, uploadContext)
       removeResumableUpload(session.sessionId)
       update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
       toast.success(`${label} 上传完成`)
-      useFilesStore().refresh()
+      refreshFileSpace(item.teamId)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '上传失败'
       update({ status: 'error', error: msg, resumable: !!item.uploadId })
@@ -307,7 +338,7 @@ export const useUploadStore = defineStore('upload', () => {
       return
     }
     if (item.uploadId) {
-      await uploadApi.abortMultipart(item.uploadId).catch(() => {})
+      await abortMultipart(item.uploadId, item.teamId ? { teamId: item.teamId } : undefined).catch(() => {})
       removeResumableUpload(item.uploadId)
     }
     Object.assign(item, { status: 'canceled' as UploadStatus, error: null, resumable: false, started: false })
@@ -335,7 +366,7 @@ export const useUploadStore = defineStore('upload', () => {
   async function refreshUploadStatus(id: string) {
     const item = queue.value.find(q => q.id === id)
     if (!item?.uploadId) return
-    const { data } = await uploadApi.getUploadStatus(item.uploadId)
+    const { data } = await getUploadStatus(item.uploadId, item.teamId ? { teamId: item.teamId } : undefined)
     const status = data.data
     if (status.uploadedChunks !== undefined && status.totalChunks) {
       item.chunkProgress = `${status.uploadedChunks}/${status.totalChunks}`
@@ -413,9 +444,11 @@ function normalizeProgress(progress: number) {
   return Math.round(clamped * 100) / 100
 }
 
-async function tryInstantUpload(parentId: number | null, fileName: string, fileSize: number, md5: string, mimeType?: string) {
+async function tryInstantUpload(parentId: number | null, fileName: string, fileSize: number, md5: string, mimeType?: string, context?: uploadApi.UploadContext) {
   try {
-    const res = await uploadApi.instantUpload(parentId, fileName, fileSize, md5, mimeType)
+    const res = context
+      ? await uploadApi.instantUpload(parentId, fileName, fileSize, md5, mimeType, context)
+      : await uploadApi.instantUpload(parentId, fileName, fileSize, md5, mimeType)
     return res.data.data?.instant === true
   } catch (e: unknown) {
     const code = (e as { response?: { data?: { code?: number } } }).response?.data?.code
@@ -427,7 +460,7 @@ async function tryInstantUpload(parentId: number | null, fileName: string, fileS
 async function getOrCreateUploadSession(item: UploadItem, md5Hash: string, totalChunks: number, resumeRecord: ResumableUploadRecord | null) {
   if (resumeRecord) {
     try {
-      await uploadApi.getUploadStatus(resumeRecord.sessionId)
+      await getUploadStatus(resumeRecord.sessionId, item.teamId ? { teamId: item.teamId } : undefined)
       return {
         sessionId: resumeRecord.sessionId,
         totalChunks: resumeRecord.totalChunks,
@@ -438,7 +471,18 @@ async function getOrCreateUploadSession(item: UploadItem, md5Hash: string, total
     }
   }
 
-  const initRes = await uploadApi.initMultipart(item.parentId, item.fileName, item.fileSize ?? item.file!.size, md5Hash, totalChunks, item.file?.type || undefined)
+  const context = item.teamId ? { teamId: item.teamId } : undefined
+  const initArgs = [
+    item.parentId,
+    item.fileName,
+    item.fileSize ?? item.file!.size,
+    md5Hash,
+    totalChunks,
+    item.file?.type || undefined,
+  ] as const
+  const initRes = context
+    ? await uploadApi.initMultipart(...initArgs, context)
+    : await uploadApi.initMultipart(...initArgs)
   return {
     sessionId: initRes.data.data.sessionId,
     totalChunks: initRes.data.data.totalChunks || totalChunks,
@@ -447,11 +491,50 @@ async function getOrCreateUploadSession(item: UploadItem, md5Hash: string, total
 }
 
 async function getMissingChunks(sessionId: string, totalChunks: number) {
-  const { data } = await uploadApi.getUploadStatus(sessionId)
+  const item = useUploadStore().queue.find(queueItem => queueItem.uploadId === sessionId)
+  const { data } = await getUploadStatus(sessionId, item?.teamId ? { teamId: item.teamId } : undefined)
   const missing = data.data.missingChunks
   if (Array.isArray(missing)) return missing
   const uploaded = data.data.uploadedChunks || 0
   return range(totalChunks).slice(uploaded)
+}
+
+function uploadChunk(
+  sessionId: string,
+  chunkNumber: number,
+  chunk: Blob,
+  onProgress: (pct: number) => void,
+  context?: uploadApi.UploadContext,
+) {
+  return context
+    ? uploadApi.uploadChunk(sessionId, chunkNumber, chunk, onProgress, context)
+    : uploadApi.uploadChunk(sessionId, chunkNumber, chunk, onProgress)
+}
+
+function completeMultipart(sessionId: string, context?: uploadApi.UploadContext) {
+  return context
+    ? uploadApi.completeMultipart(sessionId, context)
+    : uploadApi.completeMultipart(sessionId)
+}
+
+function abortMultipart(sessionId: string, context?: uploadApi.UploadContext) {
+  return context
+    ? uploadApi.abortMultipart(sessionId, context)
+    : uploadApi.abortMultipart(sessionId)
+}
+
+function getUploadStatus(sessionId: string, context?: uploadApi.UploadContext) {
+  return context
+    ? uploadApi.getUploadStatus(sessionId, context)
+    : uploadApi.getUploadStatus(sessionId)
+}
+
+function refreshFileSpace(teamId?: number | null) {
+  if (teamId) {
+    useTeamFilesStore().refreshIfCurrent(teamId)
+    return
+  }
+  useFilesStore().refresh()
 }
 
 function updateProgressFromChunks(update: (patch: Partial<UploadItem>) => void, totalChunks: number, uploadedChunks: number) {

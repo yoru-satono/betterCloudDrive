@@ -8,6 +8,9 @@ import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
+import com.betterclouddrive.dal.repository.FileVersionRepository;
+import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.storage.StorageService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -33,6 +36,15 @@ class FileServiceImplTest {
 
     @Mock
     private StringRedisTemplate redisTemplate;
+
+    @Mock
+    private StorageService storageService;
+
+    @Mock
+    private FileVersionRepository fileVersionRepository;
+
+    @Mock
+    private TeamAuditService teamAuditService;
 
     @Mock
     private ValueOperations<String, String> valueOps;
@@ -82,6 +94,15 @@ class FileServiceImplTest {
     }
 
     @Test
+    void getFile_shouldThrowForTeamFile() {
+        FileEntity file = FileEntity.builder().id(1L).userId(1L).teamId(10L).isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+
+        assertThatThrownBy(() -> fileService.getFile(1L, 1L))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     void createFolder_shouldSucceed() {
         when(fileRepository.count(any(Specification.class))).thenReturn(0L);
         FileEntity saved = FileEntity.builder().id(10L).fileName("NewFolder").build();
@@ -98,6 +119,18 @@ class FileServiceImplTest {
 
         assertThatThrownBy(() -> fileService.createFolder(1L, null, "NewFolder"))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void createTeamFolder_shouldSetTeamIdAndCreator() {
+        when(fileRepository.existsByTeamIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(10L, "Docs")).thenReturn(false);
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        FileEntity folder = fileService.createTeamFolder(10L, 2L, null, "Docs");
+
+        assertThat(folder.getTeamId()).isEqualTo(10L);
+        assertThat(folder.getUserId()).isEqualTo(2L);
+        assertThat(folder.getFileType()).isEqualTo("folder");
     }
 
     @Test
@@ -208,6 +241,8 @@ class FileServiceImplTest {
     void permanentDelete_shouldRemoveFromDb() {
         FileEntity file = FileEntity.builder().id(1L).userId(1L).isDeleted(true).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findAll(any(Specification.class))).thenReturn(List.of());
+        when(fileVersionRepository.findByFileIdOrderByVersionNumberDesc(1L)).thenReturn(List.of());
 
         fileService.permanentDelete(1L, 1L);
 
@@ -216,9 +251,13 @@ class FileServiceImplTest {
 
     @Test
     void emptyRecycleBin_shouldDeleteAllWithBulkQuery() {
+        FileEntity file = FileEntity.builder().id(1L).userId(1L).isDeleted(true).build();
+        when(fileRepository.findAll(any(Specification.class))).thenReturn(List.of(file), List.of());
+        when(fileVersionRepository.findByFileIdOrderByVersionNumberDesc(1L)).thenReturn(List.of());
+
         fileService.emptyRecycleBin(1L);
 
-        verify(fileRepository).deleteByUserIdAndIsDeletedTrue(1L);
+        verify(fileRepository).deleteById(1L);
     }
 
     @Test
@@ -233,6 +272,48 @@ class FileServiceImplTest {
         fileService.deleteFiles(100L, List.of(1L));
 
         verify(valueOps).increment("storage:incr:100", -2048L);
+    }
+
+    @Test
+    void deleteTeamFiles_shouldDecrementTeamStorage() {
+        FileEntity file = FileEntity.builder()
+                .id(1L).userId(100L).teamId(10L).fileType("file").fileSize(2048L)
+                .isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+        fileService.deleteTeamFiles(10L, 2L, List.of(1L));
+
+        assertThat(file.getIsDeleted()).isTrue();
+        verify(valueOps).increment("team:storage:incr:10", -2048L);
+    }
+
+    @Test
+    void restoreTeamFile_shouldClearDeletedAtAndRejectNameConflict() {
+        FileEntity file = FileEntity.builder()
+                .id(1L).teamId(10L).parentId(null).fileName("doc.txt")
+                .isDeleted(true).deletedAt(LocalDateTime.now()).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.existsByTeamIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(10L, "doc.txt"))
+                .thenReturn(false);
+        when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
+
+        fileService.restoreTeamFile(10L, 2L, 1L);
+
+        assertThat(file.getIsDeleted()).isFalse();
+        assertThat(file.getDeletedAt()).isNull();
+    }
+
+    @Test
+    void listTeamRecycleBin_shouldReturnDeletedFiles() {
+        FileEntity file = FileEntity.builder().id(1L).teamId(10L).fileName("deleted.txt").build();
+        Page<FileEntity> page = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
+        when(fileRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+
+        PageResult<FileEntity> result = fileService.listTeamRecycleBin(10L, "deleted", 1, 20);
+
+        assertThat(result.getRecords()).hasSize(1);
     }
 
     @Test

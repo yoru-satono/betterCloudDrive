@@ -40,6 +40,7 @@ data class TransferTask(
     val error: String? = null,
     val remoteFileId: Long? = null,
     val remoteParentId: Long? = null,
+    val teamId: Long? = null,
     val sourceUri: Uri? = null,
     val targetUri: Uri? = null,
     val sessionId: String? = null,
@@ -57,26 +58,28 @@ class TransferRepository(
     val tasks: StateFlow<List<TransferTask>> = _tasks.asStateFlow()
     private val jobs = mutableMapOf<String, Job>()
 
-    fun enqueueUpload(parentId: Long?, uri: Uri): TransferTask {
+    fun enqueueUpload(parentId: Long?, uri: Uri, teamId: Long? = null): TransferTask {
         val task = TransferTask(
             id = UUID.randomUUID().toString(),
             direction = TransferDirection.UPLOAD,
             fileName = getDisplayName(uri),
             bytesTotal = getSize(uri),
             remoteParentId = parentId,
+            teamId = teamId,
             sourceUri = uri,
         )
         upsert(task)
         return task
     }
 
-    fun enqueueDownload(fileId: Long, fileName: String, fileSize: Long, targetUri: Uri): TransferTask {
+    fun enqueueDownload(fileId: Long, fileName: String, fileSize: Long, targetUri: Uri, teamId: Long? = null): TransferTask {
         val task = TransferTask(
             id = UUID.randomUUID().toString(),
             direction = TransferDirection.DOWNLOAD,
             fileName = fileName,
             bytesTotal = fileSize,
             remoteFileId = fileId,
+            teamId = teamId,
             targetUri = targetUri,
         )
         upsert(task)
@@ -129,14 +132,17 @@ class TransferRepository(
             val fileSize = max(initialTask.bytesTotal, getSize(sourceUri))
             val totalChunks = calculateUploadTotalChunks(fileSize)
 
-            val instant = api.instantUpload(
-                com.betterclouddrive.android.data.remote.dto.InstantUploadRequest(
-                    parentId = initialTask.remoteParentId,
-                    fileName = initialTask.fileName,
-                    fileSize = fileSize,
-                    md5Hash = md5,
-                ),
+            val instantRequest = com.betterclouddrive.android.data.remote.dto.InstantUploadRequest(
+                parentId = initialTask.remoteParentId,
+                fileName = initialTask.fileName,
+                fileSize = fileSize,
+                md5Hash = md5,
             )
+            val instant = if (initialTask.teamId == null) {
+                api.instantUpload(instantRequest)
+            } else {
+                api.instantTeamUpload(initialTask.teamId, instantRequest)
+            }
             if (instant.code == 200 && instant.data?.instant == true) {
                 update(initialTask.id) {
                     it.copy(
@@ -152,15 +158,18 @@ class TransferRepository(
 
             val existing = current(initialTask.id)
             val init = if (existing?.sessionId == null) {
-                api.initUpload(
-                    com.betterclouddrive.android.data.remote.dto.InitUploadRequest(
-                        parentId = initialTask.remoteParentId,
-                        fileName = initialTask.fileName,
-                        fileSize = fileSize,
-                        md5Hash = md5,
-                        totalChunks = totalChunks,
-                    ),
+                val initRequest = com.betterclouddrive.android.data.remote.dto.InitUploadRequest(
+                    parentId = initialTask.remoteParentId,
+                    fileName = initialTask.fileName,
+                    fileSize = fileSize,
+                    md5Hash = md5,
+                    totalChunks = totalChunks,
                 )
+                if (initialTask.teamId == null) {
+                    api.initUpload(initRequest)
+                } else {
+                    api.initTeamUpload(initialTask.teamId, initRequest)
+                }
             } else {
                 null
             }
@@ -169,7 +178,11 @@ class TransferRepository(
             val chunkSize = init?.data?.chunkSize ?: Constants.CHUNK_SIZE
 
             val completed = mutableSetOf<Int>()
-            val status = api.getUploadStatus(sessionId)
+            val status = if (initialTask.teamId == null) {
+                api.getUploadStatus(sessionId)
+            } else {
+                api.getTeamUploadStatus(initialTask.teamId, sessionId)
+            }
             if (status.code == 200) {
                 val missing = status.data?.missingChunks?.toSet().orEmpty()
                 if (missing.isEmpty() && status.data?.uploadedChunks != null) {
@@ -196,7 +209,11 @@ class TransferRepository(
                 val chunk = readChunk(sourceUri, chunkNumber * chunkSize, chunkSize)
                 val requestBody = chunk.toRequestBody("application/octet-stream".toMediaType())
                 val part = MultipartBody.Part.createFormData("file", "chunk_$chunkNumber", requestBody)
-                val response = api.uploadChunk(sessionId, part, chunkNumber)
+                val response = if (initialTask.teamId == null) {
+                    api.uploadChunk(sessionId, part, chunkNumber)
+                } else {
+                    api.uploadTeamChunk(initialTask.teamId, sessionId, part, chunkNumber)
+                }
                 if (response.code != 200) {
                     return@withContext markError(initialTask.id, response.message)
                 }
@@ -212,7 +229,11 @@ class TransferRepository(
             }
 
             ensureNotPausedOrCanceled(initialTask.id)
-            val complete = api.completeUpload(sessionId)
+            val complete = if (initialTask.teamId == null) {
+                api.completeUpload(sessionId)
+            } else {
+                api.completeTeamUpload(initialTask.teamId, sessionId)
+            }
             if (complete.code == 200) {
                 update(initialTask.id) {
                     it.copy(status = TransferStatus.DONE, bytesDone = fileSize, bytesTotal = fileSize, error = null)
@@ -238,10 +259,12 @@ class TransferRepository(
                 it.copy(status = TransferStatus.RUNNING, bytesDone = tempFile.length(), error = null)
             }
             val existingBytes = tempFile.length()
-            val body = api.downloadFile(
-                fileId = remoteFileId,
-                range = if (existingBytes > 0) "bytes=$existingBytes-" else null,
-            )
+            val range = if (existingBytes > 0) "bytes=$existingBytes-" else null
+            val body = if (initialTask.teamId == null) {
+                api.downloadFile(fileId = remoteFileId, range = range)
+            } else {
+                api.downloadTeamFile(teamId = initialTask.teamId, fileId = remoteFileId, range = range)
+            }
             val contentLength = body.contentLength().takeIf { it > 0 }
             val appending = existingBytes > 0 && contentLength != null && initialTask.bytesTotal > existingBytes &&
                 contentLength <= initialTask.bytesTotal - existingBytes

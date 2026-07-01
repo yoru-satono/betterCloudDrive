@@ -106,7 +106,7 @@ function buildMenu(file: FileEntity, options: { includeOpenLocation?: boolean; a
       : downloadFile(file.id, file.fileName)),
   })
   if (file.fileType !== 'folder') {
-    items.push({ label: '预览', action: action(() => preview.openPreview(file)) })
+    items.push({ label: isOfficeFile(file) ? '打开文档' : '预览', action: action(() => preview.openPreview(file)) })
     items.push({ label: '版本管理', action: action(() => openVersions(file)) })
   }
   items.push({ label: '详情', action: action(() => openDetail(file)) })
@@ -346,6 +346,13 @@ async function deleteVersion(versionNumber: number) {
 function handleDblclick(file: FileEntity) {
   if (file.fileType === 'folder') router.push({ name: 'Folder', params: { folderId: file.id } })
   else downloadFile(file.id, file.fileName)
+}
+
+function isOfficeFile(file: FileEntity) {
+  const dot = file.fileName.lastIndexOf('.')
+  if (dot < 0) return false
+  return ['doc', 'docx', 'odt', 'rtf', 'xls', 'xlsx', 'ods', 'csv', 'ppt', 'pptx', 'odp']
+    .includes(file.fileName.slice(dot + 1).toLowerCase())
 }
 
 function triggerUpload() {
