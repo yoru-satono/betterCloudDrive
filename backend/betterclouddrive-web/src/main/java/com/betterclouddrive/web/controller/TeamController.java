@@ -36,6 +36,7 @@ import com.betterclouddrive.web.dto.response.SharePasswordResponse;
 import com.betterclouddrive.web.dto.response.TeamInviteResponse;
 import com.betterclouddrive.web.dto.response.TeamMemberResponse;
 import com.betterclouddrive.web.dto.response.TeamResponse;
+import com.betterclouddrive.web.export.AuditCsvExporter;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import jakarta.validation.Valid;
@@ -55,8 +56,6 @@ import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -67,7 +66,6 @@ import java.util.Map;
 public class TeamController {
 
     private static final int AUDIT_EXPORT_LIMIT = 10000;
-    private static final DateTimeFormatter EXPORT_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final TeamService teamService;
     private final FileService fileService;
@@ -82,6 +80,7 @@ public class TeamController {
     private final TagService tagService;
     private final FavoriteService favoriteService;
     private final TeamPermissionService teamPermissionService;
+    private final AuditCsvExporter auditCsvExporter;
 
     @GetMapping
     public ApiResponse<List<TeamResponse>> listTeams(@CurrentUser UserPrincipal user) {
@@ -206,8 +205,8 @@ public class TeamController {
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String targetType,
             @RequestParam(required = false) Integer result,
-            @RequestParam(required = false) LocalDateTime startAt,
-            @RequestParam(required = false) LocalDateTime endAt,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startAt,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
         return ApiResponse.success(teamAuditService.listLogs(
@@ -226,7 +225,7 @@ public class TeamController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt) {
         PageResult<TeamOperationLogEntity> logs = teamAuditService.exportLogs(
                 user.getUserId(), teamId, actorUserId, action, targetType, result, startAt, endAt, AUDIT_EXPORT_LIMIT);
-        return csvResponse(auditFileName(teamId), auditCsv(logs.getRecords()));
+        return auditCsvExporter.teamAuditResponse(teamId, logs.getRecords());
     }
 
     @PostMapping("/{teamId}/favorites/{fileId}")
@@ -845,38 +844,4 @@ public class TeamController {
         return teamPermissionService.effectivePermissions(member.getUserId(), member.getTeamId(), fileId).canManage();
     }
 
-    private ResponseEntity<String> csvResponse(String fileName, String body) {
-        return ResponseEntity.ok()
-                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
-                .body(body);
-    }
-
-    private String auditFileName(Long teamId) {
-        return "team-" + teamId + "-audit-" + LocalDateTime.now().format(EXPORT_TIME_FORMAT) + ".csv";
-    }
-
-    private String auditCsv(List<TeamOperationLogEntity> logs) {
-        List<String> rows = new ArrayList<>();
-        rows.add("createdAt,teamId,actorUserId,action,targetType,targetId,result,statusCode,traceId,details");
-        logs.forEach(log -> rows.add(String.join(",",
-                csv(log.getCreatedAt()),
-                csv(log.getTeamId()),
-                csv(log.getActorUserId()),
-                csv(log.getAction()),
-                csv(log.getTargetType()),
-                csv(log.getTargetId()),
-                csv(log.getResult()),
-                csv(log.getStatusCode()),
-                csv(log.getTraceId()),
-                csv(log.getDetails()))));
-        return String.join("\n", rows) + "\n";
-    }
-
-    private String csv(Object value) {
-        if (value == null) {
-            return "";
-        }
-        return "\"" + String.valueOf(value).replace("\"", "\"\"") + "\"";
-    }
 }

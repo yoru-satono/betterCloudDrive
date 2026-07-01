@@ -15,6 +15,7 @@ import com.betterclouddrive.web.dto.request.AdminUpdateUserQuotaRequest;
 import com.betterclouddrive.web.dto.request.AdminUpdateUserStatusRequest;
 import com.betterclouddrive.web.dto.response.SystemLogEntryResponse;
 import com.betterclouddrive.web.dto.response.TeamMemberResponse;
+import com.betterclouddrive.web.export.AuditCsvExporter;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import com.betterclouddrive.web.service.GrafanaAuthService;
@@ -24,17 +25,12 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -44,13 +40,13 @@ import java.util.Map;
 public class AdminController {
 
     private static final int AUDIT_EXPORT_LIMIT = 10000;
-    private static final DateTimeFormatter EXPORT_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final AdminService adminService;
     private final FileService fileService;
     private final OperationLogService operationLogService;
     private final SystemLogQueryService systemLogQueryService;
     private final GrafanaAuthService grafanaAuthService;
+    private final AuditCsvExporter auditCsvExporter;
 
     // ==================== User Management ====================
 
@@ -141,7 +137,7 @@ public class AdminController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt) {
         PageResult<TeamOperationLogEntity> logs = adminService.exportTeamAuditLogs(
                 teamId, actorUserId, action, targetType, result, startAt, endAt, AUDIT_EXPORT_LIMIT);
-        return csvResponse(auditFileName(teamId), auditCsv(logs.getRecords()));
+        return auditCsvExporter.teamAuditResponse(teamId, logs.getRecords());
     }
 
     @PatchMapping("/teams/{teamId}/quota")
@@ -251,38 +247,4 @@ public class AdminController {
         return ApiResponse.success(adminService.getSystemStats());
     }
 
-    private ResponseEntity<String> csvResponse(String fileName, String body) {
-        return ResponseEntity.ok()
-                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
-                .body(body);
-    }
-
-    private String auditFileName(Long teamId) {
-        return "team-" + teamId + "-audit-" + LocalDateTime.now().format(EXPORT_TIME_FORMAT) + ".csv";
-    }
-
-    private String auditCsv(List<TeamOperationLogEntity> logs) {
-        List<String> rows = new ArrayList<>();
-        rows.add("createdAt,teamId,actorUserId,action,targetType,targetId,result,statusCode,traceId,details");
-        logs.forEach(log -> rows.add(String.join(",",
-                csv(log.getCreatedAt()),
-                csv(log.getTeamId()),
-                csv(log.getActorUserId()),
-                csv(log.getAction()),
-                csv(log.getTargetType()),
-                csv(log.getTargetId()),
-                csv(log.getResult()),
-                csv(log.getStatusCode()),
-                csv(log.getTraceId()),
-                csv(log.getDetails()))));
-        return String.join("\n", rows) + "\n";
-    }
-
-    private String csv(Object value) {
-        if (value == null) {
-            return "";
-        }
-        return "\"" + String.valueOf(value).replace("\"", "\"\"") + "\"";
-    }
 }

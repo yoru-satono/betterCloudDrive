@@ -1787,7 +1787,7 @@ GET /api/v1/admin/teams?keyword=&page=1&size=20
 GET /api/v1/admin/teams/{teamId}
 GET /api/v1/admin/teams/{teamId}/members
 GET /api/v1/admin/teams/{teamId}/files?parentId=&deleted=&keyword=&page=1&size=20&sortBy=fileName&order=asc
-GET /api/v1/admin/teams/{teamId}/audit-logs?action=&targetType=&actorUserId=&result=&page=1&size=20
+GET /api/v1/admin/teams/{teamId}/audit-logs?action=&targetType=&actorUserId=&result=&startAt=&endAt=&page=1&size=20
 GET /api/v1/admin/teams/{teamId}/audit-logs/export?action=&targetType=&actorUserId=&result=&startAt=&endAt=
 PATCH /api/v1/admin/teams/{teamId}/quota
 POST /api/v1/admin/teams/{teamId}/archive
@@ -1805,7 +1805,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 | `GET /admin/teams/{teamId}` | 查看团队元数据 |
 | `GET /admin/teams/{teamId}/members` | 查看团队成员和角色 |
 | `GET /admin/teams/{teamId}/files` | 查看团队文件或回收站文件，`deleted=true` 表示回收站 |
-| `GET /admin/teams/{teamId}/audit-logs` | 查看团队审计日志，支持动作、目标、用户和结果过滤 |
+| `GET /admin/teams/{teamId}/audit-logs` | 查看团队审计日志，支持动作、目标、用户、结果和 ISO DateTime 时间范围过滤 |
 | `GET /admin/teams/{teamId}/audit-logs/export` | 导出团队审计日志 CSV，最多 10000 行 |
 | `PATCH /admin/teams/{teamId}/quota` | 修改团队配额，单位为字节，并写入团队审计日志 |
 | `POST /admin/teams/{teamId}/archive` | 归档团队，归档后普通团队列表不展示 |
@@ -1822,7 +1822,9 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 **Response `200`:** `GET/PATCH/POST` 返回团队实体或分页结果；`DELETE /purge` 返回统一成功响应。
 
-**错误码:** 403（非管理员）、404（团队不存在）、409（状态不允许，如未删除团队执行 purge）、419001（配额小于已用空间或写入超限）。
+`startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表和导出接口使用相同过滤语义；时间格式非法返回 400。
+
+**错误码:** 400（参数格式错误）、403（非管理员）、404（团队不存在）、409（状态不允许，如未删除团队执行 purge）、419001（配额小于已用空间或写入超限）。
 
 ---
 
@@ -2023,9 +2025,9 @@ GET /api/v1/teams/{teamId}/audit-logs/export?action=&targetType=&actorUserId=&re
 Authorization: Bearer <accessToken>
 ```
 
-OWNER/ADMIN 可查看和导出团队审计日志。导出响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。
+OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表和导出接口使用相同过滤语义。导出响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。
 
-**错误码:** 403（非 OWNER/ADMIN）、404（团队不存在）。
+**错误码:** 400（参数格式错误）、403（非 OWNER/ADMIN）、404（团队不存在）。
 
 ---
 
