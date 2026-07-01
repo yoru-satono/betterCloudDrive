@@ -14,6 +14,8 @@ import com.betterclouddrive.dal.repository.ShareLinkRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.SharePasswordCryptoService;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -22,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -39,6 +42,7 @@ class ShareServiceImplTest {
     @Mock private UserRepository userRepository;
     @Mock private SharePasswordCryptoService sharePasswordCryptoService;
     @Mock private TeamAuditService teamAuditService;
+    @Mock private TeamPermissionService teamPermissionService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private ZSetOperations<String, String> zSetOps;
@@ -76,6 +80,27 @@ class ShareServiceImplTest {
 
         assertThat(share.getShareCode()).isNotBlank().hasSize(8);
         assertThat(share.getPasswordCiphertext()).isNull();
+    }
+
+    @Test
+    void listTeamShares_shouldPageAfterPermissionFiltering() {
+        ShareLinkEntity hidden = activeShare("hidden1", 2L, 10L);
+        hidden.setId(10L);
+        ShareLinkEntity visibleOne = activeShare("visible1", 2L, 11L);
+        visibleOne.setId(11L);
+        ShareLinkEntity visibleTwo = activeShare("visible2", 2L, 12L);
+        visibleTwo.setId(12L);
+        when(shareLinkRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(hidden, visibleOne, visibleTwo));
+        when(teamPermissionService.effectivePermissions(7L, 20L, 10L)).thenReturn(new TeamEffectivePermission(false, false, false, false, false));
+        when(teamPermissionService.effectivePermissions(7L, 20L, 11L)).thenReturn(TeamEffectivePermission.viewer());
+        when(teamPermissionService.effectivePermissions(7L, 20L, 12L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<ShareLinkEntity> result = shareService.listTeamShares(7L, 20L, null, 1, 1);
+
+        assertThat(result.getRecords()).extracting(ShareLinkEntity::getId).containsExactly(11L);
+        assertThat(result.getTotal()).isEqualTo(2);
+        assertThat(result.getPages()).isEqualTo(2);
     }
 
     @Test

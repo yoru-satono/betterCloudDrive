@@ -10,6 +10,7 @@ import com.betterclouddrive.dal.repository.FileTagRepository;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.TagRepository;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.TagService;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class TagServiceImpl implements TagService {
     private final FileRepository fileRepository;
     private final TeamService teamService;
     private final TeamAuditService teamAuditService;
+    private final TeamPermissionService teamPermissionService;
 
     @Override
     @Transactional
@@ -228,11 +230,13 @@ public class TagServiceImpl implements TagService {
         teamService.requireRead(userId, teamId);
         requireTeamTag(teamId, tagId);
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        PageRequest pageRequest = PageRequest.of(page - 1, size);
-        Page<FileEntity> files = normalizedKeyword == null
-                ? fileTagRepository.findTeamTaggedFiles(teamId, tagId, pageRequest)
-                : fileTagRepository.findTeamTaggedFilesByKeyword(teamId, tagId, normalizedKeyword, pageRequest);
-        return PageResult.of(files.getContent(), files.getTotalElements(), page, size);
+        List<FileEntity> readable = (normalizedKeyword == null
+                ? fileTagRepository.findTeamTaggedFiles(teamId, tagId)
+                : fileTagRepository.findTeamTaggedFilesByKeyword(teamId, tagId, normalizedKeyword))
+                .stream()
+                .filter(file -> teamPermissionService.effectivePermissions(userId, teamId, file.getId()).canRead())
+                .toList();
+        return PageResults.fromFiltered(readable, page, size);
     }
 
     private TagEntity requireTeamTag(Long teamId, Long tagId) {

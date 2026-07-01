@@ -8,6 +8,7 @@ import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.storage.StorageService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class FileServiceImpl implements FileService {
     private final StorageService storageService;
     private final FileVersionRepository fileVersionRepository;
     private final TeamAuditService teamAuditService;
+    private final TeamPermissionService teamPermissionService;
 
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
     private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
@@ -276,7 +278,7 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public PageResult<FileEntity> listTeamFiles(Long teamId, Long parentId, int page, int size, String sortBy, String order) {
+    public PageResult<FileEntity> listTeamFiles(Long userId, Long teamId, Long parentId, int page, int size, String sortBy, String order) {
         Specification<FileEntity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("teamId"), teamId));
@@ -289,10 +291,12 @@ public class FileServiceImpl implements FileService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        PageRequest pageable = PageRequest.of(page - 1, size,
-                Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()));
-        Page<FileEntity> result = fileRepository.findAll(spec, pageable);
-        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
+        List<FileEntity> readable = fileRepository
+                .findAll(spec, Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()))
+                .stream()
+                .filter(file -> canRead(userId, teamId, file.getId()))
+                .toList();
+        return PageResults.fromFiltered(readable, page, size);
     }
 
     @Override
@@ -391,7 +395,7 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public PageResult<FileEntity> listTeamRecycleBin(Long teamId, String keyword, int page, int size) {
+    public PageResult<FileEntity> listTeamRecycleBin(Long userId, Long teamId, String keyword, int page, int size) {
         Specification<FileEntity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("teamId"), teamId));
@@ -401,9 +405,12 @@ public class FileServiceImpl implements FileService {
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
-        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "deletedAt"));
-        Page<FileEntity> result = fileRepository.findAll(spec, pageable);
-        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
+        List<FileEntity> readable = fileRepository
+                .findAll(spec, Sort.by(Sort.Direction.DESC, "deletedAt"))
+                .stream()
+                .filter(file -> canRead(userId, teamId, file.getId()))
+                .toList();
+        return PageResults.fromFiltered(readable, page, size);
     }
 
     @Override
@@ -425,16 +432,22 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public PageResult<FileEntity> searchTeamFiles(Long teamId, String keyword, int page, int size) {
+    public PageResult<FileEntity> searchTeamFiles(Long userId, Long teamId, String keyword, int page, int size) {
         Specification<FileEntity> spec = (root, query, cb) -> cb.and(
                 cb.equal(root.get("teamId"), teamId),
                 cb.equal(root.get("isDeleted"), false),
                 cb.like(cb.lower(root.get("fileName")), "%" + keyword.toLowerCase() + "%")
         );
-        PageRequest pageable = PageRequest.of(page - 1, size,
-                Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()));
-        Page<FileEntity> result = fileRepository.findAll(spec, pageable);
-        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
+        List<FileEntity> readable = fileRepository
+                .findAll(spec, Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()))
+                .stream()
+                .filter(file -> canRead(userId, teamId, file.getId()))
+                .toList();
+        return PageResults.fromFiltered(readable, page, size);
+    }
+
+    private boolean canRead(Long userId, Long teamId, Long fileId) {
+        return teamPermissionService.effectivePermissions(userId, teamId, fileId).canRead();
     }
 
     private FileEntity validateTargetParent(Long userId, Long targetParentId) {

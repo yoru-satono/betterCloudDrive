@@ -9,6 +9,7 @@ import com.betterclouddrive.dal.repository.FavoriteRepository;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.service.FavoriteService;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -29,6 +31,7 @@ public class FavoriteServiceImpl implements FavoriteService {
     private final FileRepository fileRepository;
     private final TeamService teamService;
     private final TeamAuditService teamAuditService;
+    private final TeamPermissionService teamPermissionService;
 
     @Override
     @Transactional
@@ -94,11 +97,13 @@ public class FavoriteServiceImpl implements FavoriteService {
     public PageResult<FileEntity> listTeamFavorites(Long userId, Long teamId, String keyword, int page, int size) {
         teamService.requireRead(userId, teamId);
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        PageRequest pageRequest = PageRequest.of(page - 1, size);
-        Page<FileEntity> favPage = normalizedKeyword == null
-                ? favoriteRepository.findTeamFavoriteFiles(userId, teamId, pageRequest)
-                : favoriteRepository.findTeamFavoriteFilesByKeyword(userId, teamId, normalizedKeyword, pageRequest);
-        return PageResult.of(favPage.getContent(), favPage.getTotalElements(), page, size);
+        List<FileEntity> readable = (normalizedKeyword == null
+                ? favoriteRepository.findTeamFavoriteFiles(userId, teamId)
+                : favoriteRepository.findTeamFavoriteFilesByKeyword(userId, teamId, normalizedKeyword))
+                .stream()
+                .filter(file -> teamPermissionService.effectivePermissions(userId, teamId, file.getId()).canRead())
+                .toList();
+        return PageResults.fromFiltered(readable, page, size);
     }
 
     private void saveFavoriteIfNeeded(Long userId, Long fileId) {

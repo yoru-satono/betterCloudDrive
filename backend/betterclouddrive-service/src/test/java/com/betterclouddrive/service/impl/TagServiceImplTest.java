@@ -13,7 +13,9 @@ import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileTagRepository;
 import com.betterclouddrive.dal.repository.TagRepository;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
+import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +36,7 @@ class TagServiceImplTest {
     @Mock private FileRepository fileRepository;
     @Mock private TeamService teamService;
     @Mock private TeamAuditService teamAuditService;
+    @Mock private TeamPermissionService teamPermissionService;
     @InjectMocks private TagServiceImpl tagService;
 
     private TagEntity tag(Long id, Long userId) {
@@ -148,5 +151,25 @@ class TagServiceImplTest {
 
         assertThat(result.getRecords()).hasSize(1);
         assertThat(result.getTotal()).isEqualTo(1);
+    }
+
+    @Test
+    void listTeamFilesByTag_shouldPageAfterPermissionFiltering() {
+        TagEntity tag = TagEntity.builder().id(1L).teamId(10L).tagName("team").build();
+        FileEntity hidden = FileEntity.builder().id(20L).teamId(10L).fileName("hidden.txt").build();
+        FileEntity visibleOne = FileEntity.builder().id(21L).teamId(10L).fileName("visible-a.txt").build();
+        FileEntity visibleTwo = FileEntity.builder().id(22L).teamId(10L).fileName("visible-b.txt").build();
+        when(tagRepository.findById(1L)).thenReturn(Optional.of(tag));
+        when(fileTagRepository.findTeamTaggedFiles(10L, 1L))
+                .thenReturn(List.of(hidden, visibleOne, visibleTwo));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 20L)).thenReturn(new TeamEffectivePermission(false, false, false, false, false));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 21L)).thenReturn(TeamEffectivePermission.viewer());
+        when(teamPermissionService.effectivePermissions(2L, 10L, 22L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<FileEntity> result = tagService.listTeamFilesByTag(2L, 10L, 1L, null, 1, 1);
+
+        assertThat(result.getRecords()).extracting(FileEntity::getId).containsExactly(21L);
+        assertThat(result.getTotal()).isEqualTo(2);
+        assertThat(result.getPages()).isEqualTo(2);
     }
 }

@@ -8,7 +8,7 @@ public interface ShareService {
     ShareLinkEntity createShare(Long userId, Long fileId, String password, Long expireAtMs, Integer maxVisits);
     ShareLinkEntity createTeamShare(Long userId, Long teamId, Long fileId, String password, Long expireAtMs, Integer maxVisits);
     PageResult<ShareLinkEntity> listShares(Long userId, String keyword, int page, int size);
-    PageResult<ShareLinkEntity> listTeamShares(Long teamId, String keyword, int page, int size);
+    PageResult<ShareLinkEntity> listTeamShares(Long userId, Long teamId, String keyword, int page, int size);
     ShareLinkEntity getShare(Long userId, Long shareId);
     ShareLinkEntity getTeamShare(Long teamId, Long shareId);
     String getSharePassword(Long userId, Long shareId);

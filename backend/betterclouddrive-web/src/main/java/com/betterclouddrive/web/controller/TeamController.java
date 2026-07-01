@@ -264,8 +264,7 @@ public class TeamController {
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
-        return ApiResponse.success(filterReadable(user.getUserId(), teamId,
-                favoriteService.listTeamFavorites(user.getUserId(), teamId, q, page, size)));
+        return ApiResponse.success(favoriteService.listTeamFavorites(user.getUserId(), teamId, q, page, size));
     }
 
     @PostMapping("/{teamId}/tags")
@@ -336,8 +335,7 @@ public class TeamController {
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
-        return ApiResponse.success(filterReadable(user.getUserId(), teamId,
-                tagService.listTeamFilesByTag(user.getUserId(), teamId, tagId, q, page, size)));
+        return ApiResponse.success(tagService.listTeamFilesByTag(user.getUserId(), teamId, tagId, q, page, size));
     }
 
     @GetMapping("/{teamId}/files")
@@ -354,8 +352,7 @@ public class TeamController {
         } else {
             teamPermissionService.requireRead(user.getUserId(), teamId, parentId);
         }
-        return ApiResponse.success(filterReadable(user.getUserId(), teamId,
-                fileService.listTeamFiles(teamId, parentId, page, size, sortBy, order)));
+        return ApiResponse.success(fileService.listTeamFiles(user.getUserId(), teamId, parentId, page, size, sortBy, order));
     }
 
     @GetMapping("/{teamId}/files/search")
@@ -366,8 +363,7 @@ public class TeamController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
         teamService.requireRead(user.getUserId(), teamId);
-        return ApiResponse.success(filterReadable(user.getUserId(), teamId,
-                fileService.searchTeamFiles(teamId, q, page, size)));
+        return ApiResponse.success(fileService.searchTeamFiles(user.getUserId(), teamId, q, page, size));
     }
 
     @GetMapping("/{teamId}/files/{fileId}")
@@ -471,8 +467,7 @@ public class TeamController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
         teamService.requireRead(user.getUserId(), teamId);
-        return ApiResponse.success(filterReadable(user.getUserId(), teamId,
-                fileService.listTeamRecycleBin(teamId, q, page, size)));
+        return ApiResponse.success(fileService.listTeamRecycleBin(user.getUserId(), teamId, q, page, size));
     }
 
     @PostMapping("/{teamId}/recycle-bin/{fileId}/restore")
@@ -641,14 +636,13 @@ public class TeamController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
         teamService.requireRead(user.getUserId(), teamId);
-        PageResult<ShareLinkEntity> shares = shareService.listTeamShares(teamId, q, page, size);
+        PageResult<ShareLinkEntity> shares = shareService.listTeamShares(user.getUserId(), teamId, q, page, size);
         List<ShareLinkResponse> readableShares = shares.getRecords().stream()
-                .filter(share -> canReadFile(user.getUserId(), teamId, share.getFileId()))
                 .map(ShareLinkResponse::from)
                 .toList();
         return ApiResponse.success(PageResult.of(
                 readableShares,
-                readableShares.size(),
+                shares.getTotal(),
                 shares.getPage(),
                 shares.getSize()));
     }
@@ -849,17 +843,6 @@ public class TeamController {
             return true;
         }
         return teamPermissionService.effectivePermissions(member.getUserId(), member.getTeamId(), fileId).canManage();
-    }
-
-    private boolean canReadFile(Long userId, Long teamId, Long fileId) {
-        return teamPermissionService.effectivePermissions(userId, teamId, fileId).canRead();
-    }
-
-    private PageResult<FileEntity> filterReadable(Long userId, Long teamId, PageResult<FileEntity> page) {
-        List<FileEntity> readable = page.getRecords().stream()
-                .filter(file -> teamPermissionService.effectivePermissions(userId, teamId, file.getId()).canRead())
-                .toList();
-        return PageResult.of(readable, readable.size(), page.getPage(), page.getSize());
     }
 
     private ResponseEntity<String> csvResponse(String fileName, String body) {

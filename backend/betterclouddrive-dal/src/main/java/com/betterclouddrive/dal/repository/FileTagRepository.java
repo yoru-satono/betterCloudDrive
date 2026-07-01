@@ -74,52 +74,31 @@ public interface FileTagRepository extends JpaRepository<FileTagEntity, Long> {
             @Param("keyword") String keyword,
             Pageable pageable);
 
-    @Query(
-            value = """
-                    SELECT f FROM FileTagEntity ft JOIN FileEntity f ON ft.fileId = f.id
-                    WHERE ft.teamId = :teamId
-                      AND ft.tagId = :tagId
-                      AND f.teamId = :teamId
-                      AND f.isDeleted = false
-                    ORDER BY ft.createdAt DESC
-                    """,
-            countQuery = """
-                    SELECT COUNT(f) FROM FileTagEntity ft JOIN FileEntity f ON ft.fileId = f.id
-                    WHERE ft.teamId = :teamId
-                      AND ft.tagId = :tagId
-                      AND f.teamId = :teamId
-                      AND f.isDeleted = false
-                    """
-    )
-    Page<FileEntity> findTeamTaggedFiles(
+    @Query("""
+            SELECT f FROM FileTagEntity ft JOIN FileEntity f ON ft.fileId = f.id
+            WHERE ft.teamId = :teamId
+              AND ft.tagId = :tagId
+              AND f.teamId = :teamId
+              AND f.isDeleted = false
+            ORDER BY ft.createdAt DESC
+            """)
+    List<FileEntity> findTeamTaggedFiles(
             @Param("teamId") Long teamId,
-            @Param("tagId") Long tagId,
-            Pageable pageable);
+            @Param("tagId") Long tagId);
 
-    @Query(
-            value = """
-                    SELECT f FROM FileTagEntity ft JOIN FileEntity f ON ft.fileId = f.id
-                    WHERE ft.teamId = :teamId
-                      AND ft.tagId = :tagId
-                      AND f.teamId = :teamId
-                      AND f.isDeleted = false
-                      AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                    ORDER BY ft.createdAt DESC
-                    """,
-            countQuery = """
-                    SELECT COUNT(f) FROM FileTagEntity ft JOIN FileEntity f ON ft.fileId = f.id
-                    WHERE ft.teamId = :teamId
-                      AND ft.tagId = :tagId
-                      AND f.teamId = :teamId
-                      AND f.isDeleted = false
-                      AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                    """
-    )
-    Page<FileEntity> findTeamTaggedFilesByKeyword(
+    @Query("""
+            SELECT f FROM FileTagEntity ft JOIN FileEntity f ON ft.fileId = f.id
+            WHERE ft.teamId = :teamId
+              AND ft.tagId = :tagId
+              AND f.teamId = :teamId
+              AND f.isDeleted = false
+              AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            ORDER BY ft.createdAt DESC
+            """)
+    List<FileEntity> findTeamTaggedFilesByKeyword(
             @Param("teamId") Long teamId,
             @Param("tagId") Long tagId,
-            @Param("keyword") String keyword,
-            Pageable pageable);
+            @Param("keyword") String keyword);
 
     List<FileTagEntity> findByFileId(Long fileId);
 

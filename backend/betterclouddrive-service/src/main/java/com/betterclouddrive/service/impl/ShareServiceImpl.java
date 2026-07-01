@@ -12,6 +12,7 @@ import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.SharePasswordCryptoService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,6 +42,7 @@ public class ShareServiceImpl implements ShareService {
     private final UserRepository userRepository;
     private final SharePasswordCryptoService sharePasswordCryptoService;
     private final TeamAuditService teamAuditService;
+    private final TeamPermissionService teamPermissionService;
     private final StringRedisTemplate redisTemplate;
     private static final String SHARE_CODE_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int SHARE_CODE_LENGTH = 8;
@@ -141,11 +143,14 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
-    public PageResult<ShareLinkEntity> listTeamShares(Long teamId, String keyword, int page, int size) {
+    public PageResult<ShareLinkEntity> listTeamShares(Long userId, Long teamId, String keyword, int page, int size) {
         Specification<ShareLinkEntity> spec = shareListSpec(null, teamId, keyword);
-        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<ShareLinkEntity> result = shareLinkRepository.findAll(spec, pageable);
-        return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
+        List<ShareLinkEntity> readable = shareLinkRepository
+                .findAll(spec, Sort.by(Sort.Direction.DESC, "createdAt"))
+                .stream()
+                .filter(share -> teamPermissionService.effectivePermissions(userId, teamId, share.getFileId()).canRead())
+                .toList();
+        return PageResults.fromFiltered(readable, page, size);
     }
 
     private Specification<ShareLinkEntity> shareListSpec(Long userId, Long teamId, String keyword) {

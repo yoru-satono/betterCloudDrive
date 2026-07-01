@@ -10,6 +10,10 @@ import com.betterclouddrive.dal.entity.FavoriteEntity;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.repository.FavoriteRepository;
 import com.betterclouddrive.dal.repository.FileRepository;
+import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.TeamService;
+import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -27,6 +31,9 @@ class FavoriteServiceImplTest {
 
     @Mock private FavoriteRepository favoriteRepository;
     @Mock private FileRepository fileRepository;
+    @Mock private TeamService teamService;
+    @Mock private TeamAuditService teamAuditService;
+    @Mock private TeamPermissionService teamPermissionService;
     @InjectMocks private FavoriteServiceImpl favoriteService;
 
     @Test
@@ -106,6 +113,24 @@ class FavoriteServiceImplTest {
 
         assertThat(result.getRecords()).isEmpty();
         assertThat(result.getTotal()).isEqualTo(0);
+    }
+
+    @Test
+    void listTeamFavorites_shouldPageAfterPermissionFiltering() {
+        FileEntity hidden = FileEntity.builder().id(10L).teamId(20L).fileName("hidden.txt").build();
+        FileEntity visibleOne = FileEntity.builder().id(11L).teamId(20L).fileName("visible-a.txt").build();
+        FileEntity visibleTwo = FileEntity.builder().id(12L).teamId(20L).fileName("visible-b.txt").build();
+        when(favoriteRepository.findTeamFavoriteFiles(1L, 20L))
+                .thenReturn(List.of(hidden, visibleOne, visibleTwo));
+        when(teamPermissionService.effectivePermissions(1L, 20L, 10L)).thenReturn(new TeamEffectivePermission(false, false, false, false, false));
+        when(teamPermissionService.effectivePermissions(1L, 20L, 11L)).thenReturn(TeamEffectivePermission.viewer());
+        when(teamPermissionService.effectivePermissions(1L, 20L, 12L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<FileEntity> result = favoriteService.listTeamFavorites(1L, 20L, null, 1, 1);
+
+        assertThat(result.getRecords()).extracting(FileEntity::getId).containsExactly(11L);
+        assertThat(result.getTotal()).isEqualTo(2);
+        assertThat(result.getPages()).isEqualTo(2);
     }
 
 }

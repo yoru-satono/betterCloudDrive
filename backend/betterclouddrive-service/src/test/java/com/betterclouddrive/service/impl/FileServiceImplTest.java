@@ -10,6 +10,8 @@ import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.storage.StorageService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +47,9 @@ class FileServiceImplTest {
 
     @Mock
     private TeamAuditService teamAuditService;
+
+    @Mock
+    private TeamPermissionService teamPermissionService;
 
     @Mock
     private ValueOperations<String, String> valueOps;
@@ -91,6 +96,41 @@ class FileServiceImplTest {
 
         assertThatThrownBy(() -> fileService.getFile(1L, 1L))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void listTeamFiles_shouldPageAfterPermissionFiltering() {
+        FileEntity hidden = FileEntity.builder().id(1L).teamId(10L).fileName("hidden.txt").fileType("file").build();
+        FileEntity visibleOne = FileEntity.builder().id(2L).teamId(10L).fileName("visible-a.txt").fileType("file").build();
+        FileEntity visibleTwo = FileEntity.builder().id(3L).teamId(10L).fileName("visible-b.txt").fileType("file").build();
+        when(fileRepository.findAll(any(Specification.class), any(org.springframework.data.domain.Sort.class)))
+                .thenReturn(List.of(hidden, visibleOne, visibleTwo));
+        when(teamPermissionService.effectivePermissions(7L, 10L, 1L)).thenReturn(new TeamEffectivePermission(false, false, false, false, false));
+        when(teamPermissionService.effectivePermissions(7L, 10L, 2L)).thenReturn(TeamEffectivePermission.viewer());
+        when(teamPermissionService.effectivePermissions(7L, 10L, 3L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<FileEntity> result = fileService.listTeamFiles(7L, 10L, null, 1, 1, "fileName", "asc");
+
+        assertThat(result.getRecords()).extracting(FileEntity::getId).containsExactly(2L);
+        assertThat(result.getTotal()).isEqualTo(2);
+        assertThat(result.getPages()).isEqualTo(2);
+    }
+
+    @Test
+    void listTeamFiles_shouldReturnSecondVisiblePageAfterPermissionFiltering() {
+        FileEntity hidden = FileEntity.builder().id(1L).teamId(10L).fileName("hidden.txt").fileType("file").build();
+        FileEntity visibleOne = FileEntity.builder().id(2L).teamId(10L).fileName("visible-a.txt").fileType("file").build();
+        FileEntity visibleTwo = FileEntity.builder().id(3L).teamId(10L).fileName("visible-b.txt").fileType("file").build();
+        when(fileRepository.findAll(any(Specification.class), any(org.springframework.data.domain.Sort.class)))
+                .thenReturn(List.of(hidden, visibleOne, visibleTwo));
+        when(teamPermissionService.effectivePermissions(7L, 10L, 1L)).thenReturn(new TeamEffectivePermission(false, false, false, false, false));
+        when(teamPermissionService.effectivePermissions(7L, 10L, 2L)).thenReturn(TeamEffectivePermission.viewer());
+        when(teamPermissionService.effectivePermissions(7L, 10L, 3L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<FileEntity> result = fileService.listTeamFiles(7L, 10L, null, 2, 1, "fileName", "asc");
+
+        assertThat(result.getRecords()).extracting(FileEntity::getId).containsExactly(3L);
+        assertThat(result.getTotal()).isEqualTo(2);
     }
 
     @Test
@@ -308,10 +348,11 @@ class FileServiceImplTest {
     @Test
     void listTeamRecycleBin_shouldReturnDeletedFiles() {
         FileEntity file = FileEntity.builder().id(1L).teamId(10L).fileName("deleted.txt").build();
-        Page<FileEntity> page = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
-        when(fileRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+        when(fileRepository.findAll(any(Specification.class), any(org.springframework.data.domain.Sort.class)))
+                .thenReturn(List.of(file));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 1L)).thenReturn(TeamEffectivePermission.viewer());
 
-        PageResult<FileEntity> result = fileService.listTeamRecycleBin(10L, "deleted", 1, 20);
+        PageResult<FileEntity> result = fileService.listTeamRecycleBin(2L, 10L, "deleted", 1, 20);
 
         assertThat(result.getRecords()).hasSize(1);
     }
