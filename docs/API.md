@@ -1780,7 +1780,39 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 15.7 操作日志
+### 15.7 团队管理
+
+```
+GET /api/v1/admin/teams?keyword=&page=1&size=20
+GET /api/v1/admin/teams/{teamId}
+GET /api/v1/admin/teams/{teamId}/members
+GET /api/v1/admin/teams/{teamId}/files?parentId=&deleted=&keyword=&page=1&size=20&sortBy=fileName&order=asc
+GET /api/v1/admin/teams/{teamId}/audit-logs?action=&targetType=&actorUserId=&result=&page=1&size=20
+PATCH /api/v1/admin/teams/{teamId}/quota
+Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
+```
+
+团队管理端点用于运维排障和配额调整，不要求管理员加入团队：
+
+| 端点 | 说明 |
+|------|------|
+| `GET /admin/teams` | 分页搜索未删除团队 |
+| `GET /admin/teams/{teamId}` | 查看团队元数据 |
+| `GET /admin/teams/{teamId}/members` | 查看团队成员和角色 |
+| `GET /admin/teams/{teamId}/files` | 查看团队文件或回收站文件，`deleted=true` 表示回收站 |
+| `GET /admin/teams/{teamId}/audit-logs` | 查看团队审计日志，支持动作、目标、用户和结果过滤 |
+| `PATCH /admin/teams/{teamId}/quota` | 修改团队配额，单位为字节，并写入团队审计日志 |
+
+**修改团队配额 Request Body:**
+```json
+{
+  "storageQuota": 32212254720
+}
+```
+
+---
+
+### 15.8 操作日志
 
 ```
 GET /api/v1/admin/logs?userId=&actionType=&startDate=&endDate=&page=1&size=20
@@ -1800,7 +1832,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 ---
 
-### 15.8 系统统计
+### 15.9 系统统计
 
 ```
 GET /api/v1/admin/stats

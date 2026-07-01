@@ -557,6 +557,56 @@ Docker Compose 使用这些 volume：
 | CORS | 如果前端和后端跨域部署，需要显式审查 CORS 配置 |
 | WebDAV | WebDAV 强制要求独立密码，避免复用主账号密码 |
 
+## 完整验证
+
+项目提供 Windows PowerShell 7 一键验证脚本：
+
+```powershell
+.\scripts\verify-all.ps1
+```
+
+默认流程：
+
+| 阶段 | 行为 |
+|------|------|
+| 环境文件 | 复制缺失的 `.env` 和 `config/env-files/*.env` 模板，不覆盖已有文件 |
+| Docker | 执行 `docker compose up -d --build`，启动后端、前端、PostgreSQL、Redis、SeaweedFS、Mailpit、OnlyOffice 和可观测性组件 |
+| 健康检查 | 等待后端 `/actuator/health`、前端、Mailpit、OnlyOffice `/healthcheck` 可达 |
+| 后端 | 执行 `backend/mvn test` |
+| 黑盒 API | 执行 `backend-test` pytest；admin 测试会自动创建用户并提升为 `ROLE_ADMIN` |
+| Web | 执行前端单测和 Docker Web E2E；默认开启 `E2E_ONLYOFFICE=1` |
+| Tauri | 构建 Tauri release 测试包并运行 WebDriver E2E |
+| Android | 执行 Android 单元测试和连接设备 E2E |
+
+常用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `-SkipDockerBuild` | 启动 Docker 栈但不重新 build 镜像 |
+| `-SkipTauri` | 跳过 Tauri 构建和 E2E |
+| `-SkipAndroid` | 跳过 Android 单元测试和 Android E2E |
+| `-SkipOnlyOffice` | 不等待 OnlyOffice，Web E2E 不设置 `E2E_ONLYOFFICE=1` |
+| `-AndroidSerial <serial>` | 指定 Android E2E 设备，默认 `localhost:16448` |
+| `-KeepGoing` | 单个阶段失败后继续执行剩余阶段，最后汇总失败并返回非零退出码 |
+
+Android 注意事项：
+
+- 默认模拟器端口是 `localhost:16448`。
+- 如果 ADB 同时显示 `emulator-5558` 和 `localhost:16448`，必须通过 `ANDROID_SERIAL` 限定单设备，否则 Gradle 可能对同一模拟器并发安装测试 APK，导致 instrumentation 启动即崩溃。
+- 使用脚本时默认会执行 `adb connect localhost:16448` 并设置 `ANDROID_SERIAL=localhost:16448`。
+
+OnlyOffice 注意事项：
+
+- 完整验证默认要求 `onlyoffice-documentserver` 容器可用，宿主机地址为 `http://127.0.0.1:8082`。
+- Web E2E 会验证个人 docx/pptx/xlsx 只读预览，以及团队 docx 真实编辑保存后创建版本。
+- 如当前环境不需要跑 OnlyOffice，可使用 `-SkipOnlyOffice`。
+
+后端黑盒 admin 测试：
+
+- 默认不再需要手工 `ADMIN_TOKEN`。
+- 测试会注册独立用户，并通过 `docker compose exec -T postgres psql` 将该用户更新为 `ROLE_ADMIN` 后重新登录。
+- 在非 Docker Compose 数据库环境中，可设置 `ADMIN_TOKEN` 使用已有管理员 JWT 覆盖自动提权流程。
+
 ## 配置检查清单
 
 上线前检查：

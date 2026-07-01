@@ -27,6 +27,7 @@
 - **分享链接**：创建/密码保护/过期时间/访问次数限制
 - **收藏 & 标签**：文件收藏/标签分类管理
 - **版本管理**：文件多版本保留/历史版本删除
+- **团队空间**：团队文件、成员/邀请、角色权限、团队分享/标签/收藏、版本恢复、审计日志、管理员配额运维
 - **注册验证码 & 密码重置**：Mailpit 模拟邮件
 - **存储配额**：默认 10GB/用户，管理员可调整
 - **管理员面板**：用户管理/配额调整/日志中心/系统统计
@@ -191,21 +192,48 @@ UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
 
 ## 测试
 
-```bash
-# 后端单元测试
-cd backend && mvn test
+推荐在 Windows PowerShell 7 中使用一键验证脚本：
 
-# Python 黑盒测试
-cd backend-test && UV_CACHE_DIR=../.uv-cache uv run pytest -v
+```powershell
+.\scripts\verify-all.ps1
+```
 
-# Windows PowerShell:
-# cd backend-test
-# $env:UV_CACHE_DIR = '..\.uv-cache'
-# uv run pytest -v
+默认行为：
 
-# 前端单元测试
-cd frontend && npx vitest run
+- 自动复制缺失的 `.env` / `config/env-files/*.env` 模板文件，但不会覆盖已有配置。
+- 自动执行 `docker compose up -d --build` 启动全栈，包括 OnlyOffice Document Server。
+- 依次运行后端单元测试、Python 黑盒 API 测试、前端单元测试、Web E2E、Tauri E2E、Android 单元测试和 Android E2E。
+- Web E2E 默认开启 `E2E_ONLYOFFICE=1`，会覆盖 OnlyOffice 真实预览和编辑保存。
+- Android E2E 默认使用 `ANDROID_SERIAL=localhost:16448`，避免同一模拟器暴露多个 ADB serial 时并发运行失败。
+- Python 黑盒 admin 测试会自动创建测试用户并通过 Docker Compose PostgreSQL 提升为 `ROLE_ADMIN`；非 Compose 环境可设置 `ADMIN_TOKEN` 覆盖。
 
-# 前端 E2E 测试（需 distrobox）
-distrobox enter ubuntu2404-e2e -- npx playwright test
+常用参数：
+
+```powershell
+.\scripts\verify-all.ps1 -SkipTauri -SkipAndroid
+.\scripts\verify-all.ps1 -SkipDockerBuild
+.\scripts\verify-all.ps1 -AndroidSerial localhost:16448
+.\scripts\verify-all.ps1 -KeepGoing
+```
+
+分项命令仍可单独运行：
+
+```powershell
+cd backend
+mvn test
+
+cd ..\backend-test
+.\.venv\Scripts\pytest.exe -v
+
+cd ..\frontend
+npm run test
+$env:E2E_ONLYOFFICE = '1'
+npm run test:e2e:docker
+npm run tauri:e2e:build
+npm run test:e2e:tauri
+
+cd ..\android
+.\gradlew.bat testDebugUnitTest
+$env:ANDROID_SERIAL = 'localhost:16448'
+.\gradlew.bat connectedDebugAndroidTest
 ```
