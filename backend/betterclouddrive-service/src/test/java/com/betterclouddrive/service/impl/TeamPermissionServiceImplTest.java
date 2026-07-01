@@ -16,6 +16,8 @@ import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,6 +35,63 @@ class TeamPermissionServiceImplTest {
     @Mock private TeamAuditService teamAuditService;
     @Mock private NotificationService notificationService;
     @InjectMocks private TeamPermissionServiceImpl permissionService;
+
+    @ParameterizedTest
+    @CsvSource({
+            "true,false,false,false",
+            "false,true,false,false",
+            "false,false,true,false",
+            "false,false,false,true"
+    })
+    void upsertPermission_shouldRejectDerivedPermissionWithoutRead(
+            boolean canWrite,
+            boolean canShare,
+            boolean canDelete,
+            boolean canManage) {
+        FileEntity file = teamFile();
+        TeamMemberEntity actor = TeamMemberEntity.builder().teamId(10L).userId(2L).role("ADMIN").status(1).build();
+        when(teamService.requireRead(2L, 10L)).thenReturn(actor);
+        when(fileRepository.findById(7L)).thenReturn(Optional.of(file));
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectUserId(anyLong(), anyLong(), anyString(), anyLong()))
+                .thenReturn(Optional.empty());
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectRole(anyLong(), anyLong(), anyString(), anyString()))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> permissionService.upsertPermission(
+                2L, 10L, 7L, "ROLE", null, "VIEWER",
+                false, canWrite, canShare, canDelete, canManage))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("require read permission");
+
+        verify(fileRepository).findById(7L);
+        verify(permissionRepository, never()).save(any());
+        verify(notificationService, never()).notifyUser(anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+    }
+
+    @Test
+    void upsertPermission_shouldAllowReadOnlyPermission() {
+        FileEntity file = teamFile();
+        TeamMemberEntity actor = TeamMemberEntity.builder().teamId(10L).userId(2L).role("ADMIN").status(1).build();
+        when(teamService.requireRead(2L, 10L)).thenReturn(actor);
+        when(fileRepository.findById(7L)).thenReturn(Optional.of(file));
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectUserId(anyLong(), anyLong(), anyString(), anyLong()))
+                .thenReturn(Optional.empty());
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectRole(anyLong(), anyLong(), anyString(), anyString()))
+                .thenReturn(Optional.empty());
+        when(permissionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(10L, 1))
+                .thenReturn(List.of(actor));
+
+        TeamFilePermissionEntity saved = permissionService.upsertPermission(
+                2L, 10L, 7L, "ROLE", null, "VIEWER",
+                true, false, false, false, false);
+
+        assertThat(saved.getCanRead()).isTrue();
+        assertThat(saved.getCanWrite()).isFalse();
+        assertThat(saved.getCanShare()).isFalse();
+        assertThat(saved.getCanDelete()).isFalse();
+        assertThat(saved.getCanManage()).isFalse();
+    }
 
     @Test
     void upsertPermission_shouldRejectRemovingOwnManagePermission() {

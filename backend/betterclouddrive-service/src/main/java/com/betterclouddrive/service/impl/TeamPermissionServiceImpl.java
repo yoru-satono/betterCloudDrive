@@ -92,6 +92,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
             boolean canDelete,
             boolean canManage) {
         requireManage(actorUserId, teamId, fileId);
+        validatePermissionConsistency(canRead, canWrite, canShare, canDelete, canManage);
         FileEntity file = requireTeamFileAnyState(teamId, fileId);
         String normalizedType = normalizeSubjectType(subjectType);
         TeamFilePermissionEntity permission;
@@ -210,6 +211,17 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
             return TeamEffectivePermission.editor();
         }
         return TeamEffectivePermission.viewer();
+    }
+
+    private void validatePermissionConsistency(
+            boolean canRead,
+            boolean canWrite,
+            boolean canShare,
+            boolean canDelete,
+            boolean canManage) {
+        if (!canRead && (canWrite || canShare || canDelete || canManage)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "write/share/delete/manage permissions require read permission");
+        }
     }
 
     private TeamEffectivePermission fromEntity(TeamFilePermissionEntity permission) {
