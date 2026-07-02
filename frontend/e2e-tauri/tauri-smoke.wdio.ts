@@ -7,7 +7,11 @@ import {
   createTeam,
   createTeamFolder,
   createUser,
+  listNotifications,
   listFiles,
+  listTeamFiles,
+  listTeamInvites,
+  listTeamMembers,
   uniqueName,
   uploadSampleFile,
   uploadTeamSampleFile,
@@ -15,12 +19,14 @@ import {
 import { createApiRequestContext } from './helpers/api-request'
 import {
   captureClipboardWrites,
+  clickButton,
   createShareFromContextMenu,
   createTeamShareFromContextMenu,
   downloadFromContextMenu,
   expectFolderUploadAvailable,
   expectDesktopSettings,
   expectFileVisible,
+  expectVisibleText,
   loginViaWindow,
   openSidebarLink,
   openTeamRecycleBin,
@@ -41,6 +47,7 @@ describe('Tauri desktop window smoke', () => {
       await fs.mkdir(downloadDir, { recursive: true })
 
       const user = await createUser(request)
+      const invitee = await createUser(request)
       const fileName = `${uniqueName('tauri-smoke')}.txt`
       const fileContents = `desktop resumable download ${Date.now()}`
       const file = await uploadSampleFile(request, user.accessToken, null, fileName, fileContents)
@@ -57,6 +64,8 @@ describe('Tauri desktop window smoke', () => {
         `desktop team file ${Date.now()}`,
       )
       const teamFolder = await createTeamFolder(request, user.accessToken, team.id, uniqueName('tauri-team-folder'))
+      const droppedTeamFileName = `${uniqueName('tauri-team-upload')}.txt`
+      const droppedTeamFileContents = `desktop team upload ${Date.now()}`
 
       await waitForTauriWindow()
       await expectDesktopSettings()
@@ -90,10 +99,19 @@ describe('Tauri desktop window smoke', () => {
       await openSidebarLink(team.name)
       await expectFileVisible(teamFile.fileName)
       await expectFileVisible(teamFolder.fileName)
-      await createTeamShareFromContextMenu(teamFile.fileName)
+      await dropTeamFileOnCurrentPage(droppedTeamFileName, droppedTeamFileContents)
+      await expectFileVisible(droppedTeamFileName)
+      await expectTeamFileUploaded(request, user.accessToken, team.id, droppedTeamFileName, droppedTeamFileContents.length)
+      await createTeamShareFromContextMenu(droppedTeamFileName)
       const teamClipboardText = await readCapturedClipboardText()
       assert.match(teamClipboardText, /^http:\/\/127\.0\.0\.1:3000\/s\/\S+/)
       await openTeamSettings()
+      await closeTransferQueueIfOpen()
+      await sendInviteFromTeamSettings(invitee.email)
+      await expectInvitePending(request, user.accessToken, team.id, invitee.email)
+      await expectInviteNotification(request, invitee.accessToken, team.id)
+      await acceptInviteFromNotification(invitee.accessToken, invitee.refreshToken, team.name)
+      await expectTeamMemberRole(request, invitee.accessToken, team.id, invitee.userId, 'EDITOR')
       await openSidebarLink(team.name)
       await openTeamRecycleBin()
     } finally {
@@ -114,6 +132,137 @@ async function waitForFileContents(filePath: string, expected: string) {
 
 async function fileExists(filePath: string) {
   return fs.access(filePath).then(() => true, () => false)
+}
+
+async function closeTransferQueueIfOpen() {
+  const queue = await $('.transfer-queue')
+  if (!(await queue.isDisplayed().catch(() => false))) return
+  const buttons = await queue.$$('.transfer-queue__header-actions button')
+  if (!buttons.length) return
+  await buttons[Number(buttons.length) - 1].click()
+  await browser.waitUntil(async () => !(await queue.isDisplayed().catch(() => false)), {
+    timeout: 5_000,
+    timeoutMsg: 'Transfer queue did not close',
+  })
+}
+
+async function dropTeamFileOnCurrentPage(fileName: string, contents: string) {
+  await browser.execute((name, body) => {
+    const target = document.querySelector('.team-files')
+    if (!target) throw new Error('Team files drop target was not found')
+    const dataTransfer = new DataTransfer()
+    dataTransfer.items.add(new File([body], name, { type: 'text/plain' }))
+    target.dispatchEvent(new DragEvent('drop', {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer,
+    }))
+  }, fileName, contents)
+}
+
+async function expectTeamFileUploaded(
+  request: Awaited<ReturnType<typeof createApiRequestContext>>,
+  token: string,
+  teamId: number,
+  fileName: string,
+  fileSize: number,
+) {
+  await browser.waitUntil(async () => {
+    const files = await listTeamFiles(request, token, teamId)
+    return files.some(item => item.fileName === fileName && item.fileSize === fileSize)
+  }, {
+    timeout: 20_000,
+    timeoutMsg: `Team uploaded file ${fileName} did not appear in API list`,
+  })
+}
+
+async function sendInviteFromTeamSettings(email: string) {
+  const inviteSection = await sectionByHeading('邀请')
+  await (await inviteSection.$('input[placeholder="邮箱地址"]')).setValue(email)
+  await (await inviteSection.$('select')).selectByAttribute('value', 'EDITOR')
+  await (await inviteSection.$('.//button[normalize-space(.)="发送邀请"]')).click()
+  await waitForTextWithin(inviteSection, email)
+}
+
+async function expectInvitePending(
+  request: Awaited<ReturnType<typeof createApiRequestContext>>,
+  token: string,
+  teamId: number,
+  email: string,
+) {
+  await browser.waitUntil(async () => {
+    const invites = await listTeamInvites(request, token, teamId)
+    return invites.find(invite => invite.email === email)?.status === 'PENDING'
+  }, {
+    timeout: 15_000,
+    timeoutMsg: `Invite for ${email} was not pending`,
+  })
+}
+
+async function expectInviteNotification(
+  request: Awaited<ReturnType<typeof createApiRequestContext>>,
+  token: string,
+  teamId: number,
+) {
+  await browser.waitUntil(async () => {
+    const notifications = await listNotifications(request, token, { unreadOnly: true, type: 'TEAM_INVITE' })
+    return notifications.some(notification =>
+      notification.teamId === teamId &&
+      notification.title.includes('团队邀请') &&
+      !!notification.link?.startsWith('/team-invites/'),
+    )
+  }, {
+    timeout: 15_000,
+    timeoutMsg: `Invite notification for team ${teamId} was not created`,
+  })
+}
+
+async function acceptInviteFromNotification(accessToken: string, refreshToken: string, teamName: string) {
+  await setAuthTokens(accessToken, refreshToken)
+  await navigateToDesktopPath('/notifications')
+  await expectVisibleText('通知')
+  await (await $('.notifications-page__type')).selectByAttribute('value', 'TEAM_INVITE')
+  const notificationRow = await $(`//button[contains(@class, "notification-row") and contains(normalize-space(.), "${teamName}")]`)
+  await notificationRow.waitForDisplayed()
+  await notificationRow.click()
+  await expectVisibleText(teamName)
+  await clickButton('接受邀请')
+  await expectVisibleText(teamName)
+}
+
+async function expectTeamMemberRole(
+  request: Awaited<ReturnType<typeof createApiRequestContext>>,
+  token: string,
+  teamId: number,
+  userId: number,
+  role: 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER',
+) {
+  await browser.waitUntil(async () => {
+    const members = await listTeamMembers(request, token, teamId)
+    return members.find(member => member.userId === userId)?.role === role
+  }, {
+    timeout: 15_000,
+    timeoutMsg: `Team member ${userId} did not become ${role}`,
+  })
+}
+
+async function navigateToDesktopPath(path: string) {
+  await browser.execute((nextPath) => {
+    window.location.hash = `#${nextPath}`
+  }, path)
+}
+
+async function sectionByHeading(heading: string) {
+  const section = await $(`//section[contains(@class, "team-section") and .//h3[normalize-space(.)="${heading}"]]`)
+  await section.waitForDisplayed()
+  return section
+}
+
+async function waitForTextWithin(element: ReturnType<typeof $>, text: string) {
+  await browser.waitUntil(async () => (await element.$(`.//*[contains(normalize-space(.), "${text}")]`).isDisplayed().catch(() => false)), {
+    timeout: 10_000,
+    timeoutMsg: `Text "${text}" was not displayed`,
+  })
 }
 
 async function rootFileByName(request: Awaited<ReturnType<typeof createApiRequestContext>>, token: string, fileName: string) {

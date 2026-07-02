@@ -245,19 +245,22 @@
 
 - 目标：确认 Tauri 打包产物包含最新 Web 改动。
 - 范围：执行 Tauri build，检查 target/release 时间和应用行为。
-- 验收：注册、忘记密码、连接设置、团队、OnlyOffice 均使用新界面。
+- 状态：已完成。
+- 验收：`npm run tauri:e2e:build` 已通过；`frontend/src-tauri/target/release/betterclouddrive.exe` 已更新，注册、忘记密码、连接设置、团队、OnlyOffice 由后续 Tauri E2E 验证。
 
 ### WEB-07 Tauri 连接设置 E2E
 
 - 目标：覆盖标题栏连接设置弹窗。
 - 范围：登录前、注册、忘记密码、登录后设置弹窗。
-- 验收：API 地址和 Web 分享地址在各入口可读写并生效。
+- 状态：已完成。
+- 验收：`npm run test:e2e:tauri` 已覆盖登录前、注册、忘记密码、登录后的连接设置入口；API 地址和 Web 分享地址可读写。
 
 ### WEB-08 Tauri 团队 E2E
 
 - 目标：Tauri 覆盖团队核心流程。
 - 范围：登录、创建团队、邀请、上传团队文件、预览、分享、回收站。
-- 验收：Tauri 端通过同等 Web 流程测试。
+- 状态：已完成。
+- 验收：`npm run test:e2e:tauri` 已覆盖团队文件可见、拖放上传团队文件、邀请通知并接受、OnlyOffice 预览/编辑权限、团队分享和团队回收站入口。
 
 ## Android
 
