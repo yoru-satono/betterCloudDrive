@@ -30,7 +30,7 @@ import {
 import { toast } from 'vue-sonner'
 import type { FileEntity, FileVersionEntity } from '@/types/file'
 import type { TagEntity } from '@/types/tag'
-import type { TeamEffectivePermission, TeamFilePermission, TeamMember, TeamRole } from '@/types/team'
+import type { TeamEffectivePermission, TeamFilePermission, TeamMember, TeamPermissionSource, TeamRole } from '@/types/team'
 
 const route = useRoute()
 const router = useRouter()
@@ -405,6 +405,30 @@ async function loadPermissions() {
   } finally {
     permissionsLoading.value = false
   }
+}
+
+function permissionBits(permission: Pick<TeamEffectivePermission, 'canRead' | 'canWrite' | 'canShare' | 'canDelete' | 'canManage'>) {
+  return [
+    permission.canRead ? '读' : '-',
+    permission.canWrite ? '写' : '-',
+    permission.canShare ? '分享' : '-',
+    permission.canDelete ? '删除' : '-',
+    permission.canManage ? '管理' : '-',
+  ].join(' / ')
+}
+
+function permissionSourceTitle(source: TeamPermissionSource) {
+  if (source.type === 'BASE_ROLE') return `基础角色：${source.subjectRole || '-'}`
+  return source.description || (source.type === 'USER_OVERRIDE' ? '用户权限覆盖' : '角色权限覆盖')
+}
+
+function permissionSourceMeta(source: TeamPermissionSource) {
+  const subject = source.subjectType === 'USER'
+    ? `用户 ${source.subjectUserId ?? '-'}`
+    : `角色 ${source.subjectRole ?? '-'}`
+  if (source.type === 'BASE_ROLE') return subject
+  const scope = source.inherited ? `继承自 ${source.fileName || source.fileId || '-'}` : '当前文件'
+  return `${scope} · ${subject}`
 }
 
 async function savePermission() {
@@ -841,14 +865,19 @@ function isOfficeFile(file: FileEntity) {
       <div class="permission-box">
         <div class="permission-box__target">{{ permissionTarget?.fileName }}</div>
         <div v-if="permissionEffective" class="permission-box__effective">
-          <span>当前有效权限</span>
-          <strong>
-            {{ permissionEffective.canRead ? '读' : '-' }} /
-            {{ permissionEffective.canWrite ? '写' : '-' }} /
-            {{ permissionEffective.canShare ? '分享' : '-' }} /
-            {{ permissionEffective.canDelete ? '删除' : '-' }} /
-            {{ permissionEffective.canManage ? '管理' : '-' }}
-          </strong>
+          <div class="permission-box__effective-summary">
+            <span>当前有效权限</span>
+            <strong>{{ permissionBits(permissionEffective) }}</strong>
+          </div>
+          <div v-if="permissionEffective.sourceChain?.length" class="permission-source">
+            <div v-for="source in permissionEffective.sourceChain" :key="`${source.type}-${source.fileId ?? 'base'}-${source.subjectType}-${source.subjectUserId ?? source.subjectRole}`" class="permission-source__item">
+              <div>
+                <strong>{{ permissionSourceTitle(source) }}</strong>
+                <span>{{ permissionSourceMeta(source) }}</span>
+              </div>
+              <em>{{ permissionBits(source) }}</em>
+            </div>
+          </div>
         </div>
         <div class="permission-box__form">
           <select v-model="permissionSubjectType">
@@ -874,7 +903,7 @@ function isOfficeFile(file: FileEntity) {
           <div v-for="permission in permissions" :key="permission.id" class="permission-row">
             <div>
               <strong>{{ permission.subjectType === 'ROLE' ? permission.subjectRole : `用户 ${permission.subjectUserId}` }}</strong>
-              <span>{{ permission.canRead ? '读' : '-' }} / {{ permission.canWrite ? '写' : '-' }} / {{ permission.canShare ? '分享' : '-' }} / {{ permission.canDelete ? '删' : '-' }} / {{ permission.canManage ? '管' : '-' }}</span>
+              <span>{{ permissionBits(permission) }}</span>
             </div>
             <OButton variant="danger" size="sm" @click="deletePermission(permission)">删除</OButton>
           </div>
@@ -1257,8 +1286,8 @@ function isOfficeFile(file: FileEntity) {
 }
 .permission-box__effective {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -1266,12 +1295,50 @@ function isOfficeFile(file: FileEntity) {
   background: var(--bg-elevated);
   font-size: 12px;
 }
+.permission-box__effective-summary,
+.permission-source__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 .permission-box__effective span {
   color: var(--text-secondary);
 }
 .permission-box__effective strong {
   color: var(--accent);
   font-weight: 600;
+}
+.permission-source {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.permission-source__item {
+  min-height: 32px;
+}
+.permission-source__item div {
+  min-width: 0;
+}
+.permission-source__item strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.permission-source__item span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.permission-source__item em {
+  color: var(--text-secondary);
+  font-style: normal;
+  font-size: 11px;
+  white-space: nowrap;
 }
 .permission-box__form {
   display: grid;
@@ -1333,6 +1400,14 @@ function isOfficeFile(file: FileEntity) {
 @media (max-width: 900px) {
   .permission-box__form {
     grid-template-columns: 1fr 1fr;
+  }
+  .permission-box__effective-summary,
+  .permission-source__item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .permission-source__item em {
+    white-space: normal;
   }
 }
 </style>

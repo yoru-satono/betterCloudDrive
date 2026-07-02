@@ -143,6 +143,56 @@ class TeamPermissionServiceImplTest {
         verify(notificationService, never()).notifyUser(eq(5L), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
     }
 
+    @Test
+    void effectivePermissions_shouldExplainInheritedRoleOverride() {
+        FileEntity child = teamFile();
+        FileEntity folder = FileEntity.builder()
+                .id(6L)
+                .teamId(10L)
+                .fileName("Docs")
+                .fileType("folder")
+                .isDeleted(false)
+                .build();
+        child.setParentId(folder.getId());
+        TeamMemberEntity editor = TeamMemberEntity.builder().teamId(10L).userId(3L).role("EDITOR").status(1).build();
+        TeamFilePermissionEntity roleOverride = TeamFilePermissionEntity.builder()
+                .teamId(10L)
+                .fileId(folder.getId())
+                .subjectType("ROLE")
+                .subjectRole("EDITOR")
+                .canRead(true)
+                .canWrite(false)
+                .canShare(false)
+                .canDelete(false)
+                .canManage(false)
+                .build();
+        when(teamService.requireRead(3L, 10L)).thenReturn(editor);
+        when(fileRepository.findById(7L)).thenReturn(Optional.of(child));
+        when(fileRepository.findById(6L)).thenReturn(Optional.of(folder));
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectUserId(10L, 7L, "USER", 3L))
+                .thenReturn(Optional.empty());
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectRole(10L, 7L, "ROLE", "EDITOR"))
+                .thenReturn(Optional.empty());
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectUserId(10L, 6L, "USER", 3L))
+                .thenReturn(Optional.empty());
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectRole(10L, 6L, "ROLE", "EDITOR"))
+                .thenReturn(Optional.of(roleOverride));
+
+        var effective = permissionService.effectivePermissions(3L, 10L, 7L);
+
+        assertThat(effective.canRead()).isTrue();
+        assertThat(effective.canWrite()).isFalse();
+        assertThat(effective.sourceType()).isEqualTo("ROLE_OVERRIDE");
+        assertThat(effective.sourceChain()).hasSize(2);
+        assertThat(effective.sourceChain().get(0).type()).isEqualTo("BASE_ROLE");
+        var source = effective.sourceChain().get(1);
+        assertThat(source.type()).isEqualTo("ROLE_OVERRIDE");
+        assertThat(source.fileId()).isEqualTo(6L);
+        assertThat(source.fileName()).isEqualTo("Docs");
+        assertThat(source.subjectRole()).isEqualTo("EDITOR");
+        assertThat(source.inherited()).isTrue();
+    }
+
     private FileEntity teamFile() {
         return FileEntity.builder()
                 .id(7L)

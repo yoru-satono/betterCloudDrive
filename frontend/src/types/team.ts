@@ -64,6 +64,24 @@ export interface TeamEffectivePermission {
   canShare: boolean
   canDelete: boolean
   canManage: boolean
+  sourceType?: 'UNSPECIFIED' | 'BASE_ROLE' | 'USER_OVERRIDE' | 'ROLE_OVERRIDE'
+  sourceChain?: TeamPermissionSource[]
+}
+
+export interface TeamPermissionSource {
+  type: 'BASE_ROLE' | 'USER_OVERRIDE' | 'ROLE_OVERRIDE'
+  fileId: number | null
+  fileName: string | null
+  subjectType: 'USER' | 'ROLE'
+  subjectUserId: number | null
+  subjectRole: TeamRole | null
+  inherited: boolean
+  canRead: boolean
+  canWrite: boolean
+  canShare: boolean
+  canDelete: boolean
+  canManage: boolean
+  description: string
 }
 
 export interface TeamFilePermission {

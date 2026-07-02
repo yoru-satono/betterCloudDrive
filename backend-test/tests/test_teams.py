@@ -207,6 +207,24 @@ def assert_effective_permissions(client, headers, team_id, file_id, **expected):
     return data
 
 
+def assert_permission_source(data, source_type, *, file_id=None, subject_type=None,
+                             subject_user_id=None, subject_role=None, inherited=None):
+    chain = data.get("sourceChain") or []
+    assert chain, f"Expected permission source chain, got {data}"
+    source = chain[-1]
+    assert source["type"] == source_type, f"Expected source {source_type}, got {source}"
+    if file_id is not None:
+        assert source["fileId"] == file_id, f"Expected source file {file_id}, got {source}"
+    if subject_type is not None:
+        assert source["subjectType"] == subject_type, f"Expected subject type {subject_type}, got {source}"
+    if subject_user_id is not None:
+        assert source["subjectUserId"] == subject_user_id, f"Expected subject user {subject_user_id}, got {source}"
+    if subject_role is not None:
+        assert source["subjectRole"] == subject_role, f"Expected subject role {subject_role}, got {source}"
+    if inherited is not None:
+        assert source["inherited"] is inherited, f"Expected inherited={inherited}, got {source}"
+
+
 def assert_office_editable(client, headers, team_id, file_id, expected):
     config = assert_api_ok(client.get(
         f"/api/v1/teams/{team_id}/office/files/{file_id}/config",
@@ -397,22 +415,28 @@ class TestTeamPermissions:
         uploaded = upload_team_file(client, auth_headers, team_id, folder["id"], sample_file, name="matrix.docx")
         file_id = uploaded["fileId"]
 
-        assert_effective_permissions(
+        admin_effective = assert_effective_permissions(
             client, team_admin["headers"], team_id, file_id,
             canRead=True, canWrite=True, canShare=True, canDelete=True, canManage=True)
-        assert_effective_permissions(
+        assert_permission_source(admin_effective, "BASE_ROLE", subject_type="ROLE", subject_role="ADMIN")
+        editor_effective = assert_effective_permissions(
             client, editor["headers"], team_id, file_id,
             canRead=True, canWrite=True, canShare=True, canDelete=True, canManage=False)
-        assert_effective_permissions(
+        assert_permission_source(editor_effective, "BASE_ROLE", subject_type="ROLE", subject_role="EDITOR")
+        viewer_effective = assert_effective_permissions(
             client, viewer["headers"], team_id, file_id,
             canRead=True, canWrite=False, canShare=False, canDelete=False, canManage=False)
+        assert_permission_source(viewer_effective, "BASE_ROLE", subject_type="ROLE", subject_role="VIEWER")
 
         upsert_permission(
             client, auth_headers, team_id, folder["id"], "ROLE",
             subject_role="EDITOR", read=True, write=False, share=False, delete=False, manage=False)
-        assert_effective_permissions(
+        editor_effective = assert_effective_permissions(
             client, editor["headers"], team_id, file_id,
             canRead=True, canWrite=False, canShare=False, canDelete=False, canManage=False)
+        assert_permission_source(
+            editor_effective, "ROLE_OVERRIDE", file_id=folder["id"],
+            subject_type="ROLE", subject_role="EDITOR", inherited=True)
         assert_api_error_in(client.put(
             f"/api/v1/teams/{team_id}/files/{file_id}",
             json={"newName": "editor-blocked.docx"},
@@ -424,9 +448,12 @@ class TestTeamPermissions:
             client, auth_headers, team_id, file_id, "ROLE",
             subject_role="VIEWER", read=True, write=True, share=False, delete=False, manage=False)
         assert viewer_role_permission["subjectRole"] == "VIEWER"
-        assert_effective_permissions(
+        viewer_effective = assert_effective_permissions(
             client, viewer["headers"], team_id, file_id,
             canRead=True, canWrite=True, canShare=False, canDelete=False, canManage=False)
+        assert_permission_source(
+            viewer_effective, "ROLE_OVERRIDE", file_id=file_id,
+            subject_type="ROLE", subject_role="VIEWER", inherited=False)
         assert_office_editable(client, viewer["headers"], team_id, file_id, True)
         renamed = assert_api_ok(client.put(
             f"/api/v1/teams/{team_id}/files/{file_id}",
@@ -444,9 +471,12 @@ class TestTeamPermissions:
             client, auth_headers, team_id, file_id, "USER",
             subject_user_id=viewer["userId"], read=True, write=False, share=False, delete=False, manage=False)
         assert viewer_user_permission["subjectUserId"] == viewer["userId"]
-        assert_effective_permissions(
+        viewer_effective = assert_effective_permissions(
             client, viewer["headers"], team_id, file_id,
             canRead=True, canWrite=False, canShare=False, canDelete=False, canManage=False)
+        assert_permission_source(
+            viewer_effective, "USER_OVERRIDE", file_id=file_id,
+            subject_type="USER", subject_user_id=viewer["userId"], inherited=False)
         assert_office_editable(client, viewer["headers"], team_id, file_id, False)
         assert_api_error_in(client.put(
             f"/api/v1/teams/{team_id}/files/{file_id}",
@@ -505,9 +535,12 @@ class TestTeamPermissions:
             f"/api/v1/teams/{team_id}/files/{file_id}/permissions/{viewer_user_permission['id']}",
             headers=auth_headers,
         ))
-        assert_effective_permissions(
+        viewer_effective = assert_effective_permissions(
             client, viewer["headers"], team_id, file_id,
             canRead=True, canWrite=True, canShare=False, canDelete=False, canManage=False)
+        assert_permission_source(
+            viewer_effective, "ROLE_OVERRIDE", file_id=file_id,
+            subject_type="ROLE", subject_role="VIEWER", inherited=False)
 
         for action in ["PERMISSION_UPDATE", "PERMISSION_DELETE"]:
             assert_team_audit_action(client, auth_headers, team_id, action)

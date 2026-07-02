@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -42,8 +43,10 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
     public TeamEffectivePermission effectivePermissions(Long userId, Long teamId, Long fileId) {
         TeamMemberEntity member = teamService.requireRead(userId, teamId);
         TeamEffectivePermission base = basePermissions(member.getRole());
+        List<TeamEffectivePermission.PermissionSource> sourceChain = new ArrayList<>();
+        sourceChain.add(baseSource(member.getRole(), base));
         if (fileId == null || TeamService.ROLE_OWNER.equals(member.getRole())) {
-            return base;
+            return withSources(base, "BASE_ROLE", sourceChain);
         }
         FileEntity file = requireTeamFileAnyState(teamId, fileId);
         Set<Long> seen = new HashSet<>();
@@ -53,13 +56,13 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
                     .findByTeamIdAndFileIdAndSubjectTypeAndSubjectUserId(teamId, cursor.getId(), SUBJECT_USER, userId)
                     .orElse(null);
             if (userOverride != null) {
-                return fromEntity(userOverride);
+                return fromEntity(userOverride, cursor, !Objects.equals(cursor.getId(), fileId), sourceChain);
             }
             TeamFilePermissionEntity roleOverride = permissionRepository
                     .findByTeamIdAndFileIdAndSubjectTypeAndSubjectRole(teamId, cursor.getId(), SUBJECT_ROLE, member.getRole())
                     .orElse(null);
             if (roleOverride != null) {
-                return fromEntity(roleOverride);
+                return fromEntity(roleOverride, cursor, !Objects.equals(cursor.getId(), fileId), sourceChain);
             }
             cursor = cursor.getParentId() != null
                     ? fileRepository.findById(cursor.getParentId()).orElse(null)
@@ -68,7 +71,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
                 cursor = null;
             }
         }
-        return base;
+        return withSources(base, "BASE_ROLE", sourceChain);
     }
 
     @Override
@@ -231,6 +234,72 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
                 Boolean.TRUE.equals(permission.getCanShare()),
                 Boolean.TRUE.equals(permission.getCanDelete()),
                 Boolean.TRUE.equals(permission.getCanManage()));
+    }
+
+    private TeamEffectivePermission fromEntity(
+            TeamFilePermissionEntity permission,
+            FileEntity sourceFile,
+            boolean inherited,
+            List<TeamEffectivePermission.PermissionSource> sourceChain) {
+        TeamEffectivePermission effective = fromEntity(permission);
+        List<TeamEffectivePermission.PermissionSource> resolvedChain = new ArrayList<>(sourceChain);
+        resolvedChain.add(overrideSource(permission, sourceFile, inherited));
+        String sourceType = SUBJECT_USER.equals(permission.getSubjectType()) ? "USER_OVERRIDE" : "ROLE_OVERRIDE";
+        return withSources(effective, sourceType, resolvedChain);
+    }
+
+    private TeamEffectivePermission withSources(
+            TeamEffectivePermission permission,
+            String sourceType,
+            List<TeamEffectivePermission.PermissionSource> sourceChain) {
+        return new TeamEffectivePermission(
+                permission.canRead(),
+                permission.canWrite(),
+                permission.canShare(),
+                permission.canDelete(),
+                permission.canManage(),
+                sourceType,
+                sourceChain);
+    }
+
+    private TeamEffectivePermission.PermissionSource baseSource(String role, TeamEffectivePermission permission) {
+        return new TeamEffectivePermission.PermissionSource(
+                "BASE_ROLE",
+                null,
+                null,
+                SUBJECT_ROLE,
+                null,
+                role,
+                false,
+                permission.canRead(),
+                permission.canWrite(),
+                permission.canShare(),
+                permission.canDelete(),
+                permission.canManage(),
+                "基础角色权限：" + role);
+    }
+
+    private TeamEffectivePermission.PermissionSource overrideSource(
+            TeamFilePermissionEntity permission,
+            FileEntity sourceFile,
+            boolean inherited) {
+        String sourceType = SUBJECT_USER.equals(permission.getSubjectType()) ? "USER_OVERRIDE" : "ROLE_OVERRIDE";
+        String description = (inherited ? "继承自「" + sourceFile.getFileName() + "」的" : "当前文件的")
+                + (SUBJECT_USER.equals(permission.getSubjectType()) ? "用户覆盖" : "角色覆盖");
+        return new TeamEffectivePermission.PermissionSource(
+                sourceType,
+                sourceFile.getId(),
+                sourceFile.getFileName(),
+                permission.getSubjectType(),
+                permission.getSubjectUserId(),
+                permission.getSubjectRole(),
+                inherited,
+                Boolean.TRUE.equals(permission.getCanRead()),
+                Boolean.TRUE.equals(permission.getCanWrite()),
+                Boolean.TRUE.equals(permission.getCanShare()),
+                Boolean.TRUE.equals(permission.getCanDelete()),
+                Boolean.TRUE.equals(permission.getCanManage()),
+                description);
     }
 
     private FileEntity requireTeamFileAnyState(Long teamId, Long fileId) {

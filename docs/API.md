@@ -2014,10 +2014,56 @@ Authorization: Bearer <accessToken>
 
 | 端点 | 权限 | 响应 |
 |------|------|------|
-| `GET effective-permission` | 可读 | 当前用户的 `canRead/canWrite/canShare/canDelete/canManage/isOwner` |
+| `GET effective-permission` | 可读 | 当前用户的 `canRead/canWrite/canShare/canDelete/canManage`，以及权限来源链 |
 | `GET permissions` | 可管理 | 文件权限覆盖列表 |
 | `PUT permissions` | 可管理 | 新增或更新覆盖规则 |
 | `DELETE permissions/{permissionId}` | 可管理 | 删除覆盖规则 |
+
+**GET effective-permission Response:**
+```json
+{
+  "canRead": true,
+  "canWrite": false,
+  "canShare": false,
+  "canDelete": false,
+  "canManage": false,
+  "sourceType": "ROLE_OVERRIDE",
+  "sourceChain": [
+    {
+      "type": "BASE_ROLE",
+      "fileId": null,
+      "fileName": null,
+      "subjectType": "ROLE",
+      "subjectUserId": null,
+      "subjectRole": "EDITOR",
+      "inherited": false,
+      "canRead": true,
+      "canWrite": true,
+      "canShare": true,
+      "canDelete": true,
+      "canManage": false,
+      "description": "基础角色权限：EDITOR"
+    },
+    {
+      "type": "ROLE_OVERRIDE",
+      "fileId": 20,
+      "fileName": "项目资料",
+      "subjectType": "ROLE",
+      "subjectUserId": null,
+      "subjectRole": "EDITOR",
+      "inherited": true,
+      "canRead": true,
+      "canWrite": false,
+      "canShare": false,
+      "canDelete": false,
+      "canManage": false,
+      "description": "继承自「项目资料」的角色覆盖"
+    }
+  ]
+}
+```
+
+`sourceType` 表示最终生效来源：`BASE_ROLE`、`ROLE_OVERRIDE` 或 `USER_OVERRIDE`。`sourceChain` 按解析顺序返回来源链，第一项通常是基础角色权限；后续项是最终命中的用户或角色覆盖。`inherited=true` 表示该覆盖来自父文件夹。
 
 **PUT Request Body:**
 ```json
