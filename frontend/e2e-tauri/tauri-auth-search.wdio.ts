@@ -36,7 +36,7 @@ describe('Tauri auth and context search', () => {
   it('keeps connection settings available while registering and resetting a password', async () => {
     const request = await createApiRequestContext()
     try {
-      const username = `tui${Date.now().toString(36).slice(-8)}`
+      const username = `e2e_tui_${Date.now().toString(36).slice(-8)}`
       const email = `${username}@test.local`
 
       await clearMailpit(request)

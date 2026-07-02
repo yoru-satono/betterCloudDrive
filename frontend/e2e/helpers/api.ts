@@ -734,6 +734,10 @@ export async function lowerUserQuota(username: string, bytes: number) {
   await psql(`UPDATE users SET storage_quota = ${bytes} WHERE username = '${escapeSql(username)}';`)
 }
 
+export async function cleanupE2eData() {
+  await psql(readE2eCleanupSql())
+}
+
 export async function createVersionRows(fileId: number, userId: number, versions = [1, 2]) {
   const values = versions.map(version => {
     return `
@@ -860,6 +864,18 @@ async function psql(sql: string) {
   } finally {
     client.end()
   }
+}
+
+function readE2eCleanupSql() {
+  const candidates = [
+    path.resolve(process.cwd(), 'scripts/e2e-cleanup.sql'),
+    path.resolve(process.cwd(), '../scripts/e2e-cleanup.sql'),
+  ]
+  const filePath = candidates.find(candidate => fs.existsSync(candidate))
+  if (!filePath) {
+    throw new Error(`E2E cleanup SQL not found. Checked: ${candidates.join(', ')}`)
+  }
+  return fs.readFileSync(filePath, 'utf8')
 }
 
 function escapeSql(value: string) {

@@ -13,7 +13,7 @@ test('redirects unauthenticated users to login', async ({ browser }) => {
 })
 
 test('registers with email code and logs in through the UI', async ({ page, request, e2eUser }) => {
-  const username = `ui${Date.now().toString(36).slice(-8)}`
+  const username = `e2e_ui_${Date.now().toString(36).slice(-8)}`
   const email = `${username}@test.local`
   await clearMailpit(request)
 

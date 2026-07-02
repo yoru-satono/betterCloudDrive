@@ -217,6 +217,15 @@ UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
 .\scripts\verify-all.ps1 -KeepGoing
 ```
 
+清理 E2E 和黑盒测试数据：
+
+```powershell
+.\scripts\cleanup-e2e-data.ps1 -DryRun
+.\scripts\cleanup-e2e-data.ps1
+```
+
+清理脚本通过 Docker Compose 连接 PostgreSQL，只会匹配 `@test.local` / `@test.com` 测试邮箱域和已知自动化测试用户名前缀。`-DryRun` 只输出匹配数量，不删除数据。
+
 分项命令仍可单独运行：
 
 ```powershell
