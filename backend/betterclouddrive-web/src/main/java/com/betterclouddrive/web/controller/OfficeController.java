@@ -5,11 +5,10 @@ import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.FileVersionEntity;
-import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
-import com.betterclouddrive.service.TeamService;
+import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.dto.request.OnlyOfficeCallbackRequest;
 import com.betterclouddrive.web.dto.response.OfficeConfigResponse;
@@ -36,11 +35,11 @@ public class OfficeController {
     private static final Set<Integer> SAVE_STATUSES = Set.of(2, 6);
 
     private final FileService fileService;
-    private final TeamService teamService;
     private final FileVersionService fileVersionService;
     private final StorageService storageService;
     private final OnlyOfficeService onlyOfficeService;
     private final OnlyOfficeCallbackService onlyOfficeCallbackService;
+    private final TeamPermissionService teamPermissionService;
 
     @GetMapping("/api/v1/office/files/{fileId}/config")
     public ApiResponse<OfficeConfigResponse> personalConfig(
@@ -56,11 +55,10 @@ public class OfficeController {
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long fileId) {
-        TeamMemberEntity member = teamService.requireRead(user.getUserId(), teamId);
+        teamPermissionService.requireRead(user.getUserId(), teamId, fileId);
         FileEntity file = fileService.getTeamFile(teamId, fileId);
         validateOfficeFile(file);
-        boolean editable = Set.of(TeamService.ROLE_OWNER, TeamService.ROLE_ADMIN, TeamService.ROLE_EDITOR)
-                .contains(member.getRole());
+        boolean editable = teamPermissionService.effectivePermissions(user.getUserId(), teamId, fileId).canWrite();
         return ApiResponse.success(onlyOfficeService.buildTeamConfig(user.getUserId(), teamId, file, editable));
     }
 
@@ -80,7 +78,7 @@ public class OfficeController {
             @PathVariable Long fileId,
             @RequestParam String token) {
         Long userId = onlyOfficeService.validateContentToken(token, fileId, teamId);
-        teamService.requireRead(userId, teamId);
+        teamPermissionService.requireRead(userId, teamId, fileId);
         FileEntity file = fileService.getTeamFile(teamId, fileId);
         validateOfficeFile(file);
         return streamFile(file);
@@ -93,7 +91,7 @@ public class OfficeController {
             @RequestParam String token,
             @RequestBody OnlyOfficeCallbackRequest request) {
         Long userId = onlyOfficeService.validateCallbackToken(token, fileId, teamId, request.getKey());
-        teamService.requireWrite(userId, teamId);
+        teamPermissionService.requireWrite(userId, teamId, fileId);
         if (request.getToken() != null && !request.getToken().isBlank()) {
             onlyOfficeService.validateDocumentServerToken(request.getToken());
         }

@@ -4,7 +4,7 @@ import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
-import com.betterclouddrive.service.TeamService;
+import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.dto.request.OnlyOfficeCallbackRequest;
 import com.betterclouddrive.web.service.OnlyOfficeService;
@@ -32,7 +32,7 @@ class OfficeControllerCallbackTest {
     private FileService fileService;
 
     @Mock
-    private TeamService teamService;
+    private TeamPermissionService teamPermissionService;
 
     @Mock
     private FileVersionService fileVersionService;
@@ -52,11 +52,11 @@ class OfficeControllerCallbackTest {
     void setUp() {
         controller = new OfficeController(
                 fileService,
-                teamService,
                 fileVersionService,
                 storageService,
                 onlyOfficeService,
-                onlyOfficeCallbackService);
+                onlyOfficeCallbackService,
+                teamPermissionService);
     }
 
     @Test
@@ -71,6 +71,7 @@ class OfficeControllerCallbackTest {
         Map<String, Integer> response = controller.teamCallback(10L, 1L, "callback-token", request);
 
         assertThat(response).containsEntry("error", 0);
+        verify(teamPermissionService).requireWrite(2L, 10L, 1L);
         verify(onlyOfficeService, never()).downloadEditedContent(anyString());
         verify(fileVersionService, never()).saveTeamEditedVersion(anyLong(), anyLong(), anyLong(), any());
     }

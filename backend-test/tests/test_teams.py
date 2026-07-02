@@ -1,12 +1,23 @@
 """Black-box tests for /api/v1/teams endpoints."""
 
+import base64
 import hashlib
+import json
 import re
 import uuid
 
 import pytest
 
 from tests.helpers.assert_helper import assert_api_ok, assert_paginated
+
+
+def _decode_user_id(token):
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * ((4 - len(payload) % 4) % 4)
+        return int(json.loads(base64.urlsafe_b64decode(payload))["sub"])
+    except Exception:
+        return None
 
 
 def assert_api_error_in(response, expected_codes):
@@ -34,12 +45,13 @@ def register_user(client, registration_code_for, prefix="team_user"):
         "password": password,
     })
     data = assert_api_ok(login)
+    access_token = data["accessToken"]
     return {
         "username": username,
         "password": password,
         "email": email,
-        "userId": data.get("userId"),
-        "headers": {"Authorization": f"Bearer {data['accessToken']}"},
+        "userId": data.get("userId") or _decode_user_id(access_token),
+        "headers": {"Authorization": f"Bearer {access_token}"},
     }
 
 
@@ -56,6 +68,36 @@ def add_member(client, owner_headers, team_id, username, role):
         f"/api/v1/teams/{team_id}/members",
         json={"username": username, "role": role},
         headers=owner_headers,
+    ))
+
+
+def upsert_permission(
+        client,
+        headers,
+        team_id,
+        file_id,
+        subject_type,
+        *,
+        subject_user_id=None,
+        subject_role=None,
+        read=True,
+        write=False,
+        share=False,
+        delete=False,
+        manage=False):
+    return assert_api_ok(client.put(
+        f"/api/v1/teams/{team_id}/files/{file_id}/permissions",
+        json={
+            "subjectType": subject_type,
+            "subjectUserId": subject_user_id,
+            "subjectRole": subject_role,
+            "canRead": read,
+            "canWrite": write,
+            "canShare": share,
+            "canDelete": delete,
+            "canManage": manage,
+        },
+        headers=headers,
     ))
 
 
@@ -153,6 +195,27 @@ def assert_member_role(client, headers, team_id, username, role):
     assert member is not None, f"Member {username} not found in {members}"
     assert member["role"] == role
     return member
+
+
+def assert_effective_permissions(client, headers, team_id, file_id, **expected):
+    data = assert_api_ok(client.get(
+        f"/api/v1/teams/{team_id}/files/{file_id}/effective-permission",
+        headers=headers,
+    ))
+    for key, value in expected.items():
+        assert data[key] is value, f"Expected {key}={value}, got {data}"
+    return data
+
+
+def assert_office_editable(client, headers, team_id, file_id, expected):
+    config = assert_api_ok(client.get(
+        f"/api/v1/teams/{team_id}/office/files/{file_id}/config",
+        headers=headers,
+    ))
+    assert config["editable"] is expected
+    editor_config = config["config"]["editorConfig"]
+    assert editor_config["mode"] == ("edit" if expected else "view")
+    return config
 
 
 @pytest.fixture
@@ -317,6 +380,140 @@ class TestTeamPermissions:
 
         assert_paginated(client.get(f"/api/v1/teams/{team_id}/audit-logs", headers=admin["headers"]))
         assert_api_error_in(client.get(f"/api/v1/teams/{team_id}", headers=outsider["headers"]), {403})
+
+    @pytest.mark.admin
+    def test_permission_matrix_overrides_inheritance_and_office_editing(
+            self, client, auth_headers, admin_headers, test_user, registration_code_for, sample_file):
+        team_admin = register_user(client, registration_code_for, "matrix_admin")
+        editor = register_user(client, registration_code_for, "matrix_editor")
+        viewer = register_user(client, registration_code_for, "matrix_viewer")
+        team = create_team(client, auth_headers)
+        team_id = team["id"]
+        add_member(client, auth_headers, team_id, team_admin["username"], "ADMIN")
+        add_member(client, auth_headers, team_id, editor["username"], "EDITOR")
+        add_member(client, auth_headers, team_id, viewer["username"], "VIEWER")
+
+        folder = create_team_folder(client, auth_headers, team_id)
+        uploaded = upload_team_file(client, auth_headers, team_id, folder["id"], sample_file, name="matrix.docx")
+        file_id = uploaded["fileId"]
+
+        assert_effective_permissions(
+            client, team_admin["headers"], team_id, file_id,
+            canRead=True, canWrite=True, canShare=True, canDelete=True, canManage=True)
+        assert_effective_permissions(
+            client, editor["headers"], team_id, file_id,
+            canRead=True, canWrite=True, canShare=True, canDelete=True, canManage=False)
+        assert_effective_permissions(
+            client, viewer["headers"], team_id, file_id,
+            canRead=True, canWrite=False, canShare=False, canDelete=False, canManage=False)
+
+        upsert_permission(
+            client, auth_headers, team_id, folder["id"], "ROLE",
+            subject_role="EDITOR", read=True, write=False, share=False, delete=False, manage=False)
+        assert_effective_permissions(
+            client, editor["headers"], team_id, file_id,
+            canRead=True, canWrite=False, canShare=False, canDelete=False, canManage=False)
+        assert_api_error_in(client.put(
+            f"/api/v1/teams/{team_id}/files/{file_id}",
+            json={"newName": "editor-blocked.docx"},
+            headers=editor["headers"],
+        ), {403})
+        assert_office_editable(client, editor["headers"], team_id, file_id, False)
+
+        viewer_role_permission = upsert_permission(
+            client, auth_headers, team_id, file_id, "ROLE",
+            subject_role="VIEWER", read=True, write=True, share=False, delete=False, manage=False)
+        assert viewer_role_permission["subjectRole"] == "VIEWER"
+        assert_effective_permissions(
+            client, viewer["headers"], team_id, file_id,
+            canRead=True, canWrite=True, canShare=False, canDelete=False, canManage=False)
+        assert_office_editable(client, viewer["headers"], team_id, file_id, True)
+        renamed = assert_api_ok(client.put(
+            f"/api/v1/teams/{team_id}/files/{file_id}",
+            json={"newName": "matrix-viewer.docx"},
+            headers=viewer["headers"],
+        ))
+        assert renamed["fileName"] == "matrix-viewer.docx"
+        assert_api_error_in(client.post(
+            f"/api/v1/teams/{team_id}/shares",
+            json={"fileId": file_id},
+            headers=viewer["headers"],
+        ), {403})
+
+        viewer_user_permission = upsert_permission(
+            client, auth_headers, team_id, file_id, "USER",
+            subject_user_id=viewer["userId"], read=True, write=False, share=False, delete=False, manage=False)
+        assert viewer_user_permission["subjectUserId"] == viewer["userId"]
+        assert_effective_permissions(
+            client, viewer["headers"], team_id, file_id,
+            canRead=True, canWrite=False, canShare=False, canDelete=False, canManage=False)
+        assert_office_editable(client, viewer["headers"], team_id, file_id, False)
+        assert_api_error_in(client.put(
+            f"/api/v1/teams/{team_id}/files/{file_id}",
+            json={"newName": "viewer-blocked.docx"},
+            headers=viewer["headers"],
+        ), {403})
+
+        permissions = assert_api_ok(client.get(
+            f"/api/v1/teams/{team_id}/files/{file_id}/permissions",
+            headers=auth_headers,
+        ))
+        assert any(item["id"] == viewer_role_permission["id"] for item in permissions)
+        assert any(item["id"] == viewer_user_permission["id"] for item in permissions)
+
+        assert_api_error_in(client.put(
+            f"/api/v1/teams/{team_id}/files/{file_id}/permissions",
+            json={
+                "subjectType": "ROLE",
+                "subjectRole": "VIEWER",
+                "canRead": False,
+                "canWrite": True,
+                "canShare": False,
+                "canDelete": False,
+                "canManage": False,
+            },
+            headers=auth_headers,
+        ), {400})
+        assert_api_error_in(client.put(
+            f"/api/v1/teams/{team_id}/files/{file_id}/permissions",
+            json={
+                "subjectType": "USER",
+                "subjectUserId": test_user["userId"],
+                "canRead": True,
+                "canWrite": True,
+                "canShare": True,
+                "canDelete": True,
+                "canManage": True,
+            },
+            headers=auth_headers,
+        ), {400})
+        assert_api_error_in(client.put(
+            f"/api/v1/teams/{team_id}/files/{file_id}/permissions",
+            json={
+                "subjectType": "ROLE",
+                "subjectRole": "ADMIN",
+                "canRead": True,
+                "canWrite": True,
+                "canShare": True,
+                "canDelete": True,
+                "canManage": False,
+            },
+            headers=team_admin["headers"],
+        ), {400})
+
+        assert_api_ok(client.delete(
+            f"/api/v1/teams/{team_id}/files/{file_id}/permissions/{viewer_user_permission['id']}",
+            headers=auth_headers,
+        ))
+        assert_effective_permissions(
+            client, viewer["headers"], team_id, file_id,
+            canRead=True, canWrite=True, canShare=False, canDelete=False, canManage=False)
+
+        for action in ["PERMISSION_UPDATE", "PERMISSION_DELETE"]:
+            assert_team_audit_action(client, auth_headers, team_id, action)
+
+        assert_api_ok(client.delete(f"/api/v1/teams/{team_id}", headers=auth_headers))
+        assert_api_ok(client.delete(f"/api/v1/admin/teams/{team_id}/purge", headers=admin_headers))
 
 
 class TestTeamFilesSharesTagsFavoritesAudit:
