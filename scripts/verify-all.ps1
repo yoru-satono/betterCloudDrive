@@ -1,9 +1,12 @@
 [CmdletBinding()]
 param(
+    [ValidateSet("all", "backend", "blackbox", "web", "tauri", "android", "office")]
+    [string[]]$Module = @("all"),
     [switch]$SkipDockerBuild,
     [switch]$SkipTauri,
     [switch]$SkipAndroid,
     [switch]$SkipOnlyOffice,
+    [switch]$SkipE2ECleanup,
     [string]$AndroidSerial = "localhost:16416",
     [switch]$KeepGoing
 )
@@ -16,6 +19,25 @@ Set-Location $RepoRoot
 
 $script:Results = New-Object System.Collections.Generic.List[object]
 $script:HadFailure = $false
+$script:StackStarted = $false
+
+$SelectedModules = New-Object "System.Collections.Generic.HashSet[string]" ([System.StringComparer]::OrdinalIgnoreCase)
+foreach ($name in $Module) {
+    [void]$SelectedModules.Add($name)
+}
+$RunAll = $SelectedModules.Contains("all")
+$RunBackend = $RunAll -or $SelectedModules.Contains("backend")
+$RunBlackbox = $RunAll -or $SelectedModules.Contains("blackbox")
+$RunWeb = $RunAll -or $SelectedModules.Contains("web")
+$RunTauri = ($RunAll -or $SelectedModules.Contains("tauri")) -and -not $SkipTauri
+$RunAndroid = ($RunAll -or $SelectedModules.Contains("android")) -and -not $SkipAndroid
+$RunOffice = -not $RunAll -and $SelectedModules.Contains("office") -and -not $SkipOnlyOffice
+$RunOfficeInWebE2E = $RunAll -and -not $SkipOnlyOffice
+$NeedsBackendHttp = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice
+$NeedsFrontendHttp = $RunWeb -or $RunTauri -or $RunOffice
+$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice
+$NeedsOnlyOffice = $RunOffice -or $RunOfficeInWebE2E
+$ShouldCleanupE2E = -not $SkipE2ECleanup -and ($RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice)
 
 function Add-Result {
     param(
@@ -65,6 +87,30 @@ function Invoke-Step {
         if (-not $KeepGoing) {
             throw
         }
+    }
+}
+
+function Invoke-CleanupStep {
+    if (-not $ShouldCleanupE2E -or -not $script:StackStarted) {
+        return
+    }
+    Write-Host ""
+    Write-Host "==> E2E data cleanup"
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    try {
+        & (Join-Path $ScriptRoot "cleanup-e2e-data.ps1")
+        if ($LASTEXITCODE -ne 0) {
+            throw "E2E cleanup failed with exit code $LASTEXITCODE"
+        }
+        $timer.Stop()
+        Add-Result -Name "E2E data cleanup" -Status "PASS" -Elapsed $timer.Elapsed
+        Write-Host "<== PASS E2E data cleanup ($([math]::Round($timer.Elapsed.TotalSeconds, 1))s)"
+    } catch {
+        $timer.Stop()
+        $script:HadFailure = $true
+        Add-Result -Name "E2E data cleanup" -Status "FAIL" -Elapsed $timer.Elapsed -Message $_.Exception.Message
+        Write-Host "<== FAIL E2E data cleanup ($([math]::Round($timer.Elapsed.TotalSeconds, 1))s)"
+        Write-Host $_.Exception.Message
     }
 }
 
@@ -152,6 +198,8 @@ function Invoke-WithEnv {
 }
 
 try {
+    Write-Host "Selected modules: $($SelectedModules -join ', ')"
+
     Invoke-Step "Prepare env files" {
         Initialize-EnvFiles
     }
@@ -162,61 +210,92 @@ try {
         } else {
             Invoke-External "docker" @("compose", "up", "-d", "--build")
         }
+        $script:StackStarted = $true
     }
 
     Invoke-Step "Wait for services" {
-        Wait-Http "Backend" "http://127.0.0.1:8080/actuator/health"
-        Wait-Http "Frontend" "http://127.0.0.1:3000"
-        Wait-Http "Mailpit" "http://127.0.0.1:8025/api/v1/messages"
-        if (-not $SkipOnlyOffice) {
+        if ($NeedsBackendHttp) {
+            Wait-Http "Backend" "http://127.0.0.1:8080/actuator/health"
+        }
+        if ($NeedsFrontendHttp) {
+            Wait-Http "Frontend" "http://127.0.0.1:3000"
+        }
+        if ($NeedsMailpit) {
+            Wait-Http "Mailpit" "http://127.0.0.1:8025/api/v1/messages"
+        }
+        if ($NeedsOnlyOffice) {
             Wait-Http "OnlyOffice" "http://127.0.0.1:8082/healthcheck"
         }
     }
 
-    Invoke-Step "Backend unit tests" {
-        Invoke-InDirectory "backend" {
-            Invoke-External "mvn" @("test")
+    if ($RunBackend) {
+        Invoke-Step "Backend unit tests" {
+            Invoke-InDirectory "backend" {
+                Invoke-External "mvn" @("test")
+            }
         }
     }
 
-    Invoke-Step "Backend black-box tests" {
-        Invoke-InDirectory "backend-test" {
-            $pytest = Join-Path (Get-Location) ".venv/Scripts/pytest.exe"
-            if (Test-Path $pytest) {
-                Invoke-External $pytest @("-v")
-            } elseif (Get-Command "uv" -ErrorAction SilentlyContinue) {
-                Invoke-WithEnv @{ UV_CACHE_DIR = "../.uv-cache" } {
-                    Invoke-External "uv" @("run", "pytest", "-v")
+    if ($RunBlackbox) {
+        Invoke-Step "Backend black-box tests" {
+            Invoke-InDirectory "backend-test" {
+                $pytest = Join-Path (Get-Location) ".venv/Scripts/pytest.exe"
+                if (Test-Path $pytest) {
+                    Invoke-External $pytest @("-v")
+                } elseif (Get-Command "uv" -ErrorAction SilentlyContinue) {
+                    Invoke-WithEnv @{ UV_CACHE_DIR = "../.uv-cache" } {
+                        Invoke-External "uv" @("run", "pytest", "-v")
+                    }
+                } else {
+                    Invoke-External "python" @("-m", "pytest", "-v")
                 }
-            } else {
-                Invoke-External "python" @("-m", "pytest", "-v")
             }
         }
     }
 
-    Invoke-Step "Frontend unit tests" {
-        Invoke-InDirectory "frontend" {
-            Invoke-External "npm" @("run", "test")
-        }
-    }
-
-    Invoke-Step "Web E2E tests" {
-        Invoke-InDirectory "frontend" {
-            $webEnv = @{
-                E2E_USE_DOCKER = "1"
-                E2E_BASE_URL = "http://127.0.0.1:3000"
-                E2E_BACKEND_URL = "http://127.0.0.1:8080"
-            }
-            if (-not $SkipOnlyOffice) {
-                $webEnv["E2E_ONLYOFFICE"] = "1"
-            }
-            Invoke-WithEnv $webEnv {
-                Invoke-External "npm" @("run", "test:e2e:docker")
+    if ($RunWeb) {
+        Invoke-Step "Frontend unit tests" {
+            Invoke-InDirectory "frontend" {
+                Invoke-External "npm" @("run", "test")
             }
         }
     }
 
-    if (-not $SkipTauri) {
+    if ($RunWeb) {
+        Invoke-Step "Web E2E tests" {
+            Invoke-InDirectory "frontend" {
+                $webEnv = @{
+                    E2E_USE_DOCKER = "1"
+                    E2E_BASE_URL = "http://127.0.0.1:3000"
+                    E2E_BACKEND_URL = "http://127.0.0.1:8080"
+                    E2E_ONLYOFFICE = "0"
+                }
+                if ($RunOfficeInWebE2E) {
+                    $webEnv["E2E_ONLYOFFICE"] = "1"
+                }
+                Invoke-WithEnv $webEnv {
+                    Invoke-External "npm" @("run", "test:e2e:docker")
+                }
+            }
+        }
+    }
+
+    if ($RunOffice) {
+        Invoke-Step "OnlyOffice E2E tests" {
+            Invoke-InDirectory "frontend" {
+                Invoke-WithEnv @{
+                    E2E_USE_DOCKER = "1"
+                    E2E_BASE_URL = "http://127.0.0.1:3000"
+                    E2E_BACKEND_URL = "http://127.0.0.1:8080"
+                    E2E_ONLYOFFICE = "1"
+                } {
+                    Invoke-External "npx" @("playwright", "test", "onlyoffice-personal-preview.e2e.ts", "onlyoffice-edit-save.e2e.ts")
+                }
+            }
+        }
+    }
+
+    if ($RunTauri) {
         Invoke-Step "Tauri E2E build" {
             Invoke-InDirectory "frontend" {
                 Invoke-External "npm" @("run", "tauri:e2e:build")
@@ -230,7 +309,7 @@ try {
         }
     }
 
-    if (-not $SkipAndroid) {
+    if ($RunAndroid) {
         Invoke-Step "Android unit tests" {
             Invoke-InDirectory "android" {
                 Invoke-External ".\gradlew.bat" @("testDebugUnitTest")
@@ -249,6 +328,7 @@ try {
         }
     }
 } finally {
+    Invoke-CleanupStep
     Write-Host ""
     Write-Host "Validation summary"
     $script:Results | Format-Table -AutoSize

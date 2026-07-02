@@ -215,7 +215,12 @@ UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
 .\scripts\verify-all.ps1 -SkipDockerBuild
 .\scripts\verify-all.ps1 -AndroidSerial localhost:16416
 .\scripts\verify-all.ps1 -KeepGoing
+.\scripts\verify-all.ps1 -Module web
+.\scripts\verify-all.ps1 -Module backend,blackbox
+.\scripts\verify-all.ps1 -Module office -SkipDockerBuild
 ```
+
+`-Module` 可选 `all`、`backend`、`blackbox`、`web`、`tauri`、`android`、`office`。默认是 `all`，保持完整验证；`web` 子集只跑前端单测和非 OnlyOffice Web E2E，`office` 子集单独跑 OnlyOffice Web E2E。除非传入 `-SkipE2ECleanup`，脚本结束时会自动调用 E2E 数据清理。
 
 清理 E2E 和黑盒测试数据：
 

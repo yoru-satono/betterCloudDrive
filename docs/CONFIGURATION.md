@@ -588,19 +588,31 @@ Docker Compose 使用这些 volume：
 | 后端 | 执行 `backend/mvn test` |
 | 黑盒 API | 执行 `backend-test` pytest；admin 测试会自动创建用户并提升为 `ROLE_ADMIN` |
 | Web | 执行前端单测和 Docker Web E2E；默认开启 `E2E_ONLYOFFICE=1` |
+| Office | 通过 `-Module office` 单独执行 OnlyOffice Web E2E |
 | Tauri | 构建 Tauri release 测试包并运行 WebDriver E2E |
 | Android | 执行 Android 单元测试和连接设备 E2E |
+| 清理 | 默认在脚本结束时调用 `scripts/cleanup-e2e-data.ps1` 清理 E2E/黑盒测试数据 |
 
 常用参数：
 
 | 参数 | 说明 |
 |------|------|
+| `-Module <name[]>` | 按模块运行，支持 `all`、`backend`、`blackbox`、`web`、`tauri`、`android`、`office`，默认 `all` |
 | `-SkipDockerBuild` | 启动 Docker 栈但不重新 build 镜像 |
 | `-SkipTauri` | 跳过 Tauri 构建和 E2E |
 | `-SkipAndroid` | 跳过 Android 单元测试和 Android E2E |
 | `-SkipOnlyOffice` | 不等待 OnlyOffice，Web E2E 不设置 `E2E_ONLYOFFICE=1` |
+| `-SkipE2ECleanup` | 验证结束后保留 E2E/黑盒测试数据，便于调试 |
 | `-AndroidSerial <serial>` | 指定 Android E2E 设备，默认 `localhost:16416` |
 | `-KeepGoing` | 单个阶段失败后继续执行剩余阶段，最后汇总失败并返回非零退出码 |
+
+分层验证示例：
+
+```powershell
+.\scripts\verify-all.ps1 -Module web
+.\scripts\verify-all.ps1 -Module backend,blackbox
+.\scripts\verify-all.ps1 -Module office -SkipDockerBuild
+```
 
 Android 注意事项：
 
