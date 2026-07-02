@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -223,7 +225,6 @@ class TeamFilesViewModel @Inject constructor(
 
     fun renameFile(fileId: Long, newName: String) {
         val team = _uiState.value.team ?: return
-        if (!_uiState.value.currentPermission.canWrite) return
         viewModelScope.launch {
             when (val result = teamRepository.renameFile(team.id, fileId, newName)) {
                 is NetworkResult.Success -> {
@@ -238,7 +239,6 @@ class TeamFilesViewModel @Inject constructor(
 
     fun deleteFile(fileId: Long) {
         val team = _uiState.value.team ?: return
-        if (!_uiState.value.currentPermission.canDelete) return
         viewModelScope.launch {
             when (val result = teamRepository.deleteFiles(team.id, listOf(fileId))) {
                 is NetworkResult.Success -> {
@@ -254,7 +254,6 @@ class TeamFilesViewModel @Inject constructor(
     fun createShare(fileId: Long) {
         val state = _uiState.value
         val team = state.team ?: return
-        if (!state.currentPermission.canShare) return
         viewModelScope.launch {
             when (val result = teamRepository.createShare(team.id, fileId)) {
                 is NetworkResult.Success -> _events.emit(UiEvent.ShowSnackbar("团队分享已创建: ${result.data.shareCode}"))
@@ -350,6 +349,11 @@ class TeamFilesViewModel @Inject constructor(
             _events.emit(UiEvent.ShowSnackbar("已加入传输队列"))
             transferRepository.start(task.id, viewModelScope)
         }
+    }
+
+    suspend fun permissionForFile(fileId: Long): TeamEffectivePermission {
+        val team = _uiState.value.team ?: return TeamEffectivePermission()
+        return permissionFor(team.id, fileId, team)
     }
 
     private suspend fun loadFilesInternal(teamId: Long, folderId: Long?) {
@@ -452,6 +456,8 @@ fun TeamFilesScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<FileItem?>(null) }
     var menuTarget by remember { mutableStateOf<FileItem?>(null) }
+    var menuRequestId by remember { mutableStateOf(0) }
+    var menuPermission by remember { mutableStateOf<TeamEffectivePermission?>(null) }
     var showTagsDialog by remember { mutableStateOf(false) }
     var tagsTarget by remember { mutableStateOf<FileItem?>(null) }
     var pendingDownload by remember { mutableStateOf<FileItem?>(null) }
@@ -466,6 +472,13 @@ fun TeamFilesScreen(
     }
 
     LaunchedEffect(teamId, folderId) { viewModel.open(teamId, folderId) }
+    LaunchedEffect(menuTarget?.id, menuRequestId) {
+        val target = menuTarget
+        menuPermission = null
+        if (target != null) {
+            menuPermission = viewModel.permissionForFile(target.id)
+        }
+    }
     LaunchedEffect(events) {
         if (events is UiEvent.ShowSnackbar) {
             snackbarHostState.showSnackbar((events as UiEvent.ShowSnackbar).message)
@@ -586,7 +599,10 @@ fun TeamFilesScreen(
                                         onOpenPreview(teamId, file)
                                     }
                                 },
-                                onLongClick = { menuTarget = file },
+                                onLongClick = {
+                                    menuTarget = file
+                                    menuRequestId += 1
+                                },
                             )
                         }
                     }
@@ -596,12 +612,13 @@ fun TeamFilesScreen(
     }
 
     val target = menuTarget
-    if (target != null) {
+    val targetPermission = menuPermission
+    if (target != null && targetPermission != null) {
         TeamFileMenu(
             file = target,
-            canWrite = uiState.currentPermission.canWrite,
-            canShare = uiState.currentPermission.canShare,
-            canDelete = uiState.currentPermission.canDelete,
+            canWrite = targetPermission.canWrite,
+            canShare = targetPermission.canShare,
+            canDelete = targetPermission.canDelete,
             onDismiss = { menuTarget = null },
             onOpen = {
                 if (FileTypeHelper.isOffice(target.fileName)) onOpenOffice(teamId, target) else onOpenPreview(teamId, target)
@@ -814,7 +831,7 @@ private fun TeamFileMenu(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        Column(modifier = Modifier.padding(bottom = 32.dp)) {
+        Column(modifier = Modifier.padding(bottom = 32.dp).verticalScroll(rememberScrollState())) {
             if (!file.isFolder) {
                 MenuItem(
                     title = if (FileTypeHelper.isOffice(file.fileName)) "打开文档" else "预览",
@@ -827,8 +844,8 @@ private fun TeamFileMenu(
             }
             if (canShare) MenuItem("创建分享", Icons.Default.Share, "team-file-menu-share", onShare)
             MenuItem("收藏", Icons.Default.Star, "team-file-menu-favorite", onFavorite)
-            MenuItem("标签", Icons.Default.Settings, "team-file-menu-tags", onTags)
             if (canWrite) {
+                MenuItem("标签", Icons.Default.Settings, "team-file-menu-tags", onTags)
                 MenuItem("重命名", Icons.Default.Edit, "team-file-menu-rename", onRename)
             }
             if (canDelete) {

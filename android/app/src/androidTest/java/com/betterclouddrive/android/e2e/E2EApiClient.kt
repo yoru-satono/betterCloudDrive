@@ -157,6 +157,58 @@ class E2EApiClient(
         postJson("$baseUrl/teams/$teamId/members", JSONObject().put("username", username).put("role", role), token)
     }
 
+    fun upsertTeamFileRolePermission(
+        token: String,
+        teamId: Long,
+        fileId: Long,
+        role: String,
+        canRead: Boolean = true,
+        canWrite: Boolean = false,
+        canShare: Boolean = false,
+        canDelete: Boolean = false,
+        canManage: Boolean = false,
+    ) {
+        upsertTeamFilePermission(
+            token = token,
+            teamId = teamId,
+            fileId = fileId,
+            subjectType = "ROLE",
+            subjectUserId = null,
+            subjectRole = role,
+            canRead = canRead,
+            canWrite = canWrite,
+            canShare = canShare,
+            canDelete = canDelete,
+            canManage = canManage,
+        )
+    }
+
+    fun upsertTeamFileUserPermission(
+        token: String,
+        teamId: Long,
+        fileId: Long,
+        userId: Long,
+        canRead: Boolean = true,
+        canWrite: Boolean = false,
+        canShare: Boolean = false,
+        canDelete: Boolean = false,
+        canManage: Boolean = false,
+    ) {
+        upsertTeamFilePermission(
+            token = token,
+            teamId = teamId,
+            fileId = fileId,
+            subjectType = "USER",
+            subjectUserId = userId,
+            subjectRole = null,
+            canRead = canRead,
+            canWrite = canWrite,
+            canShare = canShare,
+            canDelete = canDelete,
+            canManage = canManage,
+        )
+    }
+
     fun createTeamInvite(token: String, teamId: Long, email: String, role: String = "VIEWER"): E2ETeamInvite {
         return parseTeamInvite(
             postJson("$baseUrl/teams/$teamId/invites", JSONObject().put("email", email).put("role", role), token)
@@ -631,6 +683,39 @@ class E2EApiClient(
             .post(body.toString().toRequestBody(jsonMediaType))
         if (token != null) builder.header("Authorization", "Bearer $token")
         return expectApiSuccess(client.newCall(builder.build()).execute())
+    }
+
+    private fun putJson(url: String, body: JSONObject, token: String? = null): JSONObject {
+        val builder = Request.Builder()
+            .url(url)
+            .put(body.toString().toRequestBody(jsonMediaType))
+        if (token != null) builder.header("Authorization", "Bearer $token")
+        return expectApiSuccess(client.newCall(builder.build()).execute())
+    }
+
+    private fun upsertTeamFilePermission(
+        token: String,
+        teamId: Long,
+        fileId: Long,
+        subjectType: String,
+        subjectUserId: Long?,
+        subjectRole: String?,
+        canRead: Boolean,
+        canWrite: Boolean,
+        canShare: Boolean,
+        canDelete: Boolean,
+        canManage: Boolean,
+    ) {
+        val body = JSONObject()
+            .put("subjectType", subjectType)
+            .put("canRead", canRead)
+            .put("canWrite", canWrite)
+            .put("canShare", canShare)
+            .put("canDelete", canDelete)
+            .put("canManage", canManage)
+        if (subjectUserId != null) body.put("subjectUserId", subjectUserId)
+        if (subjectRole != null) body.put("subjectRole", subjectRole)
+        putJson("$baseUrl/teams/$teamId/files/$fileId/permissions", body, token)
     }
 
     private fun expectHttpJson(response: okhttp3.Response): JSONObject {

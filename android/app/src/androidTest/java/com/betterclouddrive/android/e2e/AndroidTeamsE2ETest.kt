@@ -76,6 +76,55 @@ class AndroidTeamsE2ETest {
     }
 
     @Test
+    fun teamPermissionMatrixControlsFileMenuActions() {
+        val editor = api.createUser()
+        val team = api.createTeam(owner.accessToken, uniqueName("matrix_team"))
+        val file = api.uploadTeamTextFile(owner.accessToken, team.id, null, uniqueName("matrix_file") + ".txt", "matrix content")
+        api.addTeamMember(owner.accessToken, team.id, editor.username, "EDITOR")
+        api.upsertTeamFileRolePermission(
+            token = owner.accessToken,
+            teamId = team.id,
+            fileId = file.id,
+            role = "EDITOR",
+            canRead = true,
+            canWrite = false,
+            canShare = false,
+            canDelete = false,
+            canManage = false,
+        )
+
+        composeRule.loginViaUi(editor)
+        openTeam(team)
+        composeRule.waitForTag("file-row-${file.fileName}").performTouchInput { longClick() }
+        composeRule.waitForTag("team-file-menu-open").assertIsDisplayed()
+        composeRule.waitForTag("team-file-menu-download").assertIsDisplayed()
+        assertTagAbsent("team-file-menu-share")
+        assertTagAbsent("team-file-menu-tags")
+        assertTagAbsent("team-file-menu-rename")
+        assertTagAbsent("team-file-menu-delete")
+
+        closeTeamFileMenu()
+
+        api.upsertTeamFileUserPermission(
+            token = owner.accessToken,
+            teamId = team.id,
+            fileId = file.id,
+            userId = editor.userId,
+            canRead = true,
+            canWrite = true,
+            canShare = true,
+            canDelete = true,
+            canManage = false,
+        )
+
+        composeRule.waitForTag("file-row-${file.fileName}").performTouchInput { longClick() }
+        assertTagExists("team-file-menu-share")
+        assertTagExists("team-file-menu-tags")
+        assertTagExists("team-file-menu-rename")
+        assertTagExists("team-file-menu-delete")
+    }
+
+    @Test
     fun teamSettingsSharesRecycleBinAndVersionsAreReachable() {
         val member = api.createUser()
         val team = api.createTeam(owner.accessToken, uniqueName("settings_team"))
@@ -269,6 +318,28 @@ class AndroidTeamsE2ETest {
     private fun openTeamOfficeFile(file: E2EFile) {
         composeRule.waitForTag("file-row-${file.fileName}").performTouchInput { longClick() }
         composeRule.waitForTag("team-file-menu-open").performClick()
+    }
+
+    private fun closeTeamFileMenu() {
+        AndroidSystemUi().device.pressBack()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("team-file-menu-open", useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .isEmpty()
+        }
+    }
+
+    private fun assertTagAbsent(tag: String) {
+        assertTrue(
+            "$tag should not be visible",
+            composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
+        )
+    }
+
+    private fun assertTagExists(tag: String) {
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            composeRule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     private fun waitForTeamFilesLoaded() {
