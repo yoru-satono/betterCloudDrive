@@ -9,7 +9,7 @@ import {
   startQueuedDesktopFolderDownload,
 } from './desktopDownload'
 
-const getFileNameFromDisposition = (disposition: string | undefined, fallback: string) => {
+export const getFileNameFromDisposition = (disposition: string | undefined, fallback: string) => {
   if (!disposition) return fallback
   const encoded = disposition.match(/filename\*=[^']*''([^;]+)/i)?.[1]
   if (encoded) return decodeURIComponent(encoded)
@@ -17,8 +17,12 @@ const getFileNameFromDisposition = (disposition: string | undefined, fallback: s
   return plain ? decodeURIComponent(plain) : fallback
 }
 
-const saveBlobResponse = async (response: { data: Blob; headers: Record<string, unknown> }, fallbackFileName: string) => {
-  const contentType = String(response.headers['content-type'] || '')
+function responseHeader(headers: Record<string, unknown> | undefined, name: string) {
+  return String(headers?.[name] ?? headers?.[name.toLowerCase()] ?? '')
+}
+
+export const saveBlobResponse = async (response: { data: Blob; headers?: Record<string, unknown> }, fallbackFileName: string) => {
+  const contentType = responseHeader(response.headers, 'content-type')
   if (contentType.includes('application/json')) {
     const payload = JSON.parse(await response.data.text()) as { message?: string }
     throw new Error(payload.message || '下载失败')
@@ -27,7 +31,7 @@ const saveBlobResponse = async (response: { data: Blob; headers: Record<string, 
   const url = URL.createObjectURL(response.data)
   const link = document.createElement('a')
   link.href = url
-  link.download = getFileNameFromDisposition(String(response.headers['content-disposition'] || ''), fallbackFileName)
+  link.download = getFileNameFromDisposition(responseHeader(response.headers, 'content-disposition'), fallbackFileName)
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)

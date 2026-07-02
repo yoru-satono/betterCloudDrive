@@ -6,6 +6,7 @@ import OModal from '@/components/base/OModal.vue'
 import OSpinner from '@/components/base/OSpinner.vue'
 import { useFormatters } from '@/composables/useFormatters'
 import * as adminApi from '@/api/admin'
+import { saveBlobResponse } from '@/api/download'
 import { toast } from 'vue-sonner'
 import type { AdminTeam } from '@/api/admin'
 import type { FileEntity } from '@/types/file'
@@ -142,14 +143,7 @@ async function exportAuditLogs() {
     targetType: teamAuditTargetType.value.trim() || undefined,
     result: teamAuditResult.value === '' ? undefined : Number(teamAuditResult.value),
   })
-  const url = URL.createObjectURL(response.data)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `team-${detailTeam.value.id}-audit.csv`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  await saveBlobResponse(response, `team-${detailTeam.value.id}-audit.csv`)
   toast.success('审计日志已导出')
 }
 

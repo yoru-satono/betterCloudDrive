@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { toast } from 'vue-sonner'
 import api from '@/api/client'
-import { downloadFile, downloadFolderZip, downloadSharedFile, downloadSharedFolderZip } from '@/api/download'
+import {
+  downloadFile,
+  downloadFolderZip,
+  downloadSharedFile,
+  downloadSharedFolderZip,
+  getFileNameFromDisposition,
+} from '@/api/download'
 import * as desktopDownload from '@/api/desktopDownload'
 
 vi.mock('@/api/client', () => ({
@@ -71,6 +77,12 @@ describe('downloadFile', () => {
     await downloadFile(7, 'fallback.txt')
 
     expect(toastError).toHaveBeenCalledWith('network down')
+  })
+
+  it('parses filenames from Content-Disposition headers', () => {
+    expect(getFileNameFromDisposition('attachment; filename="team-audit.csv"', 'fallback.csv')).toBe('team-audit.csv')
+    expect(getFileNameFromDisposition("attachment; filename*=UTF-8''team-%E5%AE%A1%E8%AE%A1.csv", 'fallback.csv')).toBe('team-审计.csv')
+    expect(getFileNameFromDisposition(undefined, 'fallback.csv')).toBe('fallback.csv')
   })
 
   it('uses the desktop file save flow in Tauri runtime', async () => {

@@ -10,6 +10,7 @@ import OSpinner from '@/components/base/OSpinner.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useFormatters } from '@/composables/useFormatters'
 import * as teamsApi from '@/api/teams'
+import { saveBlobResponse } from '@/api/download'
 import { useAuthStore } from '@/stores/auth'
 import { useTeamsStore } from '@/stores/teams'
 import { buildShareUrl } from '@/config/runtime'
@@ -163,14 +164,7 @@ async function exportAuditLogs() {
     targetType: auditTargetType.value.trim() || undefined,
     result: auditResult.value === '' ? undefined : Number(auditResult.value),
   })
-  const url = URL.createObjectURL(response.data)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `team-${teamId.value}-audit.csv`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  await saveBlobResponse(response, `team-${teamId.value}-audit.csv`)
   toast.success('审计日志已导出')
 }
 

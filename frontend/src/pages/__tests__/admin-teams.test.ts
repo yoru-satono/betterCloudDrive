@@ -147,7 +147,13 @@ beforeEach(() => {
   listTeamMembers.mockReset().mockResolvedValue({ data: { data: [member()] } })
   listTeamFiles.mockReset().mockResolvedValue(page([file()]))
   listTeamAuditLogs.mockReset().mockResolvedValue(page([auditLog()]))
-  exportTeamAuditLogs.mockReset().mockResolvedValue({ data: new Blob(['audit'], { type: 'text/csv' }) })
+  exportTeamAuditLogs.mockReset().mockResolvedValue({
+    data: new Blob(['audit'], { type: 'text/csv' }),
+    headers: {
+      'content-type': 'text/csv',
+      'content-disposition': 'attachment; filename="admin-team-audit.csv"',
+    },
+  })
 })
 
 describe('AdminTeams', () => {
