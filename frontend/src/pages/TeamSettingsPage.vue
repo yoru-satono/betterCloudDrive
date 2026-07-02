@@ -747,8 +747,14 @@ onMounted(async () => {
 
     <OModal title="编辑团队分享" :open="editOpen" @close="editOpen = false">
       <div class="share-edit">
-        <OInput v-model="editMaxVisits" label="访问次数限制" type="number" placeholder="留空表示不限" />
-        <OInput v-model="editExpireAt" label="过期时间" type="datetime-local" />
+        <div class="share-edit__field">
+          <OInput v-model="editMaxVisits" label="访问次数限制" type="number" placeholder="留空表示不限" />
+          <OButton variant="ghost" size="sm" @click="editMaxVisits = ''">清空访问次数</OButton>
+        </div>
+        <div class="share-edit__field">
+          <OInput v-model="editExpireAt" label="过期时间" type="datetime-local" />
+          <OButton variant="ghost" size="sm" @click="editExpireAt = ''">清空过期时间</OButton>
+        </div>
         <OInput v-model="editPassword" label="新访问密码" type="text" placeholder="留空表示不修改" />
         <label class="share-edit__check">
           <input v-model="editClearPassword" type="checkbox" />
@@ -1043,6 +1049,12 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.share-edit__field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
 }
 .share-edit__check {
   display: flex;
