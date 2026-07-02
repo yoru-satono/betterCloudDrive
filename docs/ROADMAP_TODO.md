@@ -337,7 +337,8 @@
 
 - 目标：浏览器覆盖团队核心用户流程。
 - 范围：团队设置、邀请、文件、分享、标签、收藏、回收站、通知。
-- 验收：Playwright 稳定通过并纳入一键验证。
+- 状态：已完成。
+- 验收：`npm run test:e2e -- teams.e2e.ts teams-permissions.e2e.ts` 已通过；`scripts/verify-all.ps1` 的 Web E2E 阶段会运行全量 Playwright。
 
 ### TEST-05 Web OnlyOffice E2E
 

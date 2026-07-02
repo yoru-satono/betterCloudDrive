@@ -7,7 +7,9 @@ import {
   createTeamTag,
   createTeamVersionRows,
   createUser,
+  listNotifications,
   listTeamFiles,
+  listTeamInvites,
   listTeamMembers,
   listTeamRecycleBin,
   listTeamShares,
@@ -123,6 +125,79 @@ test.describe('teams', () => {
     }).toBe(true)
   })
 
+  test('owner manages invites and invitee sees team notifications', async ({ page, request, e2eUser }) => {
+    const invitee = await createUser(request)
+    const team = await createTeam(request, e2eUser.accessToken, uniqueName('web_invite_team'))
+
+    await loginViaUi(page, e2eUser)
+    await page.goto(`/teams/${team.id}/settings`)
+    const inviteSection = page.locator('.team-section')
+      .filter({ has: page.getByRole('heading', { name: '邀请' }) })
+      .first()
+    await expect(inviteSection).toBeVisible()
+
+    await inviteSection.getByPlaceholder('邮箱地址').fill(invitee.email)
+    await inviteSection.locator('select').first().selectOption('EDITOR')
+    await inviteSection.getByRole('button', { name: '发送邀请' }).click()
+    await expect(page.getByText('邀请已发送')).toBeVisible()
+
+    const inviteRow = inviteSection.locator('.team-list__row').filter({ hasText: invitee.email })
+    await expect(inviteRow).toContainText('EDITOR · PENDING')
+    await expect.poll(async () => {
+      const invites = await listTeamInvites(request, e2eUser.accessToken, team.id)
+      return invites.find(invite => invite.email === invitee.email)?.status
+    }).toBe('PENDING')
+    await expect.poll(async () => {
+      const notifications = await listNotifications(request, invitee.accessToken, { unreadOnly: true, type: 'TEAM_INVITE' })
+      return notifications.some(notification =>
+        notification.teamId === team.id &&
+        notification.title.includes('团队邀请') &&
+        !!notification.link?.startsWith('/team-invites/'),
+      )
+    }).toBe(true)
+
+    await clearBrowserAuth(page)
+    await loginViaUi(page, invitee)
+    await page.goto('/notifications')
+    await page.locator('.notifications-page__type').selectOption('TEAM_INVITE')
+    const notificationRow = page.locator('.notification-row').filter({ hasText: team.name }).first()
+    await expect(notificationRow).toBeVisible()
+    await expect(notificationRow).toContainText('TEAM_INVITE')
+    await notificationRow.click()
+    await expect(page.getByRole('heading', { name: team.name })).toBeVisible()
+    await expect(page.getByRole('button', { name: '接受邀请' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '拒绝' })).toBeVisible()
+    await expect.poll(async () => {
+      const notifications = await listNotifications(request, invitee.accessToken, { type: 'TEAM_INVITE' })
+      return notifications.find(notification => notification.teamId === team.id && notification.title.includes('团队邀请'))?.isRead
+    }).toBe(true)
+
+    await clearBrowserAuth(page)
+    await loginViaUi(page, e2eUser)
+    await page.goto(`/teams/${team.id}/settings`)
+    const ownerInviteSection = page.locator('.team-section')
+      .filter({ has: page.getByRole('heading', { name: '邀请' }) })
+      .first()
+    const ownerInviteRow = ownerInviteSection.locator('.team-list__row').filter({ hasText: invitee.email })
+    await expect(ownerInviteRow).toBeVisible()
+    await ownerInviteRow.getByRole('button', { name: '重发' }).click()
+    await expect(page.getByText('邀请已重发')).toBeVisible()
+    await expect.poll(async () => {
+      const notifications = await listNotifications(request, invitee.accessToken, { unreadOnly: true, type: 'TEAM_INVITE' })
+      return notifications.some(notification => notification.teamId === team.id && notification.title.includes('团队邀请已重发'))
+    }).toBe(true)
+
+    await ownerInviteRow.getByRole('button', { name: '取消' }).click()
+    await page.getByRole('dialog', { name: '取消邀请' }).getByRole('button', { name: '确认' }).click()
+    await expect(page.getByText('邀请已取消')).toBeVisible()
+    await expect.poll(async () => {
+      const invites = await listTeamInvites(request, e2eUser.accessToken, team.id)
+      return invites.find(invite => invite.email === invitee.email)?.status
+    }).toBe('CANCELED')
+    await expect(ownerInviteRow).toContainText('CANCELED')
+    await expect(ownerInviteRow.getByRole('button', { name: '取消' })).toHaveCount(0)
+  })
+
   test('owner can transfer ownership and then leave the team', async ({ page, request, e2eUser }) => {
     const successor = await createUser(request)
     const team = await createTeam(request, e2eUser.accessToken, uniqueName('web_transfer_team'))
@@ -170,3 +245,10 @@ test.describe('teams', () => {
     await expect(page.getByRole('menu').getByRole('menuitem', { name: '删除' })).toHaveCount(0)
   })
 })
+
+async function clearBrowserAuth(page: import('@playwright/test').Page) {
+  await page.evaluate(() => {
+    localStorage.clear()
+    sessionStorage.clear()
+  })
+}

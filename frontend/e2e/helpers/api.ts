@@ -62,6 +62,32 @@ export interface E2ETeamMember {
   status: number
 }
 
+export interface E2ETeamInvite {
+  id: number
+  teamId: number
+  teamName: string | null
+  email: string
+  role: Exclude<E2ETeamMember['role'], 'OWNER'>
+  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELED' | 'EXPIRED'
+  token?: string | null
+  expiresAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface E2ENotification {
+  id: number
+  userId: number
+  teamId: number | null
+  type: string
+  title: string
+  content: string
+  link: string | null
+  isRead: boolean
+  readAt: string | null
+  createdAt: string
+}
+
 export const backendURL = process.env.E2E_BACKEND_URL || 'http://localhost:8080'
 export const frontendURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:5173'
 export const mailpitURL = process.env.E2E_MAILPIT_URL || 'http://localhost:8025'
@@ -398,6 +424,52 @@ export async function listTeamMembers(request: APIRequestContext, token: string,
   return body.data as E2ETeamMember[]
 }
 
+export async function createTeamInvite(
+  request: APIRequestContext,
+  token: string,
+  teamId: number,
+  email: string,
+  role: Exclude<E2ETeamMember['role'], 'OWNER'> = 'VIEWER',
+) {
+  const res = await request.post(`${backendURL}/api/v1/teams/${teamId}/invites`, {
+    headers: authHeaders(token),
+    data: { email, role },
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
+  return body.data as E2ETeamInvite
+}
+
+export async function listTeamInvites(request: APIRequestContext, token: string, teamId: number) {
+  const res = await request.get(`${backendURL}/api/v1/teams/${teamId}/invites`, {
+    headers: authHeaders(token),
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
+  return body.data as E2ETeamInvite[]
+}
+
+export async function resendTeamInvite(request: APIRequestContext, token: string, teamId: number, inviteId: number) {
+  const res = await request.post(`${backendURL}/api/v1/teams/${teamId}/invites/${inviteId}/resend`, {
+    headers: authHeaders(token),
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
+  return body.data as E2ETeamInvite
+}
+
+export async function cancelTeamInvite(request: APIRequestContext, token: string, teamId: number, inviteId: number) {
+  const res = await request.delete(`${backendURL}/api/v1/teams/${teamId}/invites/${inviteId}`, {
+    headers: authHeaders(token),
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
+}
+
 export async function createTeamFolder(
   request: APIRequestContext,
   token: string,
@@ -605,6 +677,27 @@ export async function addTeamFavorite(request: APIRequestContext, token: string,
     headers: authHeaders(token),
   })
   await expect(res, await res.text()).toBeOK()
+}
+
+export async function listNotifications(
+  request: APIRequestContext,
+  token: string,
+  options: { page?: number; size?: number; unreadOnly?: boolean; type?: string } = {},
+) {
+  const params: Record<string, string> = {
+    page: String(options.page ?? 1),
+    size: String(options.size ?? 100),
+    unreadOnly: String(options.unreadOnly ?? false),
+  }
+  if (options.type) params.type = options.type
+  const res = await request.get(`${backendURL}/api/v1/notifications`, {
+    headers: authHeaders(token),
+    params,
+  })
+  await expect(res, await res.text()).toBeOK()
+  const body = await res.json()
+  expect(body.code).toBe(200)
+  return body.data.records as E2ENotification[]
 }
 
 export async function setUserQuotaBytes(request: APIRequestContext, adminToken: string, userId: number, storageQuota: number) {
