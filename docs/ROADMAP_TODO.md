@@ -85,6 +85,7 @@
 
 - 目标：实现真实 HTTP Range 下载。
 - 范围：公开分享文件下载、个人/团队公开资源下载响应头和分段读取。
+- 状态：已完成。
 - 验收：支持 `206 Partial Content`、`Content-Range`、非法 Range 返回 416；补黑盒测试。
 
 ### BE-07 WebDAV 文件夹复制

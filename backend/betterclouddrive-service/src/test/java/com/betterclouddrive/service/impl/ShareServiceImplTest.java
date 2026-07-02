@@ -456,6 +456,19 @@ class ShareServiceImplTest {
     }
 
     @Test
+    void resolveSharedFileDownload_shouldReturnFileWithoutIncrementingDownloadCount() {
+        ShareLinkEntity share = activeShare("resolvefile", 1L, 5L);
+        FileEntity sharedFile = ownedFile(5L, 1L);
+        when(shareLinkRepository.findByShareCode("resolvefile")).thenReturn(Optional.of(share));
+        when(fileRepository.findById(5L)).thenReturn(Optional.of(sharedFile));
+
+        FileEntity result = shareService.resolveSharedFileDownload("resolvefile", 5L, null);
+
+        assertThat(result).isSameAs(sharedFile);
+        verify(shareLinkRepository, never()).incrementDownloadCount(anyLong());
+    }
+
+    @Test
     void downloadSharedFile_shouldRejectFileOutsideSharedFolder() {
         ShareLinkEntity share = activeShare("folder2", 1L, 10L);
         FileEntity folder = ownedFolder(10L, 1L);

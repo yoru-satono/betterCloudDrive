@@ -1391,9 +1391,17 @@ POST /api/v1/shares/access/{shareCode}/download/{fileId}
 }
 ```
 
+支持 `Range` 请求头实现断点续传：
+
+```http
+Range: bytes=1048576-
+```
+
 **Response:** 二进制流，`Content-Disposition: attachment`，包含 `Accept-Ranges: bytes` 响应头。
 
-> 当前分享文件下载响应声明支持 Range，但接口实现会返回完整文件内容，不处理 `Range` 请求头。需要严格断点续传时使用登录态下载接口 `/api/v1/download/{fileId}`。
+- 无 `Range`：返回 `200 OK`，包含完整文件和 `Content-Length`。
+- 有合法 `Range`：返回 `206 Partial Content`，包含 `Content-Range` 和片段 `Content-Length`。
+- 多段 Range 不支持；非法或不可满足的 Range 返回 `416 Requested Range Not Satisfiable`。
 
 **错误码:** 419002（无效分享码）、419003（需要密码/密码错误）、419004（已过期）、419005（访问次数达上限）
 

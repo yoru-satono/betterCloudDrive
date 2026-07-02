@@ -24,6 +24,8 @@ public interface ShareService {
     FileEntity accessShare(String shareCode, String password);
     /** Resolve and record a public share download for a file inside the shared scope. */
     FileEntity downloadSharedFile(String shareCode, Long fileId, String password);
+    /** Resolve a public share file download target without recording a download. */
+    FileEntity resolveSharedFileDownload(String shareCode, Long fileId, String password);
     /** Resolve a shared folder for webpage ZIP download without recording download count. */
     FileEntity resolveSharedFolderDownload(String shareCode, Long fileId, String password);
     /** Record a successful public share download. */

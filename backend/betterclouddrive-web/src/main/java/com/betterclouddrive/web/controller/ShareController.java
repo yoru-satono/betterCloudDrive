@@ -11,6 +11,7 @@ import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FolderZipDownloadService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.web.download.ByteRange;
 import com.betterclouddrive.web.dto.request.CreateShareRequest;
 import com.betterclouddrive.web.dto.request.SaveSharedItemRequest;
 import com.betterclouddrive.web.dto.request.UpdateShareRequest;
@@ -21,6 +22,7 @@ import com.betterclouddrive.web.security.UserPrincipal;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -146,23 +148,15 @@ public class ShareController {
     public ResponseEntity<StreamingResponseBody> downloadSharedFile(
             @PathVariable String shareCode,
             @PathVariable Long fileId,
-            @RequestBody(required = false) Map<String, String> body) {
+            @RequestBody(required = false) Map<String, String> body,
+            @RequestHeader(value = "Range", required = false) String rangeHeader) {
         String password = body != null ? body.get("password") : null;
-        FileEntity file = shareService.downloadSharedFile(shareCode, fileId, password);
-        InputStream stream = storageService.downloadObject(file.getStoragePath());
+        FileEntity file = shareService.resolveSharedFileDownload(shareCode, fileId, password);
         String mimeType = file.getMimeType() != null ? file.getMimeType() : "application/octet-stream";
+        String disposition = attachmentDisposition(file.getFileName());
 
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(mimeType))
-                .contentLength(file.getFileSize())
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + URLEncoder.encode(file.getFileName(), StandardCharsets.UTF_8) + "\"")
-                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
-                .body(outputStream -> {
-                    try (InputStream is = stream) {
-                        is.transferTo(outputStream);
-                    }
-                });
+        return sharedObjectResponse(file.getStoragePath(), file.getFileSize(), mimeType, disposition,
+                rangeHeader, shareCode, password);
     }
 
     /** Public endpoint: download a shared folder as ZIP from the webpage */
@@ -182,5 +176,55 @@ public class ShareController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=\"" + URLEncoder.encode(zipFileName, StandardCharsets.UTF_8) + "\"")
                 .body(outputStream -> folderZipDownloadService.writeZip(folder, outputStream));
+    }
+
+    private ResponseEntity<StreamingResponseBody> sharedObjectResponse(
+            String objectKey,
+            long fileSize,
+            String mimeType,
+            String disposition,
+            String rangeHeader,
+            String shareCode,
+            String password) {
+        ByteRange range;
+        try {
+            range = ByteRange.parse(rangeHeader, fileSize);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .header(HttpHeaders.CONTENT_RANGE, ByteRange.unsatisfiedRangeHeader(fileSize))
+                    .build();
+        }
+
+        shareService.recordSharedDownload(shareCode, password);
+
+        if (range == null) {
+            InputStream stream = storageService.downloadObject(objectKey);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(mimeType))
+                    .contentLength(fileSize)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                    .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                    .body(outputStream -> {
+                        try (InputStream is = stream) {
+                            is.transferTo(outputStream);
+                        }
+                    });
+        }
+
+        ByteRange selectedRange = range;
+        InputStream stream = storageService.downloadObjectRange(objectKey, selectedRange.start(), selectedRange.length());
+        return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT)
+                .contentType(MediaType.parseMediaType(mimeType))
+                .headers(selectedRange.headers(disposition))
+                .body(outputStream -> {
+                    try (InputStream is = stream) {
+                        is.transferTo(outputStream);
+                    }
+                });
+    }
+
+    private String attachmentDisposition(String fileName) {
+        return "attachment; filename=\"" + URLEncoder.encode(fileName, StandardCharsets.UTF_8) + "\"";
     }
 }

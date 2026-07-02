@@ -319,13 +319,18 @@ public class ShareServiceImpl implements ShareService {
     @Override
     @Transactional
     public FileEntity downloadSharedFile(String shareCode, Long fileId, String password) {
-        ShareLinkEntity share = validateShareAccess(shareCode, password, true);
+        FileEntity downloadFile = resolveSharedFileDownload(shareCode, fileId, password);
+        recordSharedDownload(shareCode, password);
+        return downloadFile;
+    }
+
+    @Override
+    public FileEntity resolveSharedFileDownload(String shareCode, Long fileId, String password) {
+        ShareLinkEntity share = validateShareAccess(shareCode, password, false);
         FileEntity downloadFile = resolveSharedDownloadTarget(share, fileId);
         if (!"file".equals(downloadFile.getFileType())) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND, "Cannot download a folder");
         }
-
-        shareLinkRepository.incrementDownloadCount(share.getId());
         return downloadFile;
     }
 
