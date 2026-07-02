@@ -4,8 +4,10 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
+import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
@@ -33,6 +35,7 @@ import java.util.Objects;
 public class FileServiceImpl implements FileService {
 
     private final FileRepository fileRepository;
+    private final UserRepository userRepository;
     private final StringRedisTemplate redisTemplate;
     private final StorageService storageService;
     private final FileVersionRepository fileVersionRepository;
@@ -138,30 +141,7 @@ public class FileServiceImpl implements FileService {
     @Transactional
     public void copyFile(Long userId, Long fileId, Long targetParentId) {
         FileEntity source = getFile(userId, fileId);
-        FileEntity targetParent = validateTargetParent(userId, targetParentId);
-        if ("folder".equals(source.getFileType()) && targetParent != null && isSameOrDescendant(targetParent, source)) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Cannot copy a folder into itself or its subfolder");
-        }
-        String copyName = source.getFileName() + " (copy)";
-        if (nameExists(userId, targetParentId, copyName)) {
-            throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
-        }
-        FileEntity copy = FileEntity.builder()
-                .userId(userId)
-                .teamId(null)
-                .parentId(targetParentId)
-                .fileName(copyName)
-                .fileType(source.getFileType())
-                .mimeType(source.getMimeType())
-                .fileSize(source.getFileSize())
-                .storagePath(source.getStoragePath())
-                .md5Hash(source.getMd5Hash())
-                .isDeleted(false)
-                .versionCount(1)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-        fileRepository.save(copy);
+        copyPersonalTree(userId, source, targetParentId, source.getFileName() + " (copy)");
     }
 
     @Override
@@ -259,22 +239,7 @@ public class FileServiceImpl implements FileService {
     @Transactional
     public FileEntity copyFileTo(Long userId, Long fileId, Long targetParentId, String targetFileName) {
         FileEntity source = getFile(userId, fileId);
-        FileEntity copy = FileEntity.builder()
-                .userId(userId)
-                .teamId(null)
-                .parentId(targetParentId)
-                .fileName(targetFileName)
-                .fileType(source.getFileType())
-                .mimeType(source.getMimeType())
-                .fileSize(source.getFileSize())
-                .storagePath(source.getStoragePath())
-                .md5Hash(source.getMd5Hash())
-                .isDeleted(false)
-                .versionCount(1)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-        return fileRepository.save(copy);
+        return copyPersonalTree(userId, source, targetParentId, targetFileName);
     }
 
     @Override
@@ -450,6 +415,92 @@ public class FileServiceImpl implements FileService {
         return teamPermissionService.effectivePermissions(userId, teamId, fileId).canRead();
     }
 
+    private FileEntity copyPersonalTree(Long userId, FileEntity source, Long targetParentId, String targetFileName) {
+        if (!StringUtils.hasText(targetFileName)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Target file name is required");
+        }
+        FileEntity targetParent = validateTargetParent(userId, targetParentId);
+        if ("folder".equals(source.getFileType()) && targetParent != null && isSameOrDescendant(targetParent, source)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Cannot copy a folder into itself or its subfolder");
+        }
+        if (nameExists(userId, targetParentId, targetFileName)) {
+            throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
+        }
+
+        long totalSize = calculateTreeFileSize(source);
+        if (totalSize > 0) {
+            checkStorageQuota(userId, totalSize);
+        }
+
+        FileEntity copied = copyTree(source, userId, targetParentId, targetFileName);
+        if (totalSize > 0) {
+            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, totalSize);
+        }
+        return copied;
+    }
+
+    private FileEntity copyTree(FileEntity source, Long targetUserId, Long targetParentId, String targetFileName) {
+        FileEntity copy = FileEntity.builder()
+                .userId(targetUserId)
+                .teamId(null)
+                .parentId(targetParentId)
+                .fileName(targetFileName)
+                .fileType(source.getFileType())
+                .mimeType(source.getMimeType())
+                .fileSize(safeFileSize(source))
+                .storagePath(source.getStoragePath())
+                .md5Hash(source.getMd5Hash())
+                .isDeleted(false)
+                .versionCount(1)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .build();
+        FileEntity saved = fileRepository.save(copy);
+
+        if ("folder".equals(source.getFileType())) {
+            for (FileEntity child : activeChildrenOf(source)) {
+                copyTree(child, targetUserId, saved.getId(), child.getFileName());
+            }
+        }
+        return saved;
+    }
+
+    private long calculateTreeFileSize(FileEntity source) {
+        if ("file".equals(source.getFileType())) {
+            return safeFileSize(source);
+        }
+        long total = 0L;
+        for (FileEntity child : activeChildrenOf(source)) {
+            total += calculateTreeFileSize(child);
+        }
+        return total;
+    }
+
+    private long safeFileSize(FileEntity file) {
+        return file.getFileSize() != null ? file.getFileSize() : 0L;
+    }
+
+    private void checkStorageQuota(Long userId, long additionalBytes) {
+        UserEntity user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            throw new BusinessException(ApiCode.UNAUTHORIZED);
+        }
+        String incrStr = redisTemplate.opsForValue().get(STORAGE_INCR_PREFIX + userId);
+        long pendingIncr = 0L;
+        if (incrStr != null) {
+            try {
+                pendingIncr = Long.parseLong(incrStr);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        long storageUsed = user.getStorageUsed() != null ? user.getStorageUsed() : 0L;
+        long storageQuota = user.getStorageQuota() != null ? user.getStorageQuota() : 0L;
+        if (storageUsed + pendingIncr + additionalBytes > storageQuota) {
+            throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
+                    "Storage quota exceeded. Used: " + (storageUsed + pendingIncr) + ", Quota: " + storageQuota);
+        }
+    }
+
     private FileEntity validateTargetParent(Long userId, Long targetParentId) {
         if (targetParentId == null) {
             return null;
@@ -554,6 +605,22 @@ public class FileServiceImpl implements FileService {
         Specification<FileEntity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("parentId"), parent.getId()));
+            if (parent.getTeamId() != null) {
+                predicates.add(cb.equal(root.get("teamId"), parent.getTeamId()));
+            } else {
+                predicates.add(cb.equal(root.get("userId"), parent.getUserId()));
+                predicates.add(cb.isNull(root.get("teamId")));
+            }
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return fileRepository.findAll(spec);
+    }
+
+    private List<FileEntity> activeChildrenOf(FileEntity parent) {
+        Specification<FileEntity> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("parentId"), parent.getId()));
+            predicates.add(cb.equal(root.get("isDeleted"), false));
             if (parent.getTeamId() != null) {
                 predicates.add(cb.equal(root.get("teamId"), parent.getTeamId()));
             } else {

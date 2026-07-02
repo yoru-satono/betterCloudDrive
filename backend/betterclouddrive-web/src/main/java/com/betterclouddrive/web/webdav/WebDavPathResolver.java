@@ -61,6 +61,26 @@ public class WebDavPathResolver {
         return parentId;
     }
 
+    public boolean parentExists(Long userId, String davPath) {
+        List<String> segments = splitPath(davPath);
+        if (segments.size() <= 1) return true;
+
+        Long parentId = null;
+        FileEntity folder = null;
+        for (String name : segments.subList(0, segments.size() - 1)) {
+            if (parentId == null) {
+                folder = fileRepository.findRootByName(userId, name).orElse(null);
+            } else {
+                folder = fileRepository
+                        .findByUserIdAndParentIdAndFileNameAndIsDeletedFalse(userId, parentId, name)
+                        .orElse(null);
+            }
+            if (folder == null || !"folder".equals(folder.getFileType())) return false;
+            parentId = folder.getId();
+        }
+        return true;
+    }
+
     /** Returns the last segment of the path (the file/folder name). */
     public String extractFileName(String davPath) {
         List<String> segments = splitPath(davPath);

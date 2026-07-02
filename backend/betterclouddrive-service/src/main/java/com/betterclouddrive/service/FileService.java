@@ -37,6 +37,6 @@ public interface FileService {
     /** Admin: soft-delete file without userId ownership check */
     void adminDeleteFile(Long fileId);
 
-    /** Copy a file to the given parent folder under a specific target name (used by WebDAV COPY). */
+    /** Copy a file or folder tree to the given parent folder under a specific target name (used by WebDAV COPY). */
     FileEntity copyFileTo(Long userId, Long fileId, Long targetParentId, String targetFileName);
 }

@@ -7,8 +7,10 @@ import static org.mockito.Mockito.*;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
+import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
@@ -27,6 +29,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,6 +38,9 @@ class FileServiceImplTest {
 
     @Mock
     private FileRepository fileRepository;
+
+    @Mock
+    private UserRepository userRepository;
 
     @Mock
     private StringRedisTemplate redisTemplate;
@@ -212,6 +218,94 @@ class FileServiceImplTest {
 
         assertThat(captor.getValue().getFileName()).isEqualTo("doc.txt (copy)");
         assertThat(captor.getValue().getParentId()).isEqualTo(100L);
+    }
+
+    @Test
+    void copyFileTo_shouldCopyFolderRecursivelyAndIncrementStorage() {
+        FileEntity folder = FileEntity.builder()
+                .id(1L).userId(1L).fileName("Docs").fileType("folder")
+                .fileSize(0L).isDeleted(false).build();
+        FileEntity child = FileEntity.builder()
+                .id(2L).userId(1L).parentId(1L).fileName("a.txt")
+                .fileType("file").fileSize(64L).storagePath("objects/a.txt")
+                .md5Hash("md5").isDeleted(false).build();
+        List<FileEntity> saved = new ArrayList<>();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(folder));
+        when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(1L, "Docs copy"))
+                .thenReturn(false);
+        when(fileRepository.findAll(any(Specification.class))).thenReturn(List.of(child), List.of(child));
+        when(userRepository.findById(1L))
+                .thenReturn(Optional.of(UserEntity.builder().id(1L).storageQuota(1024L).storageUsed(100L).build()));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("storage:incr:1")).thenReturn(null);
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
+            FileEntity file = inv.getArgument(0);
+            file.setId(saved.isEmpty() ? 100L : 101L);
+            saved.add(file);
+            return file;
+        });
+
+        FileEntity copied = fileService.copyFileTo(1L, 1L, null, "Docs copy");
+
+        assertThat(copied.getId()).isEqualTo(100L);
+        assertThat(saved).hasSize(2);
+        assertThat(saved.get(0).getFileName()).isEqualTo("Docs copy");
+        assertThat(saved.get(0).getFileType()).isEqualTo("folder");
+        assertThat(saved.get(1).getFileName()).isEqualTo("a.txt");
+        assertThat(saved.get(1).getParentId()).isEqualTo(100L);
+        assertThat(saved.get(1).getStoragePath()).isEqualTo("objects/a.txt");
+        verify(valueOps).increment("storage:incr:1", 64L);
+    }
+
+    @Test
+    void copyFileTo_shouldRejectNameConflict() {
+        FileEntity source = FileEntity.builder()
+                .id(1L).userId(1L).fileName("doc.txt")
+                .fileType("file").fileSize(64L).isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(source));
+        when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(1L, "doc.txt"))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> fileService.copyFileTo(1L, 1L, null, "doc.txt"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(409001));
+        verify(fileRepository, never()).save(any(FileEntity.class));
+    }
+
+    @Test
+    void copyFileTo_shouldRejectFolderCopiedIntoDescendant() {
+        FileEntity folder = FileEntity.builder()
+                .id(1L).userId(1L).fileName("Docs")
+                .fileType("folder").isDeleted(false).build();
+        FileEntity child = FileEntity.builder()
+                .id(2L).userId(1L).parentId(1L).fileName("Child")
+                .fileType("folder").isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(folder), Optional.of(folder));
+        when(fileRepository.findById(2L)).thenReturn(Optional.of(child));
+
+        assertThatThrownBy(() -> fileService.copyFileTo(1L, 1L, 2L, "Docs"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
+        verify(fileRepository, never()).save(any(FileEntity.class));
+    }
+
+    @Test
+    void copyFileTo_shouldRejectWhenQuotaExceeded() {
+        FileEntity source = FileEntity.builder()
+                .id(1L).userId(1L).fileName("big.bin")
+                .fileType("file").fileSize(64L).isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(source));
+        when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(1L, "big-copy.bin"))
+                .thenReturn(false);
+        when(userRepository.findById(1L))
+                .thenReturn(Optional.of(UserEntity.builder().id(1L).storageQuota(120L).storageUsed(100L).build()));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("storage:incr:1")).thenReturn(null);
+
+        assertThatThrownBy(() -> fileService.copyFileTo(1L, 1L, null, "big-copy.bin"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419001));
+        verify(fileRepository, never()).save(any(FileEntity.class));
     }
 
     @Test

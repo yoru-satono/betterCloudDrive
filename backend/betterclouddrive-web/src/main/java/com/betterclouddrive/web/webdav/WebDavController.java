@@ -232,13 +232,14 @@ public class WebDavController {
 
         FileEntity file = pathResolver.resolve(userId, davPath);
         if (file == null) { response.setStatus(404); return; }
-        if ("folder".equals(file.getFileType())) { response.setStatus(403); return; }
 
         String destHeader = request.getHeader("Destination");
         if (destHeader == null) { response.setStatus(400); return; }
         String destPath = extractDavPathFromUrl(destHeader);
+        if (!pathResolver.parentExists(userId, destPath)) { response.setStatus(409); return; }
         Long destParentId = pathResolver.resolveParentId(userId, destPath);
         String destName = pathResolver.extractFileName(destPath);
+        if (destName.isBlank()) { response.setStatus(400); return; }
 
         fileService.copyFileTo(userId, file.getId(), destParentId, destName);
         response.setStatus(201);
