@@ -54,11 +54,16 @@ public class OnlyOfficeService {
     }
 
     public Long validateCallbackToken(String token, Long fileId, Long teamId) {
+        return validateCallbackToken(token, fileId, teamId, null);
+    }
+
+    public Long validateCallbackToken(String token, Long fileId, Long teamId, String callbackKey) {
         Claims claims = parseToken(token);
         if (!"callback".equals(claims.get("purpose", String.class))) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Invalid office callback token");
         }
         validateTokenResource(claims, fileId, teamId);
+        validateCallbackKey(claims, callbackKey);
         return numberClaim(claims, "userId");
     }
 
@@ -107,9 +112,10 @@ public class OnlyOfficeService {
 
     private OfficeConfigResponse buildConfig(Long userId, Long teamId, FileEntity file, boolean editable) {
         String documentType = documentType(file);
-        String contentToken = createResourceToken("content", userId, file.getId(), teamId);
+        String documentKey = documentKey(file);
+        String contentToken = createResourceToken("content", userId, file.getId(), teamId, documentKey);
         String callbackToken = teamId != null && editable
-                ? createResourceToken("callback", userId, file.getId(), teamId)
+                ? createResourceToken("callback", userId, file.getId(), teamId, documentKey)
                 : null;
         String contentUrl = resourceUrl(teamId, file.getId(), "content", contentToken);
         String callbackUrl = callbackToken == null ? null : resourceUrl(teamId, file.getId(), "callback", callbackToken);
@@ -123,7 +129,7 @@ public class OnlyOfficeService {
 
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("fileType", extension(file.getFileName()).orElseThrow());
-        document.put("key", documentKey(file));
+        document.put("key", documentKey);
         document.put("title", file.getFileName());
         document.put("url", contentUrl);
         document.put("permissions", permissions);
@@ -209,7 +215,7 @@ public class OnlyOfficeService {
         }
     }
 
-    private String createResourceToken(String purpose, Long userId, Long fileId, Long teamId) {
+    private String createResourceToken(String purpose, Long userId, Long fileId, Long teamId, String documentKey) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(String.valueOf(fileId))
@@ -219,6 +225,7 @@ public class OnlyOfficeService {
                 .claim("userId", userId)
                 .claim("fileId", fileId)
                 .claim("teamId", teamId)
+                .claim("documentKey", documentKey)
                 .signWith(signingKey())
                 .compact();
     }
@@ -250,6 +257,16 @@ public class OnlyOfficeService {
         Long tokenTeamId = numberClaim(claims, "teamId");
         if (!Objects.equals(tokenFileId, fileId) || !Objects.equals(tokenTeamId, teamId)) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Office token resource mismatch");
+        }
+    }
+
+    private void validateCallbackKey(Claims claims, String callbackKey) {
+        String tokenDocumentKey = claims.get("documentKey", String.class);
+        if (tokenDocumentKey == null || tokenDocumentKey.isBlank()) {
+            return;
+        }
+        if (callbackKey == null || callbackKey.isBlank() || !tokenDocumentKey.equals(callbackKey.trim())) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Office callback key mismatch");
         }
     }
 

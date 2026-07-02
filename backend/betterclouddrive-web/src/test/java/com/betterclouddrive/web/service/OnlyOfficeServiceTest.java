@@ -1,6 +1,7 @@
 package com.betterclouddrive.web.service;
 
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.web.config.OnlyOfficeProperties;
 import com.betterclouddrive.web.dto.response.OfficeConfigResponse;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,7 @@ import org.springframework.web.client.RestClient;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OnlyOfficeServiceTest {
@@ -83,6 +85,23 @@ class OnlyOfficeServiceTest {
         assertThat((String) firstEditorConfig.get("callbackUrl"))
                 .startsWith("http://backend:8080/api/v1/teams/10/office/files/7/callback?token=");
         assertThat(firstDocument.get("key")).isNotEqualTo(secondDocument.get("key"));
+    }
+
+    @Test
+    void validateCallbackToken_shouldRequireMatchingDocumentKey() {
+        OfficeConfigResponse response = service.buildTeamConfig(2L, 10L, officeFile("sheet.xlsx"), true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> document = (Map<String, Object>) response.getConfig().get("document");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> editorConfig = (Map<String, Object>) response.getConfig().get("editorConfig");
+        String callbackUrl = (String) editorConfig.get("callbackUrl");
+        String token = callbackUrl.substring(callbackUrl.indexOf("token=") + 6);
+
+        Long userId = service.validateCallbackToken(token, 7L, 10L, (String) document.get("key"));
+
+        assertThat(userId).isEqualTo(2L);
+        assertThatThrownBy(() -> service.validateCallbackToken(token, 7L, 10L, "wrong-key"))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test

@@ -106,6 +106,7 @@
 
 - 目标：防止 OnlyOffice callback 重复保存或并发覆盖。
 - 范围：callback token、version key、保存锁、重复回调检测。
+- 状态：已完成。
 - 验收：重复 callback 不生成重复版本；并发保存结果可预测。
 
 ### BE-10 上传完成幂等

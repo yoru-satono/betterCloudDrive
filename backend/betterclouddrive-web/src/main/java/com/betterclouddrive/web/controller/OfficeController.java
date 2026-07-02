@@ -4,9 +4,11 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FileVersionService;
+import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.dto.request.OnlyOfficeCallbackRequest;
@@ -38,6 +40,7 @@ public class OfficeController {
     private final FileVersionService fileVersionService;
     private final StorageService storageService;
     private final OnlyOfficeService onlyOfficeService;
+    private final OnlyOfficeCallbackService onlyOfficeCallbackService;
 
     @GetMapping("/api/v1/office/files/{fileId}/config")
     public ApiResponse<OfficeConfigResponse> personalConfig(
@@ -89,14 +92,29 @@ public class OfficeController {
             @PathVariable Long fileId,
             @RequestParam String token,
             @RequestBody OnlyOfficeCallbackRequest request) {
-        Long userId = onlyOfficeService.validateCallbackToken(token, fileId, teamId);
+        Long userId = onlyOfficeService.validateCallbackToken(token, fileId, teamId, request.getKey());
         teamService.requireWrite(userId, teamId);
         if (request.getToken() != null && !request.getToken().isBlank()) {
             onlyOfficeService.validateDocumentServerToken(request.getToken());
         }
         if (request.getStatus() != null && SAVE_STATUSES.contains(request.getStatus())) {
-            byte[] content = onlyOfficeService.downloadEditedContent(request.getUrl());
-            fileVersionService.saveTeamEditedVersion(teamId, userId, fileId, content);
+            String callbackKey = onlyOfficeCallbackService.callbackKey(request.getKey());
+            String contentUrlHash = onlyOfficeCallbackService.contentUrlHash(request.getUrl());
+            if (!onlyOfficeCallbackService.reserveSave(teamId, fileId, callbackKey, request.getStatus(), contentUrlHash)) {
+                log.info("Skipping duplicate OnlyOffice callback, teamId={}, fileId={}, key={}, status={}",
+                        teamId, fileId, callbackKey, request.getStatus());
+                return Map.of("error", 0);
+            }
+            try {
+                byte[] content = onlyOfficeService.downloadEditedContent(request.getUrl());
+                FileVersionEntity version = fileVersionService.saveTeamEditedVersion(teamId, userId, fileId, content);
+                onlyOfficeCallbackService.markSaved(
+                        teamId, fileId, callbackKey, request.getStatus(), contentUrlHash, version.getId());
+            } catch (RuntimeException e) {
+                onlyOfficeCallbackService.releaseSaveReservation(
+                        teamId, fileId, callbackKey, request.getStatus(), contentUrlHash);
+                throw e;
+            }
         }
         return Map.of("error", 0);
     }
