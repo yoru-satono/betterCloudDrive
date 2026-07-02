@@ -344,7 +344,8 @@
 
 - 目标：浏览器覆盖预览和真实保存。
 - 范围：个人只读预览、团队可编辑保存、权限不足只读。
-- 验收：内容和版本断言基于后端 API。
+- 状态：已完成。
+- 验收：`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-personal-preview.e2e.ts onlyoffice-edit-save.e2e.ts` 已通过；内容变化、版本数量、只读配置和 UI 状态均基于后端 API 与浏览器断言。
 
 ### TEST-06 Tauri E2E
 

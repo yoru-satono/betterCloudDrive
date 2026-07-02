@@ -38,6 +38,7 @@ test.describe('onlyoffice edit save', () => {
     const beforeFile = await getTeamFile(request, e2eUser.accessToken, team.id, fileId)
     const beforeVersions = await listTeamVersions(request, e2eUser.accessToken, team.id, fileId)
     const officeConfig = await getTeamOfficeConfig(request, e2eUser.accessToken, team.id, fileId)
+    expectEditableOfficeConfig(officeConfig.config)
     const marker = `OO_E2E_${Date.now()}`
 
     await loginViaUi(page, e2eUser)
@@ -131,4 +132,21 @@ function signOnlyOfficeJwt(payload: Record<string, unknown>) {
 
 function base64Url(buffer: Buffer) {
   return buffer.toString('base64').replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+}
+
+function expectEditableOfficeConfig(config: Record<string, unknown>) {
+  const editorConfig = config.editorConfig as { mode?: string; callbackUrl?: string; customization?: Record<string, unknown> }
+  const document = config.document as { permissions?: Record<string, unknown> }
+  expect(editorConfig.mode).toBe('edit')
+  expect(editorConfig.callbackUrl).toContain('/callback?token=')
+  expect(editorConfig.customization).toMatchObject({
+    plugins: false,
+    macros: false,
+    macrosMode: 'disable',
+  })
+  expect(document.permissions).toMatchObject({
+    edit: true,
+    review: true,
+    comment: true,
+  })
 }
