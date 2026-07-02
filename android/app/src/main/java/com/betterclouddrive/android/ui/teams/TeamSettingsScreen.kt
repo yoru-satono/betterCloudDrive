@@ -99,10 +99,25 @@ data class TeamSettingsUiState(
     val auditLoading: Boolean = false,
     val auditLoadingMore: Boolean = false,
     val auditError: String? = null,
+    val auditActorUserId: String = "",
+    val auditAction: String = "",
+    val auditTargetType: String = "",
+    val auditResult: String = "",
+    val auditStartAt: String = "",
+    val auditEndAt: String = "",
     val isLoading: Boolean = false,
 )
 
 private const val TEAM_AUDIT_PAGE_SIZE = 20
+
+private data class TeamAuditFilterParams(
+    val actorUserId: Long? = null,
+    val action: String? = null,
+    val targetType: String? = null,
+    val result: Int? = null,
+    val startAt: String? = null,
+    val endAt: String? = null,
+)
 
 @HiltViewModel
 class TeamSettingsViewModel @Inject constructor(
@@ -206,22 +221,10 @@ class TeamSettingsViewModel @Inject constructor(
     fun retryAuditLogs() {
         val team = _uiState.value.team ?: return
         if (!team.canManageMembers || _uiState.value.auditLoading) return
+        val filters = parseAuditFiltersOrEmit() ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(auditLoading = true, auditError = null)
-            when (val result = repository.listAuditLogs(team.id, page = 1, size = TEAM_AUDIT_PAGE_SIZE)) {
-                is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
-                    auditLogs = result.data.records,
-                    auditPage = result.data.page,
-                    auditTotal = result.data.total,
-                    auditLoading = false,
-                    auditError = null,
-                )
-                is NetworkResult.Error -> {
-                    _uiState.value = _uiState.value.copy(auditLoading = false, auditError = result.message)
-                    _events.emit(UiEvent.ShowSnackbar("审计日志加载失败: ${result.message}", true))
-                }
-                is NetworkResult.Loading -> Unit
-            }
+            loadAuditPage(team.id, filters, page = 1, append = false)
         }
     }
 
@@ -230,23 +233,138 @@ class TeamSettingsViewModel @Inject constructor(
         val team = state.team ?: return
         if (!team.canManageMembers || state.auditLoading || state.auditLoadingMore) return
         if (state.auditLogs.size.toLong() >= state.auditTotal) return
+        val filters = parseAuditFiltersOrEmit() ?: return
         val nextPage = state.auditPage + 1
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(auditLoadingMore = true, auditError = null)
-            when (val result = repository.listAuditLogs(team.id, page = nextPage, size = TEAM_AUDIT_PAGE_SIZE)) {
-                is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
-                    auditLogs = _uiState.value.auditLogs + result.data.records,
-                    auditPage = result.data.page,
-                    auditTotal = result.data.total,
+            loadAuditPage(team.id, filters, page = nextPage, append = true)
+        }
+    }
+
+    fun updateAuditFilters(
+        actorUserId: String? = null,
+        action: String? = null,
+        targetType: String? = null,
+        result: String? = null,
+        startAt: String? = null,
+        endAt: String? = null,
+    ) {
+        val state = _uiState.value
+        _uiState.value = state.copy(
+            auditActorUserId = actorUserId ?: state.auditActorUserId,
+            auditAction = action ?: state.auditAction,
+            auditTargetType = targetType ?: state.auditTargetType,
+            auditResult = result ?: state.auditResult,
+            auditStartAt = startAt ?: state.auditStartAt,
+            auditEndAt = endAt ?: state.auditEndAt,
+        )
+    }
+
+    fun applyAuditFilters() {
+        val team = _uiState.value.team ?: return
+        if (!team.canManageMembers || _uiState.value.auditLoading) return
+        val filters = parseAuditFiltersOrEmit() ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                auditLogs = emptyList(),
+                auditPage = 1,
+                auditTotal = 0,
+                auditLoading = true,
+                auditLoadingMore = false,
+                auditError = null,
+            )
+            loadAuditPage(team.id, filters, page = 1, append = false)
+        }
+    }
+
+    fun resetAuditFilters() {
+        val team = _uiState.value.team ?: return
+        if (!team.canManageMembers || _uiState.value.auditLoading) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                auditActorUserId = "",
+                auditAction = "",
+                auditTargetType = "",
+                auditResult = "",
+                auditStartAt = "",
+                auditEndAt = "",
+                auditLogs = emptyList(),
+                auditPage = 1,
+                auditTotal = 0,
+                auditLoading = true,
+                auditLoadingMore = false,
+                auditError = null,
+            )
+            loadAuditPage(team.id, TeamAuditFilterParams(), page = 1, append = false)
+        }
+    }
+
+    private fun parseAuditFiltersOrEmit(): TeamAuditFilterParams? {
+        val state = _uiState.value
+        val actorText = state.auditActorUserId.trim()
+        val actorUserId = if (actorText.isBlank()) {
+            null
+        } else {
+            actorText.toLongOrNull() ?: return auditFilterError("用户 ID 必须是数字")
+        }
+        val resultText = state.auditResult.trim()
+        val result = when (resultText) {
+            "" -> null
+            "1", "成功" -> 1
+            "0", "失败" -> 0
+            else -> return auditFilterError("结果请输入 1/0、成功/失败或留空")
+        }
+        return TeamAuditFilterParams(
+            actorUserId = actorUserId,
+            action = state.auditAction.trim().takeIf { it.isNotEmpty() },
+            targetType = state.auditTargetType.trim().takeIf { it.isNotEmpty() },
+            result = result,
+            startAt = state.auditStartAt.trim().takeIf { it.isNotEmpty() },
+            endAt = state.auditEndAt.trim().takeIf { it.isNotEmpty() },
+        )
+    }
+
+    private fun auditFilterError(message: String): TeamAuditFilterParams? {
+        viewModelScope.launch {
+            _events.emit(UiEvent.ShowSnackbar(message, true))
+        }
+        return null
+    }
+
+    private suspend fun loadAuditPage(
+        teamId: Long,
+        filters: TeamAuditFilterParams,
+        page: Int,
+        append: Boolean,
+    ) {
+        when (val result = repository.listAuditLogs(
+            teamId = teamId,
+            actorUserId = filters.actorUserId,
+            action = filters.action,
+            targetType = filters.targetType,
+            result = filters.result,
+            startAt = filters.startAt,
+            endAt = filters.endAt,
+            page = page,
+            size = TEAM_AUDIT_PAGE_SIZE,
+        )) {
+            is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
+                auditLogs = if (append) _uiState.value.auditLogs + result.data.records else result.data.records,
+                auditPage = result.data.page,
+                auditTotal = result.data.total,
+                auditLoading = false,
+                auditLoadingMore = false,
+                auditError = null,
+            )
+            is NetworkResult.Error -> {
+                _uiState.value = _uiState.value.copy(
+                    auditLoading = false,
                     auditLoadingMore = false,
-                    auditError = null,
+                    auditError = result.message,
                 )
-                is NetworkResult.Error -> {
-                    _uiState.value = _uiState.value.copy(auditLoadingMore = false, auditError = result.message)
-                    _events.emit(UiEvent.ShowSnackbar("审计日志加载失败: ${result.message}", true))
-                }
-                is NetworkResult.Loading -> Unit
+                _events.emit(UiEvent.ShowSnackbar("审计日志加载失败: ${result.message}", true))
             }
+            is NetworkResult.Loading -> Unit
         }
     }
 
@@ -637,6 +755,20 @@ fun TeamSettingsScreen(
                     loading = uiState.auditLoading,
                     loadingMore = uiState.auditLoadingMore,
                     error = uiState.auditError,
+                    actorUserId = uiState.auditActorUserId,
+                    action = uiState.auditAction,
+                    targetType = uiState.auditTargetType,
+                    result = uiState.auditResult,
+                    startAt = uiState.auditStartAt,
+                    endAt = uiState.auditEndAt,
+                    onActorUserIdChange = { viewModel.updateAuditFilters(actorUserId = it) },
+                    onActionChange = { viewModel.updateAuditFilters(action = it) },
+                    onTargetTypeChange = { viewModel.updateAuditFilters(targetType = it) },
+                    onResultChange = { viewModel.updateAuditFilters(result = it) },
+                    onStartAtChange = { viewModel.updateAuditFilters(startAt = it) },
+                    onEndAtChange = { viewModel.updateAuditFilters(endAt = it) },
+                    onApplyFilters = viewModel::applyAuditFilters,
+                    onResetFilters = viewModel::resetAuditFilters,
                     onRetry = viewModel::retryAuditLogs,
                     onLoadMore = viewModel::loadMoreAuditLogs,
                 )
@@ -1279,6 +1411,20 @@ private fun TeamSettingsAuditLogs(
     loading: Boolean,
     loadingMore: Boolean,
     error: String?,
+    actorUserId: String,
+    action: String,
+    targetType: String,
+    result: String,
+    startAt: String,
+    endAt: String,
+    onActorUserIdChange: (String) -> Unit,
+    onActionChange: (String) -> Unit,
+    onTargetTypeChange: (String) -> Unit,
+    onResultChange: (String) -> Unit,
+    onStartAtChange: (String) -> Unit,
+    onEndAtChange: (String) -> Unit,
+    onApplyFilters: () -> Unit,
+    onResetFilters: () -> Unit,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
 ) {
@@ -1290,84 +1436,200 @@ private fun TeamSettingsAuditLogs(
         )
         return
     }
-    if (loading && logs.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize().testTag("team-settings-audit-loading"), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
-        return
-    }
-    if (error != null && logs.isEmpty()) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp).testTag("team-settings-audit-error"),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text("审计日志加载失败: $error", color = MaterialTheme.colorScheme.error)
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = onRetry, modifier = Modifier.testTag("team-settings-audit-retry")) {
-                Text("重试")
-            }
-        }
-        return
-    }
-    if (logs.isEmpty()) {
-        EmptyState(
-            icon = Icons.Default.Settings,
-            title = "暂无团队审计日志",
-            modifier = Modifier.fillMaxSize().testTag("team-settings-audit-empty"),
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp).testTag("team-settings-audit-panel"),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        TeamSettingsAuditFilters(
+            actorUserId = actorUserId,
+            action = action,
+            targetType = targetType,
+            result = result,
+            startAt = startAt,
+            endAt = endAt,
+            onActorUserIdChange = onActorUserIdChange,
+            onActionChange = onActionChange,
+            onTargetTypeChange = onTargetTypeChange,
+            onResultChange = onResultChange,
+            onStartAtChange = onStartAtChange,
+            onEndAtChange = onEndAtChange,
+            onApply = onApplyFilters,
+            onReset = onResetFilters,
         )
-        return
-    }
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp).testTag("team-settings-audit-list")) {
-        item {
-            Text(
-                "已显示 ${logs.size} / $total 条",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(bottom = 8.dp).testTag("team-settings-audit-count"),
-            )
-        }
-        items(logs, key = { it.id }) { log ->
-            ListItem(
-                headlineContent = { Text(log.action, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                supportingContent = {
-                    Text(
-                        "${log.createdAt ?: "-"} · ${log.targetType ?: "-"} ${log.targetId ?: ""} · 状态 ${log.statusCode ?: "-"}",
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                trailingContent = {
-                    Text(
-                        if (log.result == 1) "成功" else "失败",
-                        color = if (log.result == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                    )
-                },
-                modifier = Modifier.testTag("team-settings-audit-${log.id}"),
-            )
-        }
-        if (error != null) {
-            item {
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("加载失败: $error", color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = onLoadMore, modifier = Modifier.testTag("team-settings-audit-load-more-retry")) {
+
+        when {
+            loading && logs.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxWidth().weight(1f).testTag("team-settings-audit-loading"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            error != null && logs.isEmpty() -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth().weight(1f).testTag("team-settings-audit-error"),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("审计日志加载失败: $error", color = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = onRetry, modifier = Modifier.testTag("team-settings-audit-retry")) {
                         Text("重试")
                     }
                 }
             }
-        } else if (loadingMore) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.testTag("team-settings-audit-loading-more"))
-                }
+            logs.isEmpty() -> {
+                EmptyState(
+                    icon = Icons.Default.Settings,
+                    title = "暂无团队审计日志",
+                    modifier = Modifier.fillMaxWidth().weight(1f).testTag("team-settings-audit-empty"),
+                )
             }
-        } else if (logs.size.toLong() < total) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-                    TextButton(onClick = onLoadMore, modifier = Modifier.testTag("team-settings-audit-load-more")) {
-                        Text("加载更多")
+            else -> {
+                LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f).testTag("team-settings-audit-list")) {
+                    item {
+                        Text(
+                            "已显示 ${logs.size} / $total 条",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 8.dp).testTag("team-settings-audit-count"),
+                        )
+                    }
+                    items(logs, key = { it.id }) { log ->
+                        ListItem(
+                            headlineContent = { Text(log.action, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            supportingContent = {
+                                Text(
+                                    "${log.createdAt ?: "-"} · ${log.targetType ?: "-"} ${log.targetId ?: ""} · 状态 ${log.statusCode ?: "-"}",
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            trailingContent = {
+                                Text(
+                                    if (log.result == 1) "成功" else "失败",
+                                    color = if (log.result == 1) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            modifier = Modifier.testTag("team-settings-audit-${log.id}"),
+                        )
+                    }
+                    if (error != null) {
+                        item {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text("加载失败: $error", color = MaterialTheme.colorScheme.error)
+                                TextButton(onClick = onLoadMore, modifier = Modifier.testTag("team-settings-audit-load-more-retry")) {
+                                    Text("重试")
+                                }
+                            }
+                        }
+                    } else if (loadingMore) {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.testTag("team-settings-audit-loading-more"))
+                            }
+                        }
+                    } else if (logs.size.toLong() < total) {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                                TextButton(onClick = onLoadMore, modifier = Modifier.testTag("team-settings-audit-load-more")) {
+                                    Text("加载更多")
+                                }
+                            }
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TeamSettingsAuditFilters(
+    actorUserId: String,
+    action: String,
+    targetType: String,
+    result: String,
+    startAt: String,
+    endAt: String,
+    onActorUserIdChange: (String) -> Unit,
+    onActionChange: (String) -> Unit,
+    onTargetTypeChange: (String) -> Unit,
+    onResultChange: (String) -> Unit,
+    onStartAtChange: (String) -> Unit,
+    onEndAtChange: (String) -> Unit,
+    onApply: () -> Unit,
+    onReset: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().testTag("team-settings-audit-filters"),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("筛选审计日志", style = MaterialTheme.typography.titleSmall)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = actorUserId,
+                onValueChange = { onActorUserIdChange(it.filter { char -> char.isDigit() }) },
+                placeholder = { Text("用户 ID") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).testTag("team-settings-audit-filter-user"),
+            )
+            OutlinedTextField(
+                value = action,
+                onValueChange = onActionChange,
+                placeholder = { Text("动作，如 INVITE") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).testTag("team-settings-audit-filter-action"),
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = targetType,
+                onValueChange = onTargetTypeChange,
+                placeholder = { Text("目标，如 FILE") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).testTag("team-settings-audit-filter-target"),
+            )
+            OutlinedTextField(
+                value = result,
+                onValueChange = onResultChange,
+                placeholder = { Text("1成功/0失败") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).testTag("team-settings-audit-filter-result"),
+            )
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = startAt,
+                onValueChange = onStartAtChange,
+                placeholder = { Text("开始时间 ISO") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).testTag("team-settings-audit-filter-start"),
+            )
+            OutlinedTextField(
+                value = endAt,
+                onValueChange = onEndAtChange,
+                placeholder = { Text("结束时间 ISO") },
+                singleLine = true,
+                modifier = Modifier.weight(1f).testTag("team-settings-audit-filter-end"),
+            )
+        }
+        Text(
+            text = "时间格式示例：2026-06-27T12:59:14",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onApply, modifier = Modifier.testTag("team-settings-audit-filter-apply")) {
+                Text("筛选")
+            }
+            TextButton(onClick = onReset, modifier = Modifier.testTag("team-settings-audit-filter-reset")) {
+                Text("重置")
             }
         }
     }

@@ -279,7 +279,8 @@
 
 - 目标：Android 支持按用户、动作、目标、结果、时间筛选团队审计。
 - 范围：UI 表单、Repository 参数、接口契约测试。
-- 验收：筛选结果和 Web/后端一致。
+- 状态：已完成。
+- 验收：Android 团队设置审计页已支持按用户 ID、动作、目标、结果、`startAt`、`endAt` 筛选；分页重试和加载更多沿用同一组筛选参数；`ApiServiceContractTest` 覆盖团队审计时间参数契约；`testDebugUnitTest` 已通过。
 
 ### AND-03 团队审计导出
 

@@ -167,6 +167,8 @@ interface ApiService {
         @Query("action") action: String? = null,
         @Query("targetType") targetType: String? = null,
         @Query("result") result: Int? = null,
+        @Query("startAt") startAt: String? = null,
+        @Query("endAt") endAt: String? = null,
         @Query("page") page: Int = 1,
         @Query("size") size: Int = 20,
     ): ApiResponse<PageResult<TeamOperationLog>>

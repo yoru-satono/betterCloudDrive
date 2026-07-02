@@ -275,8 +275,21 @@ class ApiServiceContractTest {
             api(server).rejectTeamInvite("invite-token")
             assertEquals("/team-invites/invite-token/reject", server.takeRequest().path)
 
-            api(server).listTeamAuditLogs(7, actorUserId = 12, action = "INVITE", targetType = "USER", result = 1, page = 2, size = 30)
-            assertEquals("/teams/7/audit-logs?actorUserId=12&action=INVITE&targetType=USER&result=1&page=2&size=30", server.takeRequest().path)
+            api(server).listTeamAuditLogs(
+                7,
+                actorUserId = 12,
+                action = "INVITE",
+                targetType = "USER",
+                result = 1,
+                startAt = "2026-06-27T12:00:00",
+                endAt = "2026-06-27T13:00:00",
+                page = 2,
+                size = 30,
+            )
+            assertEquals(
+                "/teams/7/audit-logs?actorUserId=12&action=INVITE&targetType=USER&result=1&startAt=2026-06-27T12%3A00%3A00&endAt=2026-06-27T13%3A00%3A00&page=2&size=30",
+                server.takeRequest().path,
+            )
 
             api(server).getTeamFileEffectivePermission(7, 9)
             assertEquals("/teams/7/files/9/effective-permission", server.takeRequest().path)

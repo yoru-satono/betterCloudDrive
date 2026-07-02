@@ -114,10 +114,12 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
         action: String? = null,
         targetType: String? = null,
         result: Int? = null,
+        startAt: String? = null,
+        endAt: String? = null,
         page: Int = 1,
         size: Int = 20,
     ): NetworkResult<PageResult<TeamOperationLog>> = apiCall {
-        api.listTeamAuditLogs(teamId, actorUserId, action, targetType, result, page, size)
+        api.listTeamAuditLogs(teamId, actorUserId, action, targetType, result, startAt, endAt, page, size)
     }
 
     suspend fun listFiles(
