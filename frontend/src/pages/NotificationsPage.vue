@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
@@ -22,10 +22,21 @@ const pageSize = 20
 const typeOptions: Array<{ label: string; value: NotificationTypeFilter | '' }> = [
   { label: '全部类型', value: '' },
   { label: '团队邀请', value: 'TEAM_INVITE' },
+  { label: '邀请接受', value: 'TEAM_INVITE_ACCEPT' },
+  { label: '邀请拒绝', value: 'TEAM_INVITE_REJECT' },
   { label: '配额告警', value: 'TEAM_QUOTA_ALERT' },
-  { label: '团队状态', value: 'TEAM_ARCHIVE' },
+  { label: '团队归档', value: 'TEAM_ARCHIVE' },
+  { label: '取消归档', value: 'TEAM_UNARCHIVE' },
+  { label: '团队恢复', value: 'TEAM_RESTORE' },
+  { label: '团队删除', value: 'TEAM_DELETE' },
   { label: '权限变更', value: 'TEAM_PERMISSION_UPDATE' },
 ]
+const emptyTitle = computed(() => {
+  if (unreadOnly.value && typeFilter.value) return '暂无匹配的未读通知'
+  if (unreadOnly.value) return '暂无未读通知'
+  if (typeFilter.value) return '暂无匹配类型的通知'
+  return '暂无通知'
+})
 
 async function load() {
   loading.value = true
@@ -92,7 +103,7 @@ onMounted(load)
     </div>
 
     <div v-if="loading" class="notifications-page__loading"><OSpinner /></div>
-    <OEmptyState v-else-if="notifications.length === 0" title="暂无通知" />
+    <OEmptyState v-else-if="notifications.length === 0" :title="emptyTitle" />
     <div v-else class="notifications-list">
       <button
         v-for="notification in notifications"
