@@ -18,6 +18,7 @@ export const useTeamFilesStore = defineStore('teamFiles', () => {
   const sortBy = ref('fileName')
   const order = ref('asc')
   const currentPermission = ref<TeamEffectivePermission>({ canRead: true, canWrite: false, canShare: false, canDelete: false, canManage: false })
+  const filePermissions = ref<Record<number, TeamEffectivePermission>>({})
 
   const canWrite = computed(() => currentPermission.value.canWrite)
   const canShare = computed(() => currentPermission.value.canShare)
@@ -50,6 +51,7 @@ export const useTeamFilesStore = defineStore('teamFiles', () => {
         order: order.value,
       })
       files.value = data.data.records
+      filePermissions.value = {}
       total.value = data.data.total
       page.value = data.data.page
       pages.value = data.data.pages
@@ -73,6 +75,26 @@ export const useTeamFilesStore = defineStore('teamFiles', () => {
     }
     const { data } = await teamsApi.getTeamFileEffectivePermission(teamId, fileId)
     currentPermission.value = data.data
+  }
+
+  function permissionForFile(fileId: number) {
+    return filePermissions.value[fileId] ?? currentPermission.value
+  }
+
+  function setFilePermission(fileId: number, permission: TeamEffectivePermission) {
+    filePermissions.value = { ...filePermissions.value, [fileId]: permission }
+    if (currentParentId.value === fileId) {
+      currentPermission.value = permission
+    }
+  }
+
+  async function loadFilePermission(teamId: number, fileId: number, force = false) {
+    if (!force && filePermissions.value[fileId]) {
+      return filePermissions.value[fileId]
+    }
+    const { data } = await teamsApi.getTeamFileEffectivePermission(teamId, fileId)
+    setFilePermission(fileId, data.data)
+    return data.data
   }
 
   async function openDirectory(teamId: number, folderId: number | null, folderHint?: FileEntity) {
@@ -157,6 +179,7 @@ export const useTeamFilesStore = defineStore('teamFiles', () => {
     loading,
     currentParentId,
     currentPermission,
+    filePermissions,
     breadcrumb,
     viewMode,
     selectedIds,
@@ -173,6 +196,9 @@ export const useTeamFilesStore = defineStore('teamFiles', () => {
     loadTeam,
     fetchFiles,
     loadCurrentPermission,
+    loadFilePermission,
+    permissionForFile,
+    setFilePermission,
     openDirectory,
     enterFolder,
     refresh,

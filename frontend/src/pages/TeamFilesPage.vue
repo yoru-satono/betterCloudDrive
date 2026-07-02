@@ -13,6 +13,7 @@ import UploadZone from '@/components/file/UploadZone.vue'
 import { useTeamFilesStore } from '@/stores/teamFiles'
 import { useTeamsStore } from '@/stores/teams'
 import { useUploadStore } from '@/stores/upload'
+import { useAuthStore } from '@/stores/auth'
 import { useContextMenu } from '@/composables/useContextMenu'
 import type { ContextMenuItem } from '@/composables/useContextMenu'
 import { useConfirm } from '@/composables/useConfirm'
@@ -37,6 +38,7 @@ const router = useRouter()
 const store = useTeamFilesStore()
 const teamsStore = useTeamsStore()
 const uploadStore = useUploadStore()
+const auth = useAuthStore()
 const ctx = useContextMenu()
 const { confirm } = useConfirm()
 const preview = usePreviewStore()
@@ -93,6 +95,23 @@ const GENERATED_PASSWORD_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
 
 const teamId = computed(() => Number(route.params.teamId))
 const folderId = computed(() => route.params.folderId ? Number(route.params.folderId) : null)
+const permissionMembers = computed(() => members.value.filter(member => member.role !== 'OWNER'))
+const permissionConsistencyWarning = computed(() => {
+  if (permissionForm.value.canRead) return ''
+  return permissionForm.value.canWrite || permissionForm.value.canShare || permissionForm.value.canDelete || permissionForm.value.canManage
+    ? '写入、分享、删除和管理权限必须同时保留读取权限。'
+    : ''
+})
+const selfLockWarning = computed(() => {
+  if (permissionForm.value.canManage) return ''
+  if (permissionSubjectType.value === 'USER' && Number(permissionSubjectUserId.value) === auth.user?.id) {
+    return '这会移除你自己的管理权限，后端会拒绝该操作。'
+  }
+  if (permissionSubjectType.value === 'ROLE' && permissionSubjectRole.value === store.currentTeam?.role) {
+    return '这会移除当前角色的管理权限，后端会拒绝该操作。'
+  }
+  return ''
+})
 
 watch(
   () => [route.params.teamId, route.params.folderId],
@@ -102,6 +121,12 @@ watch(
   },
   { immediate: true },
 )
+
+watch(permissionSubjectType, type => {
+  if (type === 'USER') {
+    void ensureMembersLoaded()
+  }
+})
 
 let disposeDesktopUpload: (() => void) | undefined
 onMounted(async () => {
@@ -183,7 +208,10 @@ function handleFileInputChange(event: Event) {
   input.value = ''
 }
 
-function openContextMenu(file: FileEntity, event: MouseEvent) {
+async function openContextMenu(file: FileEntity, event: MouseEvent) {
+  const permission = await store
+    .loadFilePermission(teamId.value, file.id)
+    .catch(() => store.permissionForFile(file.id))
   const items: ContextMenuItem[] = [
     {
       label: '下载',
@@ -196,22 +224,22 @@ function openContextMenu(file: FileEntity, event: MouseEvent) {
     items.push({ label: isOfficeFile(file) ? '打开文档' : '预览', action: () => preview.openPreview(file, { teamId: teamId.value }) })
     items.push({ label: '版本管理', action: () => openVersions(file) })
   }
-  if (store.canShare) {
+  if (permission.canShare) {
     items.push({ label: '分享', action: () => openShareDialog(file) })
   }
   items.push({ label: '收藏', action: () => favoriteFile(file) })
-  if (store.canWrite) {
+  if (permission.canWrite) {
     items.push({ label: '标签', action: () => openTags(file) })
   }
   items.push({ label: '详情', action: () => openDetail(file) })
-  if (store.canWrite) {
+  if (permission.canWrite) {
     items.push({ label: '移动到', action: () => openMove(file) })
     items.push({ label: '重命名', action: () => startRename(file) })
   }
-  if (store.canManageFiles) {
+  if (permission.canManage) {
     items.push({ label: '权限', action: () => openPermissions(file) })
   }
-  if (store.canDelete) {
+  if (permission.canDelete) {
     items.push({ divider: true, label: '', action: () => {} })
     items.push({ label: '删除', action: () => deleteSingle(file), danger: true })
   }
@@ -252,6 +280,11 @@ async function deleteSelected() {
   if (!store.canDelete) return
   const ids = [...store.selectedIds]
   if (!ids.length) return
+  const permissions = await Promise.all(ids.map(id => store.loadFilePermission(teamId.value, id).catch(() => store.permissionForFile(id))))
+  if (permissions.some(permission => !permission.canDelete)) {
+    toast.error('所选文件中包含无删除权限的项目')
+    return
+  }
   const ok = await confirm('确认删除', `将 ${ids.length} 个团队文件移入回收站。`)
   if (!ok) return
   await teamsApi.deleteTeamFiles(teamId.value, ids)
@@ -261,7 +294,7 @@ async function deleteSelected() {
 }
 
 async function deleteSingle(file: FileEntity) {
-  if (!store.canDelete) return
+  if (!store.permissionForFile(file.id).canDelete) return
   const ok = await confirm('确认删除', `将「${file.fileName}」移入回收站？`)
   if (!ok) return
   await teamsApi.deleteTeamFiles(teamId.value, [file.id])
@@ -374,7 +407,7 @@ async function restoreVersion(versionNumber: number) {
 }
 
 function openShareDialog(file: FileEntity) {
-  if (!store.canShare) return
+  if (!store.permissionForFile(file.id).canShare) return
   shareTarget.value = file
   shareMaxVisits.value = ''
   sharePasswordEnabled.value = false
@@ -389,7 +422,7 @@ async function openPermissions(file: FileEntity) {
   permissionTarget.value = file
   permissionOpen.value = true
   permissionEffective.value = null
-  await loadPermissions()
+  await Promise.all([loadPermissions(), ensureMembersLoaded()])
 }
 
 async function loadPermissions() {
@@ -402,6 +435,7 @@ async function loadPermissions() {
     ])
     permissions.value = permissionsResult.data.data
     permissionEffective.value = effectiveResult.data.data
+    store.setFilePermission(permissionTarget.value.id, effectiveResult.data.data)
   } finally {
     permissionsLoading.value = false
   }
@@ -431,8 +465,35 @@ function permissionSourceMeta(source: TeamPermissionSource) {
   return `${scope} · ${subject}`
 }
 
+function permissionSubjectName(permission: TeamFilePermission) {
+  if (permission.subjectType === 'ROLE') return `角色 ${permission.subjectRole}`
+  const member = members.value.find(item => item.userId === permission.subjectUserId)
+  return member ? `${member.username}（用户 ${member.userId}）` : `用户 ${permission.subjectUserId}`
+}
+
+function ensurePermissionUserSelected() {
+  if (permissionSubjectType.value !== 'USER') return
+  if (permissionMembers.value.some(member => String(member.userId) === permissionSubjectUserId.value)) return
+  permissionSubjectUserId.value = permissionMembers.value[0] ? String(permissionMembers.value[0].userId) : ''
+}
+
+async function ensureMembersLoaded() {
+  if (!members.value.length) {
+    await loadMembers()
+  }
+  ensurePermissionUserSelected()
+}
+
 async function savePermission() {
   if (!permissionTarget.value) return
+  if (permissionConsistencyWarning.value) {
+    toast.error(permissionConsistencyWarning.value)
+    return
+  }
+  if (selfLockWarning.value) {
+    toast.error(selfLockWarning.value)
+    return
+  }
   let subjectUserId: number | null = null
   if (permissionSubjectType.value === 'USER') {
     const parsedUserId = Number(permissionSubjectUserId.value)
@@ -453,6 +514,7 @@ async function savePermission() {
     ...permissionForm.value,
   })
   toast.success('权限已保存')
+  await store.refresh()
   await loadPermissions()
 }
 
@@ -460,6 +522,7 @@ async function deletePermission(permission: TeamFilePermission) {
   if (!permissionTarget.value) return
   await teamsApi.deleteTeamFilePermission(teamId.value, permissionTarget.value.id, permission.id)
   toast.success('权限已删除')
+  await store.refresh()
   await loadPermissions()
 }
 
@@ -889,7 +952,11 @@ function isOfficeFile(file: FileEntity) {
             <option value="EDITOR">Editor</option>
             <option value="ADMIN">Admin</option>
           </select>
-          <input v-else v-model="permissionSubjectUserId" inputmode="numeric" placeholder="用户 ID" />
+          <select v-else v-model="permissionSubjectUserId" :disabled="membersLoading || permissionMembers.length === 0">
+            <option v-for="member in permissionMembers" :key="member.userId" :value="String(member.userId)">
+              {{ member.username }} · {{ member.role }}
+            </option>
+          </select>
           <label><input v-model="permissionForm.canRead" type="checkbox" /> 读</label>
           <label><input v-model="permissionForm.canWrite" type="checkbox" /> 写</label>
           <label><input v-model="permissionForm.canShare" type="checkbox" /> 分享</label>
@@ -897,12 +964,16 @@ function isOfficeFile(file: FileEntity) {
           <label><input v-model="permissionForm.canManage" type="checkbox" /> 管理</label>
           <OButton variant="primary" size="sm" @click="savePermission">保存</OButton>
         </div>
+        <div v-if="permissionConsistencyWarning || selfLockWarning" class="permission-box__warnings">
+          <span v-if="permissionConsistencyWarning">{{ permissionConsistencyWarning }}</span>
+          <span v-if="selfLockWarning">{{ selfLockWarning }}</span>
+        </div>
         <div v-if="permissionsLoading" class="permission-box__loading"><OSpinner /></div>
         <div v-else-if="permissions.length === 0" class="permission-box__empty">暂无权限覆盖</div>
         <div v-else class="permission-list">
           <div v-for="permission in permissions" :key="permission.id" class="permission-row">
             <div>
-              <strong>{{ permission.subjectType === 'ROLE' ? permission.subjectRole : `用户 ${permission.subjectUserId}` }}</strong>
+              <strong>{{ permissionSubjectName(permission) }}</strong>
               <span>{{ permissionBits(permission) }}</span>
             </div>
             <OButton variant="danger" size="sm" @click="deletePermission(permission)">删除</OButton>
@@ -1354,6 +1425,11 @@ function isOfficeFile(file: FileEntity) {
   background: var(--bg-elevated);
   color: var(--text-primary);
   padding: 0 9px;
+  min-width: 0;
+}
+.permission-box__form select:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
 }
 .permission-box__form label {
   display: inline-flex;
@@ -1365,6 +1441,14 @@ function isOfficeFile(file: FileEntity) {
 }
 .permission-box__form input[type="checkbox"] {
   accent-color: var(--accent);
+}
+.permission-box__warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.4;
 }
 .permission-box__loading,
 .permission-box__empty {
