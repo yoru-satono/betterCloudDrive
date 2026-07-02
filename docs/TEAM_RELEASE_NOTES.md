@@ -1,0 +1,121 @@
+# 团队模块阶段发布说明
+
+本文档记录当前团队模块阶段性能力、迁移要求、环境要求和已知限制，供本地验证、测试交接和部署前检查使用。
+
+## 已实现能力
+
+### 团队基础
+
+- 团队创建、重命名、列表、详情、成员列表。
+- 成员角色：`OWNER`、`ADMIN`、`EDITOR`、`VIEWER`。
+- 成员添加、角色调整、移除、退出团队、转让团队所有权。
+- 团队软删除、恢复、归档、取消归档、永久清理。
+- 团队删除和清理具备幂等处理，重复调用返回稳定结果。
+
+### 邀请流程
+
+- 团队邀请创建、列表、取消。
+- 邀请链接查询、接受、拒绝。
+- 团队邀请会生成站内通知。
+- Android 端已补邀请链接接受/拒绝页面和深链入口。
+
+### 团队文件
+
+- 团队文件夹创建、文件上传、列表、搜索、预览、下载票据、下载。
+- 团队文件重命名、移动、复制、删除、回收站列表、恢复、永久删除。
+- 团队分享、标签、收藏能力已接入，并按可见权限过滤。
+- 团队分页列表在权限过滤后重新分页，`total` 反映用户实际可见数据。
+
+### 权限
+
+- 支持团队角色基础权限和文件/文件夹级权限覆盖。
+- 支持用户级覆盖、角色级覆盖、文件夹继承到子文件。
+- 后端强制权限位自洽：`write/share/delete/manage` 不能在 `read=false` 时单独成立。
+- 支持自锁保护，避免管理者把自己锁出权限管理。
+- OnlyOffice 团队文档预览和编辑已按文件级有效权限判断，而不是只按团队角色判断。
+
+### 审计和通知
+
+- 团队关键动作写入团队审计日志，包括团队、成员、邀请、文件、分享、标签、收藏、权限、配额、删除/恢复/归档/清理。
+- 团队审计列表和导出时间参数解析一致。
+- 团队审计 CSV 导出与 admin 导出共用导出逻辑。
+- 团队通知、未读计数、批量已读、配额告警基础能力已实现。
+
+### 配额
+
+- 支持团队配额查看和 admin 配额调整。
+- 上传完成接口具备幂等处理，避免重复完成导致文件和配额重复计量。
+- 团队配额告警会生成通知。
+
+### OnlyOffice
+
+- Docker Compose 接入 OnlyOffice Document Server。
+- 支持个人 Office 文件只读预览。
+- 支持团队 Office 文件按权限返回只读或可编辑配置。
+- 支持团队文档编辑保存为新版本。
+- OnlyOffice callback 具备幂等保护，重复 callback 不生成重复版本。
+- 团队文档历史版本支持列表、下载、恢复。
+
+### Admin 后台
+
+- Admin 可查看团队列表、详情、成员、文件、审计、配额。
+- Admin 可归档、取消归档、恢复、永久清理团队。
+- Admin 可导出团队审计。
+- Admin 支持团队删除后的恢复/归档后台能力。
+
+### 客户端
+
+- Web/Tauri 已接入团队核心流程、团队设置、连接设置、上下文搜索和 OnlyOffice 预览/编辑入口。
+- Tauri 标题栏保留连接设置入口，登录后通过弹窗管理 API 地址和 Web 分享地址。
+- Android 已接入团队 MVP、邀请深链、团队文件、分享、通知、OnlyOffice 入口和部分团队权限测试覆盖。
+
+## 迁移要求
+
+- 数据库迁移使用 Flyway，部署时必须执行到当前最新版本：
+  - `V2__team_space_mvp.sql`
+  - `V3__team_share_links.sql`
+  - `V4__team_invites_audit_tags.sql`
+  - `V5__retain_team_audit_logs.sql`
+  - `V6__team_notifications_permissions_archival.sql`
+  - `V7__upload_completion_idempotency.sql`
+  - `V8__onlyoffice_callback_idempotency.sql`
+- PostgreSQL 版本按当前环境模板使用 PostgreSQL 18。
+- 生产环境必须替换默认 JWT、数据库、邮箱、OnlyOffice JWT secret 等密钥。
+- 升级前建议备份 PostgreSQL 和 SeaweedFS 数据；团队文件、分享、版本、审计都依赖这两类存储。
+
+## 环境要求
+
+- Docker Compose 需要启动：PostgreSQL、Redis、SeaweedFS、Mailpit、OnlyOffice Document Server、后端、前端。
+- OnlyOffice 关键配置必须一致：
+  - `ONLYOFFICE_INTERNAL_URL`
+  - `ONLYOFFICE_PUBLIC_URL`
+  - `APP_INTERNAL_API_BASE_URL`
+  - `ONLYOFFICE_JWT_SECRET`
+- Web/Tauri 使用前端环境变量配置 API 地址和 Web 分享地址。
+- Android E2E 当前使用 Android 15 模拟器，连接地址为 `localhost:16416`。
+- 本地一键验证脚本为 `scripts/verify-all.ps1`，可按需传入 `-AndroidSerial localhost:16416`。
+
+## 验证记录
+
+最近一次团队权限矩阵收尾验证：
+
+- `mvn test`
+- `backend-test/.venv/Scripts/pytest.exe tests/test_teams.py -v`
+- `backend-test/.venv/Scripts/pytest.exe -v`
+
+结果：
+
+- 后端 Maven 全量测试通过。
+- backend-test 全量黑盒测试通过：`135 passed, 1 skipped`。
+
+## 已知限制
+
+- 团队事件 outbox 尚未实现，通知、审计导出、缩略图、OnlyOffice 保存等仍以同步或现有后台机制为主。
+- 团队通知暂未提供实时 SSE/WebSocket 推送和通知偏好配置。
+- 团队任务中心尚未实现，长任务状态还没有统一入口。
+- 权限来源说明尚未完整展示，前端只能看到最终效果或基础权限配置。
+- 团队活动流尚未作为独立成员视图实现。
+- OnlyOffice 保存异步化、保存失败可见性、多格式真实保存 E2E、个人只读预览 E2E、禁用 AI/插件回归测试仍在后续任务中。
+- Web/Tauri/Android 的完整团队 E2E 和契约测试仍需继续补齐。
+- 消息队列尚未引入，队列选型和积压指标仍在后续性能任务中。
+- Compose 健康检查、OnlyOffice 部署说明、备份恢复说明和观测指标仍需按 OPS/OBS 任务继续完善。
