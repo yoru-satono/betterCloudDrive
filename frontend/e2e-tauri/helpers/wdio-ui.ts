@@ -13,11 +13,49 @@ export async function waitForTauriWindow() {
   }
 }
 
+export async function resetToLoginWindow() {
+  await browser.execute(() => {
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    window.location.hash = '#/login'
+  }).catch(() => undefined)
+  await browser.refresh().catch(() => undefined)
+  await waitForTauriWindow()
+}
+
 export async function loginViaWindow(username: string, password: string) {
   await (await inputByLabel('用户名')).setValue(username)
   await (await inputByLabel('密码')).setValue(password)
   await (await buttonByText('登录')).click()
   await expect(await linkByText('全部文件')).toBeDisplayed()
+}
+
+export async function fillInputByLabel(label: string, value: string) {
+  await (await inputByLabel(label)).setValue(value)
+}
+
+export async function clickButton(text: string) {
+  await (await buttonByText(text)).click()
+}
+
+export async function clickLink(text: string) {
+  await (await linkByText(text)).click()
+}
+
+export async function clickTextContaining(text: string) {
+  const element = await textElementContaining(text)
+  await element.waitForDisplayed()
+  await element.click()
+}
+
+export async function clickElementByClassContaining(className: string, text: string) {
+  const element = await $(`//*[contains(concat(" ", normalize-space(@class), " "), " ${className} ") and contains(normalize-space(.), "${text}")]`)
+  await element.waitForDisplayed()
+  await element.click()
+}
+
+export async function expectVisibleText(text: string) {
+  await expectTextVisible(text)
 }
 
 export async function expectDesktopSettings() {
@@ -88,7 +126,7 @@ export async function expectOfficePreviewMode(text: '只读预览' | '可编辑'
 export async function closePreviewModal() {
   const buttons = await $$('//button[normalize-space(.)="关闭"]')
   if (!buttons.length) throw new Error('Close button was not found')
-  await buttons[buttons.length - 1].click()
+  await buttons[Number(buttons.length) - 1].click()
   await browser.waitUntil(async () => !(await textElementContaining('文件预览').isDisplayed().catch(() => false)), {
     timeout: 10_000,
     timeoutMsg: 'Preview modal did not close',
@@ -122,6 +160,34 @@ export async function openTeamRecycleBin() {
 export async function expectWriteActionsUnavailable() {
   await expectButtonNotDisplayed('上传文件')
   await expectButtonNotDisplayed('新建文件夹')
+}
+
+export async function expectSearchTrigger(text: string) {
+  await expectTextVisible(text)
+}
+
+export async function openContextSearch(query: string) {
+  await (await $('.app-header__search')).click()
+  await (await $('.search-panel')).waitForDisplayed()
+  const input = await $('.search-input')
+  await input.waitForDisplayed()
+  await input.setValue(query)
+  await (await $('.search-results')).waitForDisplayed()
+}
+
+export async function closeContextSearch() {
+  await browser.keys('Escape')
+  await browser.waitUntil(async () => !(await $('.search-panel').isDisplayed().catch(() => false)), {
+    timeout: 5_000,
+    timeoutMsg: 'Search panel did not close',
+  })
+}
+
+export async function expectContextSearchResult(text: string) {
+  await browser.waitUntil(async () => (await textElementContaining(text).isDisplayed().catch(() => false)), {
+    timeout: 10_000,
+    timeoutMsg: `Search result "${text}" was not displayed`,
+  })
 }
 
 export async function downloadFromContextMenu(fileName: string) {

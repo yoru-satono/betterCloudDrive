@@ -351,7 +351,8 @@
 
 - 目标：桌面端覆盖关键回归。
 - 范围：连接设置、登录注册、团队文件、OnlyOffice、搜索上下文。
-- 验收：可在 Windows 本地自动运行。
+- 状态：已完成。
+- 验收：`npm run test:e2e:tauri` 已在 Windows 本地通过；覆盖连接设置、登录注册、团队文件、OnlyOffice、搜索上下文。
 
 ### TEST-07 Android 团队 E2E
 
