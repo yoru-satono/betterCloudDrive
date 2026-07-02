@@ -94,8 +94,15 @@ data class TeamSettingsUiState(
     val tagFiles: List<FileItem> = emptyList(),
     val tagFilesLoading: Boolean = false,
     val auditLogs: List<TeamOperationLog> = emptyList(),
+    val auditPage: Int = 1,
+    val auditTotal: Long = 0,
+    val auditLoading: Boolean = false,
+    val auditLoadingMore: Boolean = false,
+    val auditError: String? = null,
     val isLoading: Boolean = false,
 )
+
+private const val TEAM_AUDIT_PAGE_SIZE = 20
 
 @HiltViewModel
 class TeamSettingsViewModel @Inject constructor(
@@ -162,10 +169,16 @@ class TeamSettingsViewModel @Inject constructor(
             } else {
                 emptyList()
             }
+            var auditTotal = 0L
+            var auditError: String? = null
             val auditLogs = if (team?.canManageMembers == true) {
-                when (val result = repository.listAuditLogs(teamId, size = 30)) {
-                    is NetworkResult.Success -> result.data.records
+                when (val result = repository.listAuditLogs(teamId, size = TEAM_AUDIT_PAGE_SIZE)) {
+                    is NetworkResult.Success -> {
+                        auditTotal = result.data.total
+                        result.data.records
+                    }
                     is NetworkResult.Error -> {
+                        auditError = result.message
                         _events.emit(UiEvent.ShowSnackbar("审计日志加载失败: ${result.message}", true))
                         emptyList()
                     }
@@ -182,8 +195,58 @@ class TeamSettingsViewModel @Inject constructor(
                 tags = tags,
                 favorites = favorites,
                 auditLogs = auditLogs,
+                auditPage = 1,
+                auditTotal = auditTotal,
+                auditError = auditError,
                 isLoading = false,
             )
+        }
+    }
+
+    fun retryAuditLogs() {
+        val team = _uiState.value.team ?: return
+        if (!team.canManageMembers || _uiState.value.auditLoading) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(auditLoading = true, auditError = null)
+            when (val result = repository.listAuditLogs(team.id, page = 1, size = TEAM_AUDIT_PAGE_SIZE)) {
+                is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
+                    auditLogs = result.data.records,
+                    auditPage = result.data.page,
+                    auditTotal = result.data.total,
+                    auditLoading = false,
+                    auditError = null,
+                )
+                is NetworkResult.Error -> {
+                    _uiState.value = _uiState.value.copy(auditLoading = false, auditError = result.message)
+                    _events.emit(UiEvent.ShowSnackbar("审计日志加载失败: ${result.message}", true))
+                }
+                is NetworkResult.Loading -> Unit
+            }
+        }
+    }
+
+    fun loadMoreAuditLogs() {
+        val state = _uiState.value
+        val team = state.team ?: return
+        if (!team.canManageMembers || state.auditLoading || state.auditLoadingMore) return
+        if (state.auditLogs.size.toLong() >= state.auditTotal) return
+        val nextPage = state.auditPage + 1
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(auditLoadingMore = true, auditError = null)
+            when (val result = repository.listAuditLogs(team.id, page = nextPage, size = TEAM_AUDIT_PAGE_SIZE)) {
+                is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
+                    auditLogs = _uiState.value.auditLogs + result.data.records,
+                    auditPage = result.data.page,
+                    auditTotal = result.data.total,
+                    auditLoadingMore = false,
+                    auditError = null,
+                )
+                is NetworkResult.Error -> {
+                    _uiState.value = _uiState.value.copy(auditLoadingMore = false, auditError = result.message)
+                    _events.emit(UiEvent.ShowSnackbar("审计日志加载失败: ${result.message}", true))
+                }
+                is NetworkResult.Loading -> Unit
+            }
         }
     }
 
@@ -570,6 +633,12 @@ fun TeamSettingsScreen(
                 else -> TeamSettingsAuditLogs(
                     team = uiState.team,
                     logs = uiState.auditLogs,
+                    total = uiState.auditTotal,
+                    loading = uiState.auditLoading,
+                    loadingMore = uiState.auditLoadingMore,
+                    error = uiState.auditError,
+                    onRetry = viewModel::retryAuditLogs,
+                    onLoadMore = viewModel::loadMoreAuditLogs,
                 )
             }
         }
@@ -1206,6 +1275,12 @@ private fun TeamSettingsTags(
 private fun TeamSettingsAuditLogs(
     team: Team?,
     logs: List<TeamOperationLog>,
+    total: Long,
+    loading: Boolean,
+    loadingMore: Boolean,
+    error: String?,
+    onRetry: () -> Unit,
+    onLoadMore: () -> Unit,
 ) {
     if (team?.canManageMembers != true) {
         EmptyState(
@@ -1213,6 +1288,26 @@ private fun TeamSettingsAuditLogs(
             title = "无审计日志权限",
             modifier = Modifier.fillMaxSize().testTag("team-settings-audit-readonly"),
         )
+        return
+    }
+    if (loading && logs.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize().testTag("team-settings-audit-loading"), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+    if (error != null && logs.isEmpty()) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp).testTag("team-settings-audit-error"),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("审计日志加载失败: $error", color = MaterialTheme.colorScheme.error)
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onRetry, modifier = Modifier.testTag("team-settings-audit-retry")) {
+                Text("重试")
+            }
+        }
         return
     }
     if (logs.isEmpty()) {
@@ -1224,6 +1319,14 @@ private fun TeamSettingsAuditLogs(
         return
     }
     LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp).testTag("team-settings-audit-list")) {
+        item {
+            Text(
+                "已显示 ${logs.size} / $total 条",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(bottom = 8.dp).testTag("team-settings-audit-count"),
+            )
+        }
         items(logs, key = { it.id }) { log ->
             ListItem(
                 headlineContent = { Text(log.action, maxLines = 1, overflow = TextOverflow.Ellipsis) },
@@ -1242,6 +1345,30 @@ private fun TeamSettingsAuditLogs(
                 },
                 modifier = Modifier.testTag("team-settings-audit-${log.id}"),
             )
+        }
+        if (error != null) {
+            item {
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("加载失败: $error", color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onLoadMore, modifier = Modifier.testTag("team-settings-audit-load-more-retry")) {
+                        Text("重试")
+                    }
+                }
+            }
+        } else if (loadingMore) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.testTag("team-settings-audit-loading-more"))
+                }
+            }
+        } else if (logs.size.toLong() < total) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+                    TextButton(onClick = onLoadMore, modifier = Modifier.testTag("team-settings-audit-load-more")) {
+                        Text("加载更多")
+                    }
+                }
+            }
         }
     }
 }
