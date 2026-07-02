@@ -1,6 +1,7 @@
 """Black-box tests for /api/v1/teams endpoints."""
 
 import hashlib
+import re
 import uuid
 
 import pytest
@@ -56,6 +57,33 @@ def add_member(client, owner_headers, team_id, username, role):
         json={"username": username, "role": role},
         headers=owner_headers,
     ))
+
+
+def create_invite(client, owner_headers, team_id, email, role):
+    data = assert_api_ok(client.post(
+        f"/api/v1/teams/{team_id}/invites",
+        json={"email": email, "role": role},
+        headers=owner_headers,
+    ))
+    assert data["teamId"] == team_id
+    assert data["email"] == email.lower()
+    assert data["role"] == role
+    assert data["status"] == "PENDING"
+    return data
+
+
+def invite_token_from_notifications(client, invited_headers, team_id):
+    notifications = assert_paginated(client.get(
+        "/api/v1/notifications?type=TEAM_INVITE&page=1&size=20",
+        headers=invited_headers,
+    ))
+    for notification in notifications["records"]:
+        if notification.get("teamId") != team_id:
+            continue
+        match = re.search(r"team-invites/([A-Za-z0-9]+)", notification.get("link") or "")
+        if match:
+            return match.group(1)
+    raise AssertionError(f"Invite notification for team {team_id} not found: {notifications['records']}")
 
 
 def create_team_folder(client, headers, team_id, parent_id=None, name=None):
@@ -119,6 +147,14 @@ def assert_page_has_id(page, item_id):
     )
 
 
+def assert_member_role(client, headers, team_id, username, role):
+    members = assert_api_ok(client.get(f"/api/v1/teams/{team_id}/members", headers=headers))
+    member = next((item for item in members if item["username"] == username), None)
+    assert member is not None, f"Member {username} not found in {members}"
+    assert member["role"] == role
+    return member
+
+
 @pytest.fixture
 def extra_user(client, registration_code_for):
     return register_user(client, registration_code_for)
@@ -157,6 +193,104 @@ class TestTeamLifecycle:
         assert_api_error_in(client.get(f"/api/v1/teams/{team_id}", headers=auth_headers), {404})
         assert_api_error_in(client.get(f"/api/v1/teams/{team_id}/files", headers=auth_headers), {404})
         assert_api_error_in(client.get(f"/api/v1/teams/{team_id}/audit-logs", headers=auth_headers), {404})
+
+    @pytest.mark.admin
+    def test_full_lifecycle_invite_permissions_delete_and_restore(
+            self, client, auth_headers, admin_headers, registration_code_for, sample_file):
+        editor = register_user(client, registration_code_for, "lifecycle_editor")
+        rejecter = register_user(client, registration_code_for, "lifecycle_rejecter")
+        team = create_team(client, auth_headers)
+        team_id = team["id"]
+
+        create_invite(client, auth_headers, team_id, rejecter["email"], "VIEWER")
+        reject_token = invite_token_from_notifications(client, rejecter["headers"], team_id)
+        reject_detail = assert_api_ok(client.get(f"/api/v1/team-invites/{reject_token}", headers=rejecter["headers"]))
+        assert reject_detail["status"] == "PENDING"
+        assert_api_ok(client.post(f"/api/v1/team-invites/{reject_token}/reject", headers=rejecter["headers"]))
+        rejected_invites = assert_api_ok(client.get(f"/api/v1/teams/{team_id}/invites", headers=auth_headers))
+        assert any(invite["email"] == rejecter["email"] and invite["status"] == "REJECTED"
+                   for invite in rejected_invites)
+
+        create_invite(client, auth_headers, team_id, editor["email"], "EDITOR")
+        accept_token = invite_token_from_notifications(client, editor["headers"], team_id)
+        accept_detail = assert_api_ok(client.get(f"/api/v1/team-invites/{accept_token}", headers=editor["headers"]))
+        assert accept_detail["role"] == "EDITOR"
+        assert_api_ok(client.post(f"/api/v1/team-invites/{accept_token}/accept", headers=editor["headers"]))
+        editor_member = assert_member_role(client, auth_headers, team_id, editor["username"], "EDITOR")
+
+        folder = create_team_folder(client, editor["headers"], team_id)
+        uploaded = upload_team_file(client, editor["headers"], team_id, folder["id"], sample_file)
+        file_id = uploaded["fileId"]
+
+        updated_member = assert_api_ok(client.put(
+            f"/api/v1/teams/{team_id}/members/{editor_member['userId']}",
+            json={"role": "VIEWER"},
+            headers=auth_headers,
+        ))
+        assert updated_member["role"] == "VIEWER"
+        assert_paginated(client.get(
+            f"/api/v1/teams/{team_id}/files?parentId={folder['id']}",
+            headers=editor["headers"],
+        ))
+        assert_api_error_in(client.post(
+            f"/api/v1/teams/{team_id}/files/folder",
+            json={"folderName": f"blocked_{uuid.uuid4().hex[:6]}"},
+            headers=editor["headers"],
+        ), {403})
+
+        share = assert_api_ok(client.post(
+            f"/api/v1/teams/{team_id}/shares",
+            json={"fileId": file_id},
+            headers=auth_headers,
+        ))
+        assert share["fileId"] == file_id
+
+        assert_api_ok(client.request(
+            "DELETE",
+            f"/api/v1/teams/{team_id}/files",
+            json={"fileIds": [file_id]},
+            headers=auth_headers,
+        ))
+        recycled = assert_paginated(client.get(
+            f"/api/v1/teams/{team_id}/recycle-bin?q={uploaded['fileName'][:5]}",
+            headers=auth_headers,
+        ))
+        assert_page_has_id(recycled, file_id)
+        assert_api_ok(client.post(f"/api/v1/teams/{team_id}/recycle-bin/{file_id}/restore", headers=auth_headers))
+
+        assert_api_ok(client.delete(
+            f"/api/v1/teams/{team_id}/members/{editor_member['userId']}",
+            headers=auth_headers,
+        ))
+        assert_api_error_in(client.get(f"/api/v1/teams/{team_id}", headers=editor["headers"]), {403})
+
+        assert_api_ok(client.delete(f"/api/v1/teams/{team_id}", headers=auth_headers))
+        assert_api_error_in(client.get(f"/api/v1/teams/{team_id}", headers=auth_headers), {404})
+        restored = assert_api_ok(client.post(f"/api/v1/admin/teams/{team_id}/restore", headers=admin_headers))
+        assert restored["id"] == team_id
+        assert restored["deletedAt"] is None
+        restored_detail = assert_api_ok(client.get(f"/api/v1/teams/{team_id}", headers=auth_headers))
+        assert restored_detail["id"] == team_id
+
+        for action in [
+            "TEAM_CREATE",
+            "INVITE_CREATE",
+            "INVITE_REJECT",
+            "INVITE_ACCEPT",
+            "FILE_CREATE_FOLDER",
+            "UPLOAD_COMPLETE",
+            "MEMBER_ROLE_UPDATE",
+            "SHARE_CREATE",
+            "FILE_DELETE",
+            "FILE_RESTORE",
+            "MEMBER_REMOVE",
+            "TEAM_DELETE",
+            "TEAM_RESTORE",
+        ]:
+            assert_team_audit_action(client, auth_headers, team_id, action)
+
+        assert_api_ok(client.delete(f"/api/v1/teams/{team_id}", headers=auth_headers))
+        assert_api_ok(client.delete(f"/api/v1/admin/teams/{team_id}/purge", headers=admin_headers))
 
 
 class TestTeamPermissions:
