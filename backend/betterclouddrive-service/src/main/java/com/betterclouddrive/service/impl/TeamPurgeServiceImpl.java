@@ -67,7 +67,7 @@ public class TeamPurgeServiceImpl implements TeamPurgeService {
             }
         }
 
-        teamRepository.deleteById(teamId);
+        teamRepository.deleteExistingById(teamId);
         redisTemplate.delete(TEAM_STORAGE_INCR_PREFIX + teamId);
     }
 

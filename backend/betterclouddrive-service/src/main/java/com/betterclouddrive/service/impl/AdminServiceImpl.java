@@ -203,7 +203,11 @@ public class AdminServiceImpl implements AdminService {
     @Override
     @Transactional
     public void purgeTeam(Long adminUserId, Long teamId) {
-        TeamEntity team = getTeam(teamId);
+        TeamEntity team = teamRepository.findById(teamId).orElse(null);
+        if (team == null) {
+            teamPurgeService.purgeTeam(teamId);
+            return;
+        }
         if (team.getDeletedAt() == null) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "Only deleted teams can be purged");
         }

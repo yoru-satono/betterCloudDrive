@@ -19,6 +19,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -142,6 +143,45 @@ class TeamServiceImplTest {
 
         assertThatThrownBy(() -> teamService.leaveTeam(1L, 10L))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void deleteTeam_shouldSoftDeleteAndRecordAudit() {
+        TeamEntity team = TeamEntity.builder().id(10L).name("Team").ownerId(1L).build();
+        TeamMemberEntity owner = TeamMemberEntity.builder()
+                .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
+        when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(owner));
+
+        teamService.deleteTeam(1L, 10L);
+
+        assertThat(team.getDeletedAt()).isNotNull();
+        assertThat(team.getDeletedBy()).isEqualTo(1L);
+        assertThat(team.getPurgeAfter()).isNotNull();
+        verify(teamRepository).save(team);
+        verify(teamAuditService).record(10L, 1L, "TEAM_DELETE", "TEAM", 10L, "Team");
+        verify(notificationService).notifyTeamMembers(eq(10L), eq(1L), eq("TEAM_DELETE"), anyString(), anyString(), isNull(), eq(true));
+    }
+
+    @Test
+    void deleteTeam_shouldBeIdempotentWhenAlreadyDeleted() {
+        TeamEntity team = TeamEntity.builder()
+                .id(10L)
+                .name("Team")
+                .ownerId(1L)
+                .deletedAt(LocalDateTime.now())
+                .deletedBy(1L)
+                .build();
+        TeamMemberEntity owner = TeamMemberEntity.builder()
+                .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
+        when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(owner));
+
+        teamService.deleteTeam(1L, 10L);
+
+        verify(teamRepository, never()).save(any());
+        verify(teamAuditService, never()).record(anyLong(), anyLong(), anyString(), anyString(), anyLong(), any());
+        verify(notificationService, never()).notifyTeamMembers(anyLong(), anyLong(), anyString(), anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test

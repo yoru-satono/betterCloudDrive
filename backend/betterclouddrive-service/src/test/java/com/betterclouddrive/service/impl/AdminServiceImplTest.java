@@ -6,8 +6,16 @@ import static org.mockito.Mockito.*;
 
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
+import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
+import com.betterclouddrive.dal.repository.FileRepository;
+import com.betterclouddrive.dal.repository.TeamMemberRepository;
+import com.betterclouddrive.dal.repository.TeamOperationLogRepository;
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
+import com.betterclouddrive.service.NotificationService;
+import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamPurgeService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +34,13 @@ import java.util.Optional;
 class AdminServiceImplTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private TeamRepository teamRepository;
+    @Mock private TeamMemberRepository teamMemberRepository;
+    @Mock private TeamOperationLogRepository teamOperationLogRepository;
+    @Mock private FileRepository fileRepository;
+    @Mock private TeamAuditService teamAuditService;
+    @Mock private TeamPurgeService teamPurgeService;
+    @Mock private NotificationService notificationService;
     @InjectMocks private AdminServiceImpl adminService;
 
     @Test
@@ -91,6 +106,39 @@ class AdminServiceImplTest {
 
         assertThat(user.getStorageQuota()).isEqualTo(21474836480L);
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void purgeTeam_shouldBeIdempotentWhenTeamAlreadyPurged() {
+        when(teamRepository.findById(10L)).thenReturn(Optional.empty());
+
+        adminService.purgeTeam(1L, 10L);
+
+        verify(teamPurgeService).purgeTeam(10L);
+        verify(teamAuditService, never()).record(anyLong(), anyLong(), anyString(), anyString(), anyLong(), any());
+    }
+
+    @Test
+    void purgeTeam_shouldRejectActiveTeam() {
+        TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
+        when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
+
+        assertThatThrownBy(() -> adminService.purgeTeam(1L, 10L))
+                .isInstanceOf(BusinessException.class);
+
+        verify(teamPurgeService, never()).purgeTeam(anyLong());
+    }
+
+    @Test
+    void restoreTeam_shouldReturnActiveTeamWithoutSideEffects() {
+        TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
+        when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
+
+        TeamEntity restored = adminService.restoreTeam(1L, 10L);
+
+        assertThat(restored).isSameAs(team);
+        verify(teamRepository, never()).save(any());
+        verify(teamAuditService, never()).record(anyLong(), anyLong(), anyString(), anyString(), anyLong(), any());
     }
 
     @Test

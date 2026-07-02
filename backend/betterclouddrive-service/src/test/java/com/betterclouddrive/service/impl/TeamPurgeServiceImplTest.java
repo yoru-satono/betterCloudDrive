@@ -86,7 +86,19 @@ class TeamPurgeServiceImplTest {
         verify(storageService).deleteObject("zip/teams/10/folder.zip");
         verify(storageService).deleteParts("uploads/teams/10/active-upload/chunks", 2);
         verify(storageService, never()).deleteParts("uploads/teams/10/completed-upload/chunks", 2);
-        verify(teamRepository).deleteById(10L);
+        verify(teamRepository).deleteExistingById(10L);
         verify(redisTemplate).delete("team:storage:incr:10");
+    }
+
+    @Test
+    void shouldBeIdempotentWhenTeamIsAlreadyGone() {
+        when(fileRepository.findByTeamId(10L)).thenReturn(List.of());
+        when(uploadSessionRepository.findByTeamId(10L)).thenReturn(List.of());
+
+        service.purgeTeam(10L);
+
+        verify(teamRepository).deleteExistingById(10L);
+        verify(redisTemplate).delete("team:storage:incr:10");
+        verify(storageService, never()).deleteObject(org.mockito.ArgumentMatchers.anyString());
     }
 }

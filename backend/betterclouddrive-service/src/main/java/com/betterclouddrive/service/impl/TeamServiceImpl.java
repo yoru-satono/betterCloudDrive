@@ -96,12 +96,24 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional
     public void deleteTeam(Long userId, Long teamId) {
-        requireOwner(userId, teamId);
-        TeamEntity team = requireTeam(teamId);
+        TeamEntity team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
+        TeamMemberEntity owner = teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, userId, ACTIVE)
+                .orElseThrow(() -> new BusinessException(ApiCode.FORBIDDEN, "Not a team member"));
+        if (!ROLE_OWNER.equals(owner.getRole())) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Only owner can perform this operation");
+        }
+        if (team.getArchivedAt() != null && team.getDeletedAt() == null) {
+            throw new BusinessException(ApiCode.NOT_FOUND, "Team not found");
+        }
+        if (team.getDeletedAt() != null) {
+            return;
+        }
         LocalDateTime now = LocalDateTime.now();
         team.setDeletedAt(now);
         team.setDeletedBy(userId);
         team.setPurgeAfter(now.plusDays(TEAM_DELETE_RETENTION_DAYS));
+        team.setUpdatedAt(now);
         teamRepository.save(team);
         teamAuditService.record(teamId, userId, "TEAM_DELETE", "TEAM", teamId, team.getName());
         notificationService.notifyTeamMembers(teamId, userId, "TEAM_DELETE", "团队已删除",

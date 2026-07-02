@@ -1853,6 +1853,13 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 **Response `200`:** `GET/PATCH/POST` 返回团队实体或分页结果；`DELETE /purge` 返回统一成功响应。
 
+生命周期操作幂等语义：
+
+- `POST /archive`、`POST /unarchive`、`POST /restore` 对已经处于目标状态的团队返回当前团队实体，不重复写审计或通知。
+- `DELETE /purge` 对已永久清理的团队返回成功；对仍未删除的团队返回 400。
+- 团队所有者调用 `DELETE /api/v1/teams/{teamId}` 删除团队时，重复调用返回成功，不重复审计或通知。
+- 定时清理和 admin purge 使用同一底层清理服务；重复执行不会因团队记录已不存在而失败。
+
 `startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表和导出接口使用相同过滤语义；时间格式非法返回 400。
 
 **错误码:** 400（参数格式错误）、403（非管理员）、404（团队不存在）、409（状态不允许，如未删除团队执行 purge）、419001（配额小于已用空间或写入超限）。
