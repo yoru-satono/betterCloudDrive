@@ -12,6 +12,7 @@ import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.ThumbnailService;
 import com.betterclouddrive.storage.StorageService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,7 @@ class UploadServiceImplTest {
     @Mock private TeamAuditService teamAuditService;
     @Mock private NotificationService notificationService;
     @Mock private TeamPermissionService teamPermissionService;
+    @Mock private ThumbnailService thumbnailService;
     @InjectMocks private UploadServiceImpl uploadService;
 
     private UserEntity quotaUser(long quota, long used) {
@@ -243,6 +245,29 @@ class UploadServiceImplTest {
         assertThat(session.getCompletedFileId()).isEqualTo(99L);
         verify(storageService).composeParts(anyString(), eq("uploads/1/sess-5/chunks"), eq(1));
         verify(redisTemplate).delete("upload:bitmap:sess-5");
+        verify(thumbnailService, never()).generateThumbnailAsync(anyLong());
+    }
+
+    @Test
+    void completeUpload_shouldScheduleThumbnailForImage() {
+        UploadSessionEntity session = UploadSessionEntity.builder()
+                .id("image-session").userId(1L).fileName("photo.png").fileSize(512L)
+                .totalChunks(1).status(1).build();
+        when(uploadSessionRepository.findByIdForUpdate("image-session")).thenReturn(Optional.of(session));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.getBit("upload:bitmap:image-session", 0)).thenReturn(true);
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
+            FileEntity f = inv.getArgument(0);
+            f.setId(101L);
+            return f;
+        });
+        when(storageService.objectExists(anyString())).thenReturn(true);
+        when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Long fileId = uploadService.completeUpload("image-session", 1L);
+
+        assertThat(fileId).isEqualTo(101L);
+        verify(thumbnailService).generateThumbnailAsync(101L);
     }
 
     @Test
@@ -330,6 +355,28 @@ class UploadServiceImplTest {
         verify(storageService).composeParts(anyString(), eq("uploads/teams/10/team-session/chunks"), eq(1));
         verify(valueOps).increment("team:storage:incr:10", 128L);
         verify(teamAuditService).record(eq(10L), eq(2L), eq("UPLOAD_COMPLETE"), eq("FILE"), eq(50L), eq("team.txt"));
+    }
+
+    @Test
+    void completeTeamUpload_shouldScheduleThumbnailForImage() {
+        UploadSessionEntity session = UploadSessionEntity.builder()
+                .id("team-image").userId(2L).teamId(10L).fileName("team-photo.jpg").fileSize(128L)
+                .totalChunks(1).status(1).build();
+        when(uploadSessionRepository.findByIdForUpdate("team-image")).thenReturn(Optional.of(session));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.getBit("upload:bitmap:team-image", 0)).thenReturn(true);
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
+            FileEntity file = inv.getArgument(0);
+            file.setId(52L);
+            return file;
+        });
+        when(storageService.objectExists(anyString())).thenReturn(true);
+        when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Long fileId = uploadService.completeTeamUpload(10L, "team-image", 2L);
+
+        assertThat(fileId).isEqualTo(52L);
+        verify(thumbnailService).generateThumbnailAsync(52L);
     }
 
     @Test

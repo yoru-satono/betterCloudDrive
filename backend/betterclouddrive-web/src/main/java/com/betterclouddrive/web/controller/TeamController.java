@@ -374,6 +374,15 @@ public class TeamController {
         return ApiResponse.success(fileService.getTeamFile(teamId, fileId));
     }
 
+    @GetMapping("/{teamId}/files/{fileId}/thumbnail")
+    public ResponseEntity<StreamingResponseBody> thumbnail(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @PathVariable Long fileId) {
+        teamPermissionService.requireRead(user.getUserId(), teamId, fileId);
+        return thumbnailResponse(fileService.getTeamFile(teamId, fileId));
+    }
+
     @GetMapping("/{teamId}/files/{fileId}/effective-permission")
     public ApiResponse<TeamEffectivePermission> effectivePermission(
             @CurrentUser UserPrincipal user,
@@ -771,6 +780,26 @@ public class TeamController {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(mimeType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getFileName() + "\"")
+                .body(outputStream -> {
+                    try (InputStream is = stream) {
+                        is.transferTo(outputStream);
+                    }
+                });
+    }
+
+    private ResponseEntity<StreamingResponseBody> thumbnailResponse(FileEntity file) {
+        if (!"file".equals(file.getFileType())) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND, "Cannot get thumbnail for a folder");
+        }
+        if (file.getThumbnailPath() == null || file.getThumbnailPath().isBlank()) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND, "Thumbnail is not available");
+        }
+
+        InputStream stream = storageService.downloadObject(file.getThumbnailPath());
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getFileName() + ".jpg\"")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=86400")
                 .body(outputStream -> {
                     try (InputStream is = stream) {
                         is.transferTo(outputStream);

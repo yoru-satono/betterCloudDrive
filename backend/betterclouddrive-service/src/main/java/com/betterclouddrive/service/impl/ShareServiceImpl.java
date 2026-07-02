@@ -565,7 +565,6 @@ public class ShareServiceImpl implements ShareService {
                 .fileSize(source.getFileSize() != null ? source.getFileSize() : 0L)
                 .storagePath(source.getStoragePath())
                 .md5Hash(source.getMd5Hash())
-                .thumbnailPath(source.getThumbnailPath())
                 .isDeleted(false)
                 .versionCount(source.getVersionCount() != null ? source.getVersionCount() : 1)
                 .createdAt(now)

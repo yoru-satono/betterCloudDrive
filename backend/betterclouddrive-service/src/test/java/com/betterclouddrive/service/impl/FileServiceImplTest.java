@@ -384,6 +384,27 @@ class FileServiceImplTest {
     }
 
     @Test
+    void permanentDelete_shouldDeleteThumbnailObject() {
+        FileEntity file = FileEntity.builder()
+                .id(1L)
+                .userId(1L)
+                .fileType("file")
+                .storagePath("objects/photo.png")
+                .thumbnailPath("thumbnails/users/1/1.jpg")
+                .isDeleted(true)
+                .build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findAll(any(Specification.class))).thenReturn(List.of());
+        when(fileVersionRepository.findByFileIdOrderByVersionNumberDesc(1L)).thenReturn(List.of());
+
+        fileService.permanentDelete(1L, 1L);
+
+        verify(storageService).deleteObject("objects/photo.png");
+        verify(storageService).deleteObject("thumbnails/users/1/1.jpg");
+        verify(fileRepository).deleteById(1L);
+    }
+
+    @Test
     void emptyRecycleBin_shouldDeleteAllWithBulkQuery() {
         FileEntity file = FileEntity.builder().id(1L).userId(1L).isDeleted(true).build();
         when(fileRepository.findAll(any(Specification.class))).thenReturn(List.of(file), List.of());

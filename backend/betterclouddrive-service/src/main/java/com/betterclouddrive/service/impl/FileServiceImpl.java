@@ -591,6 +591,9 @@ public class FileServiceImpl implements FileService {
         if ("file".equals(file.getFileType()) && file.getStoragePath() != null && !file.getStoragePath().isBlank()) {
             storageService.deleteObject(file.getStoragePath());
         }
+        if ("file".equals(file.getFileType()) && file.getThumbnailPath() != null && !file.getThumbnailPath().isBlank()) {
+            storageService.deleteObject(file.getThumbnailPath());
+        }
         fileVersionRepository.findByFileIdOrderByVersionNumberDesc(file.getId())
                 .forEach(version -> {
                     if (version.getStoragePath() != null && !version.getStoragePath().isBlank()) {

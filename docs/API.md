@@ -882,6 +882,19 @@ Authorization: Bearer <accessToken>
 
 ---
 
+### 4.6 获取文件缩略图
+
+```
+GET /api/v1/files/{fileId}/thumbnail
+Authorization: Bearer <accessToken>
+```
+
+返回上传图片异步生成的 JPEG 缩略图。缩略图尚未生成、源文件不是普通文件或文件没有缩略图时返回 `404001`，客户端应回退到默认占位图或原始预览。
+
+**Response:** 二进制流，`Content-Type: image/jpeg`，`Content-Disposition: inline`，`Cache-Control: private, max-age=86400`。
+
+---
+
 ## 五、回收站 `/api/v1/recycle-bin`
 
 ### 5.1 回收站列表
@@ -1066,7 +1079,10 @@ POST /api/v1/auth/refresh
 
 ### 7.6 缩略图
 
-> `thumbnailPath` 字段已在数据库中预留，缩略图生成功能待后续版本实现。
+- 图片文件上传完成后会异步生成 JPEG 缩略图，并把对象存储路径写入 `thumbnailPath`。
+- 当前先支持可由后端 ImageIO 解码的图片格式；解码失败会保留 `thumbnailPath = null`，客户端按无缩略图处理。
+- 个人文件通过 `GET /api/v1/files/{fileId}/thumbnail` 获取缩略图；团队文件通过 `GET /api/v1/teams/{teamId}/files/{fileId}/thumbnail` 获取。
+- 文件从回收站永久删除或过期清理时，会同步清理缩略图对象。
 
 ### 7.7 操作日志
 
@@ -1932,6 +1948,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 | GET | `/api/v1/teams/{teamId}/files?parentId=&page=&size=&sortBy=&order=` | 可读 | 列出团队文件 |
 | GET | `/api/v1/teams/{teamId}/files/search?q=&page=&size=` | 团队成员 | 搜索可读文件 |
 | GET | `/api/v1/teams/{teamId}/files/{fileId}` | 可读 | 获取文件元数据 |
+| GET | `/api/v1/teams/{teamId}/files/{fileId}/thumbnail` | 可读 | 获取图片缩略图，未生成时返回 `404001` |
 | POST | `/api/v1/teams/{teamId}/files/folder` | 父目录可写 | 创建文件夹，Body 同个人文件夹创建 |
 | PUT | `/api/v1/teams/{teamId}/files/{fileId}` | 可写 | 重命名文件 |
 | POST | `/api/v1/teams/{teamId}/files/{fileId}/move` | 源可写且目标父目录可写 | 移动文件 |

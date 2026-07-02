@@ -30,4 +30,14 @@ public class AsyncConfig {
         executor.setThreadNamePrefix("email-");
         return executor;
     }
+
+    @Bean("thumbnailExecutor")
+    public Executor thumbnailExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(500);
+        executor.setThreadNamePrefix("thumbnail-");
+        return executor;
+    }
 }

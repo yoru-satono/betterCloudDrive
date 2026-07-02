@@ -13,6 +13,7 @@ import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.ThumbnailService;
 import com.betterclouddrive.service.UploadService;
 import com.betterclouddrive.storage.StorageService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -44,6 +47,7 @@ public class UploadServiceImpl implements UploadService {
     private final TeamAuditService teamAuditService;
     private final NotificationService notificationService;
     private final TeamPermissionService teamPermissionService;
+    private final ThumbnailService thumbnailService;
 
     private static final String UPLOAD_BITMAP_PREFIX = "upload:bitmap:";
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
@@ -166,6 +170,7 @@ public class UploadServiceImpl implements UploadService {
         FileEntity file = buildFileEntity(userId, session.getParentId(), session.getFileName(),
                 session.getFileSize(), session.getMd5Hash(), objectKey);
         file = fileRepository.save(file);
+        scheduleThumbnailAfterCommit(file);
 
         session.setStatus(2);
         session.setStoragePath(objectKey);
@@ -211,7 +216,8 @@ public class UploadServiceImpl implements UploadService {
         }
 
         FileEntity file = buildFileEntity(userId, parentId, fileName, fileSize, md5Hash, existing.getStoragePath());
-        fileRepository.save(file);
+        file = fileRepository.save(file);
+        scheduleThumbnailAfterCommit(file);
 
         redisTemplate.opsForValue().increment("storage:incr:" + userId, fileSize);
         return file.getId();
@@ -321,6 +327,7 @@ public class UploadServiceImpl implements UploadService {
         FileEntity file = buildTeamFileEntity(teamId, session.getUserId(), session.getParentId(), session.getFileName(),
                 session.getFileSize(), session.getMd5Hash(), objectKey);
         file = fileRepository.save(file);
+        scheduleThumbnailAfterCommit(file);
 
         session.setStatus(2);
         session.setStoragePath(objectKey);
@@ -362,7 +369,8 @@ public class UploadServiceImpl implements UploadService {
         }
 
         FileEntity file = buildTeamFileEntity(teamId, userId, parentId, fileName, fileSize, md5Hash, existing.getStoragePath());
-        fileRepository.save(file);
+        file = fileRepository.save(file);
+        scheduleThumbnailAfterCommit(file);
 
         redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, fileSize);
         notificationService.checkTeamQuota(teamId);
@@ -419,7 +427,8 @@ public class UploadServiceImpl implements UploadService {
         }
 
         FileEntity file = buildFileEntity(userId, parentId, fileName, fileSize, md5Hash, objectKey);
-        fileRepository.save(file);
+        file = fileRepository.save(file);
+        scheduleThumbnailAfterCommit(file);
 
         if (fileSize > 0) {
             redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, fileSize);
@@ -445,6 +454,31 @@ public class UploadServiceImpl implements UploadService {
         return userId + "/" + now.getYear() + "/"
                 + String.format("%02d", now.getMonthValue()) + "/"
                 + randomId + "_" + fileName;
+    }
+
+    private void scheduleThumbnailAfterCommit(FileEntity file) {
+        if (!shouldGenerateThumbnail(file)) {
+            return;
+        }
+        Long fileId = file.getId();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    thumbnailService.generateThumbnailAsync(fileId);
+                }
+            });
+            return;
+        }
+        thumbnailService.generateThumbnailAsync(fileId);
+    }
+
+    private boolean shouldGenerateThumbnail(FileEntity file) {
+        if (file == null || file.getId() == null || !"file".equals(file.getFileType())) {
+            return false;
+        }
+        String mimeType = file.getMimeType();
+        return mimeType != null && mimeType.toLowerCase().startsWith("image/");
     }
 
     private FileEntity buildFileEntity(Long userId, Long parentId, String fileName,

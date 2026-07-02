@@ -101,6 +101,14 @@ public class DownloadController {
         return response;
     }
 
+    @GetMapping("/api/v1/files/{fileId}/thumbnail")
+    public ResponseEntity<StreamingResponseBody> thumbnail(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long fileId) {
+        FileEntity file = fileService.getFile(user.getUserId(), fileId);
+        return thumbnailResponse(file);
+    }
+
     @GetMapping("/api/v1/preview/{fileId}")
     public ResponseEntity<StreamingResponseBody> preview(
             @CurrentUser UserPrincipal user,
@@ -117,6 +125,26 @@ public class DownloadController {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(mimeType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getFileName() + "\"")
+                .body(outputStream -> {
+                    try (InputStream is = stream) {
+                        is.transferTo(outputStream);
+                    }
+                });
+    }
+
+    private ResponseEntity<StreamingResponseBody> thumbnailResponse(FileEntity file) {
+        if (!"file".equals(file.getFileType())) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND, "Cannot get thumbnail for a folder");
+        }
+        if (file.getThumbnailPath() == null || file.getThumbnailPath().isBlank()) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND, "Thumbnail is not available");
+        }
+
+        InputStream stream = storageService.downloadObject(file.getThumbnailPath());
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getFileName() + ".jpg\"")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=86400")
                 .body(outputStream -> {
                     try (InputStream is = stream) {
                         is.transferTo(outputStream);
