@@ -226,7 +226,7 @@ class UploadServiceImplTest {
         UploadSessionEntity session = UploadSessionEntity.builder()
                 .id("sess-5").userId(1L).fileName("doc.pdf").fileSize(512L)
                 .totalChunks(1).status(1).build();
-        when(uploadSessionRepository.findById("sess-5")).thenReturn(Optional.of(session));
+        when(uploadSessionRepository.findByIdForUpdate("sess-5")).thenReturn(Optional.of(session));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.getBit("upload:bitmap:sess-5", 0)).thenReturn(true);
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
@@ -234,11 +234,13 @@ class UploadServiceImplTest {
             f.setId(99L);
             return f;
         });
+        when(storageService.objectExists(anyString())).thenReturn(true);
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Long fileId = uploadService.completeUpload("sess-5", 1L);
 
         assertThat(fileId).isEqualTo(99L);
+        assertThat(session.getCompletedFileId()).isEqualTo(99L);
         verify(storageService).composeParts(anyString(), eq("uploads/1/sess-5/chunks"), eq(1));
         verify(redisTemplate).delete("upload:bitmap:sess-5");
     }
@@ -249,17 +251,19 @@ class UploadServiceImplTest {
                 .id("empty-session").userId(1L).fileName("empty.txt").fileSize(0L)
                 .md5Hash("d41d8cd98f00b204e9800998ecf8427e")
                 .totalChunks(0).status(1).build();
-        when(uploadSessionRepository.findById("empty-session")).thenReturn(Optional.of(session));
+        when(uploadSessionRepository.findByIdForUpdate("empty-session")).thenReturn(Optional.of(session));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity f = inv.getArgument(0);
             f.setId(100L);
             return f;
         });
+        when(storageService.objectExists(anyString())).thenReturn(true);
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Long fileId = uploadService.completeUpload("empty-session", 1L);
 
         assertThat(fileId).isEqualTo(100L);
+        assertThat(session.getCompletedFileId()).isEqualTo(100L);
         verify(storageService).uploadObject(anyString(), any(InputStream.class), eq(0L), eq("text/plain"));
         verify(storageService, never()).composeParts(anyString(), anyString(), anyInt());
         verify(redisTemplate).delete("upload:bitmap:empty-session");
@@ -270,7 +274,7 @@ class UploadServiceImplTest {
     void completeUpload_shouldThrowWhenChunkMissing() {
         UploadSessionEntity session = UploadSessionEntity.builder()
                 .id("sess-6").userId(1L).totalChunks(2).status(1).build();
-        when(uploadSessionRepository.findById("sess-6")).thenReturn(Optional.of(session));
+        when(uploadSessionRepository.findByIdForUpdate("sess-6")).thenReturn(Optional.of(session));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.getBit("upload:bitmap:sess-6", 0)).thenReturn(false);
 
@@ -279,11 +283,33 @@ class UploadServiceImplTest {
     }
 
     @Test
+    void completeUpload_shouldReturnCompletedFileIdWhenRetried() {
+        UploadSessionEntity session = UploadSessionEntity.builder()
+                .id("done-session").userId(1L).fileName("done.txt").fileSize(512L)
+                .storagePath("objects/done.txt").completedFileId(123L)
+                .totalChunks(1).status(2).build();
+        FileEntity file = FileEntity.builder()
+                .id(123L).userId(1L).fileName("done.txt").fileType("file")
+                .storagePath("objects/done.txt").isDeleted(false).build();
+        when(uploadSessionRepository.findByIdForUpdate("done-session")).thenReturn(Optional.of(session));
+        when(fileRepository.findById(123L)).thenReturn(Optional.of(file));
+        when(storageService.objectExists("objects/done.txt")).thenReturn(true);
+
+        Long fileId = uploadService.completeUpload("done-session", 1L);
+
+        assertThat(fileId).isEqualTo(123L);
+        verify(storageService, never()).composeParts(anyString(), anyString(), anyInt());
+        verify(fileRepository, never()).save(any(FileEntity.class));
+        verify(redisTemplate, never()).delete("upload:bitmap:done-session");
+        verify(valueOps, never()).increment(anyString(), anyLong());
+    }
+
+    @Test
     void completeTeamUpload_shouldCreateTeamFileAndIncrementTeamStorage() {
         UploadSessionEntity session = UploadSessionEntity.builder()
                 .id("team-session").userId(2L).teamId(10L).fileName("team.txt").fileSize(128L)
                 .totalChunks(1).status(1).build();
-        when(uploadSessionRepository.findById("team-session")).thenReturn(Optional.of(session));
+        when(uploadSessionRepository.findByIdForUpdate("team-session")).thenReturn(Optional.of(session));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.getBit("upload:bitmap:team-session", 0)).thenReturn(true);
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
@@ -291,17 +317,43 @@ class UploadServiceImplTest {
             file.setId(50L);
             return file;
         });
+        when(storageService.objectExists(anyString())).thenReturn(true);
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Long fileId = uploadService.completeTeamUpload(10L, "team-session", 2L);
 
         assertThat(fileId).isEqualTo(50L);
+        assertThat(session.getCompletedFileId()).isEqualTo(50L);
         org.mockito.ArgumentCaptor<FileEntity> captor = org.mockito.ArgumentCaptor.forClass(FileEntity.class);
         verify(fileRepository).save(captor.capture());
         assertThat(captor.getValue().getTeamId()).isEqualTo(10L);
         verify(storageService).composeParts(anyString(), eq("uploads/teams/10/team-session/chunks"), eq(1));
         verify(valueOps).increment("team:storage:incr:10", 128L);
         verify(teamAuditService).record(eq(10L), eq(2L), eq("UPLOAD_COMPLETE"), eq("FILE"), eq(50L), eq("team.txt"));
+    }
+
+    @Test
+    void completeTeamUpload_shouldReturnCompletedFileIdWhenRetriedWithoutQuotaOrAuditSideEffects() {
+        UploadSessionEntity session = UploadSessionEntity.builder()
+                .id("team-done").userId(2L).teamId(10L).fileName("team.txt").fileSize(128L)
+                .storagePath("objects/team.txt").completedFileId(50L)
+                .totalChunks(1).status(2).build();
+        FileEntity file = FileEntity.builder()
+                .id(50L).userId(2L).teamId(10L).fileName("team.txt").fileType("file")
+                .storagePath("objects/team.txt").isDeleted(false).build();
+        when(uploadSessionRepository.findByIdForUpdate("team-done")).thenReturn(Optional.of(session));
+        when(fileRepository.findById(50L)).thenReturn(Optional.of(file));
+        when(storageService.objectExists("objects/team.txt")).thenReturn(true);
+
+        Long fileId = uploadService.completeTeamUpload(10L, "team-done", 2L);
+
+        assertThat(fileId).isEqualTo(50L);
+        verify(teamPermissionService).requireParentWrite(2L, 10L, null);
+        verify(storageService, never()).composeParts(anyString(), anyString(), anyInt());
+        verify(fileRepository, never()).save(any(FileEntity.class));
+        verify(valueOps, never()).increment(anyString(), anyLong());
+        verify(notificationService, never()).checkTeamQuota(anyLong());
+        verify(teamAuditService, never()).record(anyLong(), anyLong(), anyString(), anyString(), any(), anyString());
     }
 
     @Test

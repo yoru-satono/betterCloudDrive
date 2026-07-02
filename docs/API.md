@@ -682,6 +682,8 @@ Authorization: Bearer <accessToken>
 }
 ```
 
+`complete` 支持幂等重试：同一 `sessionId` 第一次成功后会记录产物文件 ID，后续重复调用返回同一个 `fileId`，不会重复合并对象、重复创建文件或重复累计存储配额。
+
 **Response `419006`（分片不完整）:**
 ```json
 {
@@ -1939,7 +1941,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 | POST | `/api/v1/teams/{teamId}/upload/init` | 父目录可写 | 初始化分片上传，Body 同个人上传 |
 | POST | `/api/v1/teams/{teamId}/upload/{sessionId}/chunk` | 上传会话所有者 | 上传分片 |
 | GET | `/api/v1/teams/{teamId}/upload/{sessionId}/status` | 上传会话所有者 | 查询上传状态 |
-| POST | `/api/v1/teams/{teamId}/upload/{sessionId}/complete` | 上传会话所有者 | 完成上传 |
+| POST | `/api/v1/teams/{teamId}/upload/{sessionId}/complete` | 上传会话所有者 | 完成上传；支持幂等重试，重复调用返回同一 `fileId` |
 | POST | `/api/v1/teams/{teamId}/upload/{sessionId}/cancel` | 上传会话所有者 | 取消上传 |
 | POST | `/api/v1/teams/{teamId}/upload/instant` | 父目录可写 | 秒传 |
 | POST | `/api/v1/teams/{teamId}/download/{fileId}/ticket` | 可读 | 创建团队文件下载 ticket |

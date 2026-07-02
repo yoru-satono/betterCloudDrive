@@ -52,6 +52,9 @@ public class UploadSessionEntity {
     @Column(name = "storage_path")
     private String storagePath;
 
+    @Column(name = "completed_file_id")
+    private Long completedFileId;
+
     @Column(name = "status")
     @Builder.Default
     private Integer status = 1;

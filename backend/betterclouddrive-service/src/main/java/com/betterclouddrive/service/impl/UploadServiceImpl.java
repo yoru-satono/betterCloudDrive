@@ -135,9 +135,15 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public Long completeUpload(String sessionId, Long userId) {
-        UploadSessionEntity session = uploadSessionRepository.findById(sessionId).orElse(null);
+        UploadSessionEntity session = uploadSessionRepository.findByIdForUpdate(sessionId).orElse(null);
         if (session == null || session.getTeamId() != null || !session.getUserId().equals(userId)) {
             throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
+        }
+        if (Objects.equals(session.getStatus(), 2)) {
+            return resolveCompletedFileId(session, userId, null);
+        }
+        if (!Objects.equals(session.getStatus(), 1)) {
+            throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Upload session is not active");
         }
 
         String bitmapKey = UPLOAD_BITMAP_PREFIX + sessionId;
@@ -155,13 +161,15 @@ public class UploadServiceImpl implements UploadService {
         } else {
             storageService.composeParts(objectKey, chunkPrefix, session.getTotalChunks());
         }
+        ensureObjectExists(objectKey);
 
         FileEntity file = buildFileEntity(userId, session.getParentId(), session.getFileName(),
                 session.getFileSize(), session.getMd5Hash(), objectKey);
-        fileRepository.save(file);
+        file = fileRepository.save(file);
 
         session.setStatus(2);
         session.setStoragePath(objectKey);
+        session.setCompletedFileId(file.getId());
         session.setUpdatedAt(LocalDateTime.now());
         uploadSessionRepository.save(session);
 
@@ -285,8 +293,14 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public Long completeTeamUpload(Long teamId, String sessionId, Long userId) {
-        UploadSessionEntity session = getActiveTeamSession(teamId, sessionId, userId);
+        UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
         teamPermissionService.requireParentWrite(userId, teamId, session.getParentId());
+        if (Objects.equals(session.getStatus(), 2)) {
+            return resolveCompletedFileId(session, userId, teamId);
+        }
+        if (!Objects.equals(session.getStatus(), 1)) {
+            throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Upload session is not active");
+        }
         String bitmapKey = UPLOAD_BITMAP_PREFIX + sessionId;
         for (int i = 0; i < session.getTotalChunks(); i++) {
             Boolean bit = redisTemplate.opsForValue().getBit(bitmapKey, i);
@@ -302,13 +316,15 @@ public class UploadServiceImpl implements UploadService {
         } else {
             storageService.composeParts(objectKey, chunkPrefix, session.getTotalChunks());
         }
+        ensureObjectExists(objectKey);
 
         FileEntity file = buildTeamFileEntity(teamId, session.getUserId(), session.getParentId(), session.getFileName(),
                 session.getFileSize(), session.getMd5Hash(), objectKey);
-        fileRepository.save(file);
+        file = fileRepository.save(file);
 
         session.setStatus(2);
         session.setStoragePath(objectKey);
+        session.setCompletedFileId(file.getId());
         session.setUpdatedAt(LocalDateTime.now());
         uploadSessionRepository.save(session);
 
@@ -522,12 +538,59 @@ public class UploadServiceImpl implements UploadService {
         return session;
     }
 
+    private UploadSessionEntity getTeamSessionForUpdate(Long teamId, String sessionId, Long userId) {
+        UploadSessionEntity session = uploadSessionRepository.findByIdForUpdate(sessionId).orElse(null);
+        if (session == null
+                || !Objects.equals(session.getTeamId(), teamId)
+                || !session.getUserId().equals(userId)) {
+            throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
+        }
+        return session;
+    }
+
     private UploadSessionEntity getActiveTeamSession(Long teamId, String sessionId, Long userId) {
         UploadSessionEntity session = getTeamSession(teamId, sessionId, userId);
         if (session.getStatus() != 1) {
             throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Upload session is not active");
         }
         return session;
+    }
+
+    private Long resolveCompletedFileId(UploadSessionEntity session, Long userId, Long teamId) {
+        FileEntity file = null;
+        if (session.getCompletedFileId() != null) {
+            file = fileRepository.findById(session.getCompletedFileId()).orElse(null);
+        }
+        if (file == null && session.getStoragePath() != null && !session.getStoragePath().isBlank()) {
+            file = fileRepository.findFirstByStoragePathAndIsDeletedFalseOrderByIdDesc(session.getStoragePath())
+                    .orElse(null);
+            if (file != null && session.getCompletedFileId() == null) {
+                session.setCompletedFileId(file.getId());
+                session.setUpdatedAt(LocalDateTime.now());
+                uploadSessionRepository.save(session);
+            }
+        }
+        if (!isCompletedUploadFile(file, userId, teamId)) {
+            throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Completed upload result is missing");
+        }
+        ensureObjectExists(file.getStoragePath());
+        return file.getId();
+    }
+
+    private boolean isCompletedUploadFile(FileEntity file, Long userId, Long teamId) {
+        if (file == null || Boolean.TRUE.equals(file.getIsDeleted())) {
+            return false;
+        }
+        if (teamId == null) {
+            return Objects.equals(file.getUserId(), userId) && file.getTeamId() == null;
+        }
+        return Objects.equals(file.getUserId(), userId) && Objects.equals(file.getTeamId(), teamId);
+    }
+
+    private void ensureObjectExists(String objectKey) {
+        if (objectKey == null || objectKey.isBlank() || !storageService.objectExists(objectKey)) {
+            throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Completed upload object is missing");
+        }
     }
 
     private void validateTeamParent(Long teamId, Long parentId) {

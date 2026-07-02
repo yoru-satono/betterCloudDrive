@@ -47,6 +47,8 @@ public interface FileRepository extends JpaRepository<FileEntity, Long>, JpaSpec
 
     Optional<FileEntity> findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc(String md5Hash);
 
+    Optional<FileEntity> findFirstByStoragePathAndIsDeletedFalseOrderByIdDesc(String storagePath);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT f FROM FileEntity f WHERE f.id = :fileId")
     Optional<FileEntity> findByIdForUpdate(@Param("fileId") Long fileId);
