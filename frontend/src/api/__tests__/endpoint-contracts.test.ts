@@ -183,6 +183,13 @@ describe('API endpoint contracts', () => {
     await teamsApi.updateTeamShare(10, 9, { maxVisits: 5, expireAt: 0 })
     expect(apiMock.put).toHaveBeenCalledWith('/teams/10/shares/9', { maxVisits: 5, expireAt: 0 })
 
+    await teamsApi.updateTeamShare(10, 9, { clearPassword: true, clearMaxVisits: true, clearExpireAt: true })
+    expect(apiMock.put).toHaveBeenCalledWith('/teams/10/shares/9', {
+      clearPassword: true,
+      clearMaxVisits: true,
+      clearExpireAt: true,
+    })
+
     await teamsApi.deleteTeamShare(10, 9)
     expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/shares/9')
 
@@ -338,6 +345,13 @@ describe('API endpoint contracts', () => {
 
     await sharesApi.updateShare(9, { maxVisits: 5, expireAt: 0 })
     expect(apiMock.put).toHaveBeenCalledWith('/shares/9', { maxVisits: 5, expireAt: 0 })
+
+    await sharesApi.updateShare(9, { clearPassword: true, clearMaxVisits: true, clearExpireAt: true })
+    expect(apiMock.put).toHaveBeenCalledWith('/shares/9', {
+      clearPassword: true,
+      clearMaxVisits: true,
+      clearExpireAt: true,
+    })
 
     await sharesApi.accessShare('abc123', 'pw')
     expect(apiMock.post).toHaveBeenCalledWith('/shares/access/abc123', { password: 'pw' }, { suppressToast: true })

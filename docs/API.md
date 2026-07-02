@@ -1270,13 +1270,16 @@ Authorization: Bearer <accessToken>
 **Request Body:**
 ```json
 {
-  "password": "",           // 设置为 "" 移除密码保护
-  "expireAt": 0,            // 设置为 0 移除过期时间
-  "maxVisits": null         // 当前为 null 时不修改；传数字可更新访问次数限制
+  "password": "1234",       // 可选；设置新密码
+  "expireAt": 1718000000000,// 可选；设置过期时间（epoch ms）
+  "maxVisits": 10,          // 可选；设置最大访问次数
+  "clearPassword": false,   // 可选；true 时移除密码保护
+  "clearExpireAt": false,   // 可选；true 时移除过期时间
+  "clearMaxVisits": false   // 可选；true 时移除访问次数限制
 }
 ```
 
-> 当前接口无法通过 `null` 清除已存在的 `maxVisits` 限制；`null` 表示保持原值不变。
+未传字段保持原值不变。兼容旧请求：`password=""` 仍会移除密码保护，`expireAt=0` 仍会移除过期时间；`maxVisits=null` 仍表示不修改，清空访问次数限制请使用 `clearMaxVisits=true`。
 
 ---
 
@@ -1947,7 +1950,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 | GET | `/api/v1/teams/{teamId}/shares?q=&page=&size=` | 团队成员 | 返回当前用户可读文件对应的分享 |
 | GET | `/api/v1/teams/{teamId}/shares/{shareId}` | 分享文件可读 | 分享详情 |
 | GET | `/api/v1/teams/{teamId}/shares/{shareId}/password` | 可分享 | 读取分享密码 |
-| PUT | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | 更新分享密码、过期时间或访问次数 |
+| PUT | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | Body 同个人更新分享；可更新或清空密码、过期时间和访问次数 |
 | DELETE | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | 取消分享 |
 | POST | `/api/v1/teams/{teamId}/favorites/{fileId}` | 可读 | 添加团队收藏 |
 | DELETE | `/api/v1/teams/{teamId}/favorites/{fileId}` | 登录用户 | 取消团队收藏 |

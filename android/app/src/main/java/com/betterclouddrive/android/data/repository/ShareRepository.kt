@@ -36,8 +36,11 @@ class ShareRepository @Inject constructor(private val api: ApiService) {
         password: String? = null,
         expireAt: Long? = null,
         maxVisits: Int? = null,
+        clearPassword: Boolean = false,
+        clearExpireAt: Boolean = false,
+        clearMaxVisits: Boolean = false,
     ): NetworkResult<ShareLink> = apiCall {
-        api.updateShare(shareId, UpdateShareRequest(password, expireAt, maxVisits))
+        api.updateShare(shareId, UpdateShareRequest(password, expireAt, maxVisits, clearPassword, clearExpireAt, clearMaxVisits))
     }
 
     suspend fun cancelShare(shareId: Long): NetworkResult<Unit> = apiCall { api.cancelShare(shareId) }

@@ -8,6 +8,7 @@ import com.betterclouddrive.android.data.remote.dto.InitUploadRequest
 import com.betterclouddrive.android.data.remote.dto.MoveRequest
 import com.betterclouddrive.android.data.remote.dto.TagFilesRequest
 import com.betterclouddrive.android.data.remote.dto.TransferTeamOwnerRequest
+import com.betterclouddrive.android.data.remote.dto.UpdateShareRequest
 import com.betterclouddrive.android.data.remote.dto.UpdateTeamFilePermissionRequest
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.runBlocking
@@ -38,6 +39,17 @@ class ApiServiceContractTest {
         assertEquals(
             """{"targetParentId":null}""",
             json.encodeToString(CopyRequest.serializer(), CopyRequest(null)),
+        )
+    }
+
+    @Test
+    fun updateShareRequestSerializesExplicitClearFlags() {
+        assertEquals(
+            """{"clearPassword":true,"clearExpireAt":true,"clearMaxVisits":true}""",
+            json.encodeToString(
+                UpdateShareRequest.serializer(),
+                UpdateShareRequest(clearPassword = true, clearExpireAt = true, clearMaxVisits = true),
+            ),
         )
     }
 
@@ -209,6 +221,16 @@ class ApiServiceContractTest {
 
             api(server).listTeamShares(7, page = 1, size = 50)
             assertEquals("/teams/7/shares?page=1&size=50", server.takeRequest().path)
+
+            api(server).updateTeamShare(
+                7,
+                10,
+                UpdateShareRequest(clearPassword = true, clearMaxVisits = true),
+            )
+            val updateShare = server.takeRequest()
+            assertEquals("/teams/7/shares/10", updateShare.path)
+            assertEquals("PUT", updateShare.method)
+            assertEquals("""{"clearPassword":true,"clearMaxVisits":true}""", updateShare.body.readUtf8())
 
             api(server).cancelTeamShare(7, 10)
             assertEquals("/teams/7/shares/10", server.takeRequest().path)

@@ -30,6 +30,9 @@ export interface UpdateShareRequest {
   expireAt?: number
   maxVisits?: number
   password?: string
+  clearPassword?: boolean
+  clearExpireAt?: boolean
+  clearMaxVisits?: boolean
 }
 
 export interface AccessShareResponse {

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -340,15 +341,23 @@ class TeamSettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateShare(share: ShareLink, password: String?, maxVisits: Int?) {
+    fun updateShare(
+        share: ShareLink,
+        password: String?,
+        maxVisits: Int?,
+        clearPassword: Boolean = false,
+        clearMaxVisits: Boolean = false,
+    ) {
         val team = _uiState.value.team ?: return
         if (!team.canManageMembers) return
         viewModelScope.launch {
             when (val result = repository.updateShare(
                 teamId = team.id,
                 shareId = share.id,
-                password = password?.trim()?.takeIf { it.isNotEmpty() },
+                password = if (clearPassword) null else password?.trim()?.takeIf { it.isNotEmpty() },
                 maxVisits = maxVisits,
+                clearPassword = clearPassword,
+                clearMaxVisits = clearMaxVisits,
             )) {
                 is NetworkResult.Success -> {
                     _events.emit(UiEvent.ShowSnackbar("分享已更新"))
@@ -885,13 +894,15 @@ private fun TeamSettingsShares(
     loadingPasswordId: Long?,
     onCancel: (ShareLink) -> Unit,
     onRevealPassword: (ShareLink) -> Unit,
-    onUpdate: (ShareLink, String?, Int?) -> Unit,
+    onUpdate: (ShareLink, String?, Int?, Boolean, Boolean) -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     var detailShare by remember { mutableStateOf<ShareLink?>(null) }
     var editShare by remember { mutableStateOf<ShareLink?>(null) }
     var editPassword by remember { mutableStateOf("") }
     var editMaxVisits by remember { mutableStateOf("") }
+    var editClearPassword by remember { mutableStateOf(false) }
+    var editClearMaxVisits by remember { mutableStateOf(false) }
 
     detailShare?.let { share ->
         AlertDialog(
@@ -920,8 +931,8 @@ private fun TeamSettingsShares(
             title = "编辑团队分享",
             onDismiss = { editShare = null },
             onConfirm = {
-                val visits = editMaxVisits.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
-                onUpdate(share, editPassword, visits)
+                val visits = if (editClearMaxVisits) null else editMaxVisits.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
+                onUpdate(share, editPassword, visits, editClearPassword, editClearMaxVisits)
                 editShare = null
             },
             confirmText = "保存",
@@ -931,16 +942,34 @@ private fun TeamSettingsShares(
                 onValueChange = { editMaxVisits = it.filter(Char::isDigit) },
                 placeholder = { Text("访问次数限制，留空不修改") },
                 singleLine = true,
+                enabled = !editClearMaxVisits,
                 modifier = Modifier.fillMaxWidth().testTag("team-settings-share-edit-max-visits"),
             )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = editClearMaxVisits,
+                    onCheckedChange = { editClearMaxVisits = it },
+                    modifier = Modifier.testTag("team-settings-share-clear-max-visits"),
+                )
+                Text("清空访问次数限制")
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = editPassword,
                 onValueChange = { editPassword = it },
                 placeholder = { Text("新密码，留空不修改") },
                 singleLine = true,
+                enabled = !editClearPassword,
                 modifier = Modifier.fillMaxWidth().testTag("team-settings-share-edit-password"),
             )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = editClearPassword,
+                    onCheckedChange = { editClearPassword = it },
+                    modifier = Modifier.testTag("team-settings-share-clear-password"),
+                )
+                Text("移除访问密码")
+            }
         }
     }
 
@@ -998,6 +1027,8 @@ private fun TeamSettingsShares(
                                         editShare = share
                                         editMaxVisits = share.maxVisits?.toString() ?: ""
                                         editPassword = ""
+                                        editClearPassword = false
+                                        editClearMaxVisits = false
                                     },
                                     modifier = Modifier.testTag("team-settings-edit-share-${share.id}"),
                                 ) {

@@ -15,6 +15,7 @@ import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.SharePasswordCryptoService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.dto.ShareUpdateCommand;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -196,6 +197,52 @@ class ShareServiceImplTest {
 
         assertThat(updated.getPasswordCiphertext()).isNull();
         verify(sharePasswordCryptoService, never()).encrypt(anyString());
+    }
+
+    @Test
+    void updateShare_shouldClearAllOptionalFieldsWhenExplicitlyRequested() {
+        ShareLinkEntity share = activeShare("abcd1234", 1L, 1L);
+        share.setPasswordCiphertext("existing-cipher");
+        share.setExpireAt(LocalDateTime.now().plusDays(1));
+        share.setMaxVisits(5);
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+        when(shareLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ShareLinkEntity updated = shareService.updateShare(1L, 1L,
+                new ShareUpdateCommand(null, null, null, true, true, true));
+
+        assertThat(updated.getPasswordCiphertext()).isNull();
+        assertThat(updated.getExpireAt()).isNull();
+        assertThat(updated.getMaxVisits()).isNull();
+    }
+
+    @Test
+    void updateShare_shouldKeepMaxVisitsWhenLegacyRequestOmitsIt() {
+        ShareLinkEntity share = activeShare("abcd1234", 1L, 1L);
+        share.setMaxVisits(5);
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+        when(shareLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ShareLinkEntity updated = shareService.updateShare(1L, 1L, null, null, null);
+
+        assertThat(updated.getMaxVisits()).isEqualTo(5);
+    }
+
+    @Test
+    void updateShare_shouldClearMaxVisitsWithoutChangingOtherFields() {
+        ShareLinkEntity share = activeShare("abcd1234", 1L, 1L);
+        share.setPasswordCiphertext("existing-cipher");
+        share.setExpireAt(LocalDateTime.now().plusDays(1));
+        share.setMaxVisits(5);
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+        when(shareLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ShareLinkEntity updated = shareService.updateShare(1L, 1L,
+                new ShareUpdateCommand(null, null, null, false, false, true));
+
+        assertThat(updated.getPasswordCiphertext()).isEqualTo("existing-cipher");
+        assertThat(updated.getExpireAt()).isNotNull();
+        assertThat(updated.getMaxVisits()).isNull();
     }
 
     @Test

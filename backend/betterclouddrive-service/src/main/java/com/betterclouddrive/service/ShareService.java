@@ -3,6 +3,7 @@ package com.betterclouddrive.service;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.ShareLinkEntity;
+import com.betterclouddrive.service.dto.ShareUpdateCommand;
 
 public interface ShareService {
     ShareLinkEntity createShare(Long userId, Long fileId, String password, Long expireAtMs, Integer maxVisits);
@@ -14,7 +15,9 @@ public interface ShareService {
     String getSharePassword(Long userId, Long shareId);
     String getTeamSharePassword(Long teamId, Long shareId);
     ShareLinkEntity updateShare(Long userId, Long shareId, String password, Long expireAtMs, Integer maxVisits);
+    ShareLinkEntity updateShare(Long userId, Long shareId, ShareUpdateCommand command);
     ShareLinkEntity updateTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId, String password, Long expireAtMs, Integer maxVisits);
+    ShareLinkEntity updateTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId, ShareUpdateCommand command);
     void cancelShare(Long userId, Long shareId);
     void cancelTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId);
     /** Access a shared link: verify code + password, return the shared file info */

@@ -246,8 +246,22 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
         password: String? = null,
         expireAt: Long? = null,
         maxVisits: Int? = null,
+        clearPassword: Boolean = false,
+        clearExpireAt: Boolean = false,
+        clearMaxVisits: Boolean = false,
     ): NetworkResult<ShareLink> = apiCall {
-        api.updateTeamShare(teamId, shareId, UpdateShareRequest(password = password, expireAt = expireAt, maxVisits = maxVisits))
+        api.updateTeamShare(
+            teamId,
+            shareId,
+            UpdateShareRequest(
+                password = password,
+                expireAt = expireAt,
+                maxVisits = maxVisits,
+                clearPassword = clearPassword,
+                clearExpireAt = clearExpireAt,
+                clearMaxVisits = clearMaxVisits,
+            ),
+        )
     }
 
     suspend fun cancelShare(teamId: Long, shareId: Long): NetworkResult<Unit> = apiCall {

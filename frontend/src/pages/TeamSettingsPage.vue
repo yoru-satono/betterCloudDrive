@@ -60,6 +60,7 @@ const editShare = ref<ShareLinkEntity | null>(null)
 const editMaxVisits = ref('')
 const editExpireAt = ref('')
 const editPassword = ref('')
+const editClearPassword = ref(false)
 const favoritesQuery = ref('')
 const favoritesPage = ref(1)
 const favoritesTotal = ref(0)
@@ -417,6 +418,7 @@ function openEdit(share: ShareLinkEntity) {
   editMaxVisits.value = share.maxVisits ? String(share.maxVisits) : ''
   editExpireAt.value = share.expireAt ? new Date(share.expireAt).toISOString().slice(0, 16) : ''
   editPassword.value = ''
+  editClearPassword.value = false
   editOpen.value = true
 }
 
@@ -428,14 +430,19 @@ async function submitEdit() {
     return
   }
   const password = editPassword.value.trim()
-  if (password && (password.length < 4 || password.length > 16)) {
+  if (!editClearPassword.value && password && (password.length < 4 || password.length > 16)) {
     toast.error('分享密码长度必须为 4-16 位')
     return
   }
+  const clearMaxVisits = !editMaxVisits.value.trim()
+  const clearExpireAt = !editExpireAt.value
   await teamsApi.updateTeamShare(teamId.value, editShare.value.id, {
     maxVisits,
-    expireAt: editExpireAt.value ? new Date(editExpireAt.value).getTime() : 0,
-    password: password || undefined,
+    expireAt: clearExpireAt ? undefined : new Date(editExpireAt.value).getTime(),
+    password: editClearPassword.value ? undefined : password || undefined,
+    clearPassword: editClearPassword.value,
+    clearExpireAt,
+    clearMaxVisits,
   })
   editOpen.value = false
   toast.success('分享已更新')
@@ -749,7 +756,11 @@ onMounted(async () => {
         <OInput v-model="editMaxVisits" label="访问次数限制" type="number" placeholder="留空表示不限" />
         <OInput v-model="editExpireAt" label="过期时间" type="datetime-local" />
         <OInput v-model="editPassword" label="新访问密码" type="text" placeholder="留空表示不修改" />
-        <p>清除过期时间会设为永不过期；密码留空表示不修改。</p>
+        <label class="share-edit__check">
+          <input v-model="editClearPassword" type="checkbox" />
+          <span>移除访问密码</span>
+        </label>
+        <p>清除访问次数和过期时间会设为无限制；密码留空表示不修改。</p>
       </div>
       <template #footer>
         <OButton variant="ghost" @click="editOpen = false">取消</OButton>
@@ -895,7 +906,8 @@ onMounted(async () => {
 }
 .team-members__email,
 .team-shares__meta,
-.share-edit p {
+.share-edit p,
+.share-edit__check {
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -1037,6 +1049,11 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.share-edit__check {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
 }
 .share-info div {
   display: grid;

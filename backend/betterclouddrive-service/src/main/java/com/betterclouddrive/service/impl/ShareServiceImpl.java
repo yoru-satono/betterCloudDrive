@@ -13,6 +13,7 @@ import com.betterclouddrive.service.SharePasswordCryptoService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.dto.ShareUpdateCommand;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -210,32 +211,54 @@ public class ShareServiceImpl implements ShareService {
     @Override
     @Transactional
     public ShareLinkEntity updateShare(Long userId, Long shareId, String password, Long expireAtMs, Integer maxVisits) {
+        return updateShare(userId, shareId, ShareUpdateCommand.legacy(password, expireAtMs, maxVisits));
+    }
+
+    @Override
+    @Transactional
+    public ShareLinkEntity updateShare(Long userId, Long shareId, ShareUpdateCommand command) {
         ShareLinkEntity share = getShare(userId, shareId);
-        return updateShareRecord(share, password, expireAtMs, maxVisits);
+        return updateShareRecord(share, command);
     }
 
     @Override
     @Transactional
     public ShareLinkEntity updateTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId,
                                            String password, Long expireAtMs, Integer maxVisits) {
+        return updateTeamShare(actorUserId, canManageAll, teamId, shareId,
+                ShareUpdateCommand.legacy(password, expireAtMs, maxVisits));
+    }
+
+    @Override
+    @Transactional
+    public ShareLinkEntity updateTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId,
+                                           ShareUpdateCommand command) {
         ShareLinkEntity share = getTeamShare(teamId, shareId);
         requireShareEditor(actorUserId, canManageAll, share);
-        ShareLinkEntity updated = updateShareRecord(share, password, expireAtMs, maxVisits);
+        ShareLinkEntity updated = updateShareRecord(share, command);
         teamAuditService.record(teamId, actorUserId, "SHARE_UPDATE", "SHARE", updated.getId(),
                 "share " + updated.getShareCode() + " file " + updated.getFileId());
         return updated;
     }
 
-    private ShareLinkEntity updateShareRecord(ShareLinkEntity share, String password, Long expireAtMs, Integer maxVisits) {
-        if (password != null) {
-            String normalizedPassword = normalizeOptionalPassword(password);
+    private ShareLinkEntity updateShareRecord(ShareLinkEntity share, ShareUpdateCommand command) {
+        if (command.clearPassword()) {
+            share.setPasswordCiphertext(null);
+        } else if (command.password() != null) {
+            String normalizedPassword = normalizeOptionalPassword(command.password());
             share.setPasswordCiphertext(normalizedPassword == null ? null : sharePasswordCryptoService.encrypt(normalizedPassword));
         }
-        if (expireAtMs != null) {
-            share.setExpireAt(expireAtMs > 0 ? LocalDateTime.ofInstant(Instant.ofEpochMilli(expireAtMs), ZoneId.systemDefault()) : null);
+        if (command.clearExpireAt()) {
+            share.setExpireAt(null);
+        } else if (command.expireAtMs() != null) {
+            share.setExpireAt(command.expireAtMs() > 0
+                    ? LocalDateTime.ofInstant(Instant.ofEpochMilli(command.expireAtMs()), ZoneId.systemDefault())
+                    : null);
         }
-        if (maxVisits != null) {
-            share.setMaxVisits(maxVisits);
+        if (command.clearMaxVisits()) {
+            share.setMaxVisits(null);
+        } else if (command.maxVisits() != null) {
+            share.setMaxVisits(command.maxVisits());
         }
         share.setUpdatedAt(LocalDateTime.now());
         return shareLinkRepository.save(share);

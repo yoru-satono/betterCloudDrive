@@ -165,6 +165,9 @@ data class UpdateShareRequest(
     val password: String? = null,
     @SerialName("expireAt") val expireAt: Long? = null,
     @SerialName("maxVisits") val maxVisits: Int? = null,
+    @SerialName("clearPassword") val clearPassword: Boolean = false,
+    @SerialName("clearExpireAt") val clearExpireAt: Boolean = false,
+    @SerialName("clearMaxVisits") val clearMaxVisits: Boolean = false,
 )
 
 @Serializable

@@ -677,7 +677,7 @@ public class TeamController {
         TeamMemberEntity member = teamService.requireRead(user.getUserId(), teamId);
         ShareLinkEntity share = shareService.updateTeamShare(
                 user.getUserId(), canManageAllShares(member, existing.getFileId()), teamId, shareId,
-                request.getPassword(), request.getExpireAt(), request.getMaxVisits());
+                request.toCommand());
         return ApiResponse.success(ShareLinkResponse.from(share));
     }
 

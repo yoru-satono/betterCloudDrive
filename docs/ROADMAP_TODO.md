@@ -78,6 +78,7 @@
 
 - 目标：支持清空分享访问次数、密码、过期时间。
 - 范围：后端 PATCH/PUT DTO、服务层、Web 和 Android 调用。
+- 状态：已完成。
 - 验收：`maxVisits`、`password`、`expireAt` 均可明确清空；兼容旧请求。
 
 ### BE-06 公开分享 Range 下载

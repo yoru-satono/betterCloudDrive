@@ -88,7 +88,7 @@ public class ShareController {
                                                        @PathVariable Long shareId,
                                                        @RequestBody UpdateShareRequest request) {
         ShareLinkEntity share = shareService.updateShare(
-                user.getUserId(), shareId, request.getPassword(), request.getExpireAt(), request.getMaxVisits());
+                user.getUserId(), shareId, request.toCommand());
         return ApiResponse.success(ShareLinkResponse.from(share));
     }
 
