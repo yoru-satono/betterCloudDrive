@@ -173,6 +173,18 @@ interface ApiService {
         @Query("size") size: Int = 20,
     ): ApiResponse<PageResult<TeamOperationLog>>
 
+    @Streaming
+    @GET("teams/{teamId}/audit-logs/export")
+    suspend fun exportTeamAuditLogs(
+        @Path("teamId") teamId: Long,
+        @Query("actorUserId") actorUserId: Long? = null,
+        @Query("action") action: String? = null,
+        @Query("targetType") targetType: String? = null,
+        @Query("result") result: Int? = null,
+        @Query("startAt") startAt: String? = null,
+        @Query("endAt") endAt: String? = null,
+    ): ResponseBody
+
     @GET("teams/{teamId}/files")
     suspend fun listTeamFiles(
         @Path("teamId") teamId: Long,

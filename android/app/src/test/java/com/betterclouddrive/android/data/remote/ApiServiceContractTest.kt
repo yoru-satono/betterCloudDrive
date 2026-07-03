@@ -250,7 +250,7 @@ class ApiServiceContractTest {
         val server = MockWebServer()
         server.start()
         try {
-            repeat(28) {
+            repeat(29) {
                 server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"code":200,"message":"success","data":null}"""))
             }
 
@@ -288,6 +288,20 @@ class ApiServiceContractTest {
             )
             assertEquals(
                 "/teams/7/audit-logs?actorUserId=12&action=INVITE&targetType=USER&result=1&startAt=2026-06-27T12%3A00%3A00&endAt=2026-06-27T13%3A00%3A00&page=2&size=30",
+                server.takeRequest().path,
+            )
+
+            api(server).exportTeamAuditLogs(
+                7,
+                actorUserId = 12,
+                action = "INVITE",
+                targetType = "USER",
+                result = 1,
+                startAt = "2026-06-27T12:00:00",
+                endAt = "2026-06-27T13:00:00",
+            )
+            assertEquals(
+                "/teams/7/audit-logs/export?actorUserId=12&action=INVITE&targetType=USER&result=1&startAt=2026-06-27T12%3A00%3A00&endAt=2026-06-27T13%3A00%3A00",
                 server.takeRequest().path,
             )
 

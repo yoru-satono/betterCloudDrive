@@ -33,6 +33,7 @@ import com.betterclouddrive.android.domain.model.TeamMember
 import com.betterclouddrive.android.domain.model.TeamOperationLog
 import com.betterclouddrive.android.domain.model.TeamRole
 import com.betterclouddrive.android.util.NetworkResult
+import okhttp3.ResponseBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -121,6 +122,16 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
     ): NetworkResult<PageResult<TeamOperationLog>> = apiCall {
         api.listTeamAuditLogs(teamId, actorUserId, action, targetType, result, startAt, endAt, page, size)
     }
+
+    suspend fun exportAuditLogs(
+        teamId: Long,
+        actorUserId: Long? = null,
+        action: String? = null,
+        targetType: String? = null,
+        result: Int? = null,
+        startAt: String? = null,
+        endAt: String? = null,
+    ): ResponseBody = api.exportTeamAuditLogs(teamId, actorUserId, action, targetType, result, startAt, endAt)
 
     suspend fun listFiles(
         teamId: Long,

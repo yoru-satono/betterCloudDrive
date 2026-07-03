@@ -1,5 +1,9 @@
 package com.betterclouddrive.android.ui.teams
 
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -74,11 +78,14 @@ import com.betterclouddrive.android.util.FormatUtil
 import com.betterclouddrive.android.util.NetworkResult
 import com.betterclouddrive.android.util.UiEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class TeamSettingsUiState(
@@ -105,6 +112,7 @@ data class TeamSettingsUiState(
     val auditResult: String = "",
     val auditStartAt: String = "",
     val auditEndAt: String = "",
+    val auditExporting: Boolean = false,
     val isLoading: Boolean = false,
 )
 
@@ -122,6 +130,7 @@ private data class TeamAuditFilterParams(
 @HiltViewModel
 class TeamSettingsViewModel @Inject constructor(
     private val repository: TeamRepository,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(TeamSettingsUiState())
     val uiState = _uiState.asStateFlow()
@@ -296,6 +305,36 @@ class TeamSettingsViewModel @Inject constructor(
                 auditError = null,
             )
             loadAuditPage(team.id, TeamAuditFilterParams(), page = 1, append = false)
+        }
+    }
+
+    fun exportAuditLogs(targetUri: Uri) {
+        val team = _uiState.value.team ?: return
+        if (!team.canManageMembers || _uiState.value.auditExporting) return
+        val filters = parseAuditFiltersOrEmit() ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(auditExporting = true)
+            try {
+                withContext(Dispatchers.IO) {
+                    val body = repository.exportAuditLogs(
+                        teamId = team.id,
+                        actorUserId = filters.actorUserId,
+                        action = filters.action,
+                        targetType = filters.targetType,
+                        result = filters.result,
+                        startAt = filters.startAt,
+                        endAt = filters.endAt,
+                    )
+                    context.contentResolver.openOutputStream(targetUri, "wt")?.use { output ->
+                        body.byteStream().use { input -> input.copyTo(output) }
+                    } ?: throw IllegalStateException("无法写入目标位置")
+                }
+                _events.emit(UiEvent.ShowSnackbar("审计 CSV 已导出"))
+            } catch (e: Exception) {
+                _events.emit(UiEvent.ShowSnackbar("导出失败: ${e.message}", true))
+            } finally {
+                _uiState.value = _uiState.value.copy(auditExporting = false)
+            }
         }
     }
 
@@ -654,6 +693,9 @@ fun TeamSettingsScreen(
     var teamName by remember(uiState.team?.id, uiState.team?.name) { mutableStateOf(uiState.team?.name.orEmpty()) }
     var showLeaveConfirm by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val auditExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) viewModel.exportAuditLogs(uri)
+    }
 
     LaunchedEffect(teamId) { viewModel.load(teamId) }
     LaunchedEffect(events) {
@@ -761,6 +803,7 @@ fun TeamSettingsScreen(
                     result = uiState.auditResult,
                     startAt = uiState.auditStartAt,
                     endAt = uiState.auditEndAt,
+                    exporting = uiState.auditExporting,
                     onActorUserIdChange = { viewModel.updateAuditFilters(actorUserId = it) },
                     onActionChange = { viewModel.updateAuditFilters(action = it) },
                     onTargetTypeChange = { viewModel.updateAuditFilters(targetType = it) },
@@ -769,6 +812,7 @@ fun TeamSettingsScreen(
                     onEndAtChange = { viewModel.updateAuditFilters(endAt = it) },
                     onApplyFilters = viewModel::applyAuditFilters,
                     onResetFilters = viewModel::resetAuditFilters,
+                    onExport = { auditExportLauncher.launch("team-${uiState.team?.id ?: teamId}-audit.csv") },
                     onRetry = viewModel::retryAuditLogs,
                     onLoadMore = viewModel::loadMoreAuditLogs,
                 )
@@ -1417,6 +1461,7 @@ private fun TeamSettingsAuditLogs(
     result: String,
     startAt: String,
     endAt: String,
+    exporting: Boolean,
     onActorUserIdChange: (String) -> Unit,
     onActionChange: (String) -> Unit,
     onTargetTypeChange: (String) -> Unit,
@@ -1425,6 +1470,7 @@ private fun TeamSettingsAuditLogs(
     onEndAtChange: (String) -> Unit,
     onApplyFilters: () -> Unit,
     onResetFilters: () -> Unit,
+    onExport: () -> Unit,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
 ) {
@@ -1448,6 +1494,7 @@ private fun TeamSettingsAuditLogs(
             result = result,
             startAt = startAt,
             endAt = endAt,
+            exporting = exporting,
             onActorUserIdChange = onActorUserIdChange,
             onActionChange = onActionChange,
             onTargetTypeChange = onTargetTypeChange,
@@ -1456,6 +1503,7 @@ private fun TeamSettingsAuditLogs(
             onEndAtChange = onEndAtChange,
             onApply = onApplyFilters,
             onReset = onResetFilters,
+            onExport = onExport,
         )
 
         when {
@@ -1557,6 +1605,7 @@ private fun TeamSettingsAuditFilters(
     result: String,
     startAt: String,
     endAt: String,
+    exporting: Boolean,
     onActorUserIdChange: (String) -> Unit,
     onActionChange: (String) -> Unit,
     onTargetTypeChange: (String) -> Unit,
@@ -1565,6 +1614,7 @@ private fun TeamSettingsAuditFilters(
     onEndAtChange: (String) -> Unit,
     onApply: () -> Unit,
     onReset: () -> Unit,
+    onExport: () -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().testTag("team-settings-audit-filters"),
@@ -1630,6 +1680,13 @@ private fun TeamSettingsAuditFilters(
             }
             TextButton(onClick = onReset, modifier = Modifier.testTag("team-settings-audit-filter-reset")) {
                 Text("重置")
+            }
+            TextButton(
+                onClick = onExport,
+                enabled = !exporting,
+                modifier = Modifier.testTag("team-settings-audit-export"),
+            ) {
+                Text(if (exporting) "导出中" else "导出 CSV")
             }
         }
     }
