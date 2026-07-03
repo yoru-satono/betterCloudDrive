@@ -300,7 +300,8 @@
 
 - 目标：确定 Android 是否承载 admin 团队后台。
 - 范围：给出产品决策文档或实现最小后台入口。
-- 验收：若不做，文档明确；若做，拆分后续 AND admin 任务。
+- 状态：已完成。
+- 验收：已新增 `docs/ANDROID_ADMIN_SCOPE.md`，明确 Android 本阶段不承载完整 admin 团队后台，普通团队管理能力继续保留，平台级 admin 操作仍以 Web/Tauri 后台为权威入口；若未来需要 Android admin，文档已列出最小入口边界和测试要求。
 
 ### AND-06 邀请深链 E2E
 
