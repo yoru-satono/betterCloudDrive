@@ -293,7 +293,8 @@
 
 - 目标：Android 支持分享字段完整编辑和清空。
 - 范围：密码、访问次数、过期时间、清空语义。
-- 验收：Android 与 Web 编辑同一分享结果一致。
+- 状态：已完成。
+- 验收：Android 个人分享页已提供编辑入口，团队分享编辑弹窗已支持密码、访问次数、过期时间的修改和清空；个人/团队分享更新均传递 `clearPassword`、`clearExpireAt`、`clearMaxVisits` 语义；`testDebugUnitTest` 已通过。
 
 ### AND-05 Android Admin 范围决策
 

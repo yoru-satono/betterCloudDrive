@@ -564,8 +564,10 @@ class TeamSettingsViewModel @Inject constructor(
     fun updateShare(
         share: ShareLink,
         password: String?,
+        expireAt: Long?,
         maxVisits: Int?,
         clearPassword: Boolean = false,
+        clearExpireAt: Boolean = false,
         clearMaxVisits: Boolean = false,
     ) {
         val team = _uiState.value.team ?: return
@@ -575,8 +577,10 @@ class TeamSettingsViewModel @Inject constructor(
                 teamId = team.id,
                 shareId = share.id,
                 password = if (clearPassword) null else password?.trim()?.takeIf { it.isNotEmpty() },
-                maxVisits = maxVisits,
+                expireAt = if (clearExpireAt) null else expireAt,
+                maxVisits = if (clearMaxVisits) null else maxVisits,
                 clearPassword = clearPassword,
+                clearExpireAt = clearExpireAt,
                 clearMaxVisits = clearMaxVisits,
             )) {
                 is NetworkResult.Success -> {
@@ -1139,14 +1143,16 @@ private fun TeamSettingsShares(
     loadingPasswordId: Long?,
     onCancel: (ShareLink) -> Unit,
     onRevealPassword: (ShareLink) -> Unit,
-    onUpdate: (ShareLink, String?, Int?, Boolean, Boolean) -> Unit,
+    onUpdate: (ShareLink, String?, Long?, Int?, Boolean, Boolean, Boolean) -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
     var detailShare by remember { mutableStateOf<ShareLink?>(null) }
     var editShare by remember { mutableStateOf<ShareLink?>(null) }
     var editPassword by remember { mutableStateOf("") }
+    var editExpireAt by remember { mutableStateOf("") }
     var editMaxVisits by remember { mutableStateOf("") }
     var editClearPassword by remember { mutableStateOf(false) }
+    var editClearExpireAt by remember { mutableStateOf(false) }
     var editClearMaxVisits by remember { mutableStateOf(false) }
 
     detailShare?.let { share ->
@@ -1176,29 +1182,13 @@ private fun TeamSettingsShares(
             title = "编辑团队分享",
             onDismiss = { editShare = null },
             onConfirm = {
+                val expireAt = if (editClearExpireAt) null else editExpireAt.trim().takeIf { it.isNotEmpty() }?.toLongOrNull()
                 val visits = if (editClearMaxVisits) null else editMaxVisits.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
-                onUpdate(share, editPassword, visits, editClearPassword, editClearMaxVisits)
+                onUpdate(share, editPassword, expireAt, visits, editClearPassword, editClearExpireAt, editClearMaxVisits)
                 editShare = null
             },
             confirmText = "保存",
         ) {
-            OutlinedTextField(
-                value = editMaxVisits,
-                onValueChange = { editMaxVisits = it.filter(Char::isDigit) },
-                placeholder = { Text("访问次数限制，留空不修改") },
-                singleLine = true,
-                enabled = !editClearMaxVisits,
-                modifier = Modifier.fillMaxWidth().testTag("team-settings-share-edit-max-visits"),
-            )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = editClearMaxVisits,
-                    onCheckedChange = { editClearMaxVisits = it },
-                    modifier = Modifier.testTag("team-settings-share-clear-max-visits"),
-                )
-                Text("清空访问次数限制")
-            }
-            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = editPassword,
                 onValueChange = { editPassword = it },
@@ -1214,6 +1204,40 @@ private fun TeamSettingsShares(
                     modifier = Modifier.testTag("team-settings-share-clear-password"),
                 )
                 Text("移除访问密码")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editExpireAt,
+                onValueChange = { editExpireAt = it.filter { char -> char.isDigit() } },
+                placeholder = { Text("过期时间 Unix 毫秒，留空不修改") },
+                singleLine = true,
+                enabled = !editClearExpireAt,
+                modifier = Modifier.fillMaxWidth().testTag("team-settings-share-edit-expire-at"),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = editClearExpireAt,
+                    onCheckedChange = { editClearExpireAt = it },
+                    modifier = Modifier.testTag("team-settings-share-clear-expire-at"),
+                )
+                Text("清空过期时间")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editMaxVisits,
+                onValueChange = { editMaxVisits = it.filter { char -> char.isDigit() } },
+                placeholder = { Text("访问次数限制，留空不修改") },
+                singleLine = true,
+                enabled = !editClearMaxVisits,
+                modifier = Modifier.fillMaxWidth().testTag("team-settings-share-edit-max-visits"),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = editClearMaxVisits,
+                    onCheckedChange = { editClearMaxVisits = it },
+                    modifier = Modifier.testTag("team-settings-share-clear-max-visits"),
+                )
+                Text("清空访问次数限制")
             }
         }
     }
@@ -1270,9 +1294,11 @@ private fun TeamSettingsShares(
                                 TextButton(
                                     onClick = {
                                         editShare = share
+                                        editExpireAt = ""
                                         editMaxVisits = share.maxVisits?.toString() ?: ""
                                         editPassword = ""
                                         editClearPassword = false
+                                        editClearExpireAt = false
                                         editClearMaxVisits = false
                                     },
                                     modifier = Modifier.testTag("team-settings-edit-share-${share.id}"),

@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.betterclouddrive.android.domain.model.ShareLink
+import com.betterclouddrive.android.ui.components.BCDDialog
 import com.betterclouddrive.android.ui.components.EmptyState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -61,6 +62,32 @@ class SharesViewModel @Inject constructor(private val repository: ShareRepositor
             }
         }
     }
+
+    fun updateShare(
+        shareId: Long,
+        password: String?,
+        expireAt: Long?,
+        maxVisits: Int?,
+        clearPassword: Boolean,
+        clearExpireAt: Boolean,
+        clearMaxVisits: Boolean,
+    ) {
+        viewModelScope.launch {
+            when (repository.updateShare(
+                shareId = shareId,
+                password = if (clearPassword) null else password?.trim()?.takeIf { it.isNotEmpty() },
+                expireAt = if (clearExpireAt) null else expireAt,
+                maxVisits = if (clearMaxVisits) null else maxVisits,
+                clearPassword = clearPassword,
+                clearExpireAt = clearExpireAt,
+                clearMaxVisits = clearMaxVisits,
+            )) {
+                is NetworkResult.Success -> load()
+                is NetworkResult.Error -> Unit
+                is NetworkResult.Loading -> Unit
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,6 +98,13 @@ fun SharesScreen(
     viewModel: SharesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var editShare by remember { mutableStateOf<ShareLink?>(null) }
+    var editPassword by remember { mutableStateOf("") }
+    var editExpireAt by remember { mutableStateOf("") }
+    var editMaxVisits by remember { mutableStateOf("") }
+    var editClearPassword by remember { mutableStateOf(false) }
+    var editClearExpireAt by remember { mutableStateOf(false) }
+    var editClearMaxVisits by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { viewModel.load() }
     MainScaffold(
         currentRoute = Screen.SHARES,
@@ -116,6 +150,18 @@ fun SharesScreen(
                                     }
                                 }
                                 TextButton(
+                                    onClick = {
+                                        editShare = share
+                                        editPassword = ""
+                                        editExpireAt = ""
+                                        editMaxVisits = share.maxVisits?.toString() ?: ""
+                                        editClearPassword = false
+                                        editClearExpireAt = false
+                                        editClearMaxVisits = false
+                                    },
+                                    modifier = Modifier.testTag("share-edit-${share.shareCode}"),
+                                ) { Text("编辑") }
+                                TextButton(
                                     onClick = { viewModel.cancel(share.id) },
                                     modifier = Modifier.testTag("share-cancel-${share.shareCode}"),
                                 ) { Text("取消分享", color = MaterialTheme.colorScheme.error) }
@@ -123,6 +169,79 @@ fun SharesScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+
+    editShare?.let { share ->
+        BCDDialog(
+            title = "编辑分享",
+            onDismiss = { editShare = null },
+            onConfirm = {
+                val expireAt = if (editClearExpireAt) null else editExpireAt.trim().takeIf { it.isNotEmpty() }?.toLongOrNull()
+                val visits = if (editClearMaxVisits) null else editMaxVisits.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
+                viewModel.updateShare(
+                    share.id,
+                    editPassword,
+                    expireAt,
+                    visits,
+                    editClearPassword,
+                    editClearExpireAt,
+                    editClearMaxVisits,
+                )
+                editShare = null
+            },
+            confirmText = "保存",
+        ) {
+            OutlinedTextField(
+                value = editPassword,
+                onValueChange = { editPassword = it },
+                placeholder = { Text("新密码，留空不修改") },
+                singleLine = true,
+                enabled = !editClearPassword,
+                modifier = Modifier.fillMaxWidth().testTag("share-edit-password"),
+            )
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(
+                    checked = editClearPassword,
+                    onCheckedChange = { editClearPassword = it },
+                    modifier = Modifier.testTag("share-clear-password"),
+                )
+                Text("移除访问密码")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editExpireAt,
+                onValueChange = { editExpireAt = it.filter { char -> char.isDigit() } },
+                placeholder = { Text("过期时间 Unix 毫秒，留空不修改") },
+                singleLine = true,
+                enabled = !editClearExpireAt,
+                modifier = Modifier.fillMaxWidth().testTag("share-edit-expire-at"),
+            )
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(
+                    checked = editClearExpireAt,
+                    onCheckedChange = { editClearExpireAt = it },
+                    modifier = Modifier.testTag("share-clear-expire-at"),
+                )
+                Text("清空过期时间")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = editMaxVisits,
+                onValueChange = { editMaxVisits = it.filter { char -> char.isDigit() } },
+                placeholder = { Text("访问次数限制，留空不修改") },
+                singleLine = true,
+                enabled = !editClearMaxVisits,
+                modifier = Modifier.fillMaxWidth().testTag("share-edit-max-visits"),
+            )
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(
+                    checked = editClearMaxVisits,
+                    onCheckedChange = { editClearMaxVisits = it },
+                    modifier = Modifier.testTag("share-clear-max-visits"),
+                )
+                Text("清空访问次数限制")
             }
         }
     }

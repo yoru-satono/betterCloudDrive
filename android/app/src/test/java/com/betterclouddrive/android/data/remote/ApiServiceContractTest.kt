@@ -225,12 +225,12 @@ class ApiServiceContractTest {
             api(server).updateTeamShare(
                 7,
                 10,
-                UpdateShareRequest(clearPassword = true, clearMaxVisits = true),
+                UpdateShareRequest(clearPassword = true, clearExpireAt = true, clearMaxVisits = true),
             )
             val updateShare = server.takeRequest()
             assertEquals("/teams/7/shares/10", updateShare.path)
             assertEquals("PUT", updateShare.method)
-            assertEquals("""{"clearPassword":true,"clearMaxVisits":true}""", updateShare.body.readUtf8())
+            assertEquals("""{"clearPassword":true,"clearExpireAt":true,"clearMaxVisits":true}""", updateShare.body.readUtf8())
 
             api(server).cancelTeamShare(7, 10)
             assertEquals("/teams/7/shares/10", server.takeRequest().path)
