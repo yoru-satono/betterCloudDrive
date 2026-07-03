@@ -307,7 +307,8 @@
 
 - 目标：稳定覆盖 Android 邀请链接接受/拒绝。
 - 范围：深链打开、未登录跳转、登录后恢复、接受、拒绝。
-- 验收：模拟器上自动化通过。
+- 状态：已完成。
+- 验收：已有 `AndroidTeamsE2ETest.teamInviteDeepLinkCanBeAcceptedAndRejected` 覆盖深链打开、未登录跳转、登录后恢复、接受、拒绝、后端邀请状态和团队审计；已在 `localhost:16416` Android 15 模拟器上通过 `connectedDebugAndroidTest` 定向验证。
 
 ### AND-07 OnlyOffice 编辑 E2E
 
