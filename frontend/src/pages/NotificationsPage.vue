@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
@@ -83,7 +83,18 @@ function changeTypeFilter() {
   load()
 }
 
-onMounted(load)
+function handleNotificationsChanged() {
+  load()
+}
+
+onMounted(() => {
+  load()
+  window.addEventListener('bcd:notifications-changed', handleNotificationsChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('bcd:notifications-changed', handleNotificationsChanged)
+})
 </script>
 
 <template>

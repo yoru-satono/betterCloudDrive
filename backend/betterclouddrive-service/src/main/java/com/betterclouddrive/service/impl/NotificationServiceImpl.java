@@ -12,6 +12,7 @@ import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.EmailService;
+import com.betterclouddrive.service.NotificationRealtimePublisher;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamEventOutboxService;
 import com.betterclouddrive.service.TeamService;
@@ -25,6 +26,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -48,6 +51,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final EmailService emailService;
     private final StringRedisTemplate redisTemplate;
     private final TeamEventOutboxService teamEventOutboxService;
+    private final NotificationRealtimePublisher notificationRealtimePublisher;
 
     @Override
     public PageResult<NotificationEntity> listNotifications(Long userId, Boolean unreadOnly, String type, int page, int size) {
@@ -83,13 +87,17 @@ public class NotificationServiceImpl implements NotificationService {
         if (notification.getReadAt() == null) {
             notification.setReadAt(LocalDateTime.now());
             notificationRepository.save(notification);
+            publishNotificationsChangedAfterCommit(userId);
         }
     }
 
     @Override
     @Transactional
     public void markAllRead(Long userId) {
-        notificationRepository.markAllReadByUserId(userId, LocalDateTime.now());
+        int updated = notificationRepository.markAllReadByUserId(userId, LocalDateTime.now());
+        if (updated > 0) {
+            publishNotificationsChangedAfterCommit(userId);
+        }
     }
 
     @Override
@@ -113,6 +121,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .createdAt(LocalDateTime.now())
                 .build());
         teamEventOutboxService.recordNotificationEvent(notification.getId(), userId, teamId, normalizedType, content);
+        publishNotificationsChangedAfterCommit(userId);
         if (email) {
             try {
                 emailService.sendNotification(user.getEmail(), title, content, link);
@@ -181,6 +190,23 @@ public class NotificationServiceImpl implements NotificationService {
             if (currentThreshold < threshold) {
                 redisTemplate.delete(QUOTA_ALERT_PREFIX + teamId + ":" + threshold);
             }
+        }
+    }
+
+    private void publishNotificationsChangedAfterCommit(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        Runnable publish = () -> notificationRealtimePublisher.publishNotificationsChanged(userId, countUnread(userId));
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publish.run();
+                }
+            });
+        } else {
+            publish.run();
         }
     }
 }

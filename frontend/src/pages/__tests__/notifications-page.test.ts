@@ -129,4 +129,17 @@ describe('NotificationsPage', () => {
     expect(toast.success).toHaveBeenCalledWith('通知已全部标记为已读')
     expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'bcd:notifications-changed' }))
   })
+
+  it('reloads current page when realtime notification event arrives', async () => {
+    const wrapper = mountPage()
+    await flushPromises()
+    listNotifications.mockClear()
+    listNotifications.mockResolvedValue(page([notification({ id: 2, title: '新通知' })]))
+
+    window.dispatchEvent(new CustomEvent('bcd:notifications-changed', { detail: { unreadCount: 1 } }))
+    await flushPromises()
+
+    expect(listNotifications).toHaveBeenCalledWith(1, 20, false, undefined)
+    expect(wrapper.text()).toContain('新通知')
+  })
 })

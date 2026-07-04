@@ -14,6 +14,7 @@ import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.EmailService;
+import com.betterclouddrive.service.NotificationRealtimePublisher;
 import com.betterclouddrive.service.TeamEventOutboxService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,7 @@ class NotificationServiceImplTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private TeamEventOutboxService teamEventOutboxService;
+    @Mock private NotificationRealtimePublisher notificationRealtimePublisher;
     @InjectMocks private NotificationServiceImpl notificationService;
 
     @Test
@@ -65,9 +67,29 @@ class NotificationServiceImplTest {
 
     @Test
     void markAllRead_shouldUseBulkRepositoryUpdate() {
+        when(notificationRepository.markAllReadByUserId(eq(2L), any())).thenReturn(3);
+        when(notificationRepository.countByUserIdAndReadAtIsNull(2L)).thenReturn(0L);
+
         notificationService.markAllRead(2L);
 
         verify(notificationRepository).markAllReadByUserId(eq(2L), any());
+        verify(notificationRealtimePublisher).publishNotificationsChanged(2L, 0L);
+    }
+
+    @Test
+    void markRead_shouldPublishUnreadCountWhenNotificationChanges() {
+        NotificationEntity notification = NotificationEntity.builder()
+                .id(7L)
+                .userId(2L)
+                .readAt(null)
+                .build();
+        when(notificationRepository.findById(7L)).thenReturn(Optional.of(notification));
+        when(notificationRepository.countByUserIdAndReadAtIsNull(2L)).thenReturn(4L);
+
+        notificationService.markRead(2L, 7L);
+
+        verify(notificationRepository).save(notification);
+        verify(notificationRealtimePublisher).publishNotificationsChanged(2L, 4L);
     }
 
     @Test
@@ -80,6 +102,7 @@ class NotificationServiceImplTest {
                 .build();
         when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).email("user@test.local").build()));
         when(notificationRepository.save(any())).thenReturn(saved);
+        when(notificationRepository.countByUserIdAndReadAtIsNull(2L)).thenReturn(5L);
 
         notificationService.notifyUser(2L, 10L, " team_invite ", "邀请", "加入团队", "/teams/10", false);
 
@@ -88,6 +111,7 @@ class NotificationServiceImplTest {
                         && Long.valueOf(10L).equals(notification.getTeamId())
                         && "TEAM_INVITE".equals(notification.getType())));
         verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, 10L, "TEAM_INVITE", "加入团队");
+        verify(notificationRealtimePublisher).publishNotificationsChanged(2L, 5L);
     }
 
     @Test

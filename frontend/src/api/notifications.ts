@@ -1,4 +1,5 @@
 import api from './client'
+import { getApiBaseUrl } from '@/config/runtime'
 import type { ApiResponse, PageResult } from '@/types/api'
 
 export interface NotificationEntity {
@@ -39,3 +40,12 @@ export const markNotificationRead = (notificationId: number) =>
 
 export const markAllNotificationsRead = () =>
   api.post<ApiResponse<void>>('/notifications/read-all')
+
+export function createNotificationEventSource() {
+  const token = localStorage.getItem('accessToken')
+  if (!token || typeof EventSource === 'undefined') return null
+
+  const url = new URL(`${getApiBaseUrl()}/notifications/stream`, window.location.origin)
+  url.searchParams.set('accessToken', token)
+  return new EventSource(url.toString())
+}

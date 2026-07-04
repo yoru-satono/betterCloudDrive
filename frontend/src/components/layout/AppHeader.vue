@@ -17,6 +17,7 @@ const route = useRoute()
 const searchMode = computed(() => resolveSearchMode(route))
 const searchPlaceholder = computed(() => getSearchTriggerPlaceholder(searchMode.value, searchContext.activeTag))
 const unreadCount = ref(0)
+let notificationStream: EventSource | null = null
 
 async function loadUnreadCount() {
   try {
@@ -28,16 +29,46 @@ async function loadUnreadCount() {
 }
 
 async function handleLogout() {
+  closeNotificationStream()
   await auth.logout()
   router.push('/login')
 }
 
+function handleRealtimeNotification(event: Event) {
+  const message = event as MessageEvent
+  try {
+    const payload = JSON.parse(message.data || '{}') as { unreadCount?: number }
+    if (typeof payload.unreadCount === 'number') unreadCount.value = payload.unreadCount
+    window.dispatchEvent(new CustomEvent('bcd:notifications-changed', { detail: payload }))
+  } catch {
+    window.dispatchEvent(new Event('bcd:notifications-changed'))
+  }
+}
+
+function openNotificationStream() {
+  closeNotificationStream()
+  notificationStream = notificationsApi.createNotificationEventSource()
+  if (!notificationStream) return
+  notificationStream.addEventListener('connected', handleRealtimeNotification)
+  notificationStream.addEventListener('notifications-changed', handleRealtimeNotification)
+}
+
+function closeNotificationStream() {
+  if (!notificationStream) return
+  notificationStream.removeEventListener('connected', handleRealtimeNotification)
+  notificationStream.removeEventListener('notifications-changed', handleRealtimeNotification)
+  notificationStream.close()
+  notificationStream = null
+}
+
 onMounted(() => {
   loadUnreadCount()
+  openNotificationStream()
   window.addEventListener('bcd:notifications-changed', loadUnreadCount)
 })
 
 onUnmounted(() => {
+  closeNotificationStream()
   window.removeEventListener('bcd:notifications-changed', loadUnreadCount)
 })
 

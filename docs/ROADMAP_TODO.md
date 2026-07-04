@@ -138,7 +138,8 @@
 
 - 目标：团队通知不只依赖刷新列表。
 - 范围：Web 可先做 SSE 或 WebSocket；Android 预留接口。
-- 验收：新通知产生后 Web 能实时显示未读数。
+- 状态：已完成。
+- 验收：新增 `/api/v1/notifications/stream` SSE 通道，Web/Tauri 通过当前 access token 建立 EventSource；通知创建、单条已读和全部已读后推送 `notifications-changed` 事件并实时刷新未读数，通知页会按当前筛选自动重载。验证已通过：`mvn -pl betterclouddrive-service,betterclouddrive-web -am "-Dtest=NotificationServiceImplTest,JwtAuthenticationFilterTest,NotificationSseServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- endpoint-contracts.test.ts notifications-page.test.ts AppHeader.test.ts`。
 
 ### TEAM-03 通知偏好
 

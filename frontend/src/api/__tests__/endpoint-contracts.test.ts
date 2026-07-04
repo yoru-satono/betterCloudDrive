@@ -29,6 +29,7 @@ const apiMock = api as unknown as Record<'get' | 'post' | 'delete' | 'patch' | '
 describe('API endpoint contracts', () => {
   beforeEach(() => {
     Object.values(apiMock).forEach(mock => mock.mockResolvedValue({ data: { code: 200, data: null } }))
+    localStorage.clear()
   })
 
   it('uses registration code and verified registration routes', async () => {
@@ -337,6 +338,24 @@ describe('API endpoint contracts', () => {
 
     await notificationsApi.markAllNotificationsRead()
     expect(apiMock.post).toHaveBeenCalledWith('/notifications/read-all')
+  })
+
+  it('creates notification stream with current access token', () => {
+    const instances: string[] = []
+    class MockEventSource {
+      constructor(url: string) {
+        instances.push(url)
+      }
+      close() {}
+    }
+    vi.stubGlobal('EventSource', MockEventSource)
+    localStorage.setItem('accessToken', 'stream-token')
+
+    const source = notificationsApi.createNotificationEventSource()
+
+    expect(source).toBeInstanceOf(MockEventSource)
+    expect(instances).toEqual(['http://localhost:3000/api/v1/notifications/stream?accessToken=stream-token'])
+    vi.unstubAllGlobals()
   })
 
   it('uses team upload and preview routes', async () => {

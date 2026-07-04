@@ -2122,10 +2122,18 @@ OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用
 |------|------|------|------|
 | GET | `/api/v1/notifications?unreadOnly=&type=&page=1&size=20` | 登录用户 | 分页列出站内通知 |
 | GET | `/api/v1/notifications/unread-count` | 登录用户 | 返回未读数量 |
+| GET | `/api/v1/notifications/stream?accessToken=` | 登录用户 | SSE 实时通知变更通道 |
 | POST | `/api/v1/notifications/{notificationId}/read` | 通知所有者 | 标记单条已读 |
 | POST | `/api/v1/notifications/read-all` | 登录用户 | 标记当前用户全部通知已读 |
 
 **Notification 字段:** `id`、`userId`、`teamId`、`type`、`title`、`content`、`link`、`readAt`、`createdAt`、`isRead`。
+
+`GET /stream` 返回 `text/event-stream`。浏览器 `EventSource` 无法设置 `Authorization` header，因此该端点接受当前 access token 的 `accessToken` 查询参数；服务端仍按登录用户鉴权。连接建立后会发送 `connected` 事件，通知创建、标记已读或全部已读后会发送 `notifications-changed` 事件：
+
+```text
+event: notifications-changed
+data: {"unreadCount":3}
+```
 
 **错误码:** 403（读取他人通知）、404（通知不存在）。
 

@@ -6,9 +6,12 @@ import com.betterclouddrive.dal.entity.NotificationEntity;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
+import com.betterclouddrive.web.service.NotificationSseService;
 import jakarta.validation.constraints.Max;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/v1/notifications")
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final NotificationSseService notificationSseService;
 
     @GetMapping
     public ApiResponse<PageResult<NotificationEntity>> listNotifications(
@@ -30,6 +34,12 @@ public class NotificationController {
     @GetMapping("/unread-count")
     public ApiResponse<Long> unreadCount(@CurrentUser UserPrincipal user) {
         return ApiResponse.success(notificationService.countUnread(user.getUserId()));
+    }
+
+    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(@CurrentUser UserPrincipal user) {
+        long unreadCount = notificationService.countUnread(user.getUserId());
+        return notificationSseService.subscribe(user.getUserId(), unreadCount);
     }
 
     @PostMapping("/{notificationId}/read")
