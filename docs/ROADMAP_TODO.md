@@ -372,7 +372,8 @@
 
 - 目标：模拟器覆盖 Android 团队核心流程。
 - 范围：邀请深链、团队文件、分享、通知、OnlyOffice、权限矩阵。
-- 验收：在 `localhost:16416` Android 15 模拟器环境通过。
+- 状态：已完成。
+- 验收：在 `localhost:16416` Android 15 模拟器环境通过 `AndroidTeamsE2ETest` 全量 10 个用例；覆盖邀请深链接受/拒绝、团队文件和成员、分享/回收站/版本入口、通知跳转并标记已读、标签/收藏、OnlyOffice 编辑保存与只读、权限矩阵。配套命令：`adb -s localhost:16416 shell am instrument -w -r -e class com.betterclouddrive.android.e2e.AndroidTeamsE2ETest -e bcd.serverBaseUrl http://10.0.2.2:8080 -e bcd.mailpitBaseUrl http://10.0.2.2:8025 -e bcd.onlyOfficeBaseUrl http://10.0.2.2:8082 -e bcd.onlyOfficeJwtSecret betterclouddrive-onlyoffice-dev-secret com.betterclouddrive.android.test/androidx.test.runner.AndroidJUnitRunner`。
 
 ### TEST-08 契约测试补齐
 

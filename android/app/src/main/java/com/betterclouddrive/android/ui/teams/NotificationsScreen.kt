@@ -118,6 +118,9 @@ class NotificationsViewModel @Inject constructor(
 
     private fun routeForLink(link: String?): String? {
         if (link.isNullOrBlank()) return null
+        Regex("/team-invites/([^/?#]+)").find(link)?.let {
+            return Screen.teamInvite(it.groupValues[1])
+        }
         Regex("/teams/(\\d+)/settings").find(link)?.let {
             return Screen.teamSettings(it.groupValues[1].toLong())
         }

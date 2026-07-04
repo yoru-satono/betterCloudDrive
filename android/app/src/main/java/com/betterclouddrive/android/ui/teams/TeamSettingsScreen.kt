@@ -741,7 +741,12 @@ fun TeamSettingsScreen(
                 ).forEachIndexed { index, (title, tag) ->
                     Tab(
                         selected = selectedTab == index,
-                        onClick = { selectedTab = index },
+                        onClick = {
+                            selectedTab = index
+                            if (tag == "audit") {
+                                viewModel.retryAuditLogs()
+                            }
+                        },
                         text = { Text(title) },
                         modifier = Modifier.testTag("team-settings-tab-$tag"),
                     )

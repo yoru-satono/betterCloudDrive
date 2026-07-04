@@ -14,9 +14,12 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import com.betterclouddrive.android.MainActivity
+import com.betterclouddrive.android.data.local.TokenManager
+import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -36,6 +39,7 @@ class AndroidTeamsE2ETest {
     @Before
     fun setUp() {
         api.waitForBackend()
+        clearSavedTokens()
         owner = api.createUser()
     }
 
@@ -188,7 +192,7 @@ class AndroidTeamsE2ETest {
         revealLaterSettingsTabs()
         composeRule.waitForTag("team-settings-tab-audit").performClick()
         composeRule.waitForTag("team-settings-audit-list").assertIsDisplayed()
-        composeRule.waitForText("INVITE_CREATE").assertIsDisplayed()
+        composeRule.waitForText("INVITE_RESEND").assertIsDisplayed()
         composeRule.waitForText("INVITE_CANCEL").assertIsDisplayed()
     }
 
@@ -231,6 +235,26 @@ class AndroidTeamsE2ETest {
 
         waitForTeamFavorite(team.id, file.id)
         waitForAuditAction(team.id, "FAVORITE_ADD")
+    }
+
+    @Test
+    fun teamNotificationsOpenLinkedTeamContextAndMarkRead() {
+        val invitee = api.createUser()
+        val team = api.createTeam(owner.accessToken, uniqueName("notify_team"))
+        api.createTeamInvite(owner.accessToken, team.id, invitee.email, "VIEWER")
+        val inviteToken = api.latestTeamInviteToken(invitee.email)
+        api.acceptTeamInvite(inviteToken, invitee.accessToken)
+        val notification = waitForNotification("TEAM_INVITE_ACCEPT")
+
+        composeRule.loginViaUi(owner)
+        openTeam(team)
+        composeRule.waitForTag("team-files-notifications").performClick()
+        composeRule.waitForTag("notifications-list").assertIsDisplayed()
+        composeRule.waitForTag("notification-${notification.id}").performClick()
+        composeRule.waitForTag("team-settings-overview").assertIsDisplayed()
+        eventually("notification ${notification.id} marked read") {
+            api.listNotifications(owner.accessToken).firstOrNull { it.id == notification.id && it.isRead }
+        }
     }
 
     @Test
@@ -326,6 +350,11 @@ class AndroidTeamsE2ETest {
                     .fetchSemanticsNodes()
                     .isNotEmpty()
         }
+    }
+
+    private fun clearSavedTokens() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        runBlocking { TokenManager(context).clearAll() }
     }
 
     private fun saveServerAddressFromLogin() {
@@ -477,6 +506,12 @@ class AndroidTeamsE2ETest {
     private fun waitForAuditAction(teamId: Long, action: String): E2ETeamAuditLog {
         return eventually("team audit action $action") {
             api.listTeamAuditLogs(owner.accessToken, teamId).firstOrNull { it.action == action }
+        }
+    }
+
+    private fun waitForNotification(type: String): E2ENotification {
+        return eventually("notification $type") {
+            api.listNotifications(owner.accessToken, unreadOnly = true).firstOrNull { it.type == type }
         }
     }
 

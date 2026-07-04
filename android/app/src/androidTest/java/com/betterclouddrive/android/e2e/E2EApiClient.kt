@@ -82,6 +82,14 @@ data class E2ETeamAuditLog(
     val targetId: Long?,
 )
 
+data class E2ENotification(
+    val id: Long,
+    val type: String,
+    val title: String,
+    val link: String?,
+    val isRead: Boolean,
+)
+
 data class E2ETeam(
     val id: Long,
     val name: String,
@@ -263,6 +271,15 @@ class E2EApiClient(
         throw AssertionError("No team invite token received for $email")
     }
 
+    fun acceptTeamInvite(token: String, accessToken: String) {
+        val request = Request.Builder()
+            .url("$baseUrl/team-invites/$token/accept")
+            .post(ByteArray(0).toRequestBody(null))
+            .header("Authorization", "Bearer $accessToken")
+            .build()
+        expectApiSuccess(client.newCall(request).execute())
+    }
+
     fun listTeamAuditLogs(token: String, teamId: Long): List<E2ETeamAuditLog> {
         val url = "$baseUrl/teams/$teamId/audit-logs".toHttpUrl().newBuilder()
             .addQueryParameter("page", "1")
@@ -277,6 +294,23 @@ class E2EApiClient(
             .getJSONObject("data")
             .getJSONArray("records")
         return (0 until records.length()).map { index -> parseTeamAuditLog(records.getJSONObject(index)) }
+    }
+
+    fun listNotifications(token: String, unreadOnly: Boolean = false): List<E2ENotification> {
+        val url = "$baseUrl/notifications".toHttpUrl().newBuilder()
+            .addQueryParameter("page", "1")
+            .addQueryParameter("size", "100")
+            .addQueryParameter("unreadOnly", unreadOnly.toString())
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute())
+            .getJSONObject("data")
+            .getJSONArray("records")
+        return (0 until records.length()).map { index -> parseNotification(records.getJSONObject(index)) }
     }
 
     fun createTeamFolder(token: String, teamId: Long, folderName: String, parentId: Long? = null): E2EFile {
@@ -908,6 +942,16 @@ class E2EApiClient(
             action = json.getString("action"),
             targetType = json.optString("targetType").takeIf { it.isNotBlank() },
             targetId = if (json.isNull("targetId")) null else json.getLong("targetId"),
+        )
+    }
+
+    private fun parseNotification(json: JSONObject): E2ENotification {
+        return E2ENotification(
+            id = json.getLong("id"),
+            type = json.getString("type"),
+            title = json.getString("title"),
+            link = json.optString("link").takeIf { it.isNotBlank() },
+            isRead = json.optBoolean("isRead"),
         )
     }
 
