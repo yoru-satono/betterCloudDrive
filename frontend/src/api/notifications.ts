@@ -25,6 +25,12 @@ export type NotificationTypeFilter =
   | 'TEAM_RESTORE'
   | 'TEAM_PERMISSION_UPDATE'
   | 'TEAM_DELETE'
+  | 'TEAM_MEMBER_ADD'
+  | 'TEAM_ROLE_UPDATE'
+  | 'TEAM_MEMBER_REMOVE'
+  | 'TEAM_OWNER_TRANSFER'
+
+export type NotificationPreferenceMap = Partial<Record<NotificationTypeFilter, boolean>>
 
 export const listNotifications = (page = 1, size = 20, unreadOnly = false, type?: NotificationTypeFilter) => {
   const params: { page: number; size: number; unreadOnly: boolean; type?: NotificationTypeFilter } = { page, size, unreadOnly }
@@ -34,6 +40,12 @@ export const listNotifications = (page = 1, size = 20, unreadOnly = false, type?
 
 export const getUnreadCount = () =>
   api.get<ApiResponse<number>>('/notifications/unread-count')
+
+export const getNotificationPreferences = () =>
+  api.get<ApiResponse<Record<NotificationTypeFilter, boolean>>>('/notifications/preferences')
+
+export const updateNotificationPreferences = (preferences: NotificationPreferenceMap) =>
+  api.put<ApiResponse<Record<NotificationTypeFilter, boolean>>>('/notifications/preferences', { preferences })
 
 export const markNotificationRead = (notificationId: number) =>
   api.post<ApiResponse<void>>(`/notifications/${notificationId}/read`)

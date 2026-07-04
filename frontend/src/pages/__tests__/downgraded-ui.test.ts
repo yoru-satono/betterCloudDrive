@@ -9,6 +9,7 @@ import * as authApi from '@/api/auth'
 import * as sharesApi from '@/api/shares'
 import * as filesApi from '@/api/files'
 import * as adminApi from '@/api/admin'
+import * as notificationsApi from '@/api/notifications'
 import { downloadSharedFile, downloadSharedFolderZip } from '@/api/download'
 import { toast } from 'vue-sonner'
 
@@ -53,6 +54,11 @@ vi.mock('@/api/auth', () => ({
   updateWebDavSettings: vi.fn(),
 }))
 
+vi.mock('@/api/notifications', () => ({
+  getNotificationPreferences: vi.fn(),
+  updateNotificationPreferences: vi.fn(),
+}))
+
 const accessShare = sharesApi.accessShare as Mock
 const listSharedFiles = sharesApi.listSharedFiles as Mock
 const saveSharedItem = sharesApi.saveSharedItem as Mock
@@ -65,6 +71,8 @@ const updateUserQuota = adminApi.updateUserQuota as Mock
 const downloadSharedFileMock = downloadSharedFile as Mock
 const downloadSharedFolderZipMock = downloadSharedFolderZip as Mock
 const updateWebDavSettings = authApi.updateWebDavSettings as Mock
+const getNotificationPreferences = notificationsApi.getNotificationPreferences as Mock
+const updateNotificationPreferences = notificationsApi.updateNotificationPreferences as Mock
 
 const baseStubs = {
   RouterLink: RouterLinkStub,
@@ -90,6 +98,12 @@ beforeEach(() => {
   downloadSharedFileMock.mockReset()
   downloadSharedFolderZipMock.mockReset()
   updateWebDavSettings.mockReset()
+  getNotificationPreferences.mockReset().mockResolvedValue({
+    data: { data: { TEAM_INVITE: true, TEAM_QUOTA_ALERT: true } },
+  })
+  updateNotificationPreferences.mockReset().mockResolvedValue({
+    data: { data: { TEAM_INVITE: false, TEAM_QUOTA_ALERT: true } },
+  })
   routerPush.mockReset()
 })
 
@@ -178,6 +192,38 @@ describe('downgraded frontend UI', () => {
     await flushPromises()
     expect(updateWebDavSettings).toHaveBeenCalledWith(false, undefined)
     expect(wrapper.text()).toContain('已关闭')
+  })
+
+  it('loads and updates notification preferences from profile page', async () => {
+    const auth = useAuthStore()
+    auth.user = {
+      id: 1,
+      username: 'alice',
+      email: 'alice@example.com',
+      role: 'ROLE_USER',
+      status: 1,
+      storageUsed: 1024,
+      storageQuota: 2048,
+      webdavEnabled: false,
+      createdAt: '2026-01-01T00:00:00',
+      updatedAt: '2026-01-01T00:00:00',
+    }
+
+    const wrapper = mount(ProfilePage)
+    await flushPromises()
+
+    expect(getNotificationPreferences).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('团队通知')
+    const inviteToggle = wrapper.findAll('.notification-prefs__row')
+      .find(row => row.text().includes('团队邀请'))!
+      .find('input[type="checkbox"]')
+    expect((inviteToggle.element as HTMLInputElement).checked).toBe(true)
+
+    await inviteToggle.setValue(false)
+    await flushPromises()
+
+    expect(updateNotificationPreferences).toHaveBeenCalledWith({ TEAM_INVITE: false })
+    expect(toast.success).toHaveBeenCalledWith('通知偏好已更新')
   })
 
   it('public share page lists files and can download shared files', async () => {

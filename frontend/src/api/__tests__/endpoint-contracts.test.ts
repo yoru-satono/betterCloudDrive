@@ -333,6 +333,14 @@ describe('API endpoint contracts', () => {
     await notificationsApi.getUnreadCount()
     expect(apiMock.get).toHaveBeenCalledWith('/notifications/unread-count')
 
+    await notificationsApi.getNotificationPreferences()
+    expect(apiMock.get).toHaveBeenCalledWith('/notifications/preferences')
+
+    await notificationsApi.updateNotificationPreferences({ TEAM_INVITE: false })
+    expect(apiMock.put).toHaveBeenCalledWith('/notifications/preferences', {
+      preferences: { TEAM_INVITE: false },
+    })
+
     await notificationsApi.markNotificationRead(7)
     expect(apiMock.post).toHaveBeenCalledWith('/notifications/7/read')
 

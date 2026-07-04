@@ -2122,11 +2122,44 @@ OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用
 |------|------|------|------|
 | GET | `/api/v1/notifications?unreadOnly=&type=&page=1&size=20` | 登录用户 | 分页列出站内通知 |
 | GET | `/api/v1/notifications/unread-count` | 登录用户 | 返回未读数量 |
+| GET | `/api/v1/notifications/preferences` | 登录用户 | 获取通知类型偏好 |
+| PUT | `/api/v1/notifications/preferences` | 登录用户 | 更新通知类型偏好 |
 | GET | `/api/v1/notifications/stream?accessToken=` | 登录用户 | SSE 实时通知变更通道 |
 | POST | `/api/v1/notifications/{notificationId}/read` | 通知所有者 | 标记单条已读 |
 | POST | `/api/v1/notifications/read-all` | 登录用户 | 标记当前用户全部通知已读 |
 
 **Notification 字段:** `id`、`userId`、`teamId`、`type`、`title`、`content`、`link`、`readAt`、`createdAt`、`isRead`。
+
+通知偏好为用户级配置，未设置的类型默认开启。关闭某个类型后，后续该类型不再生成站内通知或邮件通知；团队审计不受影响。
+
+**PUT /preferences Request Body:**
+```json
+{
+  "preferences": {
+    "TEAM_INVITE": false,
+    "TEAM_QUOTA_ALERT": true
+  }
+}
+```
+
+**Preferences Response:**
+```json
+{
+  "TEAM_INVITE": false,
+  "TEAM_INVITE_ACCEPT": true,
+  "TEAM_INVITE_REJECT": true,
+  "TEAM_QUOTA_ALERT": true,
+  "TEAM_ARCHIVE": true,
+  "TEAM_UNARCHIVE": true,
+  "TEAM_RESTORE": true,
+  "TEAM_PERMISSION_UPDATE": true,
+  "TEAM_DELETE": true,
+  "TEAM_MEMBER_ADD": true,
+  "TEAM_ROLE_UPDATE": true,
+  "TEAM_MEMBER_REMOVE": true,
+  "TEAM_OWNER_TRANSFER": true
+}
+```
 
 `GET /stream` 返回 `text/event-stream`。浏览器 `EventSource` 无法设置 `Authorization` header，因此该端点接受当前 access token 的 `accessToken` 查询参数；服务端仍按登录用户鉴权。连接建立后会发送 `connected` 事件，通知创建、标记已读或全部已读后会发送 `notifications-changed` 事件：
 
@@ -2135,7 +2168,7 @@ event: notifications-changed
 data: {"unreadCount":3}
 ```
 
-**错误码:** 403（读取他人通知）、404（通知不存在）。
+**错误码:** 400（不支持的通知偏好类型）、403（读取他人通知）、404（通知不存在）。
 
 ---
 

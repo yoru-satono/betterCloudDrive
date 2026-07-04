@@ -30,6 +30,10 @@ const typeOptions: Array<{ label: string; value: NotificationTypeFilter | '' }> 
   { label: '团队恢复', value: 'TEAM_RESTORE' },
   { label: '团队删除', value: 'TEAM_DELETE' },
   { label: '权限变更', value: 'TEAM_PERMISSION_UPDATE' },
+  { label: '成员加入', value: 'TEAM_MEMBER_ADD' },
+  { label: '角色变更', value: 'TEAM_ROLE_UPDATE' },
+  { label: '成员移除', value: 'TEAM_MEMBER_REMOVE' },
+  { label: '所有权转让', value: 'TEAM_OWNER_TRANSFER' },
 ]
 const emptyTitle = computed(() => {
   if (unreadOnly.value && typeFilter.value) return '暂无匹配的未读通知'

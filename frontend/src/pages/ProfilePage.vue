@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useFormatters } from '@/composables/useFormatters'
 import OButton from '@/components/base/OButton.vue'
 import OInput from '@/components/base/OInput.vue'
+import * as notificationsApi from '@/api/notifications'
+import type { NotificationPreferenceMap, NotificationTypeFilter } from '@/api/notifications'
 import { toast } from 'vue-sonner'
 
 const auth = useAuthStore()
@@ -14,6 +16,23 @@ const storageColor = computed(() => storagePercent.value > 90 ? 'var(--danger)' 
 const webdavPassword = ref('')
 const webdavLoading = ref(false)
 const webdavEnabled = computed(() => Boolean(auth.user?.webdavEnabled))
+const notificationPreferences = ref<NotificationPreferenceMap>({})
+const notificationPreferencesLoading = ref(false)
+const notificationPreferenceOptions: Array<{ type: NotificationTypeFilter; label: string }> = [
+  { type: 'TEAM_INVITE', label: '团队邀请' },
+  { type: 'TEAM_INVITE_ACCEPT', label: '邀请接受' },
+  { type: 'TEAM_INVITE_REJECT', label: '邀请拒绝' },
+  { type: 'TEAM_QUOTA_ALERT', label: '配额告警' },
+  { type: 'TEAM_ARCHIVE', label: '团队归档' },
+  { type: 'TEAM_UNARCHIVE', label: '取消归档' },
+  { type: 'TEAM_RESTORE', label: '团队恢复' },
+  { type: 'TEAM_PERMISSION_UPDATE', label: '权限变更' },
+  { type: 'TEAM_DELETE', label: '团队删除' },
+  { type: 'TEAM_MEMBER_ADD', label: '成员加入' },
+  { type: 'TEAM_ROLE_UPDATE', label: '角色变更' },
+  { type: 'TEAM_MEMBER_REMOVE', label: '成员移除' },
+  { type: 'TEAM_OWNER_TRANSFER', label: '所有权转让' },
+]
 
 async function saveWebDavSettings(enabled: boolean) {
   if (enabled && !webdavPassword.value.trim()) {
@@ -29,6 +48,38 @@ async function saveWebDavSettings(enabled: boolean) {
     webdavLoading.value = false
   }
 }
+
+function isNotificationEnabled(type: NotificationTypeFilter) {
+  return notificationPreferences.value[type] !== false
+}
+
+async function loadNotificationPreferences() {
+  notificationPreferencesLoading.value = true
+  try {
+    const { data } = await notificationsApi.getNotificationPreferences()
+    notificationPreferences.value = data.data
+  } finally {
+    notificationPreferencesLoading.value = false
+  }
+}
+
+async function toggleNotificationPreference(type: NotificationTypeFilter, enabled: boolean) {
+  const next = { ...notificationPreferences.value, [type]: enabled }
+  notificationPreferences.value = next
+  notificationPreferencesLoading.value = true
+  try {
+    const { data } = await notificationsApi.updateNotificationPreferences({ [type]: enabled })
+    notificationPreferences.value = data.data
+    toast.success('通知偏好已更新')
+  } catch (error) {
+    notificationPreferences.value = { ...next, [type]: !enabled }
+    throw error
+  } finally {
+    notificationPreferencesLoading.value = false
+  }
+}
+
+onMounted(loadNotificationPreferences)
 </script>
 
 <template>
@@ -89,6 +140,23 @@ async function saveWebDavSettings(enabled: boolean) {
         </div>
       </div>
     </div>
+
+    <div class="section">
+      <div class="section__header">
+        <h3 class="section__title">团队通知</h3>
+      </div>
+      <div class="notification-prefs">
+        <label v-for="option in notificationPreferenceOptions" :key="option.type" class="notification-prefs__row">
+          <span>{{ option.label }}</span>
+          <input
+            type="checkbox"
+            :checked="isNotificationEnabled(option.type)"
+            :disabled="notificationPreferencesLoading"
+            @change="event => toggleNotificationPreference(option.type, (event.target as HTMLInputElement).checked)"
+          />
+        </label>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -133,4 +201,32 @@ async function saveWebDavSettings(enabled: boolean) {
 }
 .webdav-form { display: flex; flex-direction: column; gap: 12px; }
 .webdav-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.notification-prefs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.notification-prefs__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.notification-prefs__row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+@media (max-width: 720px) {
+  .notification-prefs {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

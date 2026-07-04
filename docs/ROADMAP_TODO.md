@@ -145,7 +145,8 @@
 
 - 目标：允许用户控制团队通知类型。
 - 范围：通知类型开关、默认值、接口和 Web 设置入口。
-- 验收：关闭的类型不再生成站内未读通知，审计仍保留。
+- 状态：已完成。
+- 验收：新增 `notification_preferences` 表和 `/api/v1/notifications/preferences` 读写接口；偏好默认开启，ProfilePage 提供团队通知开关；关闭类型后 `notifyUser` 不再生成站内通知或邮件，团队审计路径不受影响。验证已通过：`mvn -pl betterclouddrive-service,betterclouddrive-web -am "-Dtest=NotificationServiceImplTest,JwtAuthenticationFilterTest,NotificationSseServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- endpoint-contracts.test.ts notifications-page.test.ts downgraded-ui.test.ts`。
 
 ### TEAM-04 团队任务中心
 

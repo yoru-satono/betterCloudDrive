@@ -6,9 +6,11 @@ import static org.mockito.Mockito.*;
 
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.NotificationEntity;
+import com.betterclouddrive.dal.entity.NotificationPreferenceEntity;
 import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
+import com.betterclouddrive.dal.repository.NotificationPreferenceRepository;
 import com.betterclouddrive.dal.repository.NotificationRepository;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
@@ -29,12 +31,14 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationServiceImplTest {
 
     @Mock private NotificationRepository notificationRepository;
+    @Mock private NotificationPreferenceRepository notificationPreferenceRepository;
     @Mock private TeamRepository teamRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private UserRepository userRepository;
@@ -93,6 +97,54 @@ class NotificationServiceImplTest {
     }
 
     @Test
+    void getPreferences_shouldDefaultSupportedTypesToEnabledAndApplyOverrides() {
+        when(notificationPreferenceRepository.findByUserId(2L)).thenReturn(List.of(
+                NotificationPreferenceEntity.builder()
+                        .userId(2L)
+                        .notificationType("team_invite")
+                        .enabled(false)
+                        .build()));
+
+        Map<String, Boolean> preferences = notificationService.getPreferences(2L);
+
+        assertThat(preferences).containsEntry("TEAM_INVITE", false);
+        assertThat(preferences).containsEntry("TEAM_QUOTA_ALERT", true);
+        assertThat(preferences.keySet()).containsAll(notificationService.supportedPreferenceTypes());
+    }
+
+    @Test
+    void updatePreferences_shouldUpsertNormalizedValues() {
+        NotificationPreferenceEntity existing = NotificationPreferenceEntity.builder()
+                .id(8L)
+                .userId(2L)
+                .notificationType("TEAM_INVITE")
+                .enabled(true)
+                .build();
+        when(notificationPreferenceRepository.findByUserIdAndNotificationType(2L, "TEAM_INVITE"))
+                .thenReturn(Optional.of(existing));
+        when(notificationPreferenceRepository.findByUserIdAndNotificationType(2L, "TEAM_DELETE"))
+                .thenReturn(Optional.empty());
+        when(notificationPreferenceRepository.findByUserId(2L)).thenReturn(List.of(
+                NotificationPreferenceEntity.builder().userId(2L).notificationType("TEAM_INVITE").enabled(false).build(),
+                NotificationPreferenceEntity.builder().userId(2L).notificationType("TEAM_DELETE").enabled(false).build()));
+
+        Map<String, Boolean> preferences = notificationService.updatePreferences(2L, Map.of(
+                " team_invite ", false,
+                "TEAM_DELETE", false));
+
+        verify(notificationPreferenceRepository).save(argThat(preference ->
+                Long.valueOf(8L).equals(preference.getId())
+                        && "TEAM_INVITE".equals(preference.getNotificationType())
+                        && Boolean.FALSE.equals(preference.getEnabled())));
+        verify(notificationPreferenceRepository).save(argThat(preference ->
+                preference.getId() == null
+                        && Long.valueOf(2L).equals(preference.getUserId())
+                        && "TEAM_DELETE".equals(preference.getNotificationType())
+                        && Boolean.FALSE.equals(preference.getEnabled())));
+        assertThat(preferences).containsEntry("TEAM_INVITE", false).containsEntry("TEAM_DELETE", false);
+    }
+
+    @Test
     void notifyUser_shouldRecordNotificationOutboxEvent() {
         NotificationEntity saved = NotificationEntity.builder()
                 .id(99L)
@@ -103,6 +155,7 @@ class NotificationServiceImplTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).email("user@test.local").build()));
         when(notificationRepository.save(any())).thenReturn(saved);
         when(notificationRepository.countByUserIdAndReadAtIsNull(2L)).thenReturn(5L);
+        when(notificationPreferenceRepository.findByUserIdAndNotificationType(2L, "TEAM_INVITE")).thenReturn(Optional.empty());
 
         notificationService.notifyUser(2L, 10L, " team_invite ", "邀请", "加入团队", "/teams/10", false);
 
@@ -112,6 +165,24 @@ class NotificationServiceImplTest {
                         && "TEAM_INVITE".equals(notification.getType())));
         verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, 10L, "TEAM_INVITE", "加入团队");
         verify(notificationRealtimePublisher).publishNotificationsChanged(2L, 5L);
+    }
+
+    @Test
+    void notifyUser_shouldSkipDisabledNotificationType() {
+        when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).email("user@test.local").build()));
+        when(notificationPreferenceRepository.findByUserIdAndNotificationType(2L, "TEAM_INVITE"))
+                .thenReturn(Optional.of(NotificationPreferenceEntity.builder()
+                        .userId(2L)
+                        .notificationType("TEAM_INVITE")
+                        .enabled(false)
+                        .build()));
+
+        notificationService.notifyUser(2L, 10L, "TEAM_INVITE", "邀请", "加入团队", "/teams/10", true);
+
+        verify(notificationRepository, never()).save(any());
+        verify(teamEventOutboxService, never()).recordNotificationEvent(any(), any(), any(), any(), any());
+        verify(notificationRealtimePublisher, never()).publishNotificationsChanged(anyLong(), anyLong());
+        verify(emailService, never()).sendNotification(any(), any(), any(), any());
     }
 
     @Test
@@ -134,6 +205,8 @@ class NotificationServiceImplTest {
         when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).email("owner@test.local").build()));
         when(userRepository.findById(3L)).thenReturn(Optional.of(UserEntity.builder().id(3L).email("admin@test.local").build()));
         when(notificationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(notificationPreferenceRepository.findByUserIdAndNotificationType(anyLong(), eq("TEAM_QUOTA_ALERT")))
+                .thenReturn(Optional.empty());
 
         notificationService.checkTeamQuota(10L);
 

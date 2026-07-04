@@ -4,9 +4,11 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.NotificationEntity;
+import com.betterclouddrive.dal.entity.NotificationPreferenceEntity;
 import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
+import com.betterclouddrive.dal.repository.NotificationPreferenceRepository;
 import com.betterclouddrive.dal.repository.NotificationRepository;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
@@ -32,8 +34,11 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -43,8 +48,24 @@ public class NotificationServiceImpl implements NotificationService {
     private static final int ACTIVE = 1;
     private static final String QUOTA_ALERT_PREFIX = "team:quota:alert:";
     private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
+    private static final List<String> PREFERENCE_TYPES = List.of(
+            "TEAM_INVITE",
+            "TEAM_INVITE_ACCEPT",
+            "TEAM_INVITE_REJECT",
+            "TEAM_QUOTA_ALERT",
+            "TEAM_ARCHIVE",
+            "TEAM_UNARCHIVE",
+            "TEAM_RESTORE",
+            "TEAM_PERMISSION_UPDATE",
+            "TEAM_DELETE",
+            "TEAM_MEMBER_ADD",
+            "TEAM_ROLE_UPDATE",
+            "TEAM_MEMBER_REMOVE",
+            "TEAM_OWNER_TRANSFER"
+    );
 
     private final NotificationRepository notificationRepository;
+    private final NotificationPreferenceRepository notificationPreferenceRepository;
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
@@ -74,6 +95,49 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     public long countUnread(Long userId) {
         return notificationRepository.countByUserIdAndReadAtIsNull(userId);
+    }
+
+    @Override
+    public List<String> supportedPreferenceTypes() {
+        return PREFERENCE_TYPES;
+    }
+
+    @Override
+    public Map<String, Boolean> getPreferences(Long userId) {
+        Map<String, Boolean> result = defaultPreferences();
+        notificationPreferenceRepository.findByUserId(userId).forEach(preference -> {
+            String type = normalizePreferenceType(preference.getNotificationType());
+            if (PREFERENCE_TYPES.contains(type)) {
+                result.put(type, Boolean.TRUE.equals(preference.getEnabled()));
+            }
+        });
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Boolean> updatePreferences(Long userId, Map<String, Boolean> preferences) {
+        if (preferences == null) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Notification preferences are required");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        for (Map.Entry<String, Boolean> entry : preferences.entrySet()) {
+            String type = normalizePreferenceType(entry.getKey());
+            if (!PREFERENCE_TYPES.contains(type) || entry.getValue() == null) {
+                throw new BusinessException(ApiCode.BAD_REQUEST, "Unsupported notification preference type");
+            }
+            NotificationPreferenceEntity preference = notificationPreferenceRepository
+                    .findByUserIdAndNotificationType(userId, type)
+                    .orElseGet(() -> NotificationPreferenceEntity.builder()
+                            .userId(userId)
+                            .notificationType(type)
+                            .createdAt(now)
+                            .build());
+            preference.setEnabled(entry.getValue());
+            preference.setUpdatedAt(now);
+            notificationPreferenceRepository.save(preference);
+        }
+        return getPreferences(userId);
     }
 
     @Override
@@ -111,6 +175,10 @@ public class NotificationServiceImpl implements NotificationService {
             return;
         }
         String normalizedType = type.trim().toUpperCase();
+        if (!isNotificationEnabled(userId, normalizedType)) {
+            log.debug("Notification type {} is disabled for user {}", normalizedType, userId);
+            return;
+        }
         NotificationEntity notification = notificationRepository.save(NotificationEntity.builder()
                 .userId(userId)
                 .teamId(teamId)
@@ -208,5 +276,31 @@ public class NotificationServiceImpl implements NotificationService {
         } else {
             publish.run();
         }
+    }
+
+    private Map<String, Boolean> defaultPreferences() {
+        return PREFERENCE_TYPES.stream()
+                .collect(Collectors.toMap(
+                        type -> type,
+                        type -> true,
+                        (left, right) -> left,
+                        LinkedHashMap::new));
+    }
+
+    private boolean isNotificationEnabled(Long userId, String type) {
+        if (!PREFERENCE_TYPES.contains(type)) {
+            return true;
+        }
+        return notificationPreferenceRepository.findByUserIdAndNotificationType(userId, type)
+                .map(NotificationPreferenceEntity::getEnabled)
+                .map(Boolean.TRUE::equals)
+                .orElse(true);
+    }
+
+    private String normalizePreferenceType(String type) {
+        if (!StringUtils.hasText(type)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Notification preference type is required");
+        }
+        return type.trim().toUpperCase();
     }
 }
