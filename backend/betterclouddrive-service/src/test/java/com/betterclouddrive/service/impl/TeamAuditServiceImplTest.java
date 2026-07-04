@@ -12,6 +12,7 @@ import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamOperationLogRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
+import com.betterclouddrive.service.TeamEventOutboxService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -31,6 +32,7 @@ class TeamAuditServiceImplTest {
     @Mock private TeamOperationLogRepository teamOperationLogRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private TeamRepository teamRepository;
+    @Mock private TeamEventOutboxService teamEventOutboxService;
     @InjectMocks private TeamAuditServiceImpl teamAuditService;
 
     @Test
@@ -47,6 +49,7 @@ class TeamAuditServiceImplTest {
         assertThat(captor.getValue().getTargetType()).isEqualTo("SHARE");
         assertThat(captor.getValue().getResult()).isEqualTo(1);
         assertThat(captor.getValue().getStatusCode()).isEqualTo(200);
+        verify(teamEventOutboxService).recordTeamEvent(10L, 2L, "SHARE_CREATE", "SHARE", 9L, "details");
     }
 
     @Test

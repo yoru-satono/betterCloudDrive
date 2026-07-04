@@ -14,6 +14,7 @@ import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.EmailService;
+import com.betterclouddrive.service.TeamEventOutboxService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -39,6 +40,7 @@ class NotificationServiceImplTest {
     @Mock private EmailService emailService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
+    @Mock private TeamEventOutboxService teamEventOutboxService;
     @InjectMocks private NotificationServiceImpl notificationService;
 
     @Test
@@ -69,6 +71,26 @@ class NotificationServiceImplTest {
     }
 
     @Test
+    void notifyUser_shouldRecordNotificationOutboxEvent() {
+        NotificationEntity saved = NotificationEntity.builder()
+                .id(99L)
+                .userId(2L)
+                .teamId(10L)
+                .type("TEAM_INVITE")
+                .build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).email("user@test.local").build()));
+        when(notificationRepository.save(any())).thenReturn(saved);
+
+        notificationService.notifyUser(2L, 10L, " team_invite ", "邀请", "加入团队", "/teams/10", false);
+
+        verify(notificationRepository).save(argThat(notification ->
+                Long.valueOf(2L).equals(notification.getUserId())
+                        && Long.valueOf(10L).equals(notification.getTeamId())
+                        && "TEAM_INVITE".equals(notification.getType())));
+        verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, 10L, "TEAM_INVITE", "加入团队");
+    }
+
+    @Test
     void checkTeamQuota_shouldResetHigherThresholdsAndNotifyManagersOnce() {
         TeamEntity team = TeamEntity.builder()
                 .id(10L)
@@ -96,6 +118,8 @@ class NotificationServiceImplTest {
         verify(notificationRepository, times(2)).save(argThat(notification ->
                 "TEAM_QUOTA_ALERT".equals(notification.getType())
                         && Long.valueOf(10L).equals(notification.getTeamId())));
+        verify(teamEventOutboxService, times(2)).recordNotificationEvent(
+                isNull(), anyLong(), eq(10L), eq("TEAM_QUOTA_ALERT"), contains("存储用量已达到 80%"));
         verify(userRepository, never()).findById(4L);
     }
 }

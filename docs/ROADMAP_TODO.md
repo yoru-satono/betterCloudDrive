@@ -131,7 +131,8 @@
 
 - 目标：为后续消息队列建立事件边界。
 - 范围：团队成员、邀请、权限、分享、文件、配额、删除事件。
-- 验收：关键事件写入 outbox 表；现有同步逻辑不破坏。
+- 状态：已完成。
+- 验收：新增 `team_event_outbox` 表、DAL entity/repository 和 `TeamEventOutboxService`；团队审计记录同步写入 `TEAM` outbox，站内通知创建同步写入 `NOTIFICATION` outbox，现有审计/通知同步逻辑保持不变。验证已通过：`mvn -pl betterclouddrive-service -am "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-start -am -DskipTests package`。
 
 ### TEAM-02 实时通知通道
 

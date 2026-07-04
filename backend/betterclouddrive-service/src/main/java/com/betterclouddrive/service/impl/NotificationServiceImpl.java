@@ -13,6 +13,7 @@ import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.EmailService;
 import com.betterclouddrive.service.NotificationService;
+import com.betterclouddrive.service.TeamEventOutboxService;
 import com.betterclouddrive.service.TeamService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final StringRedisTemplate redisTemplate;
+    private final TeamEventOutboxService teamEventOutboxService;
 
     @Override
     public PageResult<NotificationEntity> listNotifications(Long userId, Boolean unreadOnly, String type, int page, int size) {
@@ -100,15 +102,17 @@ public class NotificationServiceImpl implements NotificationService {
         if (user == null || user.getDeletedAt() != null) {
             return;
         }
-        notificationRepository.save(NotificationEntity.builder()
+        String normalizedType = type.trim().toUpperCase();
+        NotificationEntity notification = notificationRepository.save(NotificationEntity.builder()
                 .userId(userId)
                 .teamId(teamId)
-                .type(type.trim().toUpperCase())
+                .type(normalizedType)
                 .title(title.trim())
                 .content(content)
                 .link(link)
                 .createdAt(LocalDateTime.now())
                 .build());
+        teamEventOutboxService.recordNotificationEvent(notification.getId(), userId, teamId, normalizedType, content);
         if (email) {
             try {
                 emailService.sendNotification(user.getEmail(), title, content, link);

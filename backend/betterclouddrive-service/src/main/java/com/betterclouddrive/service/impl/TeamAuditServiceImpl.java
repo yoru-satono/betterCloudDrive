@@ -9,6 +9,7 @@ import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamOperationLogRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamEventOutboxService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -32,6 +33,7 @@ public class TeamAuditServiceImpl implements TeamAuditService {
     private final TeamOperationLogRepository teamOperationLogRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamRepository teamRepository;
+    private final TeamEventOutboxService teamEventOutboxService;
 
     @Override
     @Transactional
@@ -39,17 +41,20 @@ public class TeamAuditServiceImpl implements TeamAuditService {
         if (teamId == null || !StringUtils.hasText(action)) {
             return;
         }
+        String normalizedAction = action.trim().toUpperCase();
+        String normalizedTargetType = StringUtils.hasText(targetType) ? targetType.trim().toUpperCase() : null;
         teamOperationLogRepository.save(TeamOperationLogEntity.builder()
                 .teamId(teamId)
                 .actorUserId(actorUserId)
-                .action(action.trim().toUpperCase())
-                .targetType(StringUtils.hasText(targetType) ? targetType.trim().toUpperCase() : null)
+                .action(normalizedAction)
+                .targetType(normalizedTargetType)
                 .targetId(targetId)
                 .result(1)
                 .statusCode(200)
                 .details(details)
                 .createdAt(LocalDateTime.now())
                 .build());
+        teamEventOutboxService.recordTeamEvent(teamId, actorUserId, normalizedAction, normalizedTargetType, targetId, details);
     }
 
     @Override
