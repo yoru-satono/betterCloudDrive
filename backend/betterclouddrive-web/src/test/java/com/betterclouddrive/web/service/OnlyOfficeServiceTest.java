@@ -115,6 +115,28 @@ class OnlyOfficeServiceTest {
                 .isEqualTo("http://onlyoffice-documentserver/cache/files/data/edit/output.docx/output.docx?md5=abc");
     }
 
+    @Test
+    void resolveDocumentServerDownloadUrl_shouldRewriteAndroidEmulatorAlias() {
+        properties.setInternalUrl("http://onlyoffice-documentserver/");
+
+        String resolved = service.resolveDocumentServerDownloadUrl(
+                "http://10.0.2.2:8082/cache/files/data/edit/output.docx/output.docx?md5=abc");
+
+        assertThat(resolved)
+                .isEqualTo("http://onlyoffice-documentserver/cache/files/data/edit/output.docx/output.docx?md5=abc");
+    }
+
+    @Test
+    void resolveDocumentServerDownloadUrl_shouldNotRewriteDifferentLocalPort() {
+        properties.setInternalUrl("http://onlyoffice-documentserver/");
+
+        String resolved = service.resolveDocumentServerDownloadUrl(
+                "http://10.0.2.2:8083/cache/files/data/edit/output.docx/output.docx?md5=abc");
+
+        assertThat(resolved)
+                .isEqualTo("http://10.0.2.2:8083/cache/files/data/edit/output.docx/output.docx?md5=abc");
+    }
+
     private FileEntity officeFile(String fileName) {
         return FileEntity.builder()
                 .id(7L)

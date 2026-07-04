@@ -2,6 +2,7 @@ package com.betterclouddrive.android.e2e
 
 import android.content.Intent
 import android.net.Uri
+import android.view.KeyEvent
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -13,6 +14,8 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
 import com.betterclouddrive.android.MainActivity
 import org.junit.Before
 import org.junit.Rule
@@ -236,11 +239,15 @@ class AndroidTeamsE2ETest {
         val team = api.createTeam(owner.accessToken, uniqueName("office_team"))
         val file = api.uploadTeamDocxFile(owner.accessToken, team.id, null, uniqueName("office_doc") + ".docx")
         api.addTeamMember(owner.accessToken, team.id, viewer.username, "VIEWER")
+        val beforeFile = api.getTeamFile(owner.accessToken, team.id, file.id)
+        val beforeVersions = api.listTeamVersions(owner.accessToken, team.id, file.id)
+        val marker = "ooe2e${System.currentTimeMillis()}"
 
         val ownerConfig = api.getTeamOfficeConfig(owner.accessToken, team.id, file.id)
         assertTrue(ownerConfig.editable)
         assertEquals("edit", ownerConfig.mode)
         assertNotNull(ownerConfig.callbackUrl)
+        assertNotNull(ownerConfig.documentKey)
         assertTrue(ownerConfig.documentServerUrl.isNotBlank())
 
         val viewerConfig = api.getTeamOfficeConfig(viewer.accessToken, team.id, file.id)
@@ -253,6 +260,29 @@ class AndroidTeamsE2ETest {
         openTeamOfficeFile(file)
         composeRule.waitForText("文档编辑").assertIsDisplayed()
         composeRule.waitForTag("onlyoffice-webview", timeoutMs = 20_000).assertIsDisplayed()
+        composeRule.waitForTag("onlyoffice-document-ready", timeoutMs = 90_000)
+        typeIntoOnlyOffice(marker)
+        api.forceSaveOnlyOfficeDocument(ownerConfig)
+
+        var lastSaveState = "not checked"
+        eventually(
+            description = "OnlyOffice saved marker $marker",
+            timeoutMs = 120_000,
+            details = { lastSaveState },
+        ) {
+            val current = api.getTeamFile(owner.accessToken, team.id, file.id)
+            val versions = api.listTeamVersions(owner.accessToken, team.id, file.id)
+            val downloaded = api.downloadTeamFileBytes(owner.accessToken, team.id, file.id)
+            val fileChanged = current.md5Hash != beforeFile.md5Hash || current.fileSize != beforeFile.fileSize
+            val versionAdded = versions.size > beforeVersions.size && current.versionCount > beforeFile.versionCount
+            val markerSaved = api.zipContainsText(downloaded, marker)
+            lastSaveState = "fileChanged=$fileChanged versionAdded=$versionAdded markerSaved=$markerSaved " +
+                "beforeSize=${beforeFile.fileSize} currentSize=${current.fileSize} " +
+                "beforeMd5=${beforeFile.md5Hash} currentMd5=${current.md5Hash} " +
+                "beforeVersions=${beforeVersions.size}/${beforeFile.versionCount} " +
+                "currentVersions=${versions.size}/${current.versionCount}"
+            if (fileChanged && versionAdded && markerSaved) current else null
+        }
     }
 
     @Test
@@ -318,6 +348,67 @@ class AndroidTeamsE2ETest {
     private fun openTeamOfficeFile(file: E2EFile) {
         composeRule.waitForTag("file-row-${file.fileName}").performTouchInput { longClick() }
         composeRule.waitForTag("team-file-menu-open").performClick()
+    }
+
+    private fun typeIntoOnlyOffice(marker: String) {
+        val systemUi = AndroidSystemUi()
+        val device = systemUi.device
+        composeRule.waitForTag("onlyoffice-webview", timeoutMs = 60_000).assertIsDisplayed()
+        composeRule.waitForTag("onlyoffice-document-ready", timeoutMs = 90_000)
+        Thread.sleep(2_000)
+        clickOnlyOfficeDialogButtonIfVisible(device)
+
+        val documentPoints = listOf(
+            Pair((device.displayWidth * 0.50f).toInt(), (device.displayHeight * 0.60f).toInt()),
+            Pair((device.displayWidth * 0.52f).toInt(), (device.displayHeight * 0.60f).toInt()),
+        )
+        documentPoints.forEach { (x, y) ->
+            device.click(x, y)
+            device.executeShellCommand("input tap $x $y")
+            Thread.sleep(900)
+        }
+        device.waitForIdle()
+
+        device.pressKeyCode(KeyEvent.KEYCODE_MOVE_END)
+        device.pressEnter()
+        device.executeShellCommand("input keyevent ${KeyEvent.KEYCODE_MOVE_END}")
+        device.executeShellCommand("input keyevent ${KeyEvent.KEYCODE_ENTER}")
+        device.executeShellCommand("input text $marker")
+        Thread.sleep(500)
+        device.typeOnlyOfficeMarker(marker)
+        device.tapOnlyOfficeSaveButton()
+        device.pressKeyCode(KeyEvent.KEYCODE_S, KeyEvent.META_CTRL_ON)
+        Thread.sleep(15_000)
+    }
+
+    private fun UiDevice.typeOnlyOfficeMarker(marker: String) {
+        marker.forEach { char ->
+            val keyCode = when (char) {
+                in 'a'..'z' -> KeyEvent.KEYCODE_A + (char - 'a')
+                in '0'..'9' -> KeyEvent.KEYCODE_0 + (char - '0')
+                else -> throw AssertionError("Unsupported OnlyOffice E2E marker character: $char")
+            }
+            pressKeyCode(keyCode)
+            Thread.sleep(80)
+        }
+    }
+
+    private fun UiDevice.tapOnlyOfficeSaveButton() {
+        val x = (displayWidth * 0.39f).toInt()
+        val y = (displayHeight * 0.16f).toInt()
+        click(x, y)
+        executeShellCommand("input tap $x $y")
+    }
+
+    private fun clickOnlyOfficeDialogButtonIfVisible(device: UiDevice) {
+        val labels = listOf("知道了", "Got it", "OK", "确定", "確定")
+        val node = labels.firstNotNullOfOrNull { label ->
+            device.findObject(By.text(label))
+                ?: device.findObject(By.textContains(label))
+                ?: device.findObject(By.desc(label))
+                ?: device.findObject(By.descContains(label))
+        }
+        node?.click()
     }
 
     private fun closeTeamFileMenu() {
@@ -389,7 +480,12 @@ class AndroidTeamsE2ETest {
         }
     }
 
-    private fun <T> eventually(description: String, timeoutMs: Long = 20_000, block: () -> T?): T {
+    private fun <T> eventually(
+        description: String,
+        timeoutMs: Long = 20_000,
+        details: () -> String = { "" },
+        block: () -> T?,
+    ): T {
         val deadline = System.currentTimeMillis() + timeoutMs
         var lastError: Throwable? = null
         while (System.currentTimeMillis() < deadline) {
@@ -401,6 +497,7 @@ class AndroidTeamsE2ETest {
             }
             Thread.sleep(500)
         }
-        throw AssertionError("Timed out waiting for $description", lastError)
+        val suffix = details().takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
+        throw AssertionError("Timed out waiting for $description$suffix", lastError)
     }
 }

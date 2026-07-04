@@ -370,6 +370,8 @@ npm run build
 | `ANDROID_DEFAULT_SERVER_BASE_URL` | Android 默认服务器地址构建参数 |
 | `ANDROID_E2E_SERVER_BASE_URL` | Android E2E 后端地址 |
 | `ANDROID_E2E_MAILPIT_BASE_URL` | Android E2E Mailpit 地址 |
+| `ANDROID_E2E_ONLYOFFICE_BASE_URL` | Android E2E 从模拟器访问 OnlyOffice Document Server 的地址，默认 `http://10.0.2.2:8082` |
+| `ONLYOFFICE_JWT_SECRET` | Android OnlyOffice E2E 触发 force-save 时使用的 JWT 密钥，必须与后端和 Document Server 一致 |
 
 Android E2E 的 ADB 设备 serial 不从 `frontend.env` 读取，由 `scripts/verify-all.ps1 -AndroidSerial` 控制；当前 Android 15 默认值是 `localhost:16416`。
 

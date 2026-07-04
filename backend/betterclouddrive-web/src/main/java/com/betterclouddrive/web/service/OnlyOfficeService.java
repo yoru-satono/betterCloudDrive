@@ -100,7 +100,7 @@ public class OnlyOfficeService {
         try {
             URI source = URI.create(trimmedUrl);
             URI publicUri = URI.create(publicUrl);
-            if (sameOrigin(source, publicUri)) {
+            if (sameOrigin(source, publicUri) || sameLocalDocumentServerAlias(source, publicUri)) {
                 URI internalUri = URI.create(internalUrl);
                 return replaceOrigin(source, internalUri);
             }
@@ -293,6 +293,25 @@ public class OnlyOfficeService {
         return equalsIgnoreCase(left.getScheme(), right.getScheme())
                 && equalsIgnoreCase(left.getHost(), right.getHost())
                 && effectivePort(left) == effectivePort(right);
+    }
+
+    private boolean sameLocalDocumentServerAlias(URI source, URI publicUri) {
+        return equalsIgnoreCase(source.getScheme(), publicUri.getScheme())
+                && effectivePort(source) == effectivePort(publicUri)
+                && isLocalDocumentServerAlias(source.getHost())
+                && isLocalDocumentServerAlias(publicUri.getHost());
+    }
+
+    private boolean isLocalDocumentServerAlias(String host) {
+        if (host == null) {
+            return false;
+        }
+        String normalized = host.toLowerCase(Locale.ROOT);
+        return normalized.equals("localhost")
+                || normalized.equals("127.0.0.1")
+                || normalized.equals("::1")
+                || normalized.equals("10.0.2.2")
+                || normalized.equals("host.docker.internal");
     }
 
     private int effectivePort(URI uri) {

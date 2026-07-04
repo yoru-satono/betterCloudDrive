@@ -53,6 +53,8 @@ android {
         buildConfigField 'String', 'DEFAULT_SERVER_BASE_URL', "\"${envOrDefault('ANDROID_DEFAULT_SERVER_BASE_URL', 'http://10.0.2.2:8080')}\""
         testInstrumentationRunnerArgument 'bcd.serverBaseUrl', envOrDefault('ANDROID_E2E_SERVER_BASE_URL', 'http://10.0.2.2:8080')
         testInstrumentationRunnerArgument 'bcd.mailpitBaseUrl', envOrDefault('ANDROID_E2E_MAILPIT_BASE_URL', 'http://10.0.2.2:8025')
+        testInstrumentationRunnerArgument 'bcd.onlyOfficeBaseUrl', envOrDefault('ANDROID_E2E_ONLYOFFICE_BASE_URL', 'http://10.0.2.2:8082')
+        testInstrumentationRunnerArgument 'bcd.onlyOfficeJwtSecret', envOrDefault('ONLYOFFICE_JWT_SECRET', 'betterclouddrive-onlyoffice-dev-secret')
     }
 
     buildTypes {

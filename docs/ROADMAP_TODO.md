@@ -314,7 +314,8 @@
 
 - 目标：Android 覆盖团队文档真实编辑保存。
 - 范围：打开团队 docx，编辑，保存，检查版本和下载内容。
-- 验收：保存后后端版本增加；权限只读用户不能编辑。
+- 状态：已完成。
+- 验收：Android 15 / `localhost:16416` 上通过 `AndroidTeamsE2ETest.teamOfficeEditorIsReachableForWriterAndReadOnlyForViewer`；测试会打开团队 docx，向 OnlyOffice 正文输入 marker，触发保存和 force-save，断言后端版本增加、下载内容包含 marker，并验证 VIEWER 配置为只读。
 
 ### AND-08 团队权限矩阵 E2E
 

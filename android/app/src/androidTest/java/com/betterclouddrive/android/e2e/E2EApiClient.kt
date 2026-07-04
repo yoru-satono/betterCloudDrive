@@ -8,12 +8,17 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
+import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
 data class E2EUser(
     val userId: Long,
@@ -41,6 +46,12 @@ data class E2EOfficeConfig(
     val mode: String?,
     val callbackUrl: String?,
     val documentServerUrl: String,
+    val documentKey: String?,
+)
+
+data class E2EFileVersion(
+    val id: Long,
+    val versionNumber: Int,
 )
 
 data class E2EShare(
@@ -593,12 +604,120 @@ class E2EApiClient(
         val data = expectApiSuccess(client.newCall(request).execute()).getJSONObject("data")
         val config = data.getJSONObject("config")
         val editorConfig = config.getJSONObject("editorConfig")
+        val document = config.getJSONObject("document")
         return E2EOfficeConfig(
             editable = data.getBoolean("editable"),
             mode = editorConfig.optString("mode").takeIf { it.isNotBlank() },
             callbackUrl = editorConfig.optString("callbackUrl").takeIf { it.isNotBlank() },
             documentServerUrl = data.getString("documentServerUrl"),
+            documentKey = document.optString("key").takeIf { it.isNotBlank() },
         )
+    }
+
+    fun forceSaveOnlyOfficeDocument(config: E2EOfficeConfig, timeoutMs: Long = 60_000) {
+        val key = config.documentKey ?: throw AssertionError("OnlyOffice document key is missing")
+        val payload = JSONObject()
+            .put("c", "forcesave")
+            .put("key", key)
+        val payloadJson = payload.toString()
+        val token = signOnlyOfficeJwt(payloadJson)
+        val body = JSONObject(payloadJson).put("token", token)
+        val documentServerUrl = config.documentServerUrl.trimEnd('/')
+        val endpoints = listOfNotNull(
+            "$documentServerUrl/command",
+            "$documentServerUrl/coauthoring/CommandService.ashx",
+            E2EConfig.onlyOfficeBaseUrl?.let { "$it/command" },
+            E2EConfig.onlyOfficeBaseUrl?.let { "$it/coauthoring/CommandService.ashx" },
+        ).distinct()
+        var lastBody: String? = null
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            for (endpoint in endpoints) {
+                val response = runCatching {
+                    client.newCall(
+                        Request.Builder()
+                            .url(endpoint)
+                            .post(body.toString().toRequestBody(jsonMediaType))
+                            .header("Authorization", "Bearer $token")
+                            .build(),
+                    ).execute()
+                }.getOrNull() ?: continue
+                response.use {
+                    lastBody = it.body?.string().orEmpty()
+                    if (!it.isSuccessful) return@use
+                    val json = JSONObject(lastBody.orEmpty())
+                    if (json.optInt("error", -1) == 0) return
+                }
+            }
+            Thread.sleep(2_000)
+        }
+        throw AssertionError("OnlyOffice forcesave failed: $lastBody")
+    }
+
+    fun listTeamVersions(token: String, teamId: Long, fileId: Long): List<E2EFileVersion> {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/files/$fileId/versions")
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        val records = expectApiSuccess(client.newCall(request).execute()).getJSONArray("data")
+        return (0 until records.length()).map { index ->
+            val json = records.getJSONObject(index)
+            E2EFileVersion(
+                id = json.getLong("id"),
+                versionNumber = json.getInt("versionNumber"),
+            )
+        }
+    }
+
+    fun downloadTeamFileBytes(token: String, teamId: Long, fileId: Long): ByteArray {
+        val request = Request.Builder()
+            .url("$baseUrl/teams/$teamId/download/$fileId")
+            .get()
+            .header("Authorization", "Bearer $token")
+            .build()
+        return expectOk(client.newCall(request).execute()).use { response ->
+            response.body?.bytes() ?: ByteArray(0)
+        }
+    }
+
+    fun zipContainsText(bytes: ByteArray, text: String): Boolean {
+        ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
+            var entry = zip.nextEntry
+            val buffer = ByteArray(8192)
+            while (entry != null) {
+                if (!entry.isDirectory) {
+                    val output = ByteArrayOutputStream()
+                    while (true) {
+                        val read = zip.read(buffer)
+                        if (read <= 0) break
+                        output.write(buffer, 0, read)
+                    }
+                    val raw = output.toString(Charsets.UTF_8.name())
+                    if (raw.contains(text)) return true
+                    if (entry.name.endsWith(".xml")) {
+                        val xmlText = raw.xmlTextContent()
+                        if (xmlText.contains(text)) return true
+                        if (xmlText.normalizedOfficeText().contains(text.normalizedOfficeText())) return true
+                    }
+                }
+                entry = zip.nextEntry
+            }
+        }
+        return false
+    }
+
+    private fun String.xmlTextContent(): String {
+        return replace(Regex("<[^>]+>"), "")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+    }
+
+    private fun String.normalizedOfficeText(): String {
+        return filter { it.isLetterOrDigit() }
     }
 
     private fun sendRegisterCode(email: String) {
@@ -808,6 +927,19 @@ class E2EApiClient(
         return MessageDigest.getInstance("MD5")
             .digest(bytes)
             .joinToString("") { "%02x".format(it) }
+    }
+
+    private fun signOnlyOfficeJwt(payloadJson: String): String {
+        val encodedHeader = base64Url("""{"alg":"HS256","typ":"JWT"}""".toByteArray(Charsets.UTF_8))
+        val encodedPayload = base64Url(payloadJson.toByteArray(Charsets.UTF_8))
+        val signingInput = "$encodedHeader.$encodedPayload"
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(E2EConfig.onlyOfficeJwtSecret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        return "$signingInput.${base64Url(mac.doFinal(signingInput.toByteArray(Charsets.UTF_8)))}"
+    }
+
+    private fun base64Url(bytes: ByteArray): String {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
     private fun minimalDocxBytes(text: String): ByteArray {

@@ -15,6 +15,12 @@ object E2EConfig {
     val mailpitApiBaseUrl: String
         get() = "${(argument("bcd.mailpitBaseUrl") ?: DEFAULT_MAILPIT_BASE_URL).trimEnd('/')}/api/v1"
 
+    val onlyOfficeBaseUrl: String?
+        get() = argument("bcd.onlyOfficeBaseUrl")?.trimEnd('/')
+
+    val onlyOfficeJwtSecret: String
+        get() = argument("bcd.onlyOfficeJwtSecret") ?: "betterclouddrive-onlyoffice-dev-secret"
+
     private fun argument(name: String): String? {
         return InstrumentationRegistry.getArguments().getString(name)?.trim()?.takeIf { it.isNotEmpty() }
     }
