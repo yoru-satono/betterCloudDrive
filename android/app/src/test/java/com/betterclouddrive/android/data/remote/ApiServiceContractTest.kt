@@ -1,15 +1,22 @@
 package com.betterclouddrive.android.data.remote
 
+import com.betterclouddrive.android.data.remote.dto.AddTeamMemberRequest
+import com.betterclouddrive.android.data.remote.dto.BatchDeleteRequest
 import com.betterclouddrive.android.data.remote.dto.CopyRequest
+import com.betterclouddrive.android.data.remote.dto.CreateFolderRequest
 import com.betterclouddrive.android.data.remote.dto.CreateShareRequest
 import com.betterclouddrive.android.data.remote.dto.CreateTagRequest
 import com.betterclouddrive.android.data.remote.dto.CreateTeamInviteRequest
+import com.betterclouddrive.android.data.remote.dto.CreateTeamRequest
 import com.betterclouddrive.android.data.remote.dto.InitUploadRequest
 import com.betterclouddrive.android.data.remote.dto.MoveRequest
+import com.betterclouddrive.android.data.remote.dto.RenameRequest
 import com.betterclouddrive.android.data.remote.dto.TagFilesRequest
 import com.betterclouddrive.android.data.remote.dto.TransferTeamOwnerRequest
 import com.betterclouddrive.android.data.remote.dto.UpdateShareRequest
 import com.betterclouddrive.android.data.remote.dto.UpdateTeamFilePermissionRequest
+import com.betterclouddrive.android.data.remote.dto.UpdateTeamMemberRequest
+import com.betterclouddrive.android.data.remote.dto.UpdateTeamRequest
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -126,12 +133,20 @@ class ApiServiceContractTest {
         val server = MockWebServer()
         server.start()
         try {
-            server.enqueue(pageResponse())
+            repeat(3) {
+                server.enqueue(pageResponse())
+            }
             api(server).listTeamFiles(teamId = 7, parentId = 9, page = 2, size = 50)
 
             val request = server.takeRequest()
             assertEquals("/teams/7/files?parentId=9&page=2&size=50&sortBy=fileName&order=asc", request.path)
             assertEquals("GET", request.method)
+
+            api(server).searchTeamFiles(teamId = 7, query = "contract", page = 2, size = 30)
+            assertEquals("/teams/7/files/search?q=contract&page=2&size=30", server.takeRequest().path)
+
+            api(server).getTeamFile(teamId = 7, fileId = 11)
+            assertEquals("/teams/7/files/11", server.takeRequest().path)
         } finally {
             server.shutdown()
         }
@@ -194,9 +209,29 @@ class ApiServiceContractTest {
         val server = MockWebServer()
         server.start()
         try {
-            repeat(12) {
+            repeat(20) {
                 server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"code":200,"message":"success","data":null}"""))
             }
+
+            api(server).listTeams()
+            assertEquals("/teams", server.takeRequest().path)
+
+            api(server).createTeam(CreateTeamRequest("Product"))
+            val createTeam = server.takeRequest()
+            assertEquals("/teams", createTeam.path)
+            assertEquals("""{"name":"Product"}""", createTeam.body.readUtf8())
+
+            api(server).getTeam(7)
+            assertEquals("/teams/7", server.takeRequest().path)
+
+            api(server).updateTeam(7, UpdateTeamRequest("Product Docs"))
+            val updateTeam = server.takeRequest()
+            assertEquals("/teams/7", updateTeam.path)
+            assertEquals("PUT", updateTeam.method)
+            assertEquals("""{"name":"Product Docs"}""", updateTeam.body.readUtf8())
+
+            api(server).deleteTeam(7)
+            assertEquals("/teams/7", server.takeRequest().path)
 
             api(server).leaveTeam(7)
             assertEquals("/teams/7/leave", server.takeRequest().path)
@@ -240,6 +275,12 @@ class ApiServiceContractTest {
 
             api(server).restoreVersion(9, 2)
             assertEquals("/files/9/versions/2/restore", server.takeRequest().path)
+
+            api(server).downloadTeamVersion(7, 9, 2)
+            assertEquals("/teams/7/files/9/versions/2/download", server.takeRequest().path)
+
+            api(server).downloadVersion(9, 2)
+            assertEquals("/files/9/versions/2/download", server.takeRequest().path)
         } finally {
             server.shutdown()
         }
@@ -250,9 +291,26 @@ class ApiServiceContractTest {
         val server = MockWebServer()
         server.start()
         try {
-            repeat(29) {
+            repeat(33) {
                 server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"code":200,"message":"success","data":null}"""))
             }
+
+            api(server).listTeamMembers(7)
+            assertEquals("/teams/7/members", server.takeRequest().path)
+
+            api(server).addTeamMember(7, AddTeamMemberRequest(username = "chain", role = "EDITOR"))
+            val addMember = server.takeRequest()
+            assertEquals("/teams/7/members", addMember.path)
+            assertEquals("""{"username":"chain","role":"EDITOR"}""", addMember.body.readUtf8())
+
+            api(server).updateTeamMember(7, 12, UpdateTeamMemberRequest(role = "ADMIN"))
+            val updateMember = server.takeRequest()
+            assertEquals("/teams/7/members/12", updateMember.path)
+            assertEquals("PUT", updateMember.method)
+            assertEquals("""{"role":"ADMIN"}""", updateMember.body.readUtf8())
+
+            api(server).removeTeamMember(7, 12)
+            assertEquals("/teams/7/members/12", server.takeRequest().path)
 
             api(server).createTeamInvite(7, CreateTeamInviteRequest(email = "member@test.local", role = "EDITOR"))
             assertEquals("/teams/7/invites", server.takeRequest().path)
@@ -376,6 +434,52 @@ class ApiServiceContractTest {
 
             api(server).markAllNotificationsRead()
             assertEquals("/notifications/read-all", server.takeRequest().path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun teamDownloadPreviewAndMutationRoutesUseTeamScopedPaths() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            repeat(10) {
+                server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"code":200,"message":"success","data":null}"""))
+            }
+
+            api(server).createTeamFolder(7, CreateFolderRequest(parentId = null, folderName = "Docs"))
+            val createFolder = server.takeRequest()
+            assertEquals("/teams/7/files/folder", createFolder.path)
+            assertEquals("""{"parentId":null,"folderName":"Docs"}""", createFolder.body.readUtf8())
+
+            api(server).renameTeamFile(7, 9, RenameRequest("New.txt"))
+            val rename = server.takeRequest()
+            assertEquals("/teams/7/files/9", rename.path)
+            assertEquals("PUT", rename.method)
+            assertEquals("""{"newName":"New.txt"}""", rename.body.readUtf8())
+
+            api(server).moveTeamFile(7, 9, MoveRequest(null))
+            val move = server.takeRequest()
+            assertEquals("/teams/7/files/9/move", move.path)
+            assertEquals("""{"targetParentId":null}""", move.body.readUtf8())
+
+            api(server).deleteTeamFiles(7, BatchDeleteRequest(listOf(9, 10)))
+            val delete = server.takeRequest()
+            assertEquals("/teams/7/files", delete.path)
+            assertEquals("DELETE", delete.method)
+            assertEquals("""{"fileIds":[9,10]}""", delete.body.readUtf8())
+
+            api(server).downloadTeamFile(7, 9, "bytes=0-99")
+            val download = server.takeRequest()
+            assertEquals("/teams/7/download/9", download.path)
+            assertEquals("bytes=0-99", download.getHeader("Range"))
+
+            api(server).createTeamDownloadTicket(7, 9)
+            assertEquals("/teams/7/download/9/ticket", server.takeRequest().path)
+
+            api(server).previewTeamFile(7, 9)
+            assertEquals("/teams/7/preview/9", server.takeRequest().path)
         } finally {
             server.shutdown()
         }

@@ -379,7 +379,8 @@
 
 - 目标：防止前后端接口漂移。
 - 范围：Web、Tauri、Android 使用的团队、OnlyOffice、admin、通知接口。
-- 验收：新增或修改接口必须有契约测试失败保护。
+- 状态：已完成。
+- 验收：Web/Tauri `endpoint-contracts.test.ts` 覆盖团队、OnlyOffice、admin、通知 API wrapper 的路径、方法、查询参数和请求体；Android `ApiServiceContractTest` 覆盖团队管理、成员、邀请、审计、权限、文件、分享、标签、收藏、通知、OnlyOffice、版本和下载/预览 Retrofit 契约。验证已通过：`npm run test -- endpoint-contracts.test.ts`、`.\gradlew.bat testDebugUnitTest`。
 
 ### TEST-09 E2E 数据清理
 

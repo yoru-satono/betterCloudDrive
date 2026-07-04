@@ -96,19 +96,60 @@ describe('API endpoint contracts', () => {
     await teamsApi.updateTeam(10, 'Product Docs')
     expect(apiMock.put).toHaveBeenCalledWith('/teams/10', { name: 'Product Docs' })
 
+    await teamsApi.deleteTeam(10)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10')
+
     await teamsApi.leaveTeam(10)
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/leave')
 
     await teamsApi.transferTeamOwner(10, 5)
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/owner', { userId: 5 })
 
+    await teamsApi.listMembers(10)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/members')
+
     await teamsApi.addMember(10, 'chain', 'EDITOR')
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/members', { username: 'chain', role: 'EDITOR' })
+
+    await teamsApi.updateMember(10, 5, 'ADMIN')
+    expect(apiMock.put).toHaveBeenCalledWith('/teams/10/members/5', { role: 'ADMIN' })
+
+    await teamsApi.removeMember(10, 5)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/members/5')
+
+    await teamsApi.createInvite(10, 'member@test.local', 'VIEWER')
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/invites', { email: 'member@test.local', role: 'VIEWER' })
+
+    await teamsApi.listInvites(10)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/invites')
+
+    await teamsApi.resendInvite(10, 4)
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/invites/4/resend')
+
+    await teamsApi.cancelInvite(10, 4)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/invites/4')
+
+    await teamsApi.getInvite('invite-token')
+    expect(apiMock.get).toHaveBeenCalledWith('/team-invites/invite-token')
+
+    await teamsApi.acceptInvite('invite-token')
+    expect(apiMock.post).toHaveBeenCalledWith('/team-invites/invite-token/accept')
+
+    await teamsApi.rejectInvite('invite-token')
+    expect(apiMock.post).toHaveBeenCalledWith('/team-invites/invite-token/reject')
 
     await teamsApi.listTeamFiles(10, { parentId: 5, page: 1, size: 50 })
     expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files', {
       params: { parentId: 5, page: 1, size: 50 },
     })
+
+    await teamsApi.searchTeamFiles(10, 'contract', 2, 30)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files/search', {
+      params: { q: 'contract', page: 2, size: 30 },
+    })
+
+    await teamsApi.getTeamFile(10, 7)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files/7')
 
     await teamsApi.getTeamFileEffectivePermission(10, 7)
     expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files/7/effective-permission')
@@ -193,10 +234,70 @@ describe('API endpoint contracts', () => {
     await teamsApi.deleteTeamShare(10, 9)
     expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/shares/9')
 
+    await teamsApi.listTeamAuditLogs(10, {
+      actorUserId: 5,
+      action: 'INVITE_ACCEPT',
+      targetType: 'USER',
+      result: 1,
+      startAt: '2026-06-27T12:00:00',
+      endAt: '2026-06-27T13:00:00',
+      page: 2,
+      size: 30,
+    })
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/audit-logs', {
+      params: {
+        actorUserId: 5,
+        action: 'INVITE_ACCEPT',
+        targetType: 'USER',
+        result: 1,
+        startAt: '2026-06-27T12:00:00',
+        endAt: '2026-06-27T13:00:00',
+        page: 2,
+        size: 30,
+      },
+    })
+
     await teamsApi.exportTeamAuditLogs(10, { action: 'FILE_DELETE' })
     expect(apiMock.get).toHaveBeenCalledWith('/teams/10/audit-logs/export', {
       params: { action: 'FILE_DELETE' },
       responseType: 'blob',
+    })
+
+    await teamsApi.addTeamFavorite(10, 7)
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/favorites/7')
+
+    await teamsApi.removeTeamFavorite(10, 7)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/favorites/7')
+
+    await teamsApi.isTeamFavorite(10, 7)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/favorites/7/status')
+
+    await teamsApi.listTeamFavorites(10, 2, 30, 'fav')
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/favorites', {
+      params: { page: 2, size: 30, q: 'fav' },
+    })
+
+    await teamsApi.createTeamTag(10, '合同', '#00d4aa')
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/tags', { tagName: '合同', color: '#00d4aa' })
+
+    await teamsApi.listTeamTags(10, '合')
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/tags', { params: { q: '合' } })
+
+    await teamsApi.updateTeamTag(10, 3, '合同归档', '#00d4aa')
+    expect(apiMock.put).toHaveBeenCalledWith('/teams/10/tags/3', { tagName: '合同归档', color: '#00d4aa' })
+
+    await teamsApi.deleteTeamTag(10, 3)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/tags/3')
+
+    await teamsApi.addTeamFileTag(10, 7, 3)
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/tags/3/files', { fileIds: [7] })
+
+    await teamsApi.removeTeamFileTag(10, 7, 3)
+    expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/tags/3/files/7')
+
+    await teamsApi.listTeamFilesByTag(10, 3, 2, 30, 'doc')
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/tags/3/files', {
+      params: { page: 2, size: 30, q: 'doc' },
     })
 
     await versionsApi.listTeamVersions(10, 7)
@@ -388,6 +489,9 @@ describe('API endpoint contracts', () => {
   })
 
   it('uses admin keyword search and patch update routes', async () => {
+    await adminApi.getStats()
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/stats')
+
     await adminApi.listUsers(1, 100, 'alice', 1)
     expect(apiMock.get).toHaveBeenCalledWith('/admin/users', {
       params: { page: 1, size: 100, keyword: 'alice', status: 1 },
@@ -430,14 +534,32 @@ describe('API endpoint contracts', () => {
       params: { parentId: undefined, deleted: false, keyword: 'doc', page: 1, size: 10 },
     })
 
-    await adminApi.listTeamAuditLogs(10, { action: 'QUOTA_UPDATE', page: 1, size: 10 })
+    await adminApi.listTeamAuditLogs(10, {
+      actorUserId: 5,
+      action: 'QUOTA_UPDATE',
+      targetType: 'TEAM',
+      result: 1,
+      startAt: '2026-06-27T12:00:00',
+      endAt: '2026-06-27T13:00:00',
+      page: 1,
+      size: 10,
+    })
     expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10/audit-logs', {
-      params: { action: 'QUOTA_UPDATE', page: 1, size: 10 },
+      params: {
+        actorUserId: 5,
+        action: 'QUOTA_UPDATE',
+        targetType: 'TEAM',
+        result: 1,
+        startAt: '2026-06-27T12:00:00',
+        endAt: '2026-06-27T13:00:00',
+        page: 1,
+        size: 10,
+      },
     })
 
-    await adminApi.exportTeamAuditLogs(10, { action: 'QUOTA_UPDATE' })
+    await adminApi.exportTeamAuditLogs(10, { actorUserId: 5, action: 'QUOTA_UPDATE', targetType: 'TEAM', result: 1 })
     expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10/audit-logs/export', {
-      params: { action: 'QUOTA_UPDATE' },
+      params: { actorUserId: 5, action: 'QUOTA_UPDATE', targetType: 'TEAM', result: 1 },
       responseType: 'blob',
     })
 
@@ -459,6 +581,8 @@ describe('API endpoint contracts', () => {
       traceId: 'trace-1',
       statusCode: 401,
       result: 0,
+      startDate: '2026-06-27T12:00:00',
+      endDate: '2026-06-27T13:00:00',
       page: 2,
       size: 50,
     })
@@ -470,14 +594,34 @@ describe('API endpoint contracts', () => {
         traceId: 'trace-1',
         statusCode: 401,
         result: 0,
+        startDate: '2026-06-27T12:00:00',
+        endDate: '2026-06-27T13:00:00',
         page: 2,
         size: 50,
       },
     })
 
-    await adminApi.listSystemLogs({ traceId: 'trace-1', level: 'WARN', limit: 100 })
+    await adminApi.listSystemLogs({
+      traceId: 'trace-1',
+      requestId: 'req-1',
+      level: 'WARN',
+      logType: 'system',
+      keyword: 'quota',
+      startTime: '2026-06-27T12:00:00',
+      endTime: '2026-06-27T13:00:00',
+      limit: 100,
+    })
     expect(apiMock.get).toHaveBeenCalledWith('/admin/system-logs', {
-      params: { traceId: 'trace-1', level: 'WARN', limit: 100 },
+      params: {
+        traceId: 'trace-1',
+        requestId: 'req-1',
+        level: 'WARN',
+        logType: 'system',
+        keyword: 'quota',
+        startTime: '2026-06-27T12:00:00',
+        endTime: '2026-06-27T13:00:00',
+        limit: 100,
+      },
     })
 
     await adminApi.createGrafanaSession()

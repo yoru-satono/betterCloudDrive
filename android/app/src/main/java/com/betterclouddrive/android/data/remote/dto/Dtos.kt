@@ -55,7 +55,7 @@ data class RegisterResult(
 // === Files ===
 @Serializable
 data class CreateFolderRequest(
-    @SerialName("parentId") val parentId: Long? = null,
+    @SerialName("parentId") val parentId: Long?,
     @SerialName("folderName") val folderName: String,
 )
 
