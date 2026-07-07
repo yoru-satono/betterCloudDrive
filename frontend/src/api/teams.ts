@@ -4,6 +4,7 @@ import type { FileEntity } from '@/types/file'
 import type { CreateShareRequest, ShareLinkEntity, SharePasswordResponse, UpdateShareRequest } from '@/types/share'
 import type {
   Team,
+  TeamActivity,
   TeamEffectivePermission,
   TeamFilePermission,
   TeamInvite,
@@ -97,6 +98,9 @@ export const exportTeamAuditLogs = (teamId: number, params: {
   endAt?: string
 } = {}) =>
   api.get<Blob>(`/teams/${teamId}/audit-logs/export`, { params, responseType: 'blob' })
+
+export const listTeamActivities = (teamId: number, page = 1, size = 20) =>
+  api.get<ApiResponse<PageResult<TeamActivity>>>(`/teams/${teamId}/activities`, { params: { page, size } })
 
 export const listTeamTasks = (teamId: number, params: {
   status?: string

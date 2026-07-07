@@ -77,6 +77,17 @@ export interface TeamTask {
   completedAt: string | null
 }
 
+export interface TeamActivity {
+  id: number
+  teamId: number
+  actorUserId: number | null
+  action: string
+  targetType: string | null
+  targetId: number | null
+  summary: string
+  createdAt: string
+}
+
 export interface TeamEffectivePermission {
   canRead: boolean
   canWrite: boolean

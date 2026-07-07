@@ -2137,6 +2137,19 @@ Authorization: Bearer <accessToken>
 
 **错误码:** 400（非失败任务重试或参数错误）、403（非团队成员）、404（团队或任务不存在）。
 
+### 16.9 团队活动流
+
+```
+GET /api/v1/teams/{teamId}/activities?page=1&size=20
+Authorization: Bearer <accessToken>
+```
+
+团队成员可查看按时间倒序排列的精简活动流。活动流复用团队审计数据，但不会开放完整审计字段；`FILE` 目标和可解析出文件 ID 的团队分享活动会按当前用户对文件的有效 `read` 权限过滤，普通成员不会看到无权读取文件的活动摘要。OWNER/ADMIN 的完整审计仍使用 `/audit-logs`。
+
+**TeamActivity 字段:** `id`、`teamId`、`actorUserId`、`action`、`targetType`、`targetId`、`summary`、`createdAt`。
+
+**错误码:** 403（非团队成员）、404（团队不存在）。
+
 ---
 
 ## 十七、通知 `/api/v1/notifications`

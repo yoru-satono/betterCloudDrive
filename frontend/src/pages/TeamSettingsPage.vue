@@ -18,7 +18,7 @@ import { toast } from 'vue-sonner'
 import type { TagEntity } from '@/types/tag'
 import type { FileEntity } from '@/types/file'
 import type { ShareLinkEntity } from '@/types/share'
-import type { Team, TeamInvite, TeamMember, TeamOperationLog, TeamRole, TeamTask } from '@/types/team'
+import type { Team, TeamActivity, TeamInvite, TeamMember, TeamOperationLog, TeamRole, TeamTask } from '@/types/team'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,6 +32,7 @@ const team = ref<Team | null>(null)
 const members = ref<TeamMember[]>([])
 const shares = ref<ShareLinkEntity[]>([])
 const invites = ref<TeamInvite[]>([])
+const activities = ref<TeamActivity[]>([])
 const auditLogs = ref<TeamOperationLog[]>([])
 const teamTasks = ref<TeamTask[]>([])
 const teamTags = ref<TagEntity[]>([])
@@ -42,6 +43,7 @@ const loading = ref(false)
 const membersLoading = ref(false)
 const sharesLoading = ref(false)
 const invitesLoading = ref(false)
+const activitiesLoading = ref(false)
 const auditLoading = ref(false)
 const tasksLoading = ref(false)
 const tagsLoading = ref(false)
@@ -71,7 +73,10 @@ const tagFilesQuery = ref('')
 const tagFilesPage = ref(1)
 const tagFilesTotal = ref(0)
 const TEAM_COLLECTION_PAGE_SIZE = 10
+const TEAM_ACTIVITY_PAGE_SIZE = 10
 const TEAM_AUDIT_PAGE_SIZE = 20
+const activitiesPage = ref(1)
+const activitiesTotal = ref(0)
 const auditPage = ref(1)
 const auditTotal = ref(0)
 const auditAction = ref('')
@@ -87,6 +92,7 @@ const canManage = computed(() => ['OWNER', 'ADMIN'].includes(team.value?.role ||
 const isOwner = computed(() => team.value?.role === 'OWNER')
 const favoritesTotalPages = computed(() => Math.max(1, Math.ceil(favoritesTotal.value / TEAM_COLLECTION_PAGE_SIZE)))
 const tagFilesTotalPages = computed(() => Math.max(1, Math.ceil(tagFilesTotal.value / TEAM_COLLECTION_PAGE_SIZE)))
+const activitiesTotalPages = computed(() => Math.max(1, Math.ceil(activitiesTotal.value / TEAM_ACTIVITY_PAGE_SIZE)))
 const auditTotalPages = computed(() => Math.max(1, Math.ceil(auditTotal.value / TEAM_AUDIT_PAGE_SIZE)))
 const tasksTotalPages = computed(() => Math.max(1, Math.ceil(tasksTotal.value / TEAM_TASK_PAGE_SIZE)))
 const quotaPercent = computed(() => {
@@ -109,6 +115,7 @@ async function load() {
       loadShares(),
       loadTeamTags(),
       loadTeamFavorites(),
+      loadTeamActivities(),
       loadTeamTasks(),
       canManage.value ? loadInvites() : Promise.resolve(),
       canManage.value ? loadAuditLogs() : Promise.resolve(),
@@ -147,6 +154,28 @@ async function loadInvites() {
   } finally {
     invitesLoading.value = false
   }
+}
+
+async function loadTeamActivities() {
+  activitiesLoading.value = true
+  try {
+    const { data } = await teamsApi.listTeamActivities(
+      teamId.value,
+      activitiesPage.value,
+      TEAM_ACTIVITY_PAGE_SIZE,
+    )
+    activities.value = data.data.records
+    activitiesTotal.value = data.data.total
+  } finally {
+    activitiesLoading.value = false
+  }
+}
+
+function goActivitiesPage(nextPage: number) {
+  const normalizedPage = Math.min(Math.max(nextPage, 1), activitiesTotalPages.value)
+  if (normalizedPage === activitiesPage.value) return
+  activitiesPage.value = normalizedPage
+  loadTeamActivities()
 }
 
 async function loadAuditLogs() {
@@ -572,6 +601,36 @@ onMounted(async () => {
 
       <section class="team-section">
         <div class="team-section__title">
+          <h3>活动流</h3>
+          <p>成员可见的团队活动 · 共 {{ activitiesTotal }} 条</p>
+        </div>
+        <div class="team-collection__toolbar">
+          <OButton variant="ghost" size="sm" @click="loadTeamActivities">刷新</OButton>
+        </div>
+        <div v-if="activitiesLoading" class="team-settings__inline-loading"><OSpinner /></div>
+        <OEmptyState v-else-if="activities.length === 0" title="暂无团队活动" />
+        <div v-else class="team-activity">
+          <div v-for="activity in activities" :key="activity.id" class="team-activity__row">
+            <div class="team-activity__time font-mono">{{ formatDateFull(activity.createdAt) }}</div>
+            <div class="team-activity__main">
+              <div class="team-activity__summary">{{ activity.summary }}</div>
+              <div class="team-activity__meta">
+                <span class="font-mono">{{ activity.action }}</span>
+                <span v-if="activity.targetType">{{ activity.targetType }} {{ activity.targetId || '' }}</span>
+                <span v-if="activity.actorUserId">用户 {{ activity.actorUserId }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-if="activitiesTotal > TEAM_ACTIVITY_PAGE_SIZE" class="team-collection__pagination">
+          <OButton variant="ghost" size="sm" :disabled="activitiesPage === 1" @click="goActivitiesPage(activitiesPage - 1)">上一页</OButton>
+          <span class="font-mono">第 {{ activitiesPage }} / {{ activitiesTotalPages }} 页 · 共 {{ activitiesTotal }} 条活动</span>
+          <OButton variant="ghost" size="sm" :disabled="activitiesPage >= activitiesTotalPages" @click="goActivitiesPage(activitiesPage + 1)">下一页</OButton>
+        </div>
+      </section>
+
+      <section class="team-section">
+        <div class="team-section__title">
           <h3>任务中心</h3>
           <p>审计导出、ZIP、缩略图、在线文档保存和清理任务 · 共 {{ tasksTotal }} 条</p>
         </div>
@@ -964,7 +1023,8 @@ onMounted(async () => {
 .team-shares__list,
 .team-list,
 .team-tags__list,
-.team-audit {
+.team-audit,
+.team-activity {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1132,6 +1192,35 @@ onMounted(async () => {
 .team-audit__action {
   color: var(--accent);
 }
+.team-activity__row {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-surface);
+}
+.team-activity__time,
+.team-activity__meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.team-activity__main {
+  min-width: 0;
+}
+.team-activity__summary {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.team-activity__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
 .team-tasks {
   display: flex;
   flex-direction: column;
@@ -1239,6 +1328,7 @@ onMounted(async () => {
   .team-list__row,
   .team-tags__add,
   .team-tasks__row,
+  .team-activity__row,
   .team-audit__row {
     grid-template-columns: 1fr;
   }

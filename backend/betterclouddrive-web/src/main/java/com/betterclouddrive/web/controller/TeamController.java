@@ -20,12 +20,14 @@ import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FolderZipDownloadService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.service.TagService;
+import com.betterclouddrive.service.TeamActivityService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamInviteService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.TeamTaskService;
 import com.betterclouddrive.service.UploadService;
+import com.betterclouddrive.service.dto.TeamActivityItem;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.download.ByteRange;
@@ -78,6 +80,7 @@ public class TeamController {
     private final DownloadTicketService downloadTicketService;
     private final ShareService shareService;
     private final TeamInviteService teamInviteService;
+    private final TeamActivityService teamActivityService;
     private final TeamAuditService teamAuditService;
     private final TagService tagService;
     private final FavoriteService favoriteService;
@@ -214,6 +217,15 @@ public class TeamController {
             @RequestParam(defaultValue = "20") @Max(100) int size) {
         return ApiResponse.success(teamAuditService.listLogs(
                 user.getUserId(), teamId, actorUserId, action, targetType, result, startAt, endAt, page, size));
+    }
+
+    @GetMapping("/{teamId}/activities")
+    public ApiResponse<PageResult<TeamActivityItem>> listActivities(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") @Max(100) int size) {
+        return ApiResponse.success(teamActivityService.listActivities(user.getUserId(), teamId, page, size));
     }
 
     @GetMapping(value = "/{teamId}/audit-logs/export", produces = "text/csv")

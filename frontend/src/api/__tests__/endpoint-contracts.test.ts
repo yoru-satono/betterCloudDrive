@@ -264,6 +264,11 @@ describe('API endpoint contracts', () => {
       responseType: 'blob',
     })
 
+    await teamsApi.listTeamActivities(10, 2, 15)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/activities', {
+      params: { page: 2, size: 15 },
+    })
+
     await teamsApi.listTeamTasks(10, { status: 'FAILED', type: 'AUDIT_EXPORT', page: 2, size: 10 })
     expect(apiMock.get).toHaveBeenCalledWith('/teams/10/tasks', {
       params: { status: 'FAILED', type: 'AUDIT_EXPORT', page: 2, size: 10 },

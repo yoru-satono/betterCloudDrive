@@ -7,6 +7,7 @@ import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.FolderZipDownloadService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.service.TagService;
+import com.betterclouddrive.service.TeamActivityService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamInviteService;
 import com.betterclouddrive.service.TeamPermissionService;
@@ -40,6 +41,7 @@ class TeamControllerTaskTest {
     @Mock private DownloadTicketService downloadTicketService;
     @Mock private ShareService shareService;
     @Mock private TeamInviteService teamInviteService;
+    @Mock private TeamActivityService teamActivityService;
     @Mock private TeamAuditService teamAuditService;
     @Mock private TagService tagService;
     @Mock private FavoriteService favoriteService;
