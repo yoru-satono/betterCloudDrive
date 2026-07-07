@@ -28,6 +28,8 @@ public class OnlyOfficeService {
     private static final Set<String> WORD_EXTENSIONS = Set.of("doc", "docx", "odt", "rtf");
     private static final Set<String> CELL_EXTENSIONS = Set.of("xls", "xlsx", "ods", "csv");
     private static final Set<String> SLIDE_EXTENSIONS = Set.of("ppt", "pptx", "odp");
+    private static final String ONLYOFFICE_AI_PLUGIN_GUID = "asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}";
+    private static final List<String> DISABLED_PLUGIN_GUIDS = List.of(ONLYOFFICE_AI_PLUGIN_GUID);
 
     private final OnlyOfficeProperties properties;
     private final RestClient.Builder restClientBuilder;
@@ -146,6 +148,7 @@ public class OnlyOfficeService {
         customization.put("macros", false);
         customization.put("macrosMode", "disable");
         editorConfig.put("customization", customization);
+        editorConfig.put("plugins", disabledPluginsConfig());
         if (callbackUrl != null) {
             editorConfig.put("callbackUrl", callbackUrl);
         }
@@ -164,6 +167,14 @@ public class OnlyOfficeService {
                 .editable(editable)
                 .config(config)
                 .build();
+    }
+
+    private Map<String, Object> disabledPluginsConfig() {
+        Map<String, Object> plugins = new LinkedHashMap<>();
+        plugins.put("autostart", List.of());
+        plugins.put("disable", DISABLED_PLUGIN_GUIDS);
+        plugins.put("pluginsData", List.of());
+        return plugins;
     }
 
     private String resourceUrl(Long teamId, Long fileId, String kind, String token) {

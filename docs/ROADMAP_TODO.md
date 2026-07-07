@@ -219,6 +219,8 @@
 - 目标：防止 OnlyOffice AI/插件入口回归。
 - 范围：OnlyOffice config、Web 预览弹窗、E2E 断言。
 - 验收：编辑器界面不出现 AI/插件入口。
+- 状态：已完成。
+- 验证：`mvn -pl betterclouddrive-web -am "-Dtest=OnlyOfficeServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test` 已通过，覆盖 `customization.plugins=false`、宏禁用、AI 插件 GUID 禁用；`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-disabled-features.e2e.ts --project=chromium` 中禁用 AI/插件入口用例显示通过；Playwright 退出阶段未返回，外层命令在 300 秒超时。
 
 ## Web 和 Tauri
 

@@ -10,12 +10,16 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class OnlyOfficeServiceTest {
+
+    private static final String ONLYOFFICE_AI_PLUGIN_GUID = "asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}";
 
     private final OnlyOfficeProperties properties = new OnlyOfficeProperties();
     private final OnlyOfficeService service = new OnlyOfficeService(properties, RestClient.builder());
@@ -51,6 +55,7 @@ class OnlyOfficeServiceTest {
                 .containsEntry("plugins", false)
                 .containsEntry("macros", false)
                 .containsEntry("macrosMode", "disable");
+        assertPluginsDisabled(editorConfig);
         @SuppressWarnings("unchecked")
         Map<String, Object> document = (Map<String, Object>) response.getConfig().get("document");
         assertThat((String) document.get("url")).startsWith("http://backend:8080/api/v1/office/files/7/content?token=");
@@ -95,6 +100,7 @@ class OnlyOfficeServiceTest {
 
         assertThat(first.isEditable()).isTrue();
         assertThat(firstEditorConfig).containsEntry("mode", "edit");
+        assertPluginsDisabled(firstEditorConfig);
         assertThat((String) firstEditorConfig.get("callbackUrl"))
                 .startsWith("http://backend:8080/api/v1/teams/10/office/files/7/callback?token=");
         assertThat(firstDocument.get("key")).isNotEqualTo(secondDocument.get("key"));
@@ -162,5 +168,16 @@ class OnlyOfficeServiceTest {
                 .versionCount(1)
                 .updatedAt(LocalDateTime.parse("2026-06-28T10:00:00"))
                 .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assertPluginsDisabled(Map<String, Object> editorConfig) {
+        Map<String, Object> plugins = (Map<String, Object>) editorConfig.get("plugins");
+        assertThat(plugins).isNotNull();
+        assertThat((Iterable<?>) plugins.get("autostart")).isEmpty();
+        assertThat((Iterable<?>) plugins.get("pluginsData")).isEmpty();
+        List<Object> disabledPlugins = new ArrayList<>();
+        ((Iterable<?>) plugins.get("disable")).forEach(disabledPlugins::add);
+        assertThat(disabledPlugins).contains(ONLYOFFICE_AI_PLUGIN_GUID);
     }
 }

@@ -59,6 +59,7 @@
 - OnlyOffice 保存失败会生成失败任务、失败审计和 `TEAM_OFFICE_SAVE_FAILED` 站内通知，管理员可在团队审计中过滤排查。
 - Web OnlyOffice 真实保存 E2E 已覆盖 docx、xlsx、pptx 三类团队可编辑文件。
 - Web OnlyOffice 个人只读预览 E2E 已覆盖 docx、xlsx、pptx；个人文件配置不生成保存 callback，后端个人 callback 路由不可用。
+- OnlyOffice 配置已关闭插件和宏，并显式禁用 AI 插件；Web E2E 会检查编辑器中不出现 AI 或插件入口。
 - 团队文档历史版本支持列表、下载、恢复。
 
 ### Admin 后台
@@ -123,7 +124,7 @@
 - 团队通知已提供 Web/Tauri SSE 实时未读数刷新，用户可在个人资料页配置团队通知类型偏好。
 - 团队任务中心已提供审计导出、ZIP、缩略图、OnlyOffice 保存和团队回收站清理的状态入口；OnlyOffice 保存失败重试会把任务和 callback 重新置为 `PENDING`，由后台 worker 再处理。
 - 权限来源说明尚未完整展示，前端只能看到最终效果或基础权限配置。
-- OnlyOffice 禁用 AI/插件回归测试仍在后续任务中。
+- OnlyOffice 编辑器内版本入口仍在后续任务中。
 - Web/Tauri/Android 的完整团队 E2E 和契约测试仍需继续补齐。
 - 消息队列尚未引入，队列选型和积压指标仍在后续性能任务中。
 - Compose 健康检查、OnlyOffice 部署说明、备份恢复说明和观测指标仍需按 OPS/OBS 任务继续完善。
