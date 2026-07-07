@@ -8,7 +8,7 @@ import { useFormatters } from '@/composables/useFormatters'
 import * as adminApi from '@/api/admin'
 import { saveBlobResponse } from '@/api/download'
 import { toast } from 'vue-sonner'
-import type { AdminTeam } from '@/api/admin'
+import type { AdminTeam, AdminTeamRecoveryDetails } from '@/api/admin'
 import type { FileEntity } from '@/types/file'
 import type { TeamMember, TeamOperationLog } from '@/types/team'
 
@@ -25,6 +25,7 @@ const DETAIL_PAGE_SIZE = 10
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 const detailOpen = ref(false)
 const detailTeam = ref<AdminTeam | null>(null)
+const recoveryDetails = ref<AdminTeamRecoveryDetails | null>(null)
 const detailTab = ref<'members' | 'files' | 'audit'>('members')
 const detailLoading = ref(false)
 const teamMembers = ref<TeamMember[]>([])
@@ -80,6 +81,7 @@ async function saveQuota(team: AdminTeam) {
 
 async function openDetail(team: AdminTeam) {
   detailTeam.value = team
+  recoveryDetails.value = null
   detailOpen.value = true
   detailTab.value = 'members'
   teamFilePage.value = 1
@@ -98,10 +100,16 @@ async function loadDetail() {
   if (!detailTeam.value) return
   detailLoading.value = true
   try {
-    await Promise.all([loadMembers(), loadTeamFiles(), loadTeamAuditLogs()])
+    await Promise.all([loadRecoveryDetails(), loadMembers(), loadTeamFiles(), loadTeamAuditLogs()])
   } finally {
     detailLoading.value = false
   }
+}
+
+async function loadRecoveryDetails() {
+  if (!detailTeam.value) return
+  const { data } = await adminApi.getTeamRecoveryDetails(detailTeam.value.id)
+  recoveryDetails.value = data.data
 }
 
 async function loadMembers() {
@@ -308,6 +316,40 @@ onMounted(load)
           <span>{{ teamStatusDetail(detailTeam) }}</span>
           <span>{{ formatSize(detailTeam.storageUsed) }} / {{ formatSize(detailTeam.storageQuota) }}</span>
           <span>{{ formatDate(detailTeam.createdAt) }}</span>
+        </div>
+
+        <div v-if="recoveryDetails" class="team-detail__decision">
+          <div>
+            <span>删除原因</span>
+            <strong>{{ recoveryDetails.deleteReason || (detailTeam.deletedAt ? '未记录' : '未删除') }}</strong>
+          </div>
+          <div>
+            <span>删除人</span>
+            <strong>{{ recoveryDetails.deletedByUsername || recoveryDetails.deletedBy || '-' }}</strong>
+          </div>
+          <div>
+            <span>计划清理</span>
+            <strong>{{ recoveryDetails.purgeAfter ? formatDate(recoveryDetails.purgeAfter) : '-' }}</strong>
+          </div>
+          <div>
+            <span>成员/文件</span>
+            <strong>{{ recoveryDetails.memberCount }} 人 · {{ recoveryDetails.activeFileCount }} 正常 · {{ recoveryDetails.deletedFileCount }} 回收站</strong>
+          </div>
+          <div v-if="recoveryDetails.archivedAt">
+            <span>归档人</span>
+            <strong>{{ recoveryDetails.archivedByUsername || recoveryDetails.archivedBy || '-' }} · {{ formatDate(recoveryDetails.archivedAt) }}</strong>
+          </div>
+          <div class="team-detail__recent">
+            <span>最近审计</span>
+            <strong v-if="recoveryDetails.recentAuditLogs.length === 0">暂无</strong>
+            <ul v-else>
+              <li v-for="log in recoveryDetails.recentAuditLogs" :key="log.id">
+                <span class="font-mono">{{ formatDate(log.createdAt) }}</span>
+                <span>{{ log.action }}</span>
+                <span class="truncate">{{ log.details || '-' }}</span>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <div class="team-detail__tabs">
@@ -535,6 +577,49 @@ onMounted(load)
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.team-detail__decision {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-overlay);
+}
+.team-detail__decision > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.team-detail__decision span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.team-detail__decision strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.team-detail__recent {
+  grid-column: 1 / -1;
+}
+.team-detail__recent ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-detail__recent li {
+  display: grid;
+  grid-template-columns: 150px 120px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
   color: var(--text-secondary);
   font-size: 12px;
 }

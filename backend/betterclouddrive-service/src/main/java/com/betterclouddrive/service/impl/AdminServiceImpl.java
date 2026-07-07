@@ -17,6 +17,7 @@ import com.betterclouddrive.service.AdminService;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPurgeService;
+import com.betterclouddrive.service.dto.AdminTeamRecoveryDetails;
 import com.betterclouddrive.service.dto.TeamMemberView;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -131,6 +132,36 @@ public class AdminServiceImpl implements AdminService {
     }
 
     @Override
+    public AdminTeamRecoveryDetails getTeamRecoveryDetails(Long teamId) {
+        TeamEntity team = getTeam(teamId);
+        Long activeFileCount = fileRepository.countByTeamIdAndIsDeletedFalse(teamId);
+        Long deletedFileCount = fileRepository.countByTeamIdAndIsDeletedTrue(teamId);
+        Long memberCount = teamMemberRepository.countByTeamIdAndStatus(teamId, 1);
+        List<TeamOperationLogEntity> recentAuditLogs = teamOperationLogRepository.findTop5ByTeamIdOrderByCreatedAtDesc(teamId);
+        TeamOperationLogEntity deleteLog = teamOperationLogRepository
+                .findFirstByTeamIdAndActionOrderByCreatedAtDesc(teamId, "TEAM_DELETE")
+                .orElse(null);
+        String deleteReason = team.getDeletedAt() == null ? null : deleteReason(deleteLog);
+        return new AdminTeamRecoveryDetails(
+                team.getId(),
+                team.getName(),
+                team.getDeletedAt(),
+                team.getDeletedBy(),
+                usernameOf(team.getDeletedBy()),
+                deleteReason,
+                team.getPurgeAfter(),
+                team.getArchivedAt(),
+                team.getArchivedBy(),
+                usernameOf(team.getArchivedBy()),
+                activeFileCount == null ? 0 : activeFileCount,
+                deletedFileCount == null ? 0 : deletedFileCount,
+                memberCount == null ? 0 : memberCount,
+                team.getDeletedAt() != null,
+                team.getDeletedAt() != null,
+                recentAuditLogs);
+    }
+
+    @Override
     @Transactional
     public TeamEntity updateTeamQuota(Long adminUserId, Long teamId, Long storageQuota) {
         TeamEntity team = getTeam(teamId);
@@ -225,6 +256,24 @@ public class AdminServiceImpl implements AdminService {
         return members.stream()
                 .map(member -> new TeamMemberView(member, usersById.get(member.getUserId())))
                 .toList();
+    }
+
+    private String usernameOf(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        return userRepository.findById(userId)
+                .map(UserEntity::getUsername)
+                .orElse(null);
+    }
+
+    private String deleteReason(TeamOperationLogEntity deleteLog) {
+        if (deleteLog == null) {
+            return "团队所有者删除";
+        }
+        return deleteLog.getDetails() == null || deleteLog.getDetails().isBlank()
+                ? "团队所有者删除"
+                : "团队所有者删除：" + deleteLog.getDetails();
     }
 
     @Override

@@ -10,6 +10,7 @@ import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.service.AdminService;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.OperationLogService;
+import com.betterclouddrive.service.dto.AdminTeamRecoveryDetails;
 import com.betterclouddrive.web.dto.request.AdminUpdateTeamQuotaRequest;
 import com.betterclouddrive.web.dto.request.AdminUpdateUserQuotaRequest;
 import com.betterclouddrive.web.dto.request.AdminUpdateUserStatusRequest;
@@ -89,6 +90,11 @@ public class AdminController {
     @GetMapping("/teams/{teamId}")
     public ApiResponse<TeamEntity> getTeam(@PathVariable Long teamId) {
         return ApiResponse.success(adminService.getTeam(teamId));
+    }
+
+    @GetMapping("/teams/{teamId}/recovery-details")
+    public ApiResponse<AdminTeamRecoveryDetails> getTeamRecoveryDetails(@PathVariable Long teamId) {
+        return ApiResponse.success(adminService.getTeamRecoveryDetails(teamId));
     }
 
     @GetMapping("/teams/{teamId}/members")

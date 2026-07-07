@@ -1820,6 +1820,7 @@ GET /api/v1/admin/teams/{teamId}/members
 GET /api/v1/admin/teams/{teamId}/files?parentId=&deleted=&keyword=&page=1&size=20&sortBy=fileName&order=asc
 GET /api/v1/admin/teams/{teamId}/audit-logs?action=&targetType=&actorUserId=&result=&startAt=&endAt=&page=1&size=20
 GET /api/v1/admin/teams/{teamId}/audit-logs/export?action=&targetType=&actorUserId=&result=&startAt=&endAt=
+GET /api/v1/admin/teams/{teamId}/recovery-details
 PATCH /api/v1/admin/teams/{teamId}/quota
 POST /api/v1/admin/teams/{teamId}/archive
 POST /api/v1/admin/teams/{teamId}/unarchive
@@ -1838,6 +1839,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 | `GET /admin/teams/{teamId}/files` | 查看团队文件或回收站文件，`deleted=true` 表示回收站 |
 | `GET /admin/teams/{teamId}/audit-logs` | 查看团队审计日志，支持动作、目标、用户、结果和 ISO DateTime 时间范围过滤 |
 | `GET /admin/teams/{teamId}/audit-logs/export` | 导出团队审计日志 CSV，最多 10000 行 |
+| `GET /admin/teams/{teamId}/recovery-details` | 查看团队删除恢复决策信息，包括删除原因、删除人、计划清理时间、文件数、成员数和最近审计 |
 | `PATCH /admin/teams/{teamId}/quota` | 修改团队配额，单位为字节，并写入团队审计日志 |
 | `POST /admin/teams/{teamId}/archive` | 归档团队，归档后普通团队列表不展示 |
 | `POST /admin/teams/{teamId}/unarchive` | 取消归档 |
@@ -1851,7 +1853,29 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 }
 ```
 
-**Response `200`:** `GET/PATCH/POST` 返回团队实体或分页结果；`DELETE /purge` 返回统一成功响应。
+**恢复决策信息 Response `200`:**
+```json
+{
+  "teamId": 1,
+  "teamName": "Design",
+  "deletedAt": "2026-07-07T10:00:00",
+  "deletedBy": 2,
+  "deletedByUsername": "chain",
+  "deleteReason": "project closed",
+  "purgeAfter": "2026-08-06T10:00:00",
+  "archivedAt": null,
+  "archivedBy": null,
+  "archivedByUsername": null,
+  "activeFileCount": 120,
+  "deletedFileCount": 8,
+  "memberCount": 6,
+  "restoreAvailable": true,
+  "purgeAvailable": true,
+  "recentAuditLogs": []
+}
+```
+
+**Response `200`:** 其他 `GET/PATCH/POST` 返回团队实体或分页结果；`DELETE /purge` 返回统一成功响应。
 
 生命周期操作幂等语义：
 

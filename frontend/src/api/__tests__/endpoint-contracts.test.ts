@@ -551,6 +551,9 @@ describe('API endpoint contracts', () => {
     await adminApi.getTeam(10)
     expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10')
 
+    await adminApi.getTeamRecoveryDetails(10)
+    expect(apiMock.get).toHaveBeenCalledWith('/admin/teams/10/recovery-details')
+
     await adminApi.updateTeamQuota(10, 2048)
     expect(apiMock.patch).toHaveBeenCalledWith('/admin/teams/10/quota', { storageQuota: 2048 })
 

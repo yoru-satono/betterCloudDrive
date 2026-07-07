@@ -5,6 +5,7 @@ import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
+import com.betterclouddrive.service.dto.AdminTeamRecoveryDetails;
 import com.betterclouddrive.service.dto.TeamMemberView;
 
 import java.time.LocalDateTime;
@@ -25,6 +26,8 @@ public interface AdminService {
     PageResult<TeamEntity> listTeams(String keyword, String status, int page, int size);
 
     TeamEntity getTeam(Long teamId);
+
+    AdminTeamRecoveryDetails getTeamRecoveryDetails(Long teamId);
 
     TeamEntity updateTeamQuota(Long adminUserId, Long teamId, Long storageQuota);
 

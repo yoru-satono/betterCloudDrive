@@ -19,6 +19,25 @@ export interface AdminTeam {
   purgeAfter?: string | null
 }
 
+export interface AdminTeamRecoveryDetails {
+  teamId: number
+  teamName: string
+  deletedAt: string | null
+  deletedBy: number | null
+  deletedByUsername: string | null
+  deleteReason: string | null
+  purgeAfter: string | null
+  archivedAt: string | null
+  archivedBy: number | null
+  archivedByUsername: string | null
+  activeFileCount: number
+  deletedFileCount: number
+  memberCount: number
+  restoreAvailable: boolean
+  purgeAvailable: boolean
+  recentAuditLogs: TeamOperationLog[]
+}
+
 export interface OperationLog {
   id: number
   userId: number
@@ -77,6 +96,9 @@ export const listTeams = (page = 1, size = 20, keyword?: string, status: AdminTe
 
 export const getTeam = (teamId: number) =>
   api.get<ApiResponse<AdminTeam>>(`/admin/teams/${teamId}`)
+
+export const getTeamRecoveryDetails = (teamId: number) =>
+  api.get<ApiResponse<AdminTeamRecoveryDetails>>(`/admin/teams/${teamId}/recovery-details`)
 
 export const updateTeamQuota = (teamId: number, storageQuota: number) =>
   api.patch<ApiResponse<AdminTeam>>(`/admin/teams/${teamId}/quota`, { storageQuota })

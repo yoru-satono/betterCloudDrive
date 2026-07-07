@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.TeamEntity;
+import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
@@ -16,6 +17,7 @@ import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPurgeService;
+import com.betterclouddrive.service.dto.AdminTeamRecoveryDetails;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +28,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -139,6 +142,50 @@ class AdminServiceImplTest {
         assertThat(restored).isSameAs(team);
         verify(teamRepository, never()).save(any());
         verify(teamAuditService, never()).record(anyLong(), anyLong(), anyString(), anyString(), anyLong(), any());
+    }
+
+    @Test
+    void getTeamRecoveryDetails_shouldReturnDeletionDecisionContext() {
+        LocalDateTime deletedAt = LocalDateTime.now().minusDays(2);
+        LocalDateTime purgeAfter = LocalDateTime.now().plusDays(28);
+        TeamEntity team = TeamEntity.builder()
+                .id(10L)
+                .name("Product")
+                .deletedAt(deletedAt)
+                .deletedBy(2L)
+                .purgeAfter(purgeAfter)
+                .build();
+        TeamOperationLogEntity deleteLog = TeamOperationLogEntity.builder()
+                .id(99L)
+                .teamId(10L)
+                .action("TEAM_DELETE")
+                .details("Product")
+                .createdAt(deletedAt)
+                .build();
+        when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
+        when(fileRepository.countByTeamIdAndIsDeletedFalse(10L)).thenReturn(12L);
+        when(fileRepository.countByTeamIdAndIsDeletedTrue(10L)).thenReturn(3L);
+        when(teamMemberRepository.countByTeamIdAndStatus(10L, 1)).thenReturn(4L);
+        when(teamOperationLogRepository.findTop5ByTeamIdOrderByCreatedAtDesc(10L)).thenReturn(List.of(deleteLog));
+        when(teamOperationLogRepository.findFirstByTeamIdAndActionOrderByCreatedAtDesc(10L, "TEAM_DELETE"))
+                .thenReturn(Optional.of(deleteLog));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).username("owner").build()));
+
+        AdminTeamRecoveryDetails details = adminService.getTeamRecoveryDetails(10L);
+
+        assertThat(details.teamId()).isEqualTo(10L);
+        assertThat(details.teamName()).isEqualTo("Product");
+        assertThat(details.deletedAt()).isEqualTo(deletedAt);
+        assertThat(details.deletedBy()).isEqualTo(2L);
+        assertThat(details.deletedByUsername()).isEqualTo("owner");
+        assertThat(details.deleteReason()).isEqualTo("团队所有者删除：Product");
+        assertThat(details.purgeAfter()).isEqualTo(purgeAfter);
+        assertThat(details.activeFileCount()).isEqualTo(12L);
+        assertThat(details.deletedFileCount()).isEqualTo(3L);
+        assertThat(details.memberCount()).isEqualTo(4L);
+        assertThat(details.restoreAvailable()).isTrue();
+        assertThat(details.purgeAvailable()).isTrue();
+        assertThat(details.recentAuditLogs()).containsExactly(deleteLog);
     }
 
     @Test

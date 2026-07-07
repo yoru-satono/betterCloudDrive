@@ -13,4 +13,6 @@ public interface TeamMemberRepository extends JpaRepository<TeamMemberEntity, Lo
     Optional<TeamMemberEntity> findByTeamIdAndUserIdAndStatus(Long teamId, Long userId, Integer status);
 
     List<TeamMemberEntity> findByTeamIdAndStatusOrderByCreatedAtAsc(Long teamId, Integer status);
+
+    long countByTeamIdAndStatus(Long teamId, Integer status);
 }

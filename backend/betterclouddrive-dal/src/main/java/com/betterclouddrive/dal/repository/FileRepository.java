@@ -38,6 +38,10 @@ public interface FileRepository extends JpaRepository<FileEntity, Long>, JpaSpec
 
     List<FileEntity> findByTeamId(Long teamId);
 
+    long countByTeamIdAndIsDeletedFalse(Long teamId);
+
+    long countByTeamIdAndIsDeletedTrue(Long teamId);
+
     @Query("SELECT f FROM FileEntity f WHERE f.isDeleted = true AND f.deletedAt < :cutoff ORDER BY f.id ASC")
     List<FileEntity> findExpiredDeletedFiles(@Param("cutoff") LocalDateTime cutoff, Pageable pageable);
 
