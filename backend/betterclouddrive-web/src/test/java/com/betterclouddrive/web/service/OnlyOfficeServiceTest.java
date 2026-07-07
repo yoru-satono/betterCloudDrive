@@ -5,6 +5,8 @@ import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.web.config.OnlyOfficeProperties;
 import com.betterclouddrive.web.dto.response.OfficeConfigResponse;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
@@ -24,19 +26,25 @@ class OnlyOfficeServiceTest {
         properties.setAppInternalApiBaseUrl("http://backend:8080/api/v1/");
     }
 
-    @Test
-    void buildPersonalConfig_shouldCreateReadOnlyWordConfig() {
-        FileEntity file = officeFile("report.docx");
+    @ParameterizedTest
+    @CsvSource({
+            "report.docx,word",
+            "sheet.xlsx,cell",
+            "slides.pptx,slide"
+    })
+    void buildPersonalConfig_shouldCreateReadOnlyConfigWithoutCallback(String fileName, String documentType) {
+        FileEntity file = officeFile(fileName);
 
         OfficeConfigResponse response = service.buildPersonalConfig(1L, file);
 
         assertThat(response.getDocumentServerUrl()).isEqualTo("http://localhost:8082");
         assertThat(response.isEditable()).isFalse();
-        assertThat(response.getConfig()).containsEntry("documentType", "word");
+        assertThat(response.getConfig()).containsEntry("documentType", documentType);
         assertThat(response.getConfig()).containsKey("token");
         @SuppressWarnings("unchecked")
         Map<String, Object> editorConfig = (Map<String, Object>) response.getConfig().get("editorConfig");
         assertThat(editorConfig).containsEntry("mode", "view");
+        assertThat(editorConfig).doesNotContainKey("callbackUrl");
         @SuppressWarnings("unchecked")
         Map<String, Object> customization = (Map<String, Object>) editorConfig.get("customization");
         assertThat(customization)
@@ -48,7 +56,12 @@ class OnlyOfficeServiceTest {
         assertThat((String) document.get("url")).startsWith("http://backend:8080/api/v1/office/files/7/content?token=");
         @SuppressWarnings("unchecked")
         Map<String, Object> permissions = (Map<String, Object>) document.get("permissions");
-        assertThat(permissions).containsEntry("edit", false);
+        assertThat(permissions)
+                .containsEntry("download", true)
+                .containsEntry("print", true)
+                .containsEntry("edit", false)
+                .containsEntry("review", false)
+                .containsEntry("comment", false);
     }
 
     @Test

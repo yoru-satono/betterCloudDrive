@@ -205,6 +205,8 @@
 - 目标：确保个人文件只能预览不能编辑。
 - 范围：docx/xlsx/pptx 个人文件预览、编辑按钮隐藏、callback 不接受编辑保存。
 - 验收：OnlyOffice UI 只读；后端拒绝个人编辑保存。
+- 状态：已完成。
+- 验证：后端 `mvn -pl betterclouddrive-web -am "-Dtest=OnlyOfficeServiceTest,OfficeControllerCallbackTest,JwtAuthenticationFilterTest" "-Dsurefire.failIfNoSpecifiedTests=false" test` 已通过，覆盖个人配置无 callback、个人 callback 路由不可用、个人 callback 不跳过 JWT；`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-personal-preview.e2e.ts --project=chromium` 中个人 docx/xlsx/pptx 只读预览和团队无写权限只读预览两个用例均显示通过；Playwright 退出阶段未返回，外层命令在 300 秒超时。
 
 ### OFFICE-05 编辑器内版本入口
 

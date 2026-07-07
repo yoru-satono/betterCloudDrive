@@ -13,6 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.Map;
 
@@ -24,6 +27,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ExtendWith(MockitoExtension.class)
 class OfficeControllerCallbackTest {
@@ -47,6 +52,7 @@ class OfficeControllerCallbackTest {
     private TeamTaskService teamTaskService;
 
     private OfficeController controller;
+    private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
@@ -57,6 +63,19 @@ class OfficeControllerCallbackTest {
                 onlyOfficeCallbackService,
                 teamPermissionService,
                 teamTaskService);
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+    }
+
+    @Test
+    void personalCallbackRoute_shouldNotExist() throws Exception {
+        mockMvc.perform(post("/api/v1/office/files/1/callback")
+                        .param("token", "callback-token")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":2,\"key\":\"doc-key\",\"url\":\"http://onlyoffice/output.docx\"}"))
+                .andExpect(status().isNotFound());
+
+        verify(onlyOfficeCallbackService, never()).reserveSave(anyLong(), anyLong(), anyLong(), anyString(), any(), anyString(), anyString());
+        verify(teamTaskService, never()).queueTask(anyLong(), anyLong(), anyString(), anyString(), anyLong(), anyString());
     }
 
     @Test

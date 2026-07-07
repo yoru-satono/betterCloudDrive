@@ -78,6 +78,28 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
+    void onlyOfficePersonalCallbackEndpointDoesNotSkipJwtHeaderValidation() throws Exception {
+        JwtTokenProvider tokenProvider = new JwtTokenProvider();
+        String accessKey = Base64.getEncoder().encodeToString(
+                "this-is-a-32-byte-secret-key-for-acc!".getBytes());
+        ReflectionTestUtils.setField(tokenProvider, "accessSecret", accessKey);
+        ReflectionTestUtils.setField(tokenProvider, "accessExpirationMs", 60000L);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(tokenProvider, null, null);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/office/files/506/callback");
+        request.addHeader("Authorization", "Bearer onlyoffice-document-server-token");
+        request.addParameter("token", "office-callback-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        filter.doFilter(request, response, (req, res) -> chainCalled.set(true));
+
+        assertThat(chainCalled).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":401");
+        assertThat(response.getContentAsString()).contains("\"message\":\"unauthorized\"");
+    }
+
+    @Test
     void notificationStreamAcceptsAccessTokenQueryParameter() throws Exception {
         JwtTokenProvider tokenProvider = new JwtTokenProvider();
         String accessKey = Base64.getEncoder().encodeToString(
