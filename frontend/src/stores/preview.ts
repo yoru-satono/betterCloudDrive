@@ -28,8 +28,7 @@ export const usePreviewStore = defineStore('preview', () => {
     revokeUrl()
     try {
       if (officeMode.value) {
-        const res = teamId.value ? await getTeamOfficeConfig(teamId.value, file.id) : await getOfficeConfig(file.id)
-        officeConfig.value = res.data.data
+        await refreshOfficeConfig()
       } else {
         const res = teamId.value ? await previewFile(file.id, teamId.value) : await previewFile(file.id)
         url.value = URL.createObjectURL(res.data)
@@ -39,6 +38,25 @@ export const usePreviewStore = defineStore('preview', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  async function refreshOfficeConfig() {
+    if (!target.value || !officeMode.value) return
+    loading.value = true
+    error.value = ''
+    officeConfig.value = null
+    try {
+      const res = teamId.value ? await getTeamOfficeConfig(teamId.value, target.value.id) : await getOfficeConfig(target.value.id)
+      officeConfig.value = res.data.data
+    } catch {
+      error.value = '此文件暂时无法预览'
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function replaceTarget(file: FileEntity) {
+    target.value = file
   }
 
   function closePreview() {
@@ -59,7 +77,7 @@ export const usePreviewStore = defineStore('preview', () => {
     }
   }
 
-  return { open, target, teamId, url, error, loading, officeConfig, officeMode, openPreview, closePreview }
+  return { open, target, teamId, url, error, loading, officeConfig, officeMode, openPreview, refreshOfficeConfig, replaceTarget, closePreview }
 })
 
 function isOfficeFile(file: FileEntity) {

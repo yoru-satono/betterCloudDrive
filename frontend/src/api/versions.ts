@@ -1,5 +1,5 @@
 import api from './client'
-import type { FileVersionEntity } from '@/types/file'
+import type { FileEntity, FileVersionEntity } from '@/types/file'
 import type { ApiResponse } from '@/types/api'
 
 const saveBlobResponse = async (response: { data: Blob; headers: Record<string, unknown> }, fallbackFileName: string) => {
@@ -31,7 +31,7 @@ export const deleteVersion = (fileId: number, versionNumber: number) =>
   api.delete<ApiResponse<void>>(`/files/${fileId}/versions/${versionNumber}`)
 
 export const restoreVersion = (fileId: number, versionNumber: number) =>
-  api.post<ApiResponse<void>>(`/files/${fileId}/versions/${versionNumber}/restore`)
+  api.post<ApiResponse<FileEntity>>(`/files/${fileId}/versions/${versionNumber}/restore`)
 
 export const downloadVersion = async (fileId: number, versionNumber: number, fileName: string) => {
   const res = await api.get<Blob>(`/files/${fileId}/versions/${versionNumber}/download`, { responseType: 'blob', suppressToast: true })
@@ -45,7 +45,7 @@ export const deleteTeamVersion = (teamId: number, fileId: number, versionNumber:
   api.delete<ApiResponse<void>>(`/teams/${teamId}/files/${fileId}/versions/${versionNumber}`)
 
 export const restoreTeamVersion = (teamId: number, fileId: number, versionNumber: number) =>
-  api.post<ApiResponse<void>>(`/teams/${teamId}/files/${fileId}/versions/${versionNumber}/restore`)
+  api.post<ApiResponse<FileEntity>>(`/teams/${teamId}/files/${fileId}/versions/${versionNumber}/restore`)
 
 export const downloadTeamVersion = async (teamId: number, fileId: number, versionNumber: number, fileName: string) => {
   const res = await api.get<Blob>(`/teams/${teamId}/files/${fileId}/versions/${versionNumber}/download`, { responseType: 'blob', suppressToast: true })

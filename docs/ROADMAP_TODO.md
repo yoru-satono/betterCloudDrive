@@ -213,6 +213,8 @@
 - 目标：团队文档编辑时能看到历史版本入口。
 - 范围：Web OnlyOffice 弹窗底部或侧栏增加版本列表入口。
 - 验收：可下载/恢复旧版本；权限不足时隐藏恢复。
+- 状态：已完成。
+- 验证：`npm run test -- endpoint-contracts.test.ts` 已通过；`npm run build` 已通过；新增 `onlyoffice-version-entry.e2e.ts` 覆盖编辑者在 OnlyOffice 预览弹窗内下载/恢复历史版本、只读成员仅可下载且隐藏恢复按钮。`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-version-entry.e2e.ts --project=chromium` 中用例显示通过；Playwright 退出阶段未返回，外层命令在 360 秒超时。
 
 ### OFFICE-06 禁用 AI 和插件回归测试
 
