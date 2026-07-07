@@ -2197,7 +2197,8 @@ Authorization: Bearer <accessToken>
 {
   "preferences": {
     "TEAM_INVITE": false,
-    "TEAM_QUOTA_ALERT": true
+    "TEAM_QUOTA_ALERT": true,
+    "TEAM_OFFICE_SAVE_FAILED": true
   }
 }
 ```
@@ -2217,7 +2218,8 @@ Authorization: Bearer <accessToken>
   "TEAM_MEMBER_ADD": true,
   "TEAM_ROLE_UPDATE": true,
   "TEAM_MEMBER_REMOVE": true,
-  "TEAM_OWNER_TRANSFER": true
+  "TEAM_OWNER_TRANSFER": true,
+  "TEAM_OFFICE_SAVE_FAILED": true
 }
 ```
 
@@ -2291,6 +2293,6 @@ OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只�
 - callback token 内包含配置生成时的 `document.key`，回调请求体中的 `key` 必须一致。
 - 后端按 `teamId + fileId + key + status + urlHash` 记录保存回调；重复投递同一个回调时直接返回 `{ "error": 0 }`，不会重复入队或生成版本。
 - 保存版本时仍会锁定文件行，保证并发保存的版本号顺序可预测。
-- 若后台下载或保存失败，callback 记录进入失败状态，关联团队任务进入 `FAILED`；用户在团队任务中心重试后会重新置为 `PENDING` 并由 worker 再次处理。
+- 若后台下载或保存失败，callback 记录进入失败状态，关联团队任务进入 `FAILED`，写入 `OFFICE_SAVE_FAILED` 团队失败审计，并向编辑用户发送 `TEAM_OFFICE_SAVE_FAILED` 通知；用户在团队任务中心重试后会重新置为 `PENDING` 并由 worker 再次处理。
 
 **错误码:** 400（非 Office 文件或 callback 参数无效）、403（token 无效或团队不可写）、404001（文件不存在）、500003（下载编辑结果失败）。

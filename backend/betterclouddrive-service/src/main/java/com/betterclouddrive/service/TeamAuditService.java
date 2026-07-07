@@ -9,6 +9,8 @@ public interface TeamAuditService {
 
     void record(Long teamId, Long actorUserId, String action, String targetType, Long targetId, String details);
 
+    void recordFailure(Long teamId, Long actorUserId, String action, String targetType, Long targetId, Integer statusCode, String details);
+
     PageResult<TeamOperationLogEntity> listLogs(
             Long requesterUserId,
             Long teamId,

@@ -61,7 +61,8 @@ public class NotificationServiceImpl implements NotificationService {
             "TEAM_MEMBER_ADD",
             "TEAM_ROLE_UPDATE",
             "TEAM_MEMBER_REMOVE",
-            "TEAM_OWNER_TRANSFER"
+            "TEAM_OWNER_TRANSFER",
+            "TEAM_OFFICE_SAVE_FAILED"
     );
 
     private final NotificationRepository notificationRepository;

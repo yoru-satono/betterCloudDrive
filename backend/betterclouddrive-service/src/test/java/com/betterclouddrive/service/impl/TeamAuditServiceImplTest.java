@@ -53,6 +53,22 @@ class TeamAuditServiceImplTest {
     }
 
     @Test
+    void recordFailure_shouldPersistFailedResult() {
+        when(teamOperationLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        teamAuditService.recordFailure(10L, 2L, "office_save_failed", "file", 9L, 500003, "download failed");
+
+        ArgumentCaptor<TeamOperationLogEntity> captor = ArgumentCaptor.forClass(TeamOperationLogEntity.class);
+        verify(teamOperationLogRepository).save(captor.capture());
+        assertThat(captor.getValue().getAction()).isEqualTo("OFFICE_SAVE_FAILED");
+        assertThat(captor.getValue().getTargetType()).isEqualTo("FILE");
+        assertThat(captor.getValue().getResult()).isZero();
+        assertThat(captor.getValue().getStatusCode()).isEqualTo(500003);
+        assertThat(captor.getValue().getDetails()).isEqualTo("download failed");
+        verify(teamEventOutboxService).recordTeamEvent(10L, 2L, "OFFICE_SAVE_FAILED", "FILE", 9L, "download failed");
+    }
+
+    @Test
     void listLogs_shouldRejectDeletedTeamBeforeMemberCheck() {
         when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.empty());
 

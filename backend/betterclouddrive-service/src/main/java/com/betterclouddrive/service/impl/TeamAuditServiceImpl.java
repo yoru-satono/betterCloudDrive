@@ -38,6 +38,24 @@ public class TeamAuditServiceImpl implements TeamAuditService {
     @Override
     @Transactional
     public void record(Long teamId, Long actorUserId, String action, String targetType, Long targetId, String details) {
+        saveRecord(teamId, actorUserId, action, targetType, targetId, 1, 200, details);
+    }
+
+    @Override
+    @Transactional
+    public void recordFailure(Long teamId, Long actorUserId, String action, String targetType, Long targetId, Integer statusCode, String details) {
+        saveRecord(teamId, actorUserId, action, targetType, targetId, 0, statusCode == null ? 500 : statusCode, details);
+    }
+
+    private void saveRecord(
+            Long teamId,
+            Long actorUserId,
+            String action,
+            String targetType,
+            Long targetId,
+            Integer result,
+            Integer statusCode,
+            String details) {
         if (teamId == null || !StringUtils.hasText(action)) {
             return;
         }
@@ -49,8 +67,8 @@ public class TeamAuditServiceImpl implements TeamAuditService {
                 .action(normalizedAction)
                 .targetType(normalizedTargetType)
                 .targetId(targetId)
-                .result(1)
-                .statusCode(200)
+                .result(result)
+                .statusCode(statusCode)
                 .details(details)
                 .createdAt(LocalDateTime.now())
                 .build());

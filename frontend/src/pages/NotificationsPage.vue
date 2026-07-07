@@ -34,6 +34,7 @@ const typeOptions: Array<{ label: string; value: NotificationTypeFilter | '' }> 
   { label: '角色变更', value: 'TEAM_ROLE_UPDATE' },
   { label: '成员移除', value: 'TEAM_MEMBER_REMOVE' },
   { label: '所有权转让', value: 'TEAM_OWNER_TRANSFER' },
+  { label: '文档保存失败', value: 'TEAM_OFFICE_SAVE_FAILED' },
 ]
 const emptyTitle = computed(() => {
   if (unreadOnly.value && typeFilter.value) return '暂无匹配的未读通知'

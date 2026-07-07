@@ -3,8 +3,10 @@ package com.betterclouddrive.service.impl;
 import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.OnlyOfficeCallbackEntity;
 import com.betterclouddrive.service.FileVersionService;
+import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.OnlyOfficeContentDownloader;
+import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamTaskService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +34,12 @@ class OnlyOfficeSaveServiceImplTest {
 
     @Mock
     private TeamTaskService teamTaskService;
+
+    @Mock
+    private TeamAuditService teamAuditService;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private OnlyOfficeSaveServiceImpl onlyOfficeSaveService;
@@ -65,6 +73,15 @@ class OnlyOfficeSaveServiceImplTest {
         assertThat(processed).isEqualTo(1);
         verify(onlyOfficeCallbackService).markFailed(88L, "download failed");
         verify(teamTaskService).markFailed(77L, "download failed");
+        verify(teamAuditService).recordFailure(10L, 2L, "OFFICE_SAVE_FAILED", "FILE", 1L, 500003, "download failed");
+        verify(notificationService).notifyUser(
+                2L,
+                10L,
+                "TEAM_OFFICE_SAVE_FAILED",
+                "在线文档保存失败",
+                "文档保存失败，请在团队任务中心重试。原因：download failed",
+                "/teams/10/settings",
+                false);
     }
 
     private OnlyOfficeCallbackEntity callback() {

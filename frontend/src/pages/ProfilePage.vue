@@ -32,6 +32,7 @@ const notificationPreferenceOptions: Array<{ type: NotificationTypeFilter; label
   { type: 'TEAM_ROLE_UPDATE', label: '角色变更' },
   { type: 'TEAM_MEMBER_REMOVE', label: '成员移除' },
   { type: 'TEAM_OWNER_TRANSFER', label: '所有权转让' },
+  { type: 'TEAM_OFFICE_SAVE_FAILED', label: '文档保存失败' },
 ]
 
 async function saveWebDavSettings(enabled: boolean) {
