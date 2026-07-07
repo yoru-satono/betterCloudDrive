@@ -419,6 +419,8 @@
 - 目标：决定当前是否引入 Redis Stream、RabbitMQ 或 Kafka。
 - 范围：通知、审计导出、缩略图、OnlyOffice 保存、ZIP、清理任务。
 - 验收：形成选型文档和第一阶段落地范围。
+- 状态：已完成。
+- 验证：新增 `docs/MESSAGE_QUEUE_SELECTION.md`，明确当前阶段采用 Redis Streams，PostgreSQL outbox/task 表作为事实来源；文档覆盖 Redis Streams、RabbitMQ、Kafka 取舍，通知、审计导出、缩略图、OnlyOffice 保存、ZIP、清理任务的队列化顺序，以及第一阶段 `PERF-02`/`PERF-03` 落地范围。
 
 ### PERF-02 队列基础设施
 
