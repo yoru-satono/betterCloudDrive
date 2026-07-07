@@ -197,6 +197,8 @@
 - 目标：覆盖 docx、xlsx、pptx 的真实编辑保存。
 - 范围：Web E2E 优先；团队可编辑文件生成新版本。
 - 验收：编辑后下载文件内容变化；历史版本数量增加。
+- 状态：已完成。
+- 验证：`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-edit-save.e2e.ts --project=chromium` 中 docx、xlsx、pptx 三个用例均显示通过；Playwright 退出阶段未返回，外层命令在 600 秒超时。
 
 ### OFFICE-04 个人只读预览 E2E
 
