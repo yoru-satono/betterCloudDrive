@@ -264,6 +264,14 @@ describe('API endpoint contracts', () => {
       responseType: 'blob',
     })
 
+    await teamsApi.listTeamTasks(10, { status: 'FAILED', type: 'AUDIT_EXPORT', page: 2, size: 10 })
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/tasks', {
+      params: { status: 'FAILED', type: 'AUDIT_EXPORT', page: 2, size: 10 },
+    })
+
+    await teamsApi.retryTeamTask(10, 77)
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/tasks/77/retry')
+
     await teamsApi.addTeamFavorite(10, 7)
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/favorites/7')
 

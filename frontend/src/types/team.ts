@@ -58,6 +58,25 @@ export interface TeamOperationLog {
   createdAt: string
 }
 
+export interface TeamTask {
+  id: number
+  teamId: number | null
+  actorUserId: number | null
+  taskType: string
+  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+  targetType: string | null
+  targetId: number | null
+  title: string
+  progress: number
+  resultMessage: string | null
+  errorMessage: string | null
+  retryCount: number
+  createdAt: string
+  updatedAt: string
+  startedAt: string | null
+  completedAt: string | null
+}
+
 export interface TeamEffectivePermission {
   canRead: boolean
   canWrite: boolean

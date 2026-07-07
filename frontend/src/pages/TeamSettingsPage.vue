@@ -18,7 +18,7 @@ import { toast } from 'vue-sonner'
 import type { TagEntity } from '@/types/tag'
 import type { FileEntity } from '@/types/file'
 import type { ShareLinkEntity } from '@/types/share'
-import type { Team, TeamInvite, TeamMember, TeamOperationLog, TeamRole } from '@/types/team'
+import type { Team, TeamInvite, TeamMember, TeamOperationLog, TeamRole, TeamTask } from '@/types/team'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,6 +33,7 @@ const members = ref<TeamMember[]>([])
 const shares = ref<ShareLinkEntity[]>([])
 const invites = ref<TeamInvite[]>([])
 const auditLogs = ref<TeamOperationLog[]>([])
+const teamTasks = ref<TeamTask[]>([])
 const teamTags = ref<TagEntity[]>([])
 const teamFavorites = ref<FileEntity[]>([])
 const tagFiles = ref<FileEntity[]>([])
@@ -42,6 +43,7 @@ const membersLoading = ref(false)
 const sharesLoading = ref(false)
 const invitesLoading = ref(false)
 const auditLoading = ref(false)
+const tasksLoading = ref(false)
 const tagsLoading = ref(false)
 const favoritesLoading = ref(false)
 const tagFilesLoading = ref(false)
@@ -75,12 +77,18 @@ const auditTotal = ref(0)
 const auditAction = ref('')
 const auditTargetType = ref('')
 const auditResult = ref<'' | '1' | '0'>('')
+const tasksPage = ref(1)
+const tasksTotal = ref(0)
+const taskStatus = ref('')
+const taskType = ref('')
+const TEAM_TASK_PAGE_SIZE = 10
 
 const canManage = computed(() => ['OWNER', 'ADMIN'].includes(team.value?.role || ''))
 const isOwner = computed(() => team.value?.role === 'OWNER')
 const favoritesTotalPages = computed(() => Math.max(1, Math.ceil(favoritesTotal.value / TEAM_COLLECTION_PAGE_SIZE)))
 const tagFilesTotalPages = computed(() => Math.max(1, Math.ceil(tagFilesTotal.value / TEAM_COLLECTION_PAGE_SIZE)))
 const auditTotalPages = computed(() => Math.max(1, Math.ceil(auditTotal.value / TEAM_AUDIT_PAGE_SIZE)))
+const tasksTotalPages = computed(() => Math.max(1, Math.ceil(tasksTotal.value / TEAM_TASK_PAGE_SIZE)))
 const quotaPercent = computed(() => {
   const quota = team.value?.storageQuota || 0
   if (quota <= 0) return 0
@@ -101,6 +109,7 @@ async function load() {
       loadShares(),
       loadTeamTags(),
       loadTeamFavorites(),
+      loadTeamTasks(),
       canManage.value ? loadInvites() : Promise.resolve(),
       canManage.value ? loadAuditLogs() : Promise.resolve(),
     ])
@@ -166,6 +175,7 @@ async function exportAuditLogs() {
   })
   await saveBlobResponse(response, `team-${teamId.value}-audit.csv`)
   toast.success('审计日志已导出')
+  await loadTeamTasks()
 }
 
 function filterAuditLogs() {
@@ -178,6 +188,40 @@ function goAuditPage(nextPage: number) {
   if (normalizedPage === auditPage.value) return
   auditPage.value = normalizedPage
   loadAuditLogs()
+}
+
+async function loadTeamTasks() {
+  tasksLoading.value = true
+  try {
+    const { data } = await teamsApi.listTeamTasks(teamId.value, {
+      page: tasksPage.value,
+      size: TEAM_TASK_PAGE_SIZE,
+      status: taskStatus.value || undefined,
+      type: taskType.value.trim() || undefined,
+    })
+    teamTasks.value = data.data.records
+    tasksTotal.value = data.data.total
+  } finally {
+    tasksLoading.value = false
+  }
+}
+
+function filterTeamTasks() {
+  tasksPage.value = 1
+  loadTeamTasks()
+}
+
+function goTaskPage(nextPage: number) {
+  const normalizedPage = Math.min(Math.max(nextPage, 1), tasksTotalPages.value)
+  if (normalizedPage === tasksPage.value) return
+  tasksPage.value = normalizedPage
+  loadTeamTasks()
+}
+
+async function retryTask(task: TeamTask) {
+  await teamsApi.retryTeamTask(teamId.value, task.id)
+  toast.success('任务已重新排队')
+  await loadTeamTasks()
 }
 
 async function loadTeamTags() {
@@ -523,6 +567,50 @@ onMounted(async () => {
               <OButton v-if="invite.status === 'PENDING'" variant="danger" size="sm" @click="cancelInvite(invite)">取消</OButton>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="team-section">
+        <div class="team-section__title">
+          <h3>任务中心</h3>
+          <p>审计导出、ZIP、缩略图、在线文档保存和清理任务 · 共 {{ tasksTotal }} 条</p>
+        </div>
+        <div class="team-audit__filters">
+          <select v-model="taskStatus" @change="filterTeamTasks">
+            <option value="">全部状态</option>
+            <option value="PENDING">待处理</option>
+            <option value="RUNNING">运行中</option>
+            <option value="SUCCEEDED">成功</option>
+            <option value="FAILED">失败</option>
+          </select>
+          <OInput v-model="taskType" placeholder="类型，如 AUDIT_EXPORT" @keyup.enter="filterTeamTasks" />
+          <OButton variant="ghost" size="sm" @click="filterTeamTasks">刷新</OButton>
+        </div>
+        <div v-if="tasksLoading" class="team-settings__inline-loading"><OSpinner /></div>
+        <OEmptyState v-else-if="teamTasks.length === 0" title="暂无团队任务" />
+        <div v-else class="team-tasks">
+          <div v-for="task in teamTasks" :key="task.id" class="team-tasks__row">
+            <div class="team-tasks__main">
+              <div class="team-tasks__title">{{ task.title }}</div>
+              <div class="team-tasks__meta">
+                <span class="font-mono">{{ task.taskType }}</span>
+                <span>{{ formatDateFull(task.createdAt) }}</span>
+                <span v-if="task.targetType">{{ task.targetType }} {{ task.targetId || '' }}</span>
+              </div>
+              <div v-if="task.errorMessage" class="team-tasks__error">{{ task.errorMessage }}</div>
+              <div v-else-if="task.resultMessage" class="team-tasks__result">{{ task.resultMessage }}</div>
+            </div>
+            <div class="team-tasks__side">
+              <span class="team-tasks__status" :class="`team-tasks__status--${task.status.toLowerCase()}`">{{ task.status }}</span>
+              <span class="font-mono">{{ task.progress }}%</span>
+              <OButton v-if="task.status === 'FAILED'" variant="ghost" size="sm" @click="retryTask(task)">重试</OButton>
+            </div>
+          </div>
+        </div>
+        <div v-if="tasksTotal > TEAM_TASK_PAGE_SIZE" class="team-collection__pagination">
+          <OButton variant="ghost" size="sm" :disabled="tasksPage === 1" @click="goTaskPage(tasksPage - 1)">上一页</OButton>
+          <span class="font-mono">第 {{ tasksPage }} / {{ tasksTotalPages }} 页 · 共 {{ tasksTotal }} 条任务</span>
+          <OButton variant="ghost" size="sm" :disabled="tasksPage >= tasksTotalPages" @click="goTaskPage(tasksPage + 1)">下一页</OButton>
         </div>
       </section>
 
@@ -1044,6 +1132,76 @@ onMounted(async () => {
 .team-audit__action {
   color: var(--accent);
 }
+.team-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.team-tasks__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-surface);
+}
+.team-tasks__main {
+  min-width: 0;
+}
+.team-tasks__title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.team-tasks__meta,
+.team-tasks__result,
+.team-tasks__error,
+.team-tasks__side {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.team-tasks__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.team-tasks__error {
+  margin-top: 5px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+.team-tasks__result {
+  margin-top: 5px;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.team-tasks__side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.team-tasks__status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.team-tasks__status--succeeded {
+  color: var(--accent);
+  border-color: rgba(0, 212, 170, 0.35);
+  background: var(--accent-dim);
+}
+.team-tasks__status--failed {
+  color: var(--danger);
+}
+.team-tasks__status--running {
+  color: #f59e0b;
+}
 .share-info,
 .share-edit {
   display: flex;
@@ -1080,6 +1238,7 @@ onMounted(async () => {
   .team-shares__row,
   .team-list__row,
   .team-tags__add,
+  .team-tasks__row,
   .team-audit__row {
     grid-template-columns: 1fr;
   }

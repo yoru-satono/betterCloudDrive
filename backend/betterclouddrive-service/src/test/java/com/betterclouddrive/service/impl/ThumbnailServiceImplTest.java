@@ -1,7 +1,9 @@
 package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
+import com.betterclouddrive.service.TeamTaskService;
 import com.betterclouddrive.storage.StorageService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +38,9 @@ class ThumbnailServiceImplTest {
     @Mock
     private StorageService storageService;
 
+    @Mock
+    private TeamTaskService teamTaskService;
+
     @InjectMocks
     private ThumbnailServiceImpl thumbnailService;
 
@@ -69,6 +74,30 @@ class ThumbnailServiceImplTest {
     }
 
     @Test
+    void generateThumbnail_shouldTrackTeamTaskForTeamImage() throws Exception {
+        FileEntity file = FileEntity.builder()
+                .id(2L)
+                .teamId(10L)
+                .fileType("file")
+                .mimeType("image/png")
+                .storagePath("objects/team-photo.png")
+                .isDeleted(false)
+                .build();
+        when(fileRepository.findById(2L)).thenReturn(Optional.of(file));
+        when(teamTaskService.startTask(10L, null, "THUMBNAIL", "FILE", 2L, "生成团队文件缩略图"))
+                .thenReturn(TeamTaskEntity.builder().id(55L).build());
+        when(storageService.downloadObject("objects/team-photo.png")).thenReturn(new ByteArrayInputStream(pngBytes()));
+        when(storageService.uploadObject(eq("thumbnails/teams/10/2.jpg"), any(InputStream.class), anyLong(), eq("image/jpeg")))
+                .thenReturn("thumbnails/teams/10/2.jpg");
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        thumbnailService.generateThumbnail(2L);
+
+        assertThat(file.getThumbnailPath()).isEqualTo("thumbnails/teams/10/2.jpg");
+        verify(teamTaskService).markSucceeded(55L, "缩略图已生成");
+    }
+
+    @Test
     void generateThumbnail_shouldSkipUnsupportedFiles() {
         FileEntity file = FileEntity.builder()
                 .id(1L)
@@ -90,13 +119,15 @@ class ThumbnailServiceImplTest {
     void generateThumbnail_shouldLeaveFileUnchangedWhenImageCannotBeDecoded() {
         FileEntity file = FileEntity.builder()
                 .id(1L)
-                .userId(7L)
+                .teamId(10L)
                 .fileType("file")
                 .mimeType("image/png")
                 .storagePath("objects/broken.png")
                 .isDeleted(false)
                 .build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(teamTaskService.startTask(10L, null, "THUMBNAIL", "FILE", 1L, "生成团队文件缩略图"))
+                .thenReturn(TeamTaskEntity.builder().id(56L).build());
         when(storageService.downloadObject("objects/broken.png"))
                 .thenReturn(new ByteArrayInputStream("not an image".getBytes()));
 
@@ -105,6 +136,7 @@ class ThumbnailServiceImplTest {
         assertThat(file.getThumbnailPath()).isNull();
         verify(storageService, never()).uploadObject(any(), any(), anyLong(), any());
         verify(fileRepository, never()).save(any(FileEntity.class));
+        verify(teamTaskService).markFailed(56L, "图片无法解码");
     }
 
     private byte[] pngBytes() throws Exception {

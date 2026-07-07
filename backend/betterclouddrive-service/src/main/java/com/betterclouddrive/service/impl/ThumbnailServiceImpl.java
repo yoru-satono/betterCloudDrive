@@ -1,7 +1,9 @@
 package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
+import com.betterclouddrive.service.TeamTaskService;
 import com.betterclouddrive.service.ThumbnailService;
 import com.betterclouddrive.storage.StorageService;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,7 @@ public class ThumbnailServiceImpl implements ThumbnailService {
 
     private final FileRepository fileRepository;
     private final StorageService storageService;
+    private final TeamTaskService teamTaskService;
 
     @Async("thumbnailExecutor")
     @Transactional
@@ -54,10 +57,13 @@ public class ThumbnailServiceImpl implements ThumbnailService {
             return;
         }
 
+        TeamTaskEntity task = file.getTeamId() == null ? null : teamTaskService.startTask(
+                file.getTeamId(), null, "THUMBNAIL", "FILE", file.getId(), "生成团队文件缩略图");
         try (InputStream inputStream = storageService.downloadObject(file.getStoragePath())) {
             BufferedImage source = ImageIO.read(inputStream);
             if (source == null) {
                 log.warn("Thumbnail generation skipped because image cannot be decoded, fileId={}", fileId);
+                markTaskFailed(task, "图片无法解码");
                 return;
             }
 
@@ -65,6 +71,7 @@ public class ThumbnailServiceImpl implements ThumbnailService {
             ByteArrayOutputStream output = new ByteArrayOutputStream();
             if (!ImageIO.write(thumbnail, "jpg", output)) {
                 log.warn("Thumbnail generation skipped because JPEG writer is unavailable, fileId={}", fileId);
+                markTaskFailed(task, "JPEG writer is unavailable");
                 return;
             }
 
@@ -84,8 +91,22 @@ public class ThumbnailServiceImpl implements ThumbnailService {
             if (StringUtils.hasText(oldThumbnailPath) && !oldThumbnailPath.equals(thumbnailPath)) {
                 storageService.deleteObject(oldThumbnailPath);
             }
+            markTaskSucceeded(task, "缩略图已生成");
         } catch (Exception e) {
             log.warn("Thumbnail generation failed, fileId={}", fileId, e);
+            markTaskFailed(task, e.getMessage());
+        }
+    }
+
+    private void markTaskSucceeded(TeamTaskEntity task, String resultMessage) {
+        if (task != null) {
+            teamTaskService.markSucceeded(task.getId(), resultMessage);
+        }
+    }
+
+    private void markTaskFailed(TeamTaskEntity task, String errorMessage) {
+        if (task != null) {
+            teamTaskService.markFailed(task.getId(), errorMessage);
         }
     }
 

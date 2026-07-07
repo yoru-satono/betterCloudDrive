@@ -12,6 +12,7 @@ import com.betterclouddrive.dal.entity.TagEntity;
 import com.betterclouddrive.dal.entity.TeamFilePermissionEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
+import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.dal.entity.UploadSessionEntity;
 import com.betterclouddrive.service.FavoriteService;
 import com.betterclouddrive.service.FileVersionService;
@@ -23,6 +24,7 @@ import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamInviteService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
+import com.betterclouddrive.service.TeamTaskService;
 import com.betterclouddrive.service.UploadService;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.storage.StorageService;
@@ -80,6 +82,7 @@ public class TeamController {
     private final TagService tagService;
     private final FavoriteService favoriteService;
     private final TeamPermissionService teamPermissionService;
+    private final TeamTaskService teamTaskService;
     private final AuditCsvExporter auditCsvExporter;
 
     @GetMapping
@@ -223,9 +226,38 @@ public class TeamController {
             @RequestParam(required = false) Integer result,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startAt,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt) {
-        PageResult<TeamOperationLogEntity> logs = teamAuditService.exportLogs(
-                user.getUserId(), teamId, actorUserId, action, targetType, result, startAt, endAt, AUDIT_EXPORT_LIMIT);
-        return auditCsvExporter.teamAuditResponse(teamId, logs.getRecords());
+        TeamTaskEntity task = teamTaskService.startTask(
+                teamId, user.getUserId(), "AUDIT_EXPORT", "TEAM", teamId, "导出团队审计日志");
+        try {
+            PageResult<TeamOperationLogEntity> logs = teamAuditService.exportLogs(
+                    user.getUserId(), teamId, actorUserId, action, targetType, result, startAt, endAt, AUDIT_EXPORT_LIMIT);
+            teamTaskService.markSucceeded(task.getId(), "导出 " + logs.getRecords().size() + " 条审计日志");
+            return auditCsvExporter.teamAuditResponse(teamId, logs.getRecords());
+        } catch (RuntimeException e) {
+            teamTaskService.markFailed(task.getId(), e.getMessage());
+            throw e;
+        }
+    }
+
+    @GetMapping("/{teamId}/tasks")
+    public ApiResponse<PageResult<TeamTaskEntity>> listTasks(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String type,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") @Max(100) int size) {
+        teamService.requireRead(user.getUserId(), teamId);
+        return ApiResponse.success(teamTaskService.listTasks(teamId, status, type, page, size));
+    }
+
+    @PostMapping("/{teamId}/tasks/{taskId}/retry")
+    public ApiResponse<TeamTaskEntity> retryTask(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @PathVariable Long taskId) {
+        teamService.requireRead(user.getUserId(), teamId);
+        return ApiResponse.success(teamTaskService.retryTask(teamId, taskId));
     }
 
     @PostMapping("/{teamId}/favorites/{fileId}")
@@ -503,7 +535,15 @@ public class TeamController {
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId) {
         teamService.requireManageMembers(user.getUserId(), teamId);
-        fileService.emptyTeamRecycleBin(teamId, user.getUserId());
+        TeamTaskEntity task = teamTaskService.startTask(
+                teamId, user.getUserId(), "TEAM_CLEANUP", "TEAM", teamId, "清空团队回收站");
+        try {
+            fileService.emptyTeamRecycleBin(teamId, user.getUserId());
+            teamTaskService.markSucceeded(task.getId(), "团队回收站已清空");
+        } catch (RuntimeException e) {
+            teamTaskService.markFailed(task.getId(), e.getMessage());
+            throw e;
+        }
         return ApiResponse.success();
     }
 
@@ -754,15 +794,28 @@ public class TeamController {
             @RequestParam(required = false) String ticket,
             @RequestHeader(value = "Range", required = false) String rangeHeader) {
         FileEntity folder = resolveTeamDownload(user, ticket, teamId, fileId, DownloadTicketType.TEAM_FOLDER_ZIP);
-        FolderZipDownloadCacheEntity cache = folderZipDownloadService.getOrCreateCachedZip(folder);
-        ResponseEntity<StreamingResponseBody> response = rangedObjectResponse(
-                cache.getObjectKey(),
-                cache.getFileSize(),
-                "application/zip",
-                attachmentDisposition(cache.getFileName()),
-                rangeHeader);
-        folderZipDownloadService.markDownloaded(cache);
-        return response;
+        TeamTaskEntity task = teamTaskService.startTask(
+                teamId,
+                user != null ? user.getUserId() : null,
+                "FOLDER_ZIP",
+                "FILE",
+                fileId,
+                "生成团队文件夹 ZIP");
+        try {
+            FolderZipDownloadCacheEntity cache = folderZipDownloadService.getOrCreateCachedZip(folder);
+            ResponseEntity<StreamingResponseBody> response = rangedObjectResponse(
+                    cache.getObjectKey(),
+                    cache.getFileSize(),
+                    "application/zip",
+                    attachmentDisposition(cache.getFileName()),
+                    rangeHeader);
+            folderZipDownloadService.markDownloaded(cache);
+            teamTaskService.markSucceeded(task.getId(), "ZIP 已生成：" + cache.getFileName());
+            return response;
+        } catch (RuntimeException e) {
+            teamTaskService.markFailed(task.getId(), e.getMessage());
+            throw e;
+        }
     }
 
     @GetMapping("/{teamId}/preview/{fileId}")

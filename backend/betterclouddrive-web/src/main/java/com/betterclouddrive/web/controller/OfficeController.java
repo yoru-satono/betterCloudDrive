@@ -5,10 +5,12 @@ import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.FileVersionEntity;
+import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.TeamTaskService;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.dto.request.OnlyOfficeCallbackRequest;
 import com.betterclouddrive.web.dto.response.OfficeConfigResponse;
@@ -40,6 +42,7 @@ public class OfficeController {
     private final OnlyOfficeService onlyOfficeService;
     private final OnlyOfficeCallbackService onlyOfficeCallbackService;
     private final TeamPermissionService teamPermissionService;
+    private final TeamTaskService teamTaskService;
 
     @GetMapping("/api/v1/office/files/{fileId}/config")
     public ApiResponse<OfficeConfigResponse> personalConfig(
@@ -103,14 +106,18 @@ public class OfficeController {
                         teamId, fileId, callbackKey, request.getStatus());
                 return Map.of("error", 0);
             }
+            TeamTaskEntity task = teamTaskService.startTask(
+                    teamId, userId, "ONLYOFFICE_SAVE", "FILE", fileId, "保存在线编辑文档");
             try {
                 byte[] content = onlyOfficeService.downloadEditedContent(request.getUrl());
                 FileVersionEntity version = fileVersionService.saveTeamEditedVersion(teamId, userId, fileId, content);
                 onlyOfficeCallbackService.markSaved(
                         teamId, fileId, callbackKey, request.getStatus(), contentUrlHash, version.getId());
+                teamTaskService.markSucceeded(task.getId(), "保存为版本 " + version.getVersionNumber());
             } catch (RuntimeException e) {
                 onlyOfficeCallbackService.releaseSaveReservation(
                         teamId, fileId, callbackKey, request.getStatus(), contentUrlHash);
+                teamTaskService.markFailed(task.getId(), e.getMessage());
                 throw e;
             }
         }

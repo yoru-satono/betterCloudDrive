@@ -10,6 +10,7 @@ import type {
   TeamMember,
   TeamOperationLog,
   TeamRole,
+  TeamTask,
 } from '@/types/team'
 import type { TagEntity } from '@/types/tag'
 
@@ -96,6 +97,17 @@ export const exportTeamAuditLogs = (teamId: number, params: {
   endAt?: string
 } = {}) =>
   api.get<Blob>(`/teams/${teamId}/audit-logs/export`, { params, responseType: 'blob' })
+
+export const listTeamTasks = (teamId: number, params: {
+  status?: string
+  type?: string
+  page?: number
+  size?: number
+} = {}) =>
+  api.get<ApiResponse<PageResult<TeamTask>>>(`/teams/${teamId}/tasks`, { params })
+
+export const retryTeamTask = (teamId: number, taskId: number) =>
+  api.post<ApiResponse<TeamTask>>(`/teams/${teamId}/tasks/${taskId}/retry`)
 
 export const addTeamFavorite = (teamId: number, fileId: number) =>
   api.post<ApiResponse<void>>(`/teams/${teamId}/favorites/${fileId}`)

@@ -2114,6 +2114,29 @@ OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用
 
 **错误码:** 400（参数格式错误）、403（非 OWNER/ADMIN）、404（团队不存在）。
 
+### 16.8 团队任务中心
+
+```
+GET /api/v1/teams/{teamId}/tasks?status=&type=&page=1&size=20
+POST /api/v1/teams/{teamId}/tasks/{taskId}/retry
+Authorization: Bearer <accessToken>
+```
+
+团队成员可查看团队长任务状态。当前任务中心记录同步触发任务的可见状态，覆盖团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；后续异步 worker 可继续消费 `PENDING` 任务。
+
+| 端点 | 权限 | 说明 |
+|------|------|------|
+| `GET /tasks` | 团队成员 | 分页返回团队任务，可按 `status` 和 `type` 过滤 |
+| `POST /tasks/{taskId}/retry` | 团队成员 | 仅允许重试 `FAILED` 任务，状态重置为 `PENDING`，清空失败原因并递增 `retryCount` |
+
+**TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`title`、`progress`、`resultMessage`、`errorMessage`、`retryCount`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。
+
+**状态:** `PENDING`、`RUNNING`、`SUCCEEDED`、`FAILED`。
+
+**当前任务类型:** `AUDIT_EXPORT`、`FOLDER_ZIP`、`THUMBNAIL`、`ONLYOFFICE_SAVE`、`TEAM_CLEANUP`。
+
+**错误码:** 400（非失败任务重试或参数错误）、403（非团队成员）、404（团队或任务不存在）。
+
 ---
 
 ## 十七、通知 `/api/v1/notifications`
