@@ -4,10 +4,8 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
-import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.service.FileService;
-import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamTaskService;
@@ -37,7 +35,6 @@ public class OfficeController {
     private static final Set<Integer> SAVE_STATUSES = Set.of(2, 6);
 
     private final FileService fileService;
-    private final FileVersionService fileVersionService;
     private final StorageService storageService;
     private final OnlyOfficeService onlyOfficeService;
     private final OnlyOfficeCallbackService onlyOfficeCallbackService;
@@ -101,25 +98,17 @@ public class OfficeController {
         if (request.getStatus() != null && SAVE_STATUSES.contains(request.getStatus())) {
             String callbackKey = onlyOfficeCallbackService.callbackKey(request.getKey());
             String contentUrlHash = onlyOfficeCallbackService.contentUrlHash(request.getUrl());
-            if (!onlyOfficeCallbackService.reserveSave(teamId, fileId, callbackKey, request.getStatus(), contentUrlHash)) {
+            String downloadUrl = onlyOfficeService.resolveDocumentServerDownloadUrl(request.getUrl());
+            if (!onlyOfficeCallbackService.reserveSave(
+                    teamId, fileId, userId, callbackKey, request.getStatus(), contentUrlHash, downloadUrl)) {
                 log.info("Skipping duplicate OnlyOffice callback, teamId={}, fileId={}, key={}, status={}",
                         teamId, fileId, callbackKey, request.getStatus());
                 return Map.of("error", 0);
             }
-            TeamTaskEntity task = teamTaskService.startTask(
+            TeamTaskEntity task = teamTaskService.queueTask(
                     teamId, userId, "ONLYOFFICE_SAVE", "FILE", fileId, "保存在线编辑文档");
-            try {
-                byte[] content = onlyOfficeService.downloadEditedContent(request.getUrl());
-                FileVersionEntity version = fileVersionService.saveTeamEditedVersion(teamId, userId, fileId, content);
-                onlyOfficeCallbackService.markSaved(
-                        teamId, fileId, callbackKey, request.getStatus(), contentUrlHash, version.getId());
-                teamTaskService.markSucceeded(task.getId(), "保存为版本 " + version.getVersionNumber());
-            } catch (RuntimeException e) {
-                onlyOfficeCallbackService.releaseSaveReservation(
-                        teamId, fileId, callbackKey, request.getStatus(), contentUrlHash);
-                teamTaskService.markFailed(task.getId(), e.getMessage());
-                throw e;
-            }
+            onlyOfficeCallbackService.attachTask(
+                    teamId, fileId, callbackKey, request.getStatus(), contentUrlHash, task.getId());
         }
         return Map.of("error", 0);
     }

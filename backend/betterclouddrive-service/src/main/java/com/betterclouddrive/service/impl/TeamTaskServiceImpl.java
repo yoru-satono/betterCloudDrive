@@ -4,6 +4,7 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
+import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
 import com.betterclouddrive.service.TeamTaskService;
 import jakarta.persistence.criteria.Predicate;
@@ -26,6 +27,7 @@ import java.util.Locale;
 public class TeamTaskServiceImpl implements TeamTaskService {
 
     private final TeamTaskRepository teamTaskRepository;
+    private final OnlyOfficeCallbackRepository onlyOfficeCallbackRepository;
 
     @Override
     public PageResult<TeamTaskEntity> listTasks(Long teamId, String status, String taskType, int page, int size) {
@@ -49,12 +51,49 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     @Override
     @Transactional
     public TeamTaskEntity startTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title) {
+        return createTask(teamId, actorUserId, taskType, targetType, targetId, title, TeamTaskEntity.STATUS_RUNNING);
+    }
+
+    @Override
+    @Transactional
+    public TeamTaskEntity queueTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title) {
+        return createTask(teamId, actorUserId, taskType, targetType, targetId, title, TeamTaskEntity.STATUS_PENDING);
+    }
+
+    @Override
+    @Transactional
+    public void markRunning(Long taskId) {
+        if (taskId == null) {
+            return;
+        }
+        TeamTaskEntity task = teamTaskRepository.findById(taskId).orElse(null);
+        if (task == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        task.setStatus(TeamTaskEntity.STATUS_RUNNING);
+        task.setProgress(0);
+        task.setErrorMessage(null);
+        task.setCompletedAt(null);
+        task.setStartedAt(now);
+        task.setUpdatedAt(now);
+        teamTaskRepository.save(task);
+    }
+
+    private TeamTaskEntity createTask(
+            Long teamId,
+            Long actorUserId,
+            String taskType,
+            String targetType,
+            Long targetId,
+            String title,
+            String status) {
         LocalDateTime now = LocalDateTime.now();
         return teamTaskRepository.save(TeamTaskEntity.builder()
                 .teamId(teamId)
                 .actorUserId(actorUserId)
                 .taskType(normalizeRequired(taskType, "Task type is required"))
-                .status(TeamTaskEntity.STATUS_RUNNING)
+                .status(status)
                 .targetType(StringUtils.hasText(targetType) ? normalize(targetType) : null)
                 .targetId(targetId)
                 .title(StringUtils.hasText(title) ? title.trim() : normalizeRequired(taskType, "Task type is required"))
@@ -62,7 +101,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
                 .retryCount(0)
                 .createdAt(now)
                 .updatedAt(now)
-                .startedAt(now)
+                .startedAt(TeamTaskEntity.STATUS_RUNNING.equals(status) ? now : null)
                 .build());
     }
 
@@ -118,7 +157,11 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         task.setStartedAt(null);
         task.setCompletedAt(null);
         task.setUpdatedAt(LocalDateTime.now());
-        return teamTaskRepository.save(task);
+        TeamTaskEntity saved = teamTaskRepository.save(task);
+        if ("ONLYOFFICE_SAVE".equals(task.getTaskType())) {
+            onlyOfficeCallbackRepository.resetFailedByTaskId(taskId, LocalDateTime.now());
+        }
+        return saved;
     }
 
     private String normalizeRequired(String value, String message) {

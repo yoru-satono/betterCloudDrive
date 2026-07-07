@@ -87,7 +87,7 @@ public class OnlyOfficeService {
                 .body(byte[].class);
     }
 
-    String resolveDocumentServerDownloadUrl(String url) {
+    public String resolveDocumentServerDownloadUrl(String url) {
         String trimmedUrl = url.trim();
         String publicUrl = properties.normalizedPublicUrl();
         String internalUrl = properties.normalizedInternalUrl();

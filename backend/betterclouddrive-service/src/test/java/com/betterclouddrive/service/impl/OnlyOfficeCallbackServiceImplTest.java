@@ -11,7 +11,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,19 +43,34 @@ class OnlyOfficeCallbackServiceImplTest {
 
     @Test
     void reserveSave_shouldReturnFalseForDuplicateRecord() {
-        when(onlyOfficeCallbackRepository.insertProcessing(10L, 1L, "doc-key", 2, "url-hash"))
+        when(onlyOfficeCallbackRepository.insertProcessing(
+                10L, 1L, 2L, "doc-key", 2, "url-hash", "http://onlyoffice/output.docx"))
                 .thenReturn(0);
 
-        boolean reserved = onlyOfficeCallbackService.reserveSave(10L, 1L, "doc-key", 2, "url-hash");
+        boolean reserved = onlyOfficeCallbackService.reserveSave(
+                10L, 1L, 2L, "doc-key", 2, "url-hash", "http://onlyoffice/output.docx");
 
         assertThat(reserved).isFalse();
     }
 
     @Test
-    void markSaved_shouldUpdateSavedState() {
-        onlyOfficeCallbackService.markSaved(10L, 1L, "doc-key", 2, "url-hash", 99L);
+    void attachTask_shouldIgnoreNullTaskId() {
+        onlyOfficeCallbackService.attachTask(10L, 1L, "doc-key", 2, "url-hash", null);
 
-        verify(onlyOfficeCallbackRepository).markSaved(
-                eq(10L), eq(1L), eq("doc-key"), eq(2), eq("url-hash"), eq(99L), any());
+        verify(onlyOfficeCallbackRepository, never()).attachTask(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void markSaved_shouldUpdateSavedStateById() {
+        onlyOfficeCallbackService.markSaved(88L, 99L);
+
+        verify(onlyOfficeCallbackRepository).markSavedById(eq(88L), eq(99L), any());
+    }
+
+    @Test
+    void markFailed_shouldTruncateLongError() {
+        onlyOfficeCallbackService.markFailed(88L, "x".repeat(600));
+
+        verify(onlyOfficeCallbackRepository).markFailedById(eq(88L), argThat(message -> message.length() == 512), any());
     }
 }

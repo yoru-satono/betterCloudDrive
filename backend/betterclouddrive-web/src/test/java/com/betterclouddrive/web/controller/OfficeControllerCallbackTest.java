@@ -1,9 +1,7 @@
 package com.betterclouddrive.web.controller;
 
-import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.service.FileService;
-import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamTaskService;
@@ -37,9 +35,6 @@ class OfficeControllerCallbackTest {
     private TeamPermissionService teamPermissionService;
 
     @Mock
-    private FileVersionService fileVersionService;
-
-    @Mock
     private StorageService storageService;
 
     @Mock
@@ -57,7 +52,6 @@ class OfficeControllerCallbackTest {
     void setUp() {
         controller = new OfficeController(
                 fileService,
-                fileVersionService,
                 storageService,
                 onlyOfficeService,
                 onlyOfficeCallbackService,
@@ -72,58 +66,56 @@ class OfficeControllerCallbackTest {
                 .thenReturn(2L);
         when(onlyOfficeCallbackService.callbackKey("doc-key")).thenReturn("doc-key");
         when(onlyOfficeCallbackService.contentUrlHash("http://onlyoffice/output.docx")).thenReturn("url-hash");
-        when(onlyOfficeCallbackService.reserveSave(10L, 1L, "doc-key", 2, "url-hash")).thenReturn(false);
+        when(onlyOfficeService.resolveDocumentServerDownloadUrl("http://onlyoffice/output.docx"))
+                .thenReturn("http://onlyoffice/output.docx");
+        when(onlyOfficeCallbackService.reserveSave(
+                10L, 1L, 2L, "doc-key", 2, "url-hash", "http://onlyoffice/output.docx"))
+                .thenReturn(false);
 
         Map<String, Integer> response = controller.teamCallback(10L, 1L, "callback-token", request);
 
         assertThat(response).containsEntry("error", 0);
         verify(teamPermissionService).requireWrite(2L, 10L, 1L);
-        verify(teamTaskService, never()).startTask(anyLong(), anyLong(), anyString(), anyString(), anyLong(), anyString());
+        verify(teamTaskService, never()).queueTask(anyLong(), anyLong(), anyString(), anyString(), anyLong(), anyString());
         verify(onlyOfficeService, never()).downloadEditedContent(anyString());
-        verify(fileVersionService, never()).saveTeamEditedVersion(anyLong(), anyLong(), anyLong(), any());
     }
 
     @Test
-    void teamCallback_shouldSaveFirstCallbackAndMarkIdempotencyRecord() {
+    void teamCallback_shouldQueueFirstCallbackAndReturnFast() {
         OnlyOfficeCallbackRequest request = saveRequest();
-        byte[] content = "edited".getBytes();
-        FileVersionEntity version = FileVersionEntity.builder().id(99L).versionNumber(3).build();
         TeamTaskEntity task = TeamTaskEntity.builder().id(77L).build();
         when(onlyOfficeService.validateCallbackToken("callback-token", 1L, 10L, "doc-key"))
                 .thenReturn(2L);
         when(onlyOfficeCallbackService.callbackKey("doc-key")).thenReturn("doc-key");
         when(onlyOfficeCallbackService.contentUrlHash("http://onlyoffice/output.docx")).thenReturn("url-hash");
-        when(onlyOfficeCallbackService.reserveSave(10L, 1L, "doc-key", 2, "url-hash")).thenReturn(true);
-        when(teamTaskService.startTask(10L, 2L, "ONLYOFFICE_SAVE", "FILE", 1L, "保存在线编辑文档"))
+        when(onlyOfficeService.resolveDocumentServerDownloadUrl("http://onlyoffice/output.docx"))
+                .thenReturn("http://onlyoffice/output.docx");
+        when(onlyOfficeCallbackService.reserveSave(
+                10L, 1L, 2L, "doc-key", 2, "url-hash", "http://onlyoffice/output.docx"))
+                .thenReturn(true);
+        when(teamTaskService.queueTask(10L, 2L, "ONLYOFFICE_SAVE", "FILE", 1L, "保存在线编辑文档"))
                 .thenReturn(task);
-        when(onlyOfficeService.downloadEditedContent("http://onlyoffice/output.docx")).thenReturn(content);
-        when(fileVersionService.saveTeamEditedVersion(10L, 2L, 1L, content)).thenReturn(version);
 
         Map<String, Integer> response = controller.teamCallback(10L, 1L, "callback-token", request);
 
         assertThat(response).containsEntry("error", 0);
-        verify(onlyOfficeCallbackService).markSaved(10L, 1L, "doc-key", 2, "url-hash", 99L);
-        verify(teamTaskService).markSucceeded(77L, "保存为版本 3");
+        verify(onlyOfficeCallbackService).attachTask(10L, 1L, "doc-key", 2, "url-hash", 77L);
+        verify(onlyOfficeService, never()).downloadEditedContent(anyString());
+        verify(teamTaskService, never()).markSucceeded(anyLong(), anyString());
     }
 
     @Test
-    void teamCallback_shouldReleaseReservationWhenSaveFails() {
+    void teamCallback_shouldIgnoreNonSaveStatus() {
         OnlyOfficeCallbackRequest request = saveRequest();
+        request.setStatus(1);
         when(onlyOfficeService.validateCallbackToken("callback-token", 1L, 10L, "doc-key"))
                 .thenReturn(2L);
-        when(onlyOfficeCallbackService.callbackKey("doc-key")).thenReturn("doc-key");
-        when(onlyOfficeCallbackService.contentUrlHash("http://onlyoffice/output.docx")).thenReturn("url-hash");
-        when(onlyOfficeCallbackService.reserveSave(10L, 1L, "doc-key", 2, "url-hash")).thenReturn(true);
-        when(teamTaskService.startTask(10L, 2L, "ONLYOFFICE_SAVE", "FILE", 1L, "保存在线编辑文档"))
-                .thenReturn(TeamTaskEntity.builder().id(77L).build());
-        when(onlyOfficeService.downloadEditedContent("http://onlyoffice/output.docx"))
-                .thenThrow(new RuntimeException("download failed"));
 
-        assertThatThrownBy(() -> controller.teamCallback(10L, 1L, "callback-token", request))
-                .isInstanceOf(RuntimeException.class);
+        Map<String, Integer> response = controller.teamCallback(10L, 1L, "callback-token", request);
 
-        verify(onlyOfficeCallbackService).releaseSaveReservation(10L, 1L, "doc-key", 2, "url-hash");
-        verify(teamTaskService).markFailed(77L, "download failed");
+        assertThat(response).containsEntry("error", 0);
+        verify(onlyOfficeCallbackService, never()).reserveSave(anyLong(), anyLong(), anyLong(), anyString(), any(), anyString(), anyString());
+        verify(teamTaskService, never()).queueTask(anyLong(), anyLong(), anyString(), anyString(), anyLong(), anyString());
     }
 
     private OnlyOfficeCallbackRequest saveRequest() {

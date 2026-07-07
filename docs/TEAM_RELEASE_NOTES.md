@@ -55,6 +55,7 @@
 - 支持团队 Office 文件按权限返回只读或可编辑配置。
 - 支持团队文档编辑保存为新版本。
 - OnlyOffice callback 具备幂等保护，重复 callback 不生成重复版本。
+- OnlyOffice 保存 callback 已异步化，HTTP callback 只入队并快速返回；后台 worker 负责下载编辑结果、保存版本，失败后可在团队任务中心重试。
 - 团队文档历史版本支持列表、下载、恢复。
 
 ### Admin 后台
@@ -80,6 +81,10 @@
   - `V6__team_notifications_permissions_archival.sql`
   - `V7__upload_completion_idempotency.sql`
   - `V8__onlyoffice_callback_idempotency.sql`
+  - `V9__team_event_outbox.sql`
+  - `V10__notification_preferences.sql`
+  - `V11__team_tasks.sql`
+  - `V12__onlyoffice_async_save_tasks.sql`
 - PostgreSQL 版本按当前环境模板使用 PostgreSQL 18。
 - 生产环境必须替换默认 JWT、数据库、邮箱、OnlyOffice JWT secret 等密钥。
 - 升级前建议备份 PostgreSQL 和 SeaweedFS 数据；团队文件、分享、版本、审计都依赖这两类存储。
@@ -113,9 +118,9 @@
 
 - 团队事件 outbox 已落地，后续可接消息队列消费。
 - 团队通知已提供 Web/Tauri SSE 实时未读数刷新，用户可在个人资料页配置团队通知类型偏好。
-- 团队任务中心已提供审计导出、ZIP、缩略图、OnlyOffice 保存和团队回收站清理的状态入口；当前重试会把失败任务重置为 `PENDING`，真正后台 worker 仍留给后续异步化任务。
+- 团队任务中心已提供审计导出、ZIP、缩略图、OnlyOffice 保存和团队回收站清理的状态入口；OnlyOffice 保存失败重试会把任务和 callback 重新置为 `PENDING`，由后台 worker 再处理。
 - 权限来源说明尚未完整展示，前端只能看到最终效果或基础权限配置。
-- OnlyOffice 保存异步化、保存失败可见性、多格式真实保存 E2E、个人只读预览 E2E、禁用 AI/插件回归测试仍在后续任务中。
+- OnlyOffice 保存失败可见性、多格式真实保存 E2E、个人只读预览 E2E、禁用 AI/插件回归测试仍在后续任务中。
 - Web/Tauri/Android 的完整团队 E2E 和契约测试仍需继续补齐。
 - 消息队列尚未引入，队列选型和积压指标仍在后续性能任务中。
 - Compose 健康检查、OnlyOffice 部署说明、备份恢复说明和观测指标仍需按 OPS/OBS 任务继续完善。

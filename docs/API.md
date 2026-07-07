@@ -2146,7 +2146,7 @@ POST /api/v1/teams/{teamId}/tasks/{taskId}/retry
 Authorization: Bearer <accessToken>
 ```
 
-团队成员可查看团队长任务状态。当前任务中心记录同步触发任务的可见状态，覆盖团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；后续异步 worker 可继续消费 `PENDING` 任务。
+团队成员可查看团队长任务状态。任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；OnlyOffice 保存任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。
 
 | 端点 | 权限 | 说明 |
 |------|------|------|
@@ -2234,7 +2234,7 @@ data: {"unreadCount":3}
 
 ## 十八、OnlyOffice 文档 `/api/v1/office` 和 `/api/v1/teams/{teamId}/office`
 
-OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只读预览；团队文件根据团队角色返回只读或可编辑配置，保存通过 Document Server callback 写入新版本。
+OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只读预览；团队文件根据团队角色和文件级有效权限返回只读或可编辑配置，保存通过 Document Server callback 入队，再由后台 worker 下载编辑结果并写入新版本。
 
 ### 18.1 配置接口
 
@@ -2284,13 +2284,13 @@ OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只�
 }
 ```
 
-`status` 为 `2` 或 `6` 时，后端从 `url` 下载编辑结果并调用团队版本服务保存为新版本；其他状态返回 `{ "error": 0 }` 但不写版本。个人文件没有 callback，始终只读。
+`status` 为 `2` 或 `6` 时，后端验证 callback token、团队写权限和幂等记录后立即创建 `ONLYOFFICE_SAVE` 团队任务并返回 `{ "error": 0 }`；后台 worker 再从 `url` 下载编辑结果并调用团队版本服务保存为新版本。其他状态返回 `{ "error": 0 }` 但不写版本。个人文件没有 callback，始终只读。
 
 保存回调具有幂等保护：
 
 - callback token 内包含配置生成时的 `document.key`，回调请求体中的 `key` 必须一致。
-- 后端按 `teamId + fileId + key + status + urlHash` 记录保存回调；重复投递同一个回调时直接返回 `{ "error": 0 }`，不会重复下载或生成版本。
+- 后端按 `teamId + fileId + key + status + urlHash` 记录保存回调；重复投递同一个回调时直接返回 `{ "error": 0 }`，不会重复入队或生成版本。
 - 保存版本时仍会锁定文件行，保证并发保存的版本号顺序可预测。
-- 若下载或保存失败，占位记录会释放，OnlyOffice 后续重试可再次进入保存流程。
+- 若后台下载或保存失败，callback 记录进入失败状态，关联团队任务进入 `FAILED`；用户在团队任务中心重试后会重新置为 `PENDING` 并由 worker 再次处理。
 
 **错误码:** 400（非 Office 文件或 callback 参数无效）、403（token 无效或团队不可写）、404001（文件不存在）、500003（下载编辑结果失败）。

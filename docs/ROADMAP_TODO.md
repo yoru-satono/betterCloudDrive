@@ -183,6 +183,7 @@
 - 目标：OnlyOffice 保存不阻塞 callback 主流程。
 - 范围：callback 接收后入队或入 outbox，后台下载并保存版本。
 - 验收：callback 快速返回；后台失败可重试并记录状态。
+- 状态：已完成。
 
 ### OFFICE-02 保存失败可见
 

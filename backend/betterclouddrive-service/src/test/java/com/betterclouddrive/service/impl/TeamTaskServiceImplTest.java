@@ -4,12 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
+import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +31,9 @@ class TeamTaskServiceImplTest {
 
     @Mock
     private TeamTaskRepository teamTaskRepository;
+
+    @Mock
+    private OnlyOfficeCallbackRepository onlyOfficeCallbackRepository;
 
     @InjectMocks
     private TeamTaskServiceImpl teamTaskService;
@@ -57,6 +62,35 @@ class TeamTaskServiceImplTest {
         assertThat(task.getStartedAt()).isNotNull();
         assertThat(task.getCreatedAt()).isNotNull();
         assertThat(task.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void queueTask_shouldCreatePendingTaskWithoutStartTime() {
+        when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TeamTaskEntity task = teamTaskService.queueTask(10L, 2L, "onlyoffice_save", "file", 7L, "保存文档");
+
+        assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_PENDING);
+        assertThat(task.getStartedAt()).isNull();
+        assertThat(task.getCreatedAt()).isNotNull();
+    }
+
+    @Test
+    void markRunning_shouldMoveTaskToRunning() {
+        TeamTaskEntity task = TeamTaskEntity.builder()
+                .id(7L)
+                .status(TeamTaskEntity.STATUS_PENDING)
+                .errorMessage("retry")
+                .build();
+        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        teamTaskService.markRunning(7L);
+
+        assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_RUNNING);
+        assertThat(task.getErrorMessage()).isNull();
+        assertThat(task.getStartedAt()).isNotNull();
+        assertThat(task.getCompletedAt()).isNull();
     }
 
     @Test
@@ -104,6 +138,23 @@ class TeamTaskServiceImplTest {
         assertThat(retried.getStartedAt()).isNull();
         assertThat(retried.getCompletedAt()).isNull();
         assertThat(retried.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void retryTask_shouldResetOnlyOfficeCallbackWhenTaskIsOnlyOfficeSave() {
+        TeamTaskEntity task = TeamTaskEntity.builder()
+                .id(7L)
+                .teamId(10L)
+                .taskType("ONLYOFFICE_SAVE")
+                .status(TeamTaskEntity.STATUS_FAILED)
+                .retryCount(0)
+                .build();
+        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        teamTaskService.retryTask(10L, 7L);
+
+        verify(onlyOfficeCallbackRepository).resetFailedByTaskId(eq(7L), any());
     }
 
     @Test

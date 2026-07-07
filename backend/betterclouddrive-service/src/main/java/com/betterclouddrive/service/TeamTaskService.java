@@ -9,6 +9,10 @@ public interface TeamTaskService {
 
     TeamTaskEntity startTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title);
 
+    TeamTaskEntity queueTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title);
+
+    void markRunning(Long taskId);
+
     void markSucceeded(Long taskId, String resultMessage);
 
     void markFailed(Long taskId, String errorMessage);

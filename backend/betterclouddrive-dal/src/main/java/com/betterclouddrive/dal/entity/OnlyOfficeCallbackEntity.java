@@ -31,6 +31,9 @@ public class OnlyOfficeCallbackEntity {
     @Column(name = "file_id")
     private Long fileId;
 
+    @Column(name = "actor_user_id")
+    private Long actorUserId;
+
     @Column(name = "callback_key")
     private String callbackKey;
 
@@ -40,14 +43,23 @@ public class OnlyOfficeCallbackEntity {
     @Column(name = "content_url_hash")
     private String contentUrlHash;
 
+    @Column(name = "download_url")
+    private String downloadUrl;
+
     @Column(name = "state")
     private Integer state;
+
+    @Column(name = "task_id")
+    private Long taskId;
 
     @Column(name = "version_id")
     private Long versionId;
 
     @Column(name = "error_message")
     private String errorMessage;
+
+    @Column(name = "last_attempt_at")
+    private LocalDateTime lastAttemptAt;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
