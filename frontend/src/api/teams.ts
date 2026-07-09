@@ -99,6 +99,16 @@ export const exportTeamAuditLogs = (teamId: number, params: {
 } = {}) =>
   api.get<Blob>(`/teams/${teamId}/audit-logs/export`, { params, responseType: 'blob' })
 
+export const queueTeamAuditExport = (teamId: number, params: {
+  actorUserId?: number
+  action?: string
+  targetType?: string
+  result?: number
+  startAt?: string
+  endAt?: string
+} = {}) =>
+  api.post<ApiResponse<TeamTask>>(`/teams/${teamId}/audit-logs/export-tasks`, undefined, { params })
+
 export const listTeamActivities = (teamId: number, page = 1, size = 20) =>
   api.get<ApiResponse<PageResult<TeamActivity>>>(`/teams/${teamId}/activities`, { params: { page, size } })
 
@@ -112,6 +122,9 @@ export const listTeamTasks = (teamId: number, params: {
 
 export const retryTeamTask = (teamId: number, taskId: number) =>
   api.post<ApiResponse<TeamTask>>(`/teams/${teamId}/tasks/${taskId}/retry`)
+
+export const downloadTeamTaskResult = (teamId: number, taskId: number) =>
+  api.get<Blob>(`/teams/${teamId}/tasks/${taskId}/download`, { responseType: 'blob' })
 
 export const addTeamFavorite = (teamId: number, fileId: number) =>
   api.post<ApiResponse<void>>(`/teams/${teamId}/favorites/${fileId}`)

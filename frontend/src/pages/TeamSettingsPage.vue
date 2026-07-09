@@ -197,13 +197,12 @@ async function loadAuditLogs() {
 }
 
 async function exportAuditLogs() {
-  const response = await teamsApi.exportTeamAuditLogs(teamId.value, {
+  await teamsApi.queueTeamAuditExport(teamId.value, {
     action: auditAction.value.trim() || undefined,
     targetType: auditTargetType.value.trim() || undefined,
     result: auditResult.value === '' ? undefined : Number(auditResult.value),
   })
-  await saveBlobResponse(response, `team-${teamId.value}-audit.csv`)
-  toast.success('审计日志已导出')
+  toast.success('审计导出任务已提交')
   await loadTeamTasks()
 }
 
@@ -251,6 +250,11 @@ async function retryTask(task: TeamTask) {
   await teamsApi.retryTeamTask(teamId.value, task.id)
   toast.success('任务已重新排队')
   await loadTeamTasks()
+}
+
+async function downloadTaskResult(task: TeamTask) {
+  const response = await teamsApi.downloadTeamTaskResult(teamId.value, task.id)
+  await saveBlobResponse(response, task.resultFileName || `team-${teamId.value}-task-${task.id}.csv`)
 }
 
 async function loadTeamTags() {
@@ -662,6 +666,14 @@ onMounted(async () => {
             <div class="team-tasks__side">
               <span class="team-tasks__status" :class="`team-tasks__status--${task.status.toLowerCase()}`">{{ task.status }}</span>
               <span class="font-mono">{{ task.progress }}%</span>
+              <OButton
+                v-if="task.status === 'SUCCEEDED' && task.taskType === 'AUDIT_EXPORT' && task.resultFileName"
+                variant="ghost"
+                size="sm"
+                @click="downloadTaskResult(task)"
+              >
+                下载
+              </OButton>
               <OButton v-if="task.status === 'FAILED'" variant="ghost" size="sm" @click="retryTask(task)">重试</OButton>
             </div>
           </div>

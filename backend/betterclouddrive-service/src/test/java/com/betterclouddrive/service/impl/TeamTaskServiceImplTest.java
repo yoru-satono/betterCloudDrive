@@ -13,6 +13,7 @@ import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
+import com.betterclouddrive.service.dto.TeamTaskResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -23,6 +24,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -68,11 +70,38 @@ class TeamTaskServiceImplTest {
     void queueTask_shouldCreatePendingTaskWithoutStartTime() {
         when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TeamTaskEntity task = teamTaskService.queueTask(10L, 2L, "onlyoffice_save", "file", 7L, "保存文档");
+        TeamTaskEntity task = teamTaskService.queueTask(10L, 2L, "onlyoffice_save", "file", 7L, "保存文档", "{\"id\":7}");
 
         assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_PENDING);
+        assertThat(task.getPayload()).isEqualTo("{\"id\":7}");
         assertThat(task.getStartedAt()).isNull();
         assertThat(task.getCreatedAt()).isNotNull();
+    }
+
+    @Test
+    void getTask_shouldRequireMatchingTeam() {
+        TeamTaskEntity task = TeamTaskEntity.builder().id(7L).teamId(10L).build();
+        when(teamTaskRepository.findByIdAndTeamId(7L, 10L)).thenReturn(Optional.of(task));
+
+        assertThat(teamTaskService.getTask(10L, 7L)).isSameAs(task);
+    }
+
+    @Test
+    void listPendingTasks_shouldNormalizeTypeAndApplyLimit() {
+        TeamTaskEntity task = TeamTaskEntity.builder().id(7L).taskType("AUDIT_EXPORT").status(TeamTaskEntity.STATUS_PENDING).build();
+        when(teamTaskRepository.findByTaskTypeAndStatusOrderByCreatedAtAsc(
+                eq("AUDIT_EXPORT"),
+                eq(TeamTaskEntity.STATUS_PENDING),
+                any(Pageable.class)))
+                .thenReturn(List.of(task));
+
+        List<TeamTaskEntity> tasks = teamTaskService.listPendingTasks(" audit_export ", 5);
+
+        assertThat(tasks).containsExactly(task);
+        verify(teamTaskRepository).findByTaskTypeAndStatusOrderByCreatedAtAsc(
+                eq("AUDIT_EXPORT"),
+                eq(TeamTaskEntity.STATUS_PENDING),
+                argThat((Pageable pageable) -> pageable.getPageSize() == 5));
     }
 
     @Test
@@ -91,6 +120,34 @@ class TeamTaskServiceImplTest {
         assertThat(task.getErrorMessage()).isNull();
         assertThat(task.getStartedAt()).isNotNull();
         assertThat(task.getCompletedAt()).isNull();
+    }
+
+    @Test
+    void markSucceeded_shouldStoreResultMetadata() {
+        TeamTaskEntity task = TeamTaskEntity.builder()
+                .id(7L)
+                .status(TeamTaskEntity.STATUS_RUNNING)
+                .progress(20)
+                .build();
+        LocalDateTime expiresAt = LocalDateTime.now().plusHours(1);
+        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+
+        teamTaskService.markSucceeded(7L, "导出 3 条审计日志", new TeamTaskResult(
+                "audit-exports/7.csv",
+                "team-10-audit.csv",
+                "text/csv;charset=UTF-8",
+                128L,
+                expiresAt));
+
+        assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_SUCCEEDED);
+        assertThat(task.getProgress()).isEqualTo(100);
+        assertThat(task.getResultMessage()).isEqualTo("导出 3 条审计日志");
+        assertThat(task.getResultPath()).isEqualTo("audit-exports/7.csv");
+        assertThat(task.getResultFileName()).isEqualTo("team-10-audit.csv");
+        assertThat(task.getResultContentType()).isEqualTo("text/csv;charset=UTF-8");
+        assertThat(task.getResultSizeBytes()).isEqualTo(128L);
+        assertThat(task.getResultExpiresAt()).isEqualTo(expiresAt);
+        verify(teamTaskRepository).save(task);
     }
 
     @Test
@@ -134,6 +191,8 @@ class TeamTaskServiceImplTest {
         assertThat(retried.getStatus()).isEqualTo(TeamTaskEntity.STATUS_PENDING);
         assertThat(retried.getProgress()).isZero();
         assertThat(retried.getErrorMessage()).isNull();
+        assertThat(retried.getResultMessage()).isNull();
+        assertThat(retried.getResultPath()).isNull();
         assertThat(retried.getRetryCount()).isEqualTo(3);
         assertThat(retried.getStartedAt()).isNull();
         assertThat(retried.getCompletedAt()).isNull();
@@ -183,5 +242,39 @@ class TeamTaskServiceImplTest {
         assertThatThrownBy(() -> teamTaskService.retryTask(10L, 7L))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404));
+    }
+
+    @Test
+    void clearResult_shouldRemoveStoredResultMetadata() {
+        TeamTaskEntity task = TeamTaskEntity.builder()
+                .id(7L)
+                .resultPath("audit-exports/7.csv")
+                .resultFileName("team-10-audit.csv")
+                .resultContentType("text/csv")
+                .resultSizeBytes(12L)
+                .resultExpiresAt(LocalDateTime.now())
+                .resultMessage("导出完成")
+                .build();
+        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+
+        teamTaskService.clearResult(7L, "结果已清理");
+
+        assertThat(task.getResultPath()).isNull();
+        assertThat(task.getResultFileName()).isNull();
+        assertThat(task.getResultContentType()).isNull();
+        assertThat(task.getResultSizeBytes()).isNull();
+        assertThat(task.getResultExpiresAt()).isNull();
+        assertThat(task.getResultMessage()).isEqualTo("结果已清理");
+        verify(teamTaskRepository).save(task);
+    }
+
+    @Test
+    void listExpiredResults_shouldDelegateToRepository() {
+        LocalDateTime now = LocalDateTime.now();
+        TeamTaskEntity task = TeamTaskEntity.builder().id(7L).build();
+        when(teamTaskRepository.findByResultExpiresAtLessThanEqualAndResultPathIsNotNull(now))
+                .thenReturn(List.of(task));
+
+        assertThat(teamTaskService.listExpiredResults(now)).containsExactly(task);
     }
 }

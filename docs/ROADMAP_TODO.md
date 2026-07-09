@@ -441,7 +441,8 @@
 
 - 目标：大审计导出改为后台任务。
 - 范围：提交导出任务、查询状态、下载结果、过期清理。
-- 验收：大数据量导出不会阻塞 HTTP 请求。
+- 状态：已完成。
+- 验收：团队审计导出支持 `POST /api/v1/teams/{teamId}/audit-logs/export-tasks` 创建后台任务，worker 生成 CSV 结果文件，任务中心可下载成功结果，过期结果会被清理；保留同步导出接口兼容旧客户端。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=TeamTaskServiceImplTest,TeamAuditExportTaskServiceImplTest,TeamTaskResultStorageServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-web -am "-Dtest=TeamControllerTaskTest,TeamControllerContractTest,AuditCsvExporterTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=TeamAuditExportTaskTest,TeamTaskResultCleanupTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- endpoint-contracts.test.ts`。
 
 ### PERF-05 缩略图异步化
 

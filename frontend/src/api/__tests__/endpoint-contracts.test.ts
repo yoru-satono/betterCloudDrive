@@ -264,6 +264,11 @@ describe('API endpoint contracts', () => {
       responseType: 'blob',
     })
 
+    await teamsApi.queueTeamAuditExport(10, { action: 'FILE_DELETE' })
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/audit-logs/export-tasks', undefined, {
+      params: { action: 'FILE_DELETE' },
+    })
+
     await teamsApi.listTeamActivities(10, 2, 15)
     expect(apiMock.get).toHaveBeenCalledWith('/teams/10/activities', {
       params: { page: 2, size: 15 },
@@ -276,6 +281,11 @@ describe('API endpoint contracts', () => {
 
     await teamsApi.retryTeamTask(10, 77)
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/tasks/77/retry')
+
+    await teamsApi.downloadTeamTaskResult(10, 77)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/tasks/77/download', {
+      responseType: 'blob',
+    })
 
     await teamsApi.addTeamFavorite(10, 7)
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/favorites/7')

@@ -19,7 +19,7 @@ Redis 已经是 BetterCloudDrive 的必需组件，用于验证码、上传分�
 | 工作负载 | 当前状态 | 队列化收益 | 第一阶段策略 |
 | --- | --- | --- | --- |
 | 团队通知 | 成员、邀请、权限、配额、删除等主流程已写 `NOTIFICATION` dispatch outbox，并由 `bcd:stream:notifications` worker 异步生成通知 | 降低团队成员、邀请、权限、配额、删除等主请求延迟；通知失败可重试 | 已队列化 |
-| 审计导出 | 已有团队任务中心入口 | 大导出不阻塞 HTTP 请求 | 第二批队列化 |
+| 审计导出 | 已通过 `team_tasks` 和 Spring scheduler worker 后台生成 CSV 结果 | 大导出不阻塞 HTTP 请求；结果可下载、可过期清理 | 已任务化；后续可接入 `bcd:stream:team-tasks` 统一唤醒 |
 | 缩略图 | 已有生成逻辑和任务状态 | 上传后先返回列表，后台生成缩略图 | 第二批队列化 |
 | OnlyOffice 保存 | callback 已入任务，后台 worker 保存 | Redis Stream 可替代轮询，提高失败重试和积压观测 | 第二批队列化 |
 | 文件夹 ZIP | 已有任务化基础 | 大目录打包不占用请求线程 | 第二批队列化 |
@@ -84,7 +84,7 @@ Redis 已经是 BetterCloudDrive 的必需组件，用于验证码、上传分�
 
 ## 后续批次
 
-1. `PERF-04` 审计导出异步化：把导出请求创建为 `team_tasks`，worker 生成 CSV 并提供下载结果。
+1. `PERF-04` 审计导出异步化已完成：导出请求创建为 `team_tasks`，当前由 Spring scheduler 扫描 `PENDING` 任务生成 CSV 并提供下载结果；后续可把任务唤醒接入 `bcd:stream:team-tasks`。
 2. `PERF-05` 缩略图异步化：上传后创建缩略图任务，worker 生成缩略图并更新文件记录。
 3. `PERF-06` ZIP 任务化：大文件夹下载先创建 ZIP 任务，再异步生成临时包。
 4. `OBS-03` 队列积压指标：补 pending、retry、dead-letter、处理耗时和 stream 长度指标。

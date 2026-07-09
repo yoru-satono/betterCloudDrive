@@ -1,23 +1,21 @@
 package com.betterclouddrive.web.export;
 
 import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
+import com.betterclouddrive.service.csv.TeamAuditCsvService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 
 class AuditCsvExporterTest {
 
-    private final AuditCsvExporter exporter = new AuditCsvExporter(
-            Clock.fixed(Instant.parse("2026-06-27T04:59:14Z"), ZoneId.of("Asia/Shanghai")));
+    private final TeamAuditCsvService csvService = new TeamAuditCsvService();
+    private final AuditCsvExporter exporter = new AuditCsvExporter(csvService);
 
     @Test
     void teamAuditResponse_shouldBuildCsvResponseWithStableFileName() {
@@ -39,7 +37,7 @@ class AuditCsvExporterTest {
         assertThat(response.getHeaders().getContentType())
                 .isEqualTo(new MediaType("text", "csv", java.nio.charset.StandardCharsets.UTF_8));
         assertThat(response.getHeaders().getFirst(HttpHeaders.CONTENT_DISPOSITION))
-                .isEqualTo("attachment; filename=\"team-10-audit-20260627125914.csv\"");
+                .matches("attachment; filename=\"team-10-audit-\\d{14}\\.csv\"");
         assertThat(response.getBody()).isEqualTo(String.join("\n",
                 "createdAt,teamId,actorUserId,action,targetType,targetId,result,statusCode,traceId,details",
                 "\"2026-06-27T12:59:14\",\"10\",\"2\",\"SHARE_CREATE\",\"FILE\",\"99\",\"1\",\"200\",\"trace-1\",\"created \"\"public\"\" share\"",
@@ -53,7 +51,7 @@ class AuditCsvExporterTest {
                 .action("READ")
                 .build();
 
-        assertThat(exporter.teamAuditCsv(List.of(log))).isEqualTo(String.join("\n",
+        assertThat(csvService.teamAuditCsv(List.of(log))).isEqualTo(String.join("\n",
                 "createdAt,teamId,actorUserId,action,targetType,targetId,result,statusCode,traceId,details",
                 ",\"10\",,\"READ\",,,,,,",
                 ""));

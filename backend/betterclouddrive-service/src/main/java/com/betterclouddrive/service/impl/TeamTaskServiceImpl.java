@@ -7,6 +7,7 @@ import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
 import com.betterclouddrive.service.TeamTaskService;
+import com.betterclouddrive.service.dto.TeamTaskResult;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -51,13 +52,34 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     @Override
     @Transactional
     public TeamTaskEntity startTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title) {
-        return createTask(teamId, actorUserId, taskType, targetType, targetId, title, TeamTaskEntity.STATUS_RUNNING);
+        return createTask(teamId, actorUserId, taskType, targetType, targetId, title, null, TeamTaskEntity.STATUS_RUNNING);
     }
 
     @Override
     @Transactional
     public TeamTaskEntity queueTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title) {
-        return createTask(teamId, actorUserId, taskType, targetType, targetId, title, TeamTaskEntity.STATUS_PENDING);
+        return queueTask(teamId, actorUserId, taskType, targetType, targetId, title, null);
+    }
+
+    @Override
+    @Transactional
+    public TeamTaskEntity queueTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title, String payload) {
+        return createTask(teamId, actorUserId, taskType, targetType, targetId, title, payload, TeamTaskEntity.STATUS_PENDING);
+    }
+
+    @Override
+    public TeamTaskEntity getTask(Long teamId, Long taskId) {
+        return teamTaskRepository.findByIdAndTeamId(taskId, teamId)
+                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team task not found"));
+    }
+
+    @Override
+    public List<TeamTaskEntity> listPendingTasks(String taskType, int limit) {
+        int pageSize = Math.max(limit, 1);
+        return teamTaskRepository.findByTaskTypeAndStatusOrderByCreatedAtAsc(
+                normalizeRequired(taskType, "Task type is required"),
+                TeamTaskEntity.STATUS_PENDING,
+                PageRequest.of(0, pageSize));
     }
 
     @Override
@@ -87,6 +109,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
             String targetType,
             Long targetId,
             String title,
+            String payload,
             String status) {
         LocalDateTime now = LocalDateTime.now();
         return teamTaskRepository.save(TeamTaskEntity.builder()
@@ -97,6 +120,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
                 .targetType(StringUtils.hasText(targetType) ? normalize(targetType) : null)
                 .targetId(targetId)
                 .title(StringUtils.hasText(title) ? title.trim() : normalizeRequired(taskType, "Task type is required"))
+                .payload(payload)
                 .progress(0)
                 .retryCount(0)
                 .createdAt(now)
@@ -108,6 +132,12 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     @Override
     @Transactional
     public void markSucceeded(Long taskId, String resultMessage) {
+        markSucceeded(taskId, resultMessage, null);
+    }
+
+    @Override
+    @Transactional
+    public void markSucceeded(Long taskId, String resultMessage, TeamTaskResult result) {
         if (taskId == null) {
             return;
         }
@@ -120,6 +150,13 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         task.setResultMessage(resultMessage);
         task.setErrorMessage(null);
         task.setCompletedAt(LocalDateTime.now());
+        if (result != null) {
+            task.setResultPath(result.path());
+            task.setResultFileName(result.fileName());
+            task.setResultContentType(result.contentType());
+            task.setResultSizeBytes(result.sizeBytes());
+            task.setResultExpiresAt(result.expiresAt());
+        }
         teamTaskRepository.save(task);
     }
 
@@ -153,6 +190,12 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         task.setStatus(TeamTaskEntity.STATUS_PENDING);
         task.setProgress(0);
         task.setErrorMessage(null);
+        task.setResultMessage(null);
+        task.setResultPath(null);
+        task.setResultFileName(null);
+        task.setResultContentType(null);
+        task.setResultSizeBytes(null);
+        task.setResultExpiresAt(null);
         task.setRetryCount((task.getRetryCount() == null ? 0 : task.getRetryCount()) + 1);
         task.setStartedAt(null);
         task.setCompletedAt(null);
@@ -162,6 +205,32 @@ public class TeamTaskServiceImpl implements TeamTaskService {
             onlyOfficeCallbackRepository.resetFailedByTaskId(taskId, LocalDateTime.now());
         }
         return saved;
+    }
+
+    @Override
+    @Transactional
+    public void clearResult(Long taskId, String resultMessage) {
+        if (taskId == null) {
+            return;
+        }
+        TeamTaskEntity task = teamTaskRepository.findById(taskId).orElse(null);
+        if (task == null) {
+            return;
+        }
+        task.setResultPath(null);
+        task.setResultFileName(null);
+        task.setResultContentType(null);
+        task.setResultSizeBytes(null);
+        task.setResultExpiresAt(null);
+        task.setResultMessage(StringUtils.hasText(resultMessage) ? resultMessage.trim() : task.getResultMessage());
+        task.setUpdatedAt(LocalDateTime.now());
+        teamTaskRepository.save(task);
+    }
+
+    @Override
+    public List<TeamTaskEntity> listExpiredResults(LocalDateTime now) {
+        return teamTaskRepository.findByResultExpiresAtLessThanEqualAndResultPathIsNotNull(
+                now == null ? LocalDateTime.now() : now);
     }
 
     private String normalizeRequired(String value, String message) {

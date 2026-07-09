@@ -21,6 +21,7 @@ import com.betterclouddrive.service.FolderZipDownloadService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.service.TagService;
 import com.betterclouddrive.service.TeamActivityService;
+import com.betterclouddrive.service.TeamAuditExportTaskService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamInviteService;
 import com.betterclouddrive.service.TeamPermissionService;
@@ -29,6 +30,7 @@ import com.betterclouddrive.service.TeamTaskService;
 import com.betterclouddrive.service.UploadService;
 import com.betterclouddrive.service.dto.TeamActivityItem;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
+import com.betterclouddrive.service.dto.TeamTaskDownload;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.download.ByteRange;
 import com.betterclouddrive.web.download.DownloadTicketService;
@@ -81,6 +83,7 @@ public class TeamController {
     private final ShareService shareService;
     private final TeamInviteService teamInviteService;
     private final TeamActivityService teamActivityService;
+    private final TeamAuditExportTaskService teamAuditExportTaskService;
     private final TeamAuditService teamAuditService;
     private final TagService tagService;
     private final FavoriteService favoriteService;
@@ -251,6 +254,20 @@ public class TeamController {
         }
     }
 
+    @PostMapping("/{teamId}/audit-logs/export-tasks")
+    public ApiResponse<TeamTaskEntity> queueAuditExport(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @RequestParam(required = false) Long actorUserId,
+            @RequestParam(required = false) String action,
+            @RequestParam(required = false) String targetType,
+            @RequestParam(required = false) Integer result,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startAt,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt) {
+        return ApiResponse.success(teamAuditExportTaskService.queueExport(
+                user.getUserId(), teamId, actorUserId, action, targetType, result, startAt, endAt));
+    }
+
     @GetMapping("/{teamId}/tasks")
     public ApiResponse<PageResult<TeamTaskEntity>> listTasks(
             @CurrentUser UserPrincipal user,
@@ -270,6 +287,23 @@ public class TeamController {
             @PathVariable Long taskId) {
         teamService.requireRead(user.getUserId(), teamId);
         return ApiResponse.success(teamTaskService.retryTask(teamId, taskId));
+    }
+
+    @GetMapping("/{teamId}/tasks/{taskId}/download")
+    public ResponseEntity<StreamingResponseBody> downloadTaskResult(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @PathVariable Long taskId) {
+        TeamTaskDownload download = teamAuditExportTaskService.downloadExportResult(user.getUserId(), teamId, taskId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(download.contentType()))
+                .contentLength(download.sizeBytes())
+                .header(HttpHeaders.CONTENT_DISPOSITION, attachmentDisposition(download.fileName()))
+                .body(outputStream -> {
+                    try (InputStream inputStream = download.inputStream()) {
+                        inputStream.transferTo(outputStream);
+                    }
+                });
     }
 
     @PostMapping("/{teamId}/favorites/{fileId}")

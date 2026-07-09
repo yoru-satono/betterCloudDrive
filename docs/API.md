@@ -2131,10 +2131,11 @@ Authorization: Bearer <accessToken>
 ```
 GET /api/v1/teams/{teamId}/audit-logs?action=&targetType=&actorUserId=&result=&startAt=&endAt=&page=1&size=20
 GET /api/v1/teams/{teamId}/audit-logs/export?action=&targetType=&actorUserId=&result=&startAt=&endAt=
+POST /api/v1/teams/{teamId}/audit-logs/export-tasks?action=&targetType=&actorUserId=&result=&startAt=&endAt=
 Authorization: Bearer <accessToken>
 ```
 
-OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表和导出接口使用相同过滤语义。导出响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。
+OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表、同步导出和异步导出任务使用相同过滤语义。`GET /audit-logs/export` 保留同步 CSV 导出兼容旧客户端，响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。`POST /audit-logs/export-tasks` 返回 `TeamTask`，后台生成 CSV 后可在任务中心下载结果。
 
 **错误码:** 400（参数格式错误）、403（非 OWNER/ADMIN）、404（团队不存在）。
 
@@ -2143,23 +2144,25 @@ OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用
 ```
 GET /api/v1/teams/{teamId}/tasks?status=&type=&page=1&size=20
 POST /api/v1/teams/{teamId}/tasks/{taskId}/retry
+GET /api/v1/teams/{teamId}/tasks/{taskId}/download
 Authorization: Bearer <accessToken>
 ```
 
-团队成员可查看团队长任务状态。任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；OnlyOffice 保存任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。
+团队成员可查看团队长任务状态。任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；OnlyOffice 保存任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。
 
 | 端点 | 权限 | 说明 |
 |------|------|------|
 | `GET /tasks` | 团队成员 | 分页返回团队任务，可按 `status` 和 `type` 过滤 |
 | `POST /tasks/{taskId}/retry` | 团队成员 | 仅允许重试 `FAILED` 任务，状态重置为 `PENDING`，清空失败原因并递增 `retryCount` |
+| `GET /tasks/{taskId}/download` | OWNER/ADMIN | 下载已成功的审计导出任务结果，响应为任务结果文件二进制流 |
 
-**TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`title`、`progress`、`resultMessage`、`errorMessage`、`retryCount`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。
+**TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`title`、`progress`、`resultMessage`、`errorMessage`、`retryCount`、`payload`、`resultPath`、`resultFileName`、`resultContentType`、`resultSizeBytes`、`resultExpiresAt`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。
 
 **状态:** `PENDING`、`RUNNING`、`SUCCEEDED`、`FAILED`。
 
 **当前任务类型:** `AUDIT_EXPORT`、`FOLDER_ZIP`、`THUMBNAIL`、`ONLYOFFICE_SAVE`、`TEAM_CLEANUP`。
 
-**错误码:** 400（非失败任务重试或参数错误）、403（非团队成员）、404（团队或任务不存在）。
+**错误码:** 400（非失败任务重试、任务未成功或参数错误）、403（非团队成员或缺少导出结果下载权限）、404（团队、任务或结果文件不存在）。
 
 ### 16.9 团队活动流
 

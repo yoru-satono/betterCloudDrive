@@ -50,6 +50,23 @@ class TeamControllerContractTest {
         assertIsoDateTime(method.getParameters()[7], "endAt");
     }
 
+    @Test
+    void queueAuditExport_shouldUseIsoDateTimeForTimeFilters() throws NoSuchMethodException {
+        Method method = TeamController.class.getMethod(
+                "queueAuditExport",
+                UserPrincipal.class,
+                Long.class,
+                Long.class,
+                String.class,
+                String.class,
+                Integer.class,
+                LocalDateTime.class,
+                LocalDateTime.class);
+
+        assertIsoDateTime(method.getParameters()[6], "startAt");
+        assertIsoDateTime(method.getParameters()[7], "endAt");
+    }
+
     private void assertIsoDateTime(Parameter parameter, String name) {
         DateTimeFormat dateTimeFormat = findAnnotation(parameter, DateTimeFormat.class);
 

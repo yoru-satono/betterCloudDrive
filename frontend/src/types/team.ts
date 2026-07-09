@@ -67,8 +67,14 @@ export interface TeamTask {
   targetType: string | null
   targetId: number | null
   title: string
+  payload?: string | null
   progress: number
   resultMessage: string | null
+  resultPath?: string | null
+  resultFileName?: string | null
+  resultContentType?: string | null
+  resultSizeBytes?: number | null
+  resultExpiresAt?: string | null
   errorMessage: string | null
   retryCount: number
   createdAt: string

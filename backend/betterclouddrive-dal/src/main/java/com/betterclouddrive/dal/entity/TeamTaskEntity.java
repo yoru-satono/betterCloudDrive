@@ -51,11 +51,29 @@ public class TeamTaskEntity {
     @Column(name = "title", nullable = false)
     private String title;
 
+    @Column(name = "payload")
+    private String payload;
+
     @Column(name = "progress", nullable = false)
     private Integer progress;
 
     @Column(name = "result_message")
     private String resultMessage;
+
+    @Column(name = "result_path")
+    private String resultPath;
+
+    @Column(name = "result_file_name")
+    private String resultFileName;
+
+    @Column(name = "result_content_type")
+    private String resultContentType;
+
+    @Column(name = "result_size_bytes")
+    private Long resultSizeBytes;
+
+    @Column(name = "result_expires_at")
+    private LocalDateTime resultExpiresAt;
 
     @Column(name = "error_message")
     private String errorMessage;
