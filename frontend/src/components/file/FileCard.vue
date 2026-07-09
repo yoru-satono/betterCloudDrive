@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FileIcon from './FileIcon.vue'
+import FileThumbnail from './FileThumbnail.vue'
 import { useFormatters } from '@/composables/useFormatters'
 import type { FileEntity } from '@/types/file'
 
@@ -24,7 +24,7 @@ const { formatSize, formatDate } = useFormatters()
     @contextmenu.prevent="emit('contextmenu', file, $event)"
   >
     <div class="file-card__icon">
-      <FileIcon :mime-type="file.mimeType" :file-type="file.fileType" :size="28" />
+      <FileThumbnail :file="file" :size="28" />
     </div>
     <div class="file-card__name truncate">{{ file.fileName }}</div>
     <div class="file-card__meta">

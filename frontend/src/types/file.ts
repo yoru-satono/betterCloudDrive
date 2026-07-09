@@ -8,6 +8,7 @@ export interface FileEntity {
   mimeType: string | null
   fileSize: number
   storagePath: string | null
+  thumbnailPath?: string | null
   md5Hash: string | null
   isDeleted: boolean
   versionCount: number

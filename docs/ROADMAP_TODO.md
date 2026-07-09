@@ -448,7 +448,8 @@
 
 - 目标：上传后后台生成缩略图。
 - 范围：图片上传事件、worker、失败重试、默认占位。
-- 验收：列表先显示占位，生成后刷新可见缩略图。
+- 状态：已完成。
+- 验收：图片上传完成后只创建 `THUMBNAIL` 后台任务，`ThumbnailGenerationTask` worker 扫描 `PENDING` 任务生成缩略图并更新 `thumbnailPath`；失败任务会进入 `FAILED`，团队任务中心可重试；Web/Tauri 列表在 `thumbnailPath` 为空时显示文件图标，占位刷新后可显示真实缩略图。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=ThumbnailServiceImplTest,UploadServiceImplTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=ThumbnailGenerationTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- FileThumbnail.test.ts`。
 
 ### PERF-06 ZIP 任务化
 

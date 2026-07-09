@@ -18,6 +18,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -74,7 +75,48 @@ class ThumbnailServiceImplTest {
     }
 
     @Test
-    void generateThumbnail_shouldTrackTeamTaskForTeamImage() throws Exception {
+    void generateThumbnailAsync_shouldQueueThumbnailTaskForTeamImage() {
+        FileEntity file = FileEntity.builder()
+                .id(2L)
+                .userId(8L)
+                .teamId(10L)
+                .fileType("file")
+                .mimeType("image/png")
+                .storagePath("objects/team-photo.png")
+                .isDeleted(false)
+                .build();
+        when(fileRepository.findById(2L)).thenReturn(Optional.of(file));
+        when(teamTaskService.queueTask(10L, 8L, "THUMBNAIL", "FILE", 2L, "生成团队文件缩略图"))
+                .thenReturn(TeamTaskEntity.builder().id(55L).build());
+
+        thumbnailService.generateThumbnailAsync(2L);
+
+        verify(teamTaskService).queueTask(10L, 8L, "THUMBNAIL", "FILE", 2L, "生成团队文件缩略图");
+        verifyNoInteractions(storageService);
+    }
+
+    @Test
+    void generateThumbnailAsync_shouldQueueThumbnailTaskForPersonalImage() {
+        FileEntity file = FileEntity.builder()
+                .id(3L)
+                .userId(7L)
+                .fileType("file")
+                .mimeType("image/png")
+                .storagePath("objects/personal-photo.png")
+                .isDeleted(false)
+                .build();
+        when(fileRepository.findById(3L)).thenReturn(Optional.of(file));
+        when(teamTaskService.queueTask(null, 7L, "THUMBNAIL", "FILE", 3L, "生成个人文件缩略图"))
+                .thenReturn(TeamTaskEntity.builder().id(56L).build());
+
+        thumbnailService.generateThumbnailAsync(3L);
+
+        verify(teamTaskService).queueTask(null, 7L, "THUMBNAIL", "FILE", 3L, "生成个人文件缩略图");
+        verifyNoInteractions(storageService);
+    }
+
+    @Test
+    void processPendingThumbnails_shouldGenerateAndMarkTaskSucceeded() throws Exception {
         FileEntity file = FileEntity.builder()
                 .id(2L)
                 .teamId(10L)
@@ -83,17 +125,24 @@ class ThumbnailServiceImplTest {
                 .storagePath("objects/team-photo.png")
                 .isDeleted(false)
                 .build();
+        TeamTaskEntity task = TeamTaskEntity.builder()
+                .id(55L)
+                .taskType("THUMBNAIL")
+                .targetType("FILE")
+                .targetId(2L)
+                .build();
+        when(teamTaskService.listPendingTasks("THUMBNAIL", 5)).thenReturn(List.of(task));
         when(fileRepository.findById(2L)).thenReturn(Optional.of(file));
-        when(teamTaskService.startTask(10L, null, "THUMBNAIL", "FILE", 2L, "生成团队文件缩略图"))
-                .thenReturn(TeamTaskEntity.builder().id(55L).build());
         when(storageService.downloadObject("objects/team-photo.png")).thenReturn(new ByteArrayInputStream(pngBytes()));
         when(storageService.uploadObject(eq("thumbnails/teams/10/2.jpg"), any(InputStream.class), anyLong(), eq("image/jpeg")))
                 .thenReturn("thumbnails/teams/10/2.jpg");
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        thumbnailService.generateThumbnail(2L);
+        int processed = thumbnailService.processPendingThumbnails(5);
 
+        assertThat(processed).isEqualTo(1);
         assertThat(file.getThumbnailPath()).isEqualTo("thumbnails/teams/10/2.jpg");
+        verify(teamTaskService).markRunning(55L);
         verify(teamTaskService).markSucceeded(55L, "缩略图已生成");
     }
 
@@ -116,7 +165,7 @@ class ThumbnailServiceImplTest {
     }
 
     @Test
-    void generateThumbnail_shouldLeaveFileUnchangedWhenImageCannotBeDecoded() {
+    void processPendingThumbnails_shouldMarkTaskFailedWhenImageCannotBeDecoded() {
         FileEntity file = FileEntity.builder()
                 .id(1L)
                 .teamId(10L)
@@ -125,17 +174,24 @@ class ThumbnailServiceImplTest {
                 .storagePath("objects/broken.png")
                 .isDeleted(false)
                 .build();
+        TeamTaskEntity task = TeamTaskEntity.builder()
+                .id(56L)
+                .taskType("THUMBNAIL")
+                .targetType("FILE")
+                .targetId(1L)
+                .build();
+        when(teamTaskService.listPendingTasks("THUMBNAIL", 5)).thenReturn(List.of(task));
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
-        when(teamTaskService.startTask(10L, null, "THUMBNAIL", "FILE", 1L, "生成团队文件缩略图"))
-                .thenReturn(TeamTaskEntity.builder().id(56L).build());
         when(storageService.downloadObject("objects/broken.png"))
                 .thenReturn(new ByteArrayInputStream("not an image".getBytes()));
 
-        thumbnailService.generateThumbnail(1L);
+        int processed = thumbnailService.processPendingThumbnails(5);
 
+        assertThat(processed).isEqualTo(1);
         assertThat(file.getThumbnailPath()).isNull();
         verify(storageService, never()).uploadObject(any(), any(), anyLong(), any());
         verify(fileRepository, never()).save(any(FileEntity.class));
+        verify(teamTaskService).markRunning(56L);
         verify(teamTaskService).markFailed(56L, "图片无法解码");
     }
 

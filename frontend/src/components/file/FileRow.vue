@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import FileIcon from './FileIcon.vue'
+import FileThumbnail from './FileThumbnail.vue'
 import { useFormatters } from '@/composables/useFormatters'
 import type { FileEntity } from '@/types/file'
 
@@ -29,7 +29,7 @@ const { formatSize, formatDate } = useFormatters()
       </div>
     </div>
     <div class="file-row__icon">
-      <FileIcon :mime-type="file.mimeType" :file-type="file.fileType" :size="16" />
+      <FileThumbnail :file="file" :size="16" />
     </div>
     <div class="file-row__name truncate">{{ file.fileName }}</div>
     <div class="file-row__size font-mono">

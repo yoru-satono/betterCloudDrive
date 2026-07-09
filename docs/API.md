@@ -889,7 +889,7 @@ GET /api/v1/files/{fileId}/thumbnail
 Authorization: Bearer <accessToken>
 ```
 
-返回上传图片异步生成的 JPEG 缩略图。缩略图尚未生成、源文件不是普通文件或文件没有缩略图时返回 `404001`，客户端应回退到默认占位图或原始预览。
+返回上传图片后台任务生成的 JPEG 缩略图。缩略图尚未生成、源文件不是普通文件或文件没有缩略图时返回 `404001`，客户端应回退到默认占位图或原始预览。
 
 **Response:** 二进制流，`Content-Type: image/jpeg`，`Content-Disposition: inline`，`Cache-Control: private, max-age=86400`。
 
@@ -1079,9 +1079,10 @@ POST /api/v1/auth/refresh
 
 ### 7.6 缩略图
 
-- 图片文件上传完成后会异步生成 JPEG 缩略图，并把对象存储路径写入 `thumbnailPath`。
-- 当前先支持可由后端 ImageIO 解码的图片格式；解码失败会保留 `thumbnailPath = null`，客户端按无缩略图处理。
+- 图片文件上传完成后会创建 `THUMBNAIL` 后台任务，worker 生成 JPEG 缩略图，并把对象存储路径写入 `thumbnailPath`。
+- 当前先支持可由后端 ImageIO 解码的图片格式；解码失败会保留 `thumbnailPath = null`，客户端按无缩略图处理，团队缩略图失败任务可在团队任务中心重试。
 - 个人文件通过 `GET /api/v1/files/{fileId}/thumbnail` 获取缩略图；团队文件通过 `GET /api/v1/teams/{teamId}/files/{fileId}/thumbnail` 获取。
+- Web/Tauri 列表在 `thumbnailPath` 为空时显示默认文件图标，刷新后若 `thumbnailPath` 已生成则显示缩略图。
 - 文件从回收站永久删除或过期清理时，会同步清理缩略图对象。
 
 ### 7.7 操作日志
@@ -2148,7 +2149,7 @@ GET /api/v1/teams/{teamId}/tasks/{taskId}/download
 Authorization: Bearer <accessToken>
 ```
 
-团队成员可查看团队长任务状态。任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；OnlyOffice 保存任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。
+团队成员可查看团队长任务状态。任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；OnlyOffice 保存和缩略图生成任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。
 
 | 端点 | 权限 | 说明 |
 |------|------|------|

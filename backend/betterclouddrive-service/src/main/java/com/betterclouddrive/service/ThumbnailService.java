@@ -5,4 +5,6 @@ public interface ThumbnailService {
     void generateThumbnailAsync(Long fileId);
 
     void generateThumbnail(Long fileId);
+
+    int processPendingThumbnails(int batchSize);
 }

@@ -362,6 +362,8 @@ npm run build
 | `TEAM_TASK_RESULT_RETENTION_HOURS` | 团队后台任务结果文件保留小时数，默认 24 |
 | `TEAM_AUDIT_EXPORT_BATCH_SIZE` | 单次处理团队审计导出任务数量，默认 10 |
 | `TEAM_AUDIT_EXPORT_INTERVAL_MS` | 团队审计导出 worker 执行间隔，默认 5000 毫秒 |
+| `THUMBNAIL_TASK_BATCH_SIZE` | 单次处理缩略图任务数量，默认 10 |
+| `THUMBNAIL_TASK_INTERVAL_MS` | 缩略图 worker 执行间隔，默认 5000 毫秒 |
 | `TEAM_TASK_RESULT_CLEANUP_INTERVAL_MS` | 团队任务结果文件过期清理间隔，默认 3600000 毫秒 |
 
 后端日志包含：
