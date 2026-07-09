@@ -348,6 +348,15 @@ npm run build
 | `ONLYOFFICE_JWT_SECRET` | OnlyOffice JWT 密钥，必须与根目录 `.env` 中传给 Document Server 的值一致 |
 | `ONLYOFFICE_TOKEN_TTL_SECONDS` | OnlyOffice 内容和回调 token 有效期，默认 86400 秒 |
 | `ONLYOFFICE_CALLBACK_DOWNLOAD_TIMEOUT_SECONDS` | 后端从 Document Server 下载编辑结果的超时时间，默认 30 秒 |
+| `QUEUE_ENABLED` | 是否初始化 Redis Streams 队列基础设施，默认 `true` |
+| `QUEUE_REDIS_CONSUMER_NAME` | 当前后端实例的 Redis Stream consumer 名称，默认 `backend-worker`；多实例建议使用唯一名称 |
+| `QUEUE_REDIS_READ_BATCH_SIZE` | 单次读取队列消息数量，默认 20 |
+| `QUEUE_REDIS_BLOCK_TIMEOUT_MS` | consumer 阻塞读取等待时间，默认 2000 毫秒 |
+| `QUEUE_REDIS_MAX_DELIVERIES` | 消息进入 dead-letter 前的最大投递次数，默认 5 |
+| `QUEUE_REDIS_CLAIM_IDLE_MS` | pending 消息可被重新接管的空闲时间，默认 60000 毫秒 |
+| `QUEUE_REDIS_TRIM_MAX_LENGTH` | Redis Stream 近似裁剪长度，默认 10000 |
+| `QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE` | 单次扫描并投递团队 outbox 事件的最大数量，默认 50 |
+| `QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS` | 团队 outbox 投递任务的执行间隔，默认 5000 毫秒 |
 
 后端日志包含：
 

@@ -113,6 +113,28 @@ onlyoffice:
   token-ttl-seconds: ${ONLYOFFICE_TOKEN_TTL_SECONDS:86400}
   callback-download-timeout-seconds: ${ONLYOFFICE_CALLBACK_DOWNLOAD_TIMEOUT_SECONDS:30}
 
+# Redis Stream queue
+queue:
+  enabled: ${QUEUE_ENABLED:true}
+  redis:
+    consumer-name: ${QUEUE_REDIS_CONSUMER_NAME:backend-worker}
+    read-batch-size: ${QUEUE_REDIS_READ_BATCH_SIZE:20}
+    block-timeout-ms: ${QUEUE_REDIS_BLOCK_TIMEOUT_MS:2000}
+    max-deliveries: ${QUEUE_REDIS_MAX_DELIVERIES:5}
+    claim-idle-ms: ${QUEUE_REDIS_CLAIM_IDLE_MS:60000}
+    trim-max-length: ${QUEUE_REDIS_TRIM_MAX_LENGTH:10000}
+    outbox-publish-batch-size: ${QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE:50}
+    outbox-publish-interval-ms: ${QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS:5000}
+    streams:
+      team-events: ${QUEUE_REDIS_STREAM_TEAM_EVENTS:bcd:stream:team-events}
+      notifications: ${QUEUE_REDIS_STREAM_NOTIFICATIONS:bcd:stream:notifications}
+      team-tasks: ${QUEUE_REDIS_STREAM_TEAM_TASKS:bcd:stream:team-tasks}
+      dead-letter: ${QUEUE_REDIS_STREAM_DEAD_LETTER:bcd:stream:dead-letter}
+    groups:
+      team-events: ${QUEUE_REDIS_GROUP_TEAM_EVENTS:bcd-team-event-workers}
+      notifications: ${QUEUE_REDIS_GROUP_NOTIFICATIONS:bcd-notification-workers}
+      team-tasks: ${QUEUE_REDIS_GROUP_TEAM_TASKS:bcd-team-task-workers}
+
 # Application settings
 drive:
   recycle-bin:

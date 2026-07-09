@@ -17,6 +17,9 @@ import java.time.LocalDateTime;
 public class TeamEventOutboxEntity {
 
     public static final String STATUS_PENDING = "PENDING";
+    public static final String STATUS_PROCESSING = "PROCESSING";
+    public static final String STATUS_PROCESSED = "PROCESSED";
+    public static final String STATUS_FAILED = "FAILED";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -427,6 +427,8 @@
 - 目标：接入最小消息队列运行环境。
 - 范围：Docker Compose、配置、健康检查、生产/测试 profile。
 - 验收：本地环境可启动队列并有最小消费者测试。
+- 状态：已完成。
+- 验证：Redis 已作为 Docker Compose 必需服务并具备 healthcheck；新增 `QueueProperties`、`RedisStreamQueueService`、`RedisQueueInitializer`、`TeamEventOutboxQueuePublisher` 和 `TeamEventOutboxPublishTask`，启动时初始化 Redis Stream consumer groups，定时把 `team_event_outbox` 的 `PENDING` 事件投递到 Redis Streams；`backend.env(.example)` 和 `docs/CONFIGURATION.md` 已补队列配置。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=RedisStreamQueueServiceTest,RedisQueueInitializerTest,TeamEventOutboxQueuePublisherTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=TeamEventOutboxPublishTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-start -am -DskipTests package`。
 
 ### PERF-03 通知异步化
 
