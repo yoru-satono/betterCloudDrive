@@ -18,7 +18,7 @@ Redis 已经是 BetterCloudDrive 的必需组件，用于验证码、上传分�
 
 | 工作负载 | 当前状态 | 队列化收益 | 第一阶段策略 |
 | --- | --- | --- | --- |
-| 团队通知 | 同步写通知、邮件和实时推送；已写 `NOTIFICATION` outbox | 降低团队成员、邀请、权限、配额、删除等主请求延迟；通知失败可重试 | 优先队列化 |
+| 团队通知 | 成员、邀请、权限、配额、删除等主流程已写 `NOTIFICATION` dispatch outbox，并由 `bcd:stream:notifications` worker 异步生成通知 | 降低团队成员、邀请、权限、配额、删除等主请求延迟；通知失败可重试 | 已队列化 |
 | 审计导出 | 已有团队任务中心入口 | 大导出不阻塞 HTTP 请求 | 第二批队列化 |
 | 缩略图 | 已有生成逻辑和任务状态 | 上传后先返回列表，后台生成缩略图 | 第二批队列化 |
 | OnlyOffice 保存 | callback 已入任务，后台 worker 保存 | Redis Stream 可替代轮询，提高失败重试和积压观测 | 第二批队列化 |
@@ -74,11 +74,13 @@ Redis 已经是 BetterCloudDrive 的必需组件，用于验证码、上传分�
 
 ### PERF-03 通知异步化
 
-- 团队成员、邀请、权限、配额、删除等主流程只记录团队领域事件，不直接同步生成所有通知。
-- 通知 worker 消费 `bcd:stream:team-events`，按事件类型生成站内通知、邮件和实时刷新事件。
-- 通知偏好仍在 worker 内判断。
-- `NOTIFICATION` outbox 保留为通知创建后的下游事件记录。
+- 团队成员、邀请、权限、配额、删除等主流程写入 `NOTIFICATION` dispatch outbox，不直接同步生成通知。
+- outbox 补投任务把 dispatch 事件投递到 `bcd:stream:notifications`。
+- 通知 worker 消费 `bcd:stream:notifications`，调用现有通知服务生成站内通知、邮件和实时刷新事件。
+- 通知偏好仍在现有通知服务内判断。
+- `NotificationService.notifyUser` 创建通知后仍写 `NOTIFICATION` outbox 作为下游事件记录；通知 worker 只处理 dispatch target，避免重复通知。
 - 主接口只依赖领域事件写入成功，不依赖通知写入、邮件发送或 SSE 推送成功。
+- 消费失败会回写 outbox 为 `PENDING` 并延迟重投；超过最大投递次数后标记 `FAILED` 并写入 dead-letter stream。
 
 ## 后续批次
 

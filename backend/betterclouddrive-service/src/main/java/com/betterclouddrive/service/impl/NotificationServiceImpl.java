@@ -18,6 +18,8 @@ import com.betterclouddrive.service.NotificationRealtimePublisher;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamEventOutboxService;
 import com.betterclouddrive.service.TeamService;
+import com.betterclouddrive.service.config.QueueProperties;
+import com.betterclouddrive.service.queue.TeamNotificationOutboxWriter;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -74,6 +76,8 @@ public class NotificationServiceImpl implements NotificationService {
     private final StringRedisTemplate redisTemplate;
     private final TeamEventOutboxService teamEventOutboxService;
     private final NotificationRealtimePublisher notificationRealtimePublisher;
+    private final TeamNotificationOutboxWriter teamNotificationOutboxWriter;
+    private final QueueProperties queueProperties;
 
     @Override
     public PageResult<NotificationEntity> listNotifications(Long userId, Boolean unreadOnly, String type, int page, int size) {
@@ -251,7 +255,13 @@ public class NotificationServiceImpl implements NotificationService {
         teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(team.getId(), ACTIVE).stream()
                 .filter(member -> Set.of(TeamService.ROLE_OWNER, TeamService.ROLE_ADMIN).contains(member.getRole()))
                 .map(TeamMemberEntity::getUserId)
-                .forEach(userId -> notifyUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true));
+                .forEach(userId -> {
+                    if (queueProperties.isEnabled()) {
+                        teamNotificationOutboxWriter.enqueueUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true);
+                    } else {
+                        notifyUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true);
+                    }
+                });
     }
 
     private void resetQuotaThresholdsBelow(Long teamId, int currentThreshold) {

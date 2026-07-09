@@ -18,6 +18,8 @@ import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.EmailService;
 import com.betterclouddrive.service.NotificationRealtimePublisher;
 import com.betterclouddrive.service.TeamEventOutboxService;
+import com.betterclouddrive.service.config.QueueProperties;
+import com.betterclouddrive.service.queue.TeamNotificationOutboxWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -47,6 +49,8 @@ class NotificationServiceImplTest {
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private TeamEventOutboxService teamEventOutboxService;
     @Mock private NotificationRealtimePublisher notificationRealtimePublisher;
+    @Mock private TeamNotificationOutboxWriter teamNotificationOutboxWriter;
+    @Mock private QueueProperties queueProperties;
     @InjectMocks private NotificationServiceImpl notificationService;
 
     @Test
@@ -218,5 +222,32 @@ class NotificationServiceImplTest {
         verify(teamEventOutboxService, times(2)).recordNotificationEvent(
                 isNull(), anyLong(), eq(10L), eq("TEAM_QUOTA_ALERT"), contains("存储用量已达到 80%"));
         verify(userRepository, never()).findById(4L);
+    }
+
+    @Test
+    void checkTeamQuota_shouldQueueManagerNotificationsWhenQueueEnabled() {
+        TeamEntity team = TeamEntity.builder()
+                .id(10L)
+                .name("Product")
+                .storageUsed(910L)
+                .storageQuota(1000L)
+                .build();
+        TeamMemberEntity owner = TeamMemberEntity.builder().teamId(10L).userId(2L).role("OWNER").status(1).build();
+        TeamMemberEntity admin = TeamMemberEntity.builder().teamId(10L).userId(3L).role("ADMIN").status(1).build();
+        TeamMemberEntity viewer = TeamMemberEntity.builder().teamId(10L).userId(4L).role("VIEWER").status(1).build();
+        when(queueProperties.isEnabled()).thenReturn(true);
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("team:storage:incr:10")).thenReturn(null);
+        when(valueOperations.setIfAbsent("team:quota:alert:10:90", "1")).thenReturn(true);
+        when(teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(10L, 1))
+                .thenReturn(List.of(owner, admin, viewer));
+
+        notificationService.checkTeamQuota(10L);
+
+        verify(teamNotificationOutboxWriter).enqueueUser(eq(2L), eq(10L), eq("TEAM_QUOTA_ALERT"), anyString(), contains("90%"), anyString(), eq(true));
+        verify(teamNotificationOutboxWriter).enqueueUser(eq(3L), eq(10L), eq("TEAM_QUOTA_ALERT"), anyString(), contains("90%"), anyString(), eq(true));
+        verify(teamNotificationOutboxWriter, never()).enqueueUser(eq(4L), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(notificationRepository, never()).save(any());
     }
 }

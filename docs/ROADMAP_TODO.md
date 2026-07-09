@@ -434,7 +434,8 @@
 
 - 目标：团队通知生成不阻塞主请求。
 - 范围：成员、邀请、权限、配额、删除事件进入队列。
-- 验收：主接口延迟不受通知写入影响；失败可重试。
+- 状态：已完成。
+- 验收：成员、邀请、权限、配额、删除等团队通知主流程只写 `NOTIFICATION` dispatch outbox；`TeamEventOutboxPublishTask` 投递到 `bcd:stream:notifications` 后由 `TeamNotificationDispatchTask` 消费并调用原通知服务生成站内通知、邮件和实时未读刷新。队列关闭时保留同步回退；消费失败会把 outbox 退回 `PENDING` 并按重试次数延迟重投，超过最大投递次数后标记 `FAILED` 并进入 dead-letter stream。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=TeamNotificationOutboxWriterTest,TeamNotificationDispatchServiceImplTest,TeamServiceImplTest,TeamPermissionServiceImplTest,NotificationServiceImplTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=TeamNotificationDispatchTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-start -am -DskipTests package`。
 
 ### PERF-04 审计导出异步化
 

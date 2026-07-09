@@ -22,6 +22,7 @@ public class QueueProperties {
         private long trimMaxLength = 10000;
         private int outboxPublishBatchSize = 50;
         private long outboxPublishIntervalMs = 5000;
+        private long notificationDispatchIntervalMs = 2000;
         private Streams streams = new Streams();
         private Groups groups = new Groups();
     }

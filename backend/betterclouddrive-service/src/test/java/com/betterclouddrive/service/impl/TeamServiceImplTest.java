@@ -7,8 +7,8 @@ import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
-import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamNotificationDispatchService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.dto.TeamMemberView;
 import com.betterclouddrive.service.dto.TeamView;
@@ -34,7 +34,7 @@ class TeamServiceImplTest {
     @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private UserRepository userRepository;
     @Mock private TeamAuditService teamAuditService;
-    @Mock private NotificationService notificationService;
+    @Mock private TeamNotificationDispatchService teamNotificationDispatchService;
     @InjectMocks private TeamServiceImpl teamService;
 
     @Test
@@ -160,7 +160,7 @@ class TeamServiceImplTest {
         assertThat(team.getPurgeAfter()).isNotNull();
         verify(teamRepository).save(team);
         verify(teamAuditService).record(10L, 1L, "TEAM_DELETE", "TEAM", 10L, "Team");
-        verify(notificationService).notifyTeamMembers(eq(10L), eq(1L), eq("TEAM_DELETE"), anyString(), anyString(), isNull(), eq(true));
+        verify(teamNotificationDispatchService).enqueueTeamMembersNotification(eq(10L), eq(1L), eq("TEAM_DELETE"), anyString(), anyString(), isNull(), eq(true));
     }
 
     @Test
@@ -181,7 +181,7 @@ class TeamServiceImplTest {
 
         verify(teamRepository, never()).save(any());
         verify(teamAuditService, never()).record(anyLong(), anyLong(), anyString(), anyString(), anyLong(), any());
-        verify(notificationService, never()).notifyTeamMembers(anyLong(), anyLong(), anyString(), anyString(), anyString(), any(), anyBoolean());
+        verify(teamNotificationDispatchService, never()).enqueueTeamMembersNotification(anyLong(), anyLong(), anyString(), anyString(), anyString(), any(), anyBoolean());
     }
 
     @Test

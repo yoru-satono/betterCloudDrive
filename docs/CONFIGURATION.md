@@ -357,6 +357,7 @@ npm run build
 | `QUEUE_REDIS_TRIM_MAX_LENGTH` | Redis Stream 近似裁剪长度，默认 10000 |
 | `QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE` | 单次扫描并投递团队 outbox 事件的最大数量，默认 50 |
 | `QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS` | 团队 outbox 投递任务的执行间隔，默认 5000 毫秒 |
+| `QUEUE_REDIS_NOTIFICATION_DISPATCH_INTERVAL_MS` | 团队通知队列消费任务的执行间隔，默认 2000 毫秒 |
 
 后端日志包含：
 

@@ -11,8 +11,8 @@ import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.TeamFilePermissionRepository;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
-import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamNotificationDispatchService;
 import com.betterclouddrive.service.TeamService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,7 +33,7 @@ class TeamPermissionServiceImplTest {
     @Mock private TeamFilePermissionRepository permissionRepository;
     @Mock private TeamMemberRepository teamMemberRepository;
     @Mock private TeamAuditService teamAuditService;
-    @Mock private NotificationService notificationService;
+    @Mock private TeamNotificationDispatchService teamNotificationDispatchService;
     @InjectMocks private TeamPermissionServiceImpl permissionService;
 
     @ParameterizedTest
@@ -65,7 +65,7 @@ class TeamPermissionServiceImplTest {
 
         verify(fileRepository).findById(7L);
         verify(permissionRepository, never()).save(any());
-        verify(notificationService, never()).notifyUser(anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(teamNotificationDispatchService, never()).enqueueUserNotification(anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
     }
 
     @Test
@@ -111,7 +111,7 @@ class TeamPermissionServiceImplTest {
                 .hasMessageContaining("Cannot remove your own manage permission");
 
         verify(permissionRepository, never()).save(any());
-        verify(notificationService, never()).notifyUser(anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(teamNotificationDispatchService, never()).enqueueUserNotification(anyLong(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
     }
 
     @Test
@@ -137,10 +137,10 @@ class TeamPermissionServiceImplTest {
 
         assertThat(saved.getSubjectType()).isEqualTo("ROLE");
         assertThat(saved.getSubjectRole()).isEqualTo("EDITOR");
-        verify(notificationService).notifyUser(eq(3L), eq(10L), eq("TEAM_PERMISSION_UPDATE"), anyString(), anyString(), anyString(), eq(true));
-        verify(notificationService).notifyUser(eq(4L), eq(10L), eq("TEAM_PERMISSION_UPDATE"), anyString(), anyString(), anyString(), eq(true));
-        verify(notificationService, never()).notifyUser(eq(2L), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
-        verify(notificationService, never()).notifyUser(eq(5L), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(teamNotificationDispatchService).enqueueUserNotification(eq(3L), eq(10L), eq("TEAM_PERMISSION_UPDATE"), anyString(), anyString(), anyString(), eq(true));
+        verify(teamNotificationDispatchService).enqueueUserNotification(eq(4L), eq(10L), eq("TEAM_PERMISSION_UPDATE"), anyString(), anyString(), anyString(), eq(true));
+        verify(teamNotificationDispatchService, never()).enqueueUserNotification(eq(2L), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
+        verify(teamNotificationDispatchService, never()).enqueueUserNotification(eq(5L), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
     }
 
     @Test

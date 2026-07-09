@@ -125,6 +125,7 @@ queue:
     trim-max-length: ${QUEUE_REDIS_TRIM_MAX_LENGTH:10000}
     outbox-publish-batch-size: ${QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE:50}
     outbox-publish-interval-ms: ${QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS:5000}
+    notification-dispatch-interval-ms: ${QUEUE_REDIS_NOTIFICATION_DISPATCH_INTERVAL_MS:2000}
     streams:
       team-events: ${QUEUE_REDIS_STREAM_TEAM_EVENTS:bcd:stream:team-events}
       notifications: ${QUEUE_REDIS_STREAM_NOTIFICATIONS:bcd:stream:notifications}

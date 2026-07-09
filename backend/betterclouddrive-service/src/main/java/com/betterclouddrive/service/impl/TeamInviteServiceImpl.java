@@ -10,9 +10,9 @@ import com.betterclouddrive.dal.repository.TeamInviteRepository;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.EmailService;
-import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamInviteService;
+import com.betterclouddrive.service.TeamNotificationDispatchService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.dto.TeamInviteView;
 import lombok.RequiredArgsConstructor;
@@ -47,7 +47,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     private final UserRepository userRepository;
     private final TeamService teamService;
     private final EmailService emailService;
-    private final NotificationService notificationService;
+    private final TeamNotificationDispatchService teamNotificationDispatchService;
     private final TeamAuditService teamAuditService;
 
     @Value("${drive.team.invite-ttl-hours:168}")
@@ -91,7 +91,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         TeamInviteEntity saved = teamInviteRepository.save(invite);
         sendInvite(team, saved);
         if (existingUser != null) {
-            notificationService.notifyUser(existingUser.getId(), teamId, "TEAM_INVITE", "团队邀请",
+            teamNotificationDispatchService.enqueueUserNotification(existingUser.getId(), teamId, "TEAM_INVITE", "团队邀请",
                     "你被邀请加入团队「" + team.getName() + "」，角色为 " + normalizedRole + "。",
                     "/team-invites/" + saved.getToken(), false);
         }
@@ -123,7 +123,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         sendInvite(teamService.requireTeam(teamId), saved);
         UserEntity invited = userRepository.findByEmail(saved.getEmail()).orElse(null);
         if (invited != null) {
-            notificationService.notifyUser(invited.getId(), teamId, "TEAM_INVITE", "团队邀请已重发",
+            teamNotificationDispatchService.enqueueUserNotification(invited.getId(), teamId, "TEAM_INVITE", "团队邀请已重发",
                     "你的团队邀请已重发。", "/team-invites/" + saved.getToken(), false);
         }
         teamAuditService.record(teamId, actorUserId, "INVITE_RESEND", "INVITE", saved.getId(), saved.getEmail());
@@ -189,7 +189,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         invite.setUpdatedAt(now);
         TeamInviteEntity saved = teamInviteRepository.save(invite);
         teamAuditService.record(invite.getTeamId(), userId, "INVITE_ACCEPT", "INVITE", invite.getId(), invite.getEmail());
-        notificationService.notifyUser(invite.getInvitedByUserId(), invite.getTeamId(), "TEAM_INVITE_ACCEPT", "团队邀请已接受",
+        teamNotificationDispatchService.enqueueUserNotification(invite.getInvitedByUserId(), invite.getTeamId(), "TEAM_INVITE_ACCEPT", "团队邀请已接受",
                 user.getUsername() + " 已接受团队邀请。", "/teams/" + invite.getTeamId() + "/settings", true);
         return saved;
     }
@@ -212,7 +212,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         invite.setUpdatedAt(LocalDateTime.now());
         TeamInviteEntity saved = teamInviteRepository.save(invite);
         teamAuditService.record(invite.getTeamId(), userId, "INVITE_REJECT", "INVITE", invite.getId(), invite.getEmail());
-        notificationService.notifyUser(invite.getInvitedByUserId(), invite.getTeamId(), "TEAM_INVITE_REJECT", "团队邀请已拒绝",
+        teamNotificationDispatchService.enqueueUserNotification(invite.getInvitedByUserId(), invite.getTeamId(), "TEAM_INVITE_REJECT", "团队邀请已拒绝",
                 user.getUsername() + " 已拒绝团队邀请。", "/teams/" + invite.getTeamId() + "/settings", true);
         return saved;
     }

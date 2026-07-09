@@ -8,8 +8,8 @@ import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
-import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
+import com.betterclouddrive.service.TeamNotificationDispatchService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.dto.TeamMemberView;
 import com.betterclouddrive.service.dto.TeamView;
@@ -38,7 +38,7 @@ public class TeamServiceImpl implements TeamService {
     private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
     private final TeamAuditService teamAuditService;
-    private final NotificationService notificationService;
+    private final TeamNotificationDispatchService teamNotificationDispatchService;
 
     @Override
     public List<TeamView> listTeams(Long userId) {
@@ -116,7 +116,7 @@ public class TeamServiceImpl implements TeamService {
         team.setUpdatedAt(now);
         teamRepository.save(team);
         teamAuditService.record(teamId, userId, "TEAM_DELETE", "TEAM", teamId, team.getName());
-        notificationService.notifyTeamMembers(teamId, userId, "TEAM_DELETE", "团队已删除",
+        teamNotificationDispatchService.enqueueTeamMembersNotification(teamId, userId, "TEAM_DELETE", "团队已删除",
                 "团队「" + team.getName() + "」已被所有者删除，可在清理前由管理员恢复。", null, true);
     }
 
@@ -164,7 +164,7 @@ public class TeamServiceImpl implements TeamService {
         }
         TeamMemberEntity saved = teamMemberRepository.save(member);
         teamAuditService.record(teamId, actorUserId, "MEMBER_ADD", "USER", user.getId(), user.getUsername() + " as " + normalizedRole);
-        notificationService.notifyUser(user.getId(), teamId, "TEAM_MEMBER_ADD", "已加入团队",
+        teamNotificationDispatchService.enqueueUserNotification(user.getId(), teamId, "TEAM_MEMBER_ADD", "已加入团队",
                 "你已被加入团队，角色为 " + normalizedRole + "。", "/teams/" + teamId + "/files", true);
         return new TeamMemberView(saved, user);
     }
@@ -187,7 +187,7 @@ public class TeamServiceImpl implements TeamService {
         UserEntity user = userRepository.findById(targetUserId).orElse(null);
         TeamMemberEntity saved = teamMemberRepository.save(member);
         teamAuditService.record(teamId, actorUserId, "MEMBER_ROLE_UPDATE", "USER", targetUserId, normalizedRole);
-        notificationService.notifyUser(targetUserId, teamId, "TEAM_ROLE_UPDATE", "团队角色已更新",
+        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_ROLE_UPDATE", "团队角色已更新",
                 "你的团队角色已更新为 " + normalizedRole + "。", "/teams/" + teamId + "/settings", true);
         return new TeamMemberView(saved, user);
     }
@@ -208,7 +208,7 @@ public class TeamServiceImpl implements TeamService {
         member.setUpdatedAt(LocalDateTime.now());
         teamMemberRepository.save(member);
         teamAuditService.record(teamId, actorUserId, "MEMBER_REMOVE", "USER", targetUserId, member.getRole());
-        notificationService.notifyUser(targetUserId, teamId, "TEAM_MEMBER_REMOVE", "已被移出团队",
+        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_MEMBER_REMOVE", "已被移出团队",
                 "你已被移出团队。", null, true);
     }
 
@@ -246,7 +246,7 @@ public class TeamServiceImpl implements TeamService {
         teamMemberRepository.save(target);
         TeamEntity savedTeam = teamRepository.save(team);
         teamAuditService.record(teamId, ownerUserId, "OWNER_TRANSFER", "USER", targetUserId, null);
-        notificationService.notifyUser(targetUserId, teamId, "TEAM_OWNER_TRANSFER", "团队所有权已转让给你",
+        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_OWNER_TRANSFER", "团队所有权已转让给你",
                 "你现在是团队「" + team.getName() + "」的所有者。", "/teams/" + teamId + "/settings", true);
         return new TeamView(savedTeam, ROLE_ADMIN);
     }

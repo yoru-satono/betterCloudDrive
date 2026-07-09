@@ -9,7 +9,7 @@ import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.TeamFilePermissionRepository;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
 import com.betterclouddrive.service.TeamAuditService;
-import com.betterclouddrive.service.NotificationService;
+import com.betterclouddrive.service.TeamNotificationDispatchService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
@@ -37,7 +37,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
     private final TeamFilePermissionRepository permissionRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamAuditService teamAuditService;
-    private final NotificationService notificationService;
+    private final TeamNotificationDispatchService teamNotificationDispatchService;
 
     @Override
     public TeamEffectivePermission effectivePermissions(Long userId, Long teamId, Long fileId) {
@@ -335,13 +335,13 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
         String content = "文件「" + file.getFileName() + "」的团队权限已变更。";
         String link = "/teams/" + teamId + "/files" + (file.getParentId() != null ? "/" + file.getParentId() : "");
         if (SUBJECT_USER.equals(permission.getSubjectType())) {
-            notificationService.notifyUser(permission.getSubjectUserId(), teamId, "TEAM_PERMISSION_UPDATE", title, content, link, true);
+            teamNotificationDispatchService.enqueueUserNotification(permission.getSubjectUserId(), teamId, "TEAM_PERMISSION_UPDATE", title, content, link, true);
             return;
         }
         teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(teamId, 1).stream()
                 .filter(member -> permission.getSubjectRole().equals(member.getRole()))
                 .filter(member -> actorUserId == null || !actorUserId.equals(member.getUserId()))
                 .forEach(member ->
-                notificationService.notifyUser(member.getUserId(), teamId, "TEAM_PERMISSION_UPDATE", title, content, link, true));
+                teamNotificationDispatchService.enqueueUserNotification(member.getUserId(), teamId, "TEAM_PERMISSION_UPDATE", title, content, link, true));
     }
 }
