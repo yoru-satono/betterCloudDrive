@@ -19,6 +19,7 @@ import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamEventOutboxService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.config.QueueProperties;
+import com.betterclouddrive.service.metrics.TeamQuotaMetrics;
 import com.betterclouddrive.service.queue.TeamNotificationOutboxWriter;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -78,6 +79,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRealtimePublisher notificationRealtimePublisher;
     private final TeamNotificationOutboxWriter teamNotificationOutboxWriter;
     private final QueueProperties queueProperties;
+    private final TeamQuotaMetrics teamQuotaMetrics;
 
     @Override
     public PageResult<NotificationEntity> listNotifications(Long userId, Boolean unreadOnly, String type, int page, int size) {
@@ -199,6 +201,9 @@ public class NotificationServiceImpl implements NotificationService {
             try {
                 emailService.sendNotification(user.getEmail(), title, content, link);
             } catch (Exception e) {
+                if ("TEAM_QUOTA_ALERT".equals(normalizedType)) {
+                    teamQuotaMetrics.recordNotificationFailure("email");
+                }
                 log.warn("Failed to enqueue notification email to user {}", userId, e);
             }
         }
@@ -228,27 +233,34 @@ public class NotificationServiceImpl implements NotificationService {
         }
         int ratio = (int) Math.floor(used * 100.0 / team.getStorageQuota());
         int threshold = ratio >= 100 ? 100 : ratio >= 90 ? 90 : ratio >= 80 ? 80 : 0;
+        teamQuotaMetrics.recordUsage(team.getId(), used, team.getStorageQuota(), threshold);
         resetQuotaThresholdsBelow(team.getId(), threshold);
         if (threshold == 0) {
             return;
         }
-        notifyQuotaThreshold(team, threshold);
+        notifyQuotaThreshold(team, threshold, used);
     }
 
     @Override
     public void notifyTeamQuotaExceeded(Long teamId) {
         TeamEntity team = teamRepository.findByIdAndDeletedAtIsNull(teamId).orElse(null);
         if (team != null) {
-            notifyQuotaThreshold(team, 100);
+            long used = team.getStorageUsed() != null ? team.getStorageUsed() : 0L;
+            long quota = team.getStorageQuota() != null ? team.getStorageQuota() : 0L;
+            teamQuotaMetrics.recordUsage(team.getId(), used, quota, 100);
+            notifyQuotaThreshold(team, 100, used);
         }
     }
 
-    private void notifyQuotaThreshold(TeamEntity team, int threshold) {
+    private void notifyQuotaThreshold(TeamEntity team, int threshold, long usedBytes) {
         String key = QUOTA_ALERT_PREFIX + team.getId() + ":" + threshold;
         Boolean first = redisTemplate.opsForValue().setIfAbsent(key, "1");
         if (!Boolean.TRUE.equals(first)) {
             return;
         }
+        teamQuotaMetrics.recordAlertTriggered(threshold);
+        log.warn("Team quota alert triggered teamId={} usedBytes={} quotaBytes={} threshold={}",
+                team.getId(), usedBytes, team.getStorageQuota(), threshold);
         String title = "团队配额告警";
         String content = "团队「" + team.getName() + "」存储用量已达到 " + threshold + "%。";
         String link = "/teams/" + team.getId() + "/settings";
@@ -256,10 +268,17 @@ public class NotificationServiceImpl implements NotificationService {
                 .filter(member -> Set.of(TeamService.ROLE_OWNER, TeamService.ROLE_ADMIN).contains(member.getRole()))
                 .map(TeamMemberEntity::getUserId)
                 .forEach(userId -> {
-                    if (queueProperties.isEnabled()) {
-                        teamNotificationOutboxWriter.enqueueUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true);
-                    } else {
-                        notifyUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true);
+                    String channel = queueProperties.isEnabled() ? "queue" : "direct";
+                    try {
+                        if (queueProperties.isEnabled()) {
+                            teamNotificationOutboxWriter.enqueueUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true);
+                        } else {
+                            notifyUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true);
+                        }
+                    } catch (RuntimeException e) {
+                        teamQuotaMetrics.recordNotificationFailure(channel);
+                        log.warn("Failed to dispatch team quota alert teamId={} userId={} channel={}",
+                                team.getId(), userId, channel, e);
                     }
                 });
     }

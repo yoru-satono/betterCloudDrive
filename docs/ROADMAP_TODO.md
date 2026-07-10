@@ -492,7 +492,8 @@
 
 - 目标：团队配额告警可观测。
 - 范围：使用量、阈值、告警触发次数、通知失败数。
-- 验收：Grafana 或日志中可定位配额告警问题。
+- 状态：已完成。
+- 验收：Actuator 暴露每团队已用字节、配额、使用率和当前阈值 gauge，以及按阈值统计的告警 counter、按通道统计的通知失败 counter；数据库刷新任务保证重启后无新上传时仍有 gauge，实时配额检查会计入 Redis 待落库增量。告警和失败日志包含 team/user/channel 定位字段，指标清单和查询方式见 `docs/OBSERVABILITY.md`。验证已通过：`NotificationServiceImplTest`、`TeamQuotaMetricsTest`、`TeamQuotaMetricsTaskTest`；重建后端后 `/actuator/metrics` 可查询四个 `bcd.team.quota.*` gauge 及实际 `team.id` 测量值。
 
 ### OBS-02 OnlyOffice 保存指标
 

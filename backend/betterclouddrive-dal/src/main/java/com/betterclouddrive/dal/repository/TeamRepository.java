@@ -16,6 +16,8 @@ public interface TeamRepository extends JpaRepository<TeamEntity, Long>, JpaSpec
 
     Optional<TeamEntity> findByIdAndDeletedAtIsNull(Long id);
 
+    List<TeamEntity> findByDeletedAtIsNull();
+
     @Query("""
             SELECT t FROM TeamEntity t
             WHERE t.deletedAt IS NOT NULL

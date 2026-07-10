@@ -40,6 +40,12 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- Application metrics exposed by the start module's Actuator -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+
         <!-- Spring Data Redis -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -19,6 +19,7 @@ import com.betterclouddrive.service.EmailService;
 import com.betterclouddrive.service.NotificationRealtimePublisher;
 import com.betterclouddrive.service.TeamEventOutboxService;
 import com.betterclouddrive.service.config.QueueProperties;
+import com.betterclouddrive.service.metrics.TeamQuotaMetrics;
 import com.betterclouddrive.service.queue.TeamNotificationOutboxWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,6 +52,7 @@ class NotificationServiceImplTest {
     @Mock private NotificationRealtimePublisher notificationRealtimePublisher;
     @Mock private TeamNotificationOutboxWriter teamNotificationOutboxWriter;
     @Mock private QueueProperties queueProperties;
+    @Mock private TeamQuotaMetrics teamQuotaMetrics;
     @InjectMocks private NotificationServiceImpl notificationService;
 
     @Test
@@ -214,6 +216,8 @@ class NotificationServiceImplTest {
 
         notificationService.checkTeamQuota(10L);
 
+        verify(teamQuotaMetrics).recordUsage(10L, 850L, 1000L, 80);
+        verify(teamQuotaMetrics).recordAlertTriggered(80);
         verify(redisTemplate).delete("team:quota:alert:10:90");
         verify(redisTemplate).delete("team:quota:alert:10:100");
         verify(notificationRepository, times(2)).save(argThat(notification ->
@@ -245,9 +249,39 @@ class NotificationServiceImplTest {
 
         notificationService.checkTeamQuota(10L);
 
+        verify(teamQuotaMetrics).recordUsage(10L, 910L, 1000L, 90);
+        verify(teamQuotaMetrics).recordAlertTriggered(90);
         verify(teamNotificationOutboxWriter).enqueueUser(eq(2L), eq(10L), eq("TEAM_QUOTA_ALERT"), anyString(), contains("90%"), anyString(), eq(true));
         verify(teamNotificationOutboxWriter).enqueueUser(eq(3L), eq(10L), eq("TEAM_QUOTA_ALERT"), anyString(), contains("90%"), anyString(), eq(true));
         verify(teamNotificationOutboxWriter, never()).enqueueUser(eq(4L), anyLong(), anyString(), anyString(), anyString(), anyString(), anyBoolean());
         verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    void checkTeamQuota_shouldRecordQueueFailureAndContinueOtherManagers() {
+        TeamEntity team = TeamEntity.builder()
+                .id(10L)
+                .name("Product")
+                .storageUsed(910L)
+                .storageQuota(1000L)
+                .build();
+        TeamMemberEntity owner = TeamMemberEntity.builder().teamId(10L).userId(2L).role("OWNER").status(1).build();
+        TeamMemberEntity admin = TeamMemberEntity.builder().teamId(10L).userId(3L).role("ADMIN").status(1).build();
+        when(queueProperties.isEnabled()).thenReturn(true);
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get("team:storage:incr:10")).thenReturn(null);
+        when(valueOperations.setIfAbsent("team:quota:alert:10:90", "1")).thenReturn(true);
+        when(teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(10L, 1))
+                .thenReturn(List.of(owner, admin));
+        doThrow(new IllegalStateException("queue unavailable"))
+                .when(teamNotificationOutboxWriter)
+                .enqueueUser(eq(2L), eq(10L), eq("TEAM_QUOTA_ALERT"), anyString(), anyString(), anyString(), eq(true));
+
+        notificationService.checkTeamQuota(10L);
+
+        verify(teamQuotaMetrics).recordNotificationFailure("queue");
+        verify(teamNotificationOutboxWriter).enqueueUser(
+                eq(3L), eq(10L), eq("TEAM_QUOTA_ALERT"), anyString(), contains("90%"), anyString(), eq(true));
     }
 }

@@ -207,6 +207,8 @@ logging:
 
 observability:
   enabled: ${OBSERVABILITY_ENABLED:true}
+  metrics:
+    team-quota-refresh-interval-ms: ${TEAM_QUOTA_METRICS_REFRESH_INTERVAL_MS:60000}
   legacy-operation-aspect:
     enabled: false
   system-logs:
