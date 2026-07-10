@@ -364,6 +364,8 @@ npm run build
 | `TEAM_AUDIT_EXPORT_INTERVAL_MS` | 团队审计导出 worker 执行间隔，默认 5000 毫秒 |
 | `THUMBNAIL_TASK_BATCH_SIZE` | 单次处理缩略图任务数量，默认 10 |
 | `THUMBNAIL_TASK_INTERVAL_MS` | 缩略图 worker 执行间隔，默认 5000 毫秒 |
+| `FOLDER_ZIP_TASK_BATCH_SIZE` | 单次处理团队文件夹 ZIP 任务数量，默认 5 |
+| `FOLDER_ZIP_TASK_INTERVAL_MS` | 团队文件夹 ZIP worker 执行间隔，默认 5000 毫秒 |
 | `TEAM_TASK_RESULT_CLEANUP_INTERVAL_MS` | 团队任务结果文件过期清理间隔，默认 3600000 毫秒 |
 
 后端日志包含：

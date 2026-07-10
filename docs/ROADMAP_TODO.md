@@ -455,7 +455,8 @@
 
 - 目标：大文件夹下载 ZIP 不阻塞请求。
 - 范围：创建 ZIP 任务、进度、下载临时包、清理。
-- 验收：大目录下载可查询进度并最终下载。
+- 状态：已完成。
+- 验收：团队文件夹 ZIP 支持 `POST /api/v1/teams/{teamId}/download/folders/{fileId}/zip/tasks` 创建 `FOLDER_ZIP` 后台任务，`FolderZipTask` worker 生成缓存 ZIP 并写入任务结果，任务中心可通过 `GET /tasks/{taskId}/download` 下载成功结果；Web 浏览器端团队文件夹下载改为提交后台任务，Tauri 保持本地递归下载，旧 ticket/GET 同步 ZIP 路径保留兼容旧客户端，缓存对象继续由现有 ZIP cache cleanup 清理。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=FolderZipTaskServiceImplTest,FolderZipDownloadServiceImplTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-web -am "-Dtest=TeamControllerTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=FolderZipTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- download.test.ts endpoint-contracts.test.ts`。
 
 ### PERF-07 数据库索引检查
 

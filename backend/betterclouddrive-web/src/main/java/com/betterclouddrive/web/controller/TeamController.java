@@ -18,6 +18,7 @@ import com.betterclouddrive.service.FavoriteService;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FolderZipDownloadService;
+import com.betterclouddrive.service.FolderZipTaskService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.service.TagService;
 import com.betterclouddrive.service.TeamActivityService;
@@ -79,6 +80,7 @@ public class TeamController {
     private final UploadService uploadService;
     private final StorageService storageService;
     private final FolderZipDownloadService folderZipDownloadService;
+    private final FolderZipTaskService folderZipTaskService;
     private final DownloadTicketService downloadTicketService;
     private final ShareService shareService;
     private final TeamInviteService teamInviteService;
@@ -294,7 +296,16 @@ public class TeamController {
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long taskId) {
-        TeamTaskDownload download = teamAuditExportTaskService.downloadExportResult(user.getUserId(), teamId, taskId);
+        teamService.requireRead(user.getUserId(), teamId);
+        TeamTaskEntity task = teamTaskService.getTask(teamId, taskId);
+        TeamTaskDownload download;
+        if ("AUDIT_EXPORT".equals(task.getTaskType())) {
+            download = teamAuditExportTaskService.downloadExportResult(user.getUserId(), teamId, taskId);
+        } else if ("FOLDER_ZIP".equals(task.getTaskType())) {
+            download = folderZipTaskService.downloadTeamFolderZipResult(user.getUserId(), teamId, taskId);
+        } else {
+            throw new BusinessException(ApiCode.NOT_FOUND, "Task result is not available");
+        }
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(download.contentType()))
                 .contentLength(download.sizeBytes())
@@ -814,6 +825,14 @@ public class TeamController {
         String ticket = downloadTicketService.createTicket(user.getUserId(), fileId, DownloadTicketType.TEAM_FOLDER_ZIP);
         return ApiResponse.success(new DownloadTicketResponse(
                 "/api/v1/teams/" + teamId + "/download/folders/" + fileId + "/zip?ticket=" + ticket));
+    }
+
+    @PostMapping("/{teamId}/download/folders/{fileId}/zip/tasks")
+    public ApiResponse<TeamTaskEntity> queueFolderZipTask(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @PathVariable Long fileId) {
+        return ApiResponse.success(folderZipTaskService.queueTeamFolderZip(user.getUserId(), teamId, fileId));
     }
 
     @GetMapping("/{teamId}/download/{fileId}")

@@ -1997,8 +1997,9 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 | POST | `/api/v1/teams/{teamId}/upload/instant` | 父目录可写 | 秒传 |
 | POST | `/api/v1/teams/{teamId}/download/{fileId}/ticket` | 可读 | 创建团队文件下载 ticket |
 | POST | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip/ticket` | 可读 | 创建团队文件夹 ZIP ticket |
+| POST | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip/tasks` | 可读 | 创建团队文件夹 ZIP 后台任务，返回 `TeamTask` |
 | GET | `/api/v1/teams/{teamId}/download/{fileId}?ticket=` | 可读或有效 ticket | 下载文件，支持 Range |
-| GET | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip?ticket=` | 可读或有效 ticket | 下载 ZIP，支持 Range |
+| GET | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip?ticket=` | 可读或有效 ticket | 兼容旧客户端的同步 ZIP 下载，支持 Range |
 | GET | `/api/v1/teams/{teamId}/preview/{fileId}` | 可读 | 内联预览文件内容 |
 
 **错误码:** 403（权限不足）、404001（文件不存在）、409001（同名冲突）、419001（团队配额不足）、419006/419007（上传状态或分片 MD5 错误）、419015（ZIP 超限）。
@@ -2149,13 +2150,13 @@ GET /api/v1/teams/{teamId}/tasks/{taskId}/download
 Authorization: Bearer <accessToken>
 ```
 
-团队成员可查看团队长任务状态。任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；OnlyOffice 保存和缩略图生成任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。
+团队成员可查看团队长任务状态。任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；OnlyOffice 保存、缩略图生成和团队文件夹 ZIP 任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。团队文件夹 ZIP 任务成功后会把 ZIP 对象 key 写入任务结果，任务中心通过 `GET /tasks/{taskId}/download` 下载。
 
 | 端点 | 权限 | 说明 |
 |------|------|------|
 | `GET /tasks` | 团队成员 | 分页返回团队任务，可按 `status` 和 `type` 过滤 |
 | `POST /tasks/{taskId}/retry` | 团队成员 | 仅允许重试 `FAILED` 任务，状态重置为 `PENDING`，清空失败原因并递增 `retryCount` |
-| `GET /tasks/{taskId}/download` | OWNER/ADMIN | 下载已成功的审计导出任务结果，响应为任务结果文件二进制流 |
+| `GET /tasks/{taskId}/download` | 按任务类型 | 审计导出要求 OWNER/ADMIN；文件夹 ZIP 要求对目标文件夹可读；响应为任务结果文件二进制流 |
 
 **TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`title`、`progress`、`resultMessage`、`errorMessage`、`retryCount`、`payload`、`resultPath`、`resultFileName`、`resultContentType`、`resultSizeBytes`、`resultExpiresAt`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。
 
@@ -2163,7 +2164,7 @@ Authorization: Bearer <accessToken>
 
 **当前任务类型:** `AUDIT_EXPORT`、`FOLDER_ZIP`、`THUMBNAIL`、`ONLYOFFICE_SAVE`、`TEAM_CLEANUP`。
 
-**错误码:** 400（非失败任务重试、任务未成功或参数错误）、403（非团队成员或缺少导出结果下载权限）、404（团队、任务或结果文件不存在）。
+**错误码:** 400（非失败任务重试、任务未成功或参数错误）、403（非团队成员或缺少任务结果下载权限）、404（团队、任务或结果文件不存在）。
 
 ### 16.9 团队活动流
 

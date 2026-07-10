@@ -5,6 +5,7 @@ import com.betterclouddrive.service.FavoriteService;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.FolderZipDownloadService;
+import com.betterclouddrive.service.FolderZipTaskService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.service.TagService;
 import com.betterclouddrive.service.TeamActivityService;
@@ -46,6 +47,7 @@ class TeamControllerTaskTest {
     @Mock private UploadService uploadService;
     @Mock private StorageService storageService;
     @Mock private FolderZipDownloadService folderZipDownloadService;
+    @Mock private FolderZipTaskService folderZipTaskService;
     @Mock private DownloadTicketService downloadTicketService;
     @Mock private ShareService shareService;
     @Mock private TeamInviteService teamInviteService;
@@ -74,6 +76,11 @@ class TeamControllerTaskTest {
 
     @Test
     void downloadTaskResult_shouldStreamResultFile() {
+        when(teamTaskService.getTask(10L, 88L)).thenReturn(TeamTaskEntity.builder()
+                .id(88L)
+                .teamId(10L)
+                .taskType("AUDIT_EXPORT")
+                .build());
         when(teamAuditExportTaskService.downloadExportResult(2L, 10L, 88L))
                 .thenReturn(new TeamTaskDownload(
                         "team-10-audit.csv",
@@ -85,6 +92,38 @@ class TeamControllerTaskTest {
 
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getHeaders().getFirst("Content-Disposition")).contains("team-10-audit.csv");
+        assertThat(response.getHeaders().getContentLength()).isEqualTo(3L);
+        verify(teamService).requireRead(2L, 10L);
+    }
+
+    @Test
+    void queueFolderZipTask_shouldCreatePendingTask() {
+        TeamTaskEntity task = TeamTaskEntity.builder().id(99L).teamId(10L).taskType("FOLDER_ZIP").build();
+        when(folderZipTaskService.queueTeamFolderZip(2L, 10L, 20L)).thenReturn(task);
+
+        var response = controller.queueFolderZipTask(user(), 10L, 20L);
+
+        assertThat(response.getData()).isSameAs(task);
+    }
+
+    @Test
+    void downloadTaskResult_shouldRouteFolderZipResults() {
+        when(teamTaskService.getTask(10L, 99L)).thenReturn(TeamTaskEntity.builder()
+                .id(99L)
+                .teamId(10L)
+                .taskType("FOLDER_ZIP")
+                .build());
+        when(folderZipTaskService.downloadTeamFolderZipResult(2L, 10L, 99L))
+                .thenReturn(new TeamTaskDownload(
+                        "Docs.zip",
+                        "application/zip",
+                        3L,
+                        new ByteArrayInputStream("zip".getBytes())));
+
+        ResponseEntity<StreamingResponseBody> response = controller.downloadTaskResult(user(), 10L, 99L);
+
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+        assertThat(response.getHeaders().getFirst("Content-Disposition")).contains("Docs.zip");
         assertThat(response.getHeaders().getContentLength()).isEqualTo(3L);
     }
 

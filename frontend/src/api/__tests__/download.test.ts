@@ -6,6 +6,7 @@ import {
   downloadFolderZip,
   downloadSharedFile,
   downloadSharedFolderZip,
+  downloadTeamFolderZip,
   getFileNameFromDisposition,
 } from '@/api/download'
 import * as desktopDownload from '@/api/desktopDownload'
@@ -117,6 +118,15 @@ describe('downloadFile', () => {
     expect(startQueuedDesktopFolderDownload).toHaveBeenCalledWith({ id: 7, fileName: 'docs', fileSize: 0 })
     expect(apiGet).not.toHaveBeenCalled()
     expect(toastSuccess).toHaveBeenCalledWith('已加入传输队列')
+  })
+
+  it('queues team folder ZIP generation in browser runtime', async () => {
+    apiPost.mockResolvedValue({ data: { code: 200, data: { id: 88 } } })
+
+    await downloadTeamFolderZip(10, 7, 'docs')
+
+    expect(apiPost).toHaveBeenCalledWith('/teams/10/download/folders/7/zip/tasks', undefined, { suppressToast: true })
+    expect(toastSuccess).toHaveBeenCalledWith('ZIP 任务已提交，可在团队设置的任务中心下载')
   })
 
   it('shows folder ZIP limit errors from JSON blob responses', async () => {

@@ -104,8 +104,8 @@ export const downloadTeamFolderZip = async (teamId: number, fileId: number, fold
       return
     }
 
-    const { data } = await api.post<{ code: number; data: { url: string } }>(`/teams/${teamId}/download/folders/${fileId}/zip/ticket`, undefined, { suppressToast: true })
-    triggerBrowserDownload(data.data.url, `${folderName}.zip`)
+    await api.post(`/teams/${teamId}/download/folders/${fileId}/zip/tasks`, undefined, { suppressToast: true })
+    toast.success('ZIP 任务已提交，可在团队设置的任务中心下载')
   } catch (e) {
     const msg = e instanceof Error ? e.message : '下载失败'
     toast.error(msg)

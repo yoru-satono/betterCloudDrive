@@ -11,6 +11,8 @@ public interface FolderZipDownloadCacheRepository extends JpaRepository<FolderZi
 
     Optional<FolderZipDownloadCacheEntity> findByUserIdAndFolderId(Long userId, Long folderId);
 
+    Optional<FolderZipDownloadCacheEntity> findByObjectKey(String objectKey);
+
     List<FolderZipDownloadCacheEntity> findByFolderIdIn(List<Long> folderIds);
 
     List<FolderZipDownloadCacheEntity> findByLastDownloadedAtLessThanEqual(LocalDateTime cutoff);

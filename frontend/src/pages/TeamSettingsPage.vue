@@ -667,7 +667,7 @@ onMounted(async () => {
               <span class="team-tasks__status" :class="`team-tasks__status--${task.status.toLowerCase()}`">{{ task.status }}</span>
               <span class="font-mono">{{ task.progress }}%</span>
               <OButton
-                v-if="task.status === 'SUCCEEDED' && task.taskType === 'AUDIT_EXPORT' && task.resultFileName"
+                v-if="task.status === 'SUCCEEDED' && ['AUDIT_EXPORT', 'FOLDER_ZIP'].includes(task.taskType) && task.resultFileName"
                 variant="ghost"
                 size="sm"
                 @click="downloadTaskResult(task)"

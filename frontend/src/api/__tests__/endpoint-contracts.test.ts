@@ -12,7 +12,7 @@ import * as teamsApi from '@/api/teams'
 import * as officeApi from '@/api/office'
 import * as versionsApi from '@/api/versions'
 import * as notificationsApi from '@/api/notifications'
-import { downloadFolderZip, downloadSharedFile, downloadSharedFolderZip, previewFile } from '@/api/download'
+import { downloadFolderZip, downloadSharedFile, downloadSharedFolderZip, downloadTeamFolderZip, previewFile } from '@/api/download'
 
 vi.mock('@/api/client', () => ({
   default: {
@@ -426,6 +426,9 @@ describe('API endpoint contracts', () => {
 
     await downloadFolderZip(5, 'docs')
     expect(apiMock.post).toHaveBeenCalledWith('/download/folders/5/zip/ticket', undefined, { suppressToast: true })
+
+    await downloadTeamFolderZip(10, 6, 'team-docs')
+    expect(apiMock.post).toHaveBeenCalledWith('/teams/10/download/folders/6/zip/tasks', undefined, { suppressToast: true })
   })
 
   it('maps recycle bin batch actions to per-file backend calls', async () => {
