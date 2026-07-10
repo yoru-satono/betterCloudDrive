@@ -478,13 +478,15 @@
 
 - 目标：解释为什么需要 document server 镜像以及如何验证。
 - 范围：镜像名、端口、JWT secret、回调地址、常见错误。
-- 验收：按文档可确认 OnlyOffice 预览和编辑可用。
+- 状态：已完成。
+- 验收：`docs/ONLYOFFICE_DEPLOYMENT.md` 已说明 Document Server 职责、镜像和端口、三类访问地址、JWT 一致性、保存链路、健康/SDK/容器互通检查、真实预览编辑 E2E 和常见错误排查。按文档可区分“服务健康”和“保存回调可用”。
 
 ### OPS-03 备份恢复说明
 
 - 目标：团队数据和文件可恢复。
 - 范围：Postgres、SeaweedFS、OnlyOffice 历史版本、归档团队。
-- 验收：文档包含备份、恢复、演练步骤。
+- 状态：已完成。
+- 验收：`docs/BACKUP_RESTORE.md` 已覆盖暂停写入的一致性备份、PostgreSQL 逻辑备份、SeaweedFS/OnlyOffice volume 冷备、SHA-256 清单、空环境恢复、历史版本和归档/软删除团队抽查，以及季度恢复演练要求。
 
 ### OBS-01 团队配额指标
 

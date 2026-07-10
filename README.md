@@ -98,6 +98,8 @@ docker compose up -d --build
 - SeaweedFS S3：`http://localhost:8333`
 - Grafana：通过管理后台日志中心的 Grafana 链接访问，同域路径为 `/grafana/`，仅系统管理员可进入。
 
+部署细节见 [OnlyOffice 部署与排障](docs/ONLYOFFICE_DEPLOYMENT.md) 和 [团队数据备份与恢复](docs/BACKUP_RESTORE.md)。
+
 前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Tauri 默认地址可用 `VITE_DESKTOP_API_BASE_URL`、`VITE_DESKTOP_WEB_BASE_URL` 覆盖；Android 默认服务器地址可用 `ANDROID_DEFAULT_SERVER_BASE_URL` 覆盖，Android E2E 可用 `ANDROID_E2E_SERVER_BASE_URL`、`ANDROID_E2E_MAILPIT_BASE_URL` 覆盖，用户仍可在登录页设置自己的服务器地址。
 
 ## 可观测性
