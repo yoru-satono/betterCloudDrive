@@ -471,7 +471,8 @@
 
 - 目标：Docker Compose 启动顺序和健康状态可靠。
 - 范围：Postgres、Redis、SeaweedFS、OnlyOffice、Mailpit、后端、前端。
-- 验收：`docker compose up` 后服务健康状态明确。
+- 状态：已完成。
+- 验收：Postgres、Redis、SeaweedFS、OnlyOffice、Mailpit、后端和前端均配置容器级 healthcheck；后端等待五项依赖健康，前端和 Promtail 等待后端健康。验证已通过：`docker compose config --quiet`、`docker compose up -d --build frontend promtail`，随后 `docker compose ps` 中七项服务均为 `healthy`。
 
 ### OPS-02 OnlyOffice 部署文档
 

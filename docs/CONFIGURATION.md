@@ -89,6 +89,18 @@ docker compose ps
 docker compose logs -f backend
 ```
 
+`postgres`、`redis`、`seaweedfs`、`mailpit`、`onlyoffice-documentserver`、`backend` 和 `frontend` 都定义了容器健康检查。后端只会在数据库、Redis、对象存储、邮件服务和 OnlyOffice 健康后启动，前端只会在后端健康后启动。
+
+| 服务 | 容器内健康检查 |
+|------|----------------|
+| PostgreSQL | `pg_isready` |
+| Redis | `redis-cli ping` |
+| SeaweedFS | Master `/cluster/status` |
+| Mailpit | `/api/v1/info` |
+| OnlyOffice | `/healthcheck` |
+| 后端 | `/actuator/health` |
+| 前端 | `/healthz` |
+
 默认入口：
 
 | 服务 | 默认地址 |
