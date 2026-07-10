@@ -31,3 +31,20 @@ Invoke-RestMethod http://127.0.0.1:8080/actuator/metrics/bcd.team.quota.usage.ra
 | `bcd.onlyoffice.save.retries` | Counter | 无 | 用户从任务中心重试保存的次数 |
 
 保存失败日志包含 `callbackId`、`teamId`、`fileId` 和异常；成功日志包含生成的 `versionId`。排查时先比较 callback `queued` 数与 save result 数，再查看失败耗时、重试次数和 `ONLYOFFICE_SAVE` 任务状态。
+
+## 队列积压
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `bcd.queue.stream.length` | Gauge | `stream` | Redis Stream 当前长度；覆盖 team events、notifications、team tasks 和 dead letter |
+| `bcd.queue.consumer.pending` | Gauge | `stream`, `group` | 已投递但尚未 ACK 的 consumer group 消息数 |
+| `bcd.queue.records.pending` | Gauge | `source` | PostgreSQL outbox/team task 事实表中的 `PENDING` 数量 |
+| `bcd.queue.records.retry` | Gauge | `source` | `PENDING` 且 `retry_count > 0` 的记录数 |
+| `bcd.queue.deadlettered` | Counter | `stream` | 运行期间进入 dead letter 的消息数 |
+| `bcd.queue.processing.results` | Counter | `operation`, `outcome` | outbox 发布和通知消费批次的成功/失败次数 |
+| `bcd.queue.processing.duration` | Timer | `operation`, `outcome` | outbox 发布和通知消费批次耗时 |
+| `bcd.queue.observation.available` | Gauge | `source` | 最近一次刷新时 Redis/数据库指标源是否可用，`1` 可用、`0` 不可用 |
+
+刷新任务默认每 15 秒读取 Redis Streams 和 PostgreSQL 事实表。pending/retry 达到 `QUEUE_REDIS_BACKLOG_WARN_THRESHOLD`，或 dead-letter 长度达到 `QUEUE_REDIS_DEAD_LETTER_WARN_THRESHOLD` 时，仅在跨越阈值时写入结构化告警；恢复到阈值以下会记录恢复日志。指标源不可用和恢复也采用相同的状态转换日志，避免每次刷新重复刷屏。
+
+排查时不要把 `stream.length` 直接等同于未处理消息：ACK 不会自动删除 Stream 记录，长度还受 `QUEUE_REDIS_TRIM_MAX_LENGTH` 控制。实际消费异常优先查看 `consumer.pending`、数据库 `records.pending/retry`、dead-letter 和 processing failure/duration。

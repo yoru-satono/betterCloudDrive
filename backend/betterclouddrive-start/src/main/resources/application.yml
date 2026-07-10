@@ -126,6 +126,8 @@ queue:
     outbox-publish-batch-size: ${QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE:50}
     outbox-publish-interval-ms: ${QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS:5000}
     notification-dispatch-interval-ms: ${QUEUE_REDIS_NOTIFICATION_DISPATCH_INTERVAL_MS:2000}
+    backlog-warn-threshold: ${QUEUE_REDIS_BACKLOG_WARN_THRESHOLD:100}
+    dead-letter-warn-threshold: ${QUEUE_REDIS_DEAD_LETTER_WARN_THRESHOLD:1}
     streams:
       team-events: ${QUEUE_REDIS_STREAM_TEAM_EVENTS:bcd:stream:team-events}
       notifications: ${QUEUE_REDIS_STREAM_NOTIFICATIONS:bcd:stream:notifications}
@@ -209,6 +211,7 @@ observability:
   enabled: ${OBSERVABILITY_ENABLED:true}
   metrics:
     team-quota-refresh-interval-ms: ${TEAM_QUOTA_METRICS_REFRESH_INTERVAL_MS:60000}
+    queue-refresh-interval-ms: ${QUEUE_METRICS_REFRESH_INTERVAL_MS:15000}
   legacy-operation-aspect:
     enabled: false
   system-logs:

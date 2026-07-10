@@ -4,6 +4,7 @@ import com.betterclouddrive.dal.entity.TeamEventOutboxEntity;
 import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.config.QueueProperties;
+import com.betterclouddrive.service.metrics.QueueMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,6 +44,9 @@ class TeamNotificationDispatchServiceImplTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private QueueMetrics queueMetrics;
+
     private QueueProperties queueProperties;
     private ObjectMapper objectMapper;
     private TeamNotificationDispatchServiceImpl service;
@@ -57,7 +61,8 @@ class TeamNotificationDispatchServiceImplTest {
                 redisStreamQueueService,
                 notificationService,
                 queueProperties,
-                objectMapper);
+                objectMapper,
+                queueMetrics);
     }
 
     @Test
@@ -147,6 +152,7 @@ class TeamNotificationDispatchServiceImplTest {
         assertThat(saved.getRetryCount()).isEqualTo(5);
         assertThat(saved.getProcessedAt()).isNotNull();
         verify(redisStreamQueueService).moveToDeadLetter(message, "notification db down");
+        verify(queueMetrics).recordDeadLetter("bcd:stream:notifications");
         verify(redisStreamQueueService).acknowledge("bcd:stream:notifications", "bcd-notification-workers", "1-0");
     }
 
@@ -163,6 +169,7 @@ class TeamNotificationDispatchServiceImplTest {
         verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), anyBoolean());
         verify(teamEventOutboxRepository, never()).save(any());
         verify(redisStreamQueueService).moveToDeadLetter(message, "Notification outbox event not found");
+        verify(queueMetrics).recordDeadLetter("bcd:stream:notifications");
         verify(redisStreamQueueService).acknowledge("bcd:stream:notifications", "bcd-notification-workers", "1-0");
     }
 

@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.PendingMessagesSummary;
 import org.springframework.data.redis.connection.stream.ReadOffset;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.connection.stream.StreamOffset;
@@ -117,6 +118,22 @@ public class RedisStreamQueueService {
         return publish(queueProperties.getRedis().getStreams().getDeadLetter(), payload);
     }
 
+    public long streamLength(String stream) {
+        if (!isEnabled() || !StringUtils.hasText(stream)) {
+            return 0L;
+        }
+        Long size = redisTemplate.opsForStream().size(stream);
+        return size == null ? 0L : size;
+    }
+
+    public long pendingCount(String stream, String group) {
+        if (!isEnabled() || !StringUtils.hasText(stream) || !StringUtils.hasText(group)) {
+            return 0L;
+        }
+        PendingMessagesSummary pending = redisTemplate.opsForStream().pending(stream, group);
+        return pending == null ? 0L : pending.getTotalPendingMessages();
+    }
+
     private void createGroup(String stream, String group) {
         redisTemplate.opsForStream().createGroup(stream, ReadOffset.from("0-0"), group);
     }
@@ -158,6 +175,15 @@ public class RedisStreamQueueService {
     }
 
     private String message(Exception e) {
-        return String.valueOf(e.getMessage()).toUpperCase(Locale.ROOT);
+        StringBuilder messages = new StringBuilder();
+        Throwable current = e;
+        int depth = 0;
+        while (current != null && depth++ < 10) {
+            if (current.getMessage() != null) {
+                messages.append(' ').append(current.getMessage());
+            }
+            current = current.getCause();
+        }
+        return messages.toString().toUpperCase(Locale.ROOT);
     }
 }

@@ -371,6 +371,9 @@ npm run build
 | `QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE` | 单次扫描并投递团队 outbox 事件的最大数量，默认 50 |
 | `QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS` | 团队 outbox 投递任务的执行间隔，默认 5000 毫秒 |
 | `QUEUE_REDIS_NOTIFICATION_DISPATCH_INTERVAL_MS` | 团队通知队列消费任务的执行间隔，默认 2000 毫秒 |
+| `QUEUE_REDIS_BACKLOG_WARN_THRESHOLD` | Redis consumer pending 或数据库 pending/retry 达到该值时记录一次告警日志，恢复后记录恢复日志，默认 100 |
+| `QUEUE_REDIS_DEAD_LETTER_WARN_THRESHOLD` | dead-letter Stream 长度达到该值时记录告警日志，默认 1 |
+| `QUEUE_METRICS_REFRESH_INTERVAL_MS` | 刷新 Redis Streams 和数据库队列积压指标的间隔，默认 15000 毫秒 |
 | `TEAM_QUOTA_METRICS_REFRESH_INTERVAL_MS` | 从数据库刷新团队配额 gauge 的间隔，默认 60000 毫秒 |
 | `TEAM_TASK_RESULT_DIRECTORY` | 团队后台任务结果文件目录，默认 `./data/team-task-results` |
 | `TEAM_TASK_RESULT_RETENTION_HOURS` | 团队后台任务结果文件保留小时数，默认 24 |

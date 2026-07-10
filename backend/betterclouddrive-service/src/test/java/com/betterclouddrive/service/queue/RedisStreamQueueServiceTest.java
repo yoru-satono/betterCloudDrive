@@ -10,6 +10,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.connection.stream.Consumer;
 import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.PendingMessagesSummary;
 import org.springframework.data.redis.connection.stream.RecordId;
 import org.springframework.data.redis.connection.stream.StreamOffset;
 import org.springframework.data.redis.connection.stream.StreamReadOptions;
@@ -92,6 +93,21 @@ class RedisStreamQueueServiceTest {
 
     @Test
     @SuppressWarnings({ "rawtypes", "unchecked" })
+    void ensureConsumerGroup_shouldIgnoreNestedBusyGroupError() {
+        useStreamOperations();
+        RedisSystemException busyGroup = new RedisSystemException(
+                "Error in execution",
+                new IllegalStateException("BUSYGROUP Consumer Group name already exists"));
+        when(streamOperations.createGroup(eq("bcd:stream:team-events"), any(), eq("workers")))
+                .thenThrow(busyGroup);
+
+        service.ensureConsumerGroup("bcd:stream:team-events", "workers");
+
+        verify(streamOperations, never()).add(any(MapRecord.class));
+    }
+
+    @Test
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     void readGroup_shouldMapRecordsAndAcknowledge() {
         useStreamOperations();
         MapRecord record = org.mockito.Mockito.mock(MapRecord.class);
@@ -138,6 +154,19 @@ class RedisStreamQueueServiceTest {
         assertThat(payload.get("originalId")).isEqualTo("2-0");
         assertThat(payload.get("reason")).isEqualTo("boom");
         assertThat(payload.get("eventType")).isEqualTo("TEAM_CREATED");
+    }
+
+    @Test
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    void streamLengthAndPendingCount_shouldReadStreamState() {
+        useStreamOperations();
+        PendingMessagesSummary pending = org.mockito.Mockito.mock(PendingMessagesSummary.class);
+        when(streamOperations.size("bcd:stream:team-events")).thenReturn(12L);
+        when(streamOperations.pending("bcd:stream:team-events", "workers")).thenReturn(pending);
+        when(pending.getTotalPendingMessages()).thenReturn(3L);
+
+        assertThat(service.streamLength("bcd:stream:team-events")).isEqualTo(12L);
+        assertThat(service.pendingCount("bcd:stream:team-events", "workers")).isEqualTo(3L);
     }
 
     @SuppressWarnings("unchecked")

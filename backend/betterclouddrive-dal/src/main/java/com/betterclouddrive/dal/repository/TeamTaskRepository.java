@@ -15,4 +15,8 @@ public interface TeamTaskRepository extends JpaRepository<TeamTaskEntity, Long>,
     List<TeamTaskEntity> findByTaskTypeAndStatusOrderByCreatedAtAsc(String taskType, String status, Pageable pageable);
 
     List<TeamTaskEntity> findByResultExpiresAtLessThanEqualAndResultPathIsNotNull(LocalDateTime resultExpiresAt);
+
+    long countByStatus(String status);
+
+    long countByStatusAndRetryCountGreaterThan(String status, Integer retryCount);
 }

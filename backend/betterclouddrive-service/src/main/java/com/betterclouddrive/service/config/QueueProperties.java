@@ -23,6 +23,8 @@ public class QueueProperties {
         private int outboxPublishBatchSize = 50;
         private long outboxPublishIntervalMs = 5000;
         private long notificationDispatchIntervalMs = 2000;
+        private long backlogWarnThreshold = 100;
+        private long deadLetterWarnThreshold = 1;
         private Streams streams = new Streams();
         private Groups groups = new Groups();
     }

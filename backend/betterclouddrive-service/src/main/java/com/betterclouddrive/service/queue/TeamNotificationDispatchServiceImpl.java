@@ -5,6 +5,7 @@ import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamNotificationDispatchService;
 import com.betterclouddrive.service.config.QueueProperties;
+import com.betterclouddrive.service.metrics.QueueMetrics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
     private final NotificationService notificationService;
     private final QueueProperties queueProperties;
     private final ObjectMapper objectMapper;
+    private final QueueMetrics queueMetrics;
 
     @Override
     public void enqueueUserNotification(Long userId, Long teamId, String type, String title, String content, String link, boolean email) {
@@ -73,7 +75,7 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
                 ? null
                 : teamEventOutboxRepository.findById(outboxId).orElse(null);
         if (event == null) {
-            redisStreamQueueService.moveToDeadLetter(message, "Notification outbox event not found");
+            moveToDeadLetter(message, "Notification outbox event not found");
             acknowledge(message);
             return false;
         }
@@ -145,7 +147,7 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
 
     private void handleFailure(TeamEventOutboxEntity event, QueueMessage message, RuntimeException error) {
         if (event == null) {
-            redisStreamQueueService.moveToDeadLetter(message, error.getMessage());
+            moveToDeadLetter(message, error.getMessage());
             acknowledge(message);
             return;
         }
@@ -158,7 +160,7 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
             event.setStatus(TeamEventOutboxEntity.STATUS_FAILED);
             event.setProcessedAt(now);
             teamEventOutboxRepository.save(event);
-            redisStreamQueueService.moveToDeadLetter(message, event.getErrorMessage());
+            moveToDeadLetter(message, event.getErrorMessage());
             acknowledge(message);
             return;
         }
@@ -171,6 +173,11 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
     private void acknowledge(QueueMessage message) {
         QueueProperties.Redis redis = queueProperties.getRedis();
         redisStreamQueueService.acknowledge(message.stream(), redis.getGroups().getNotifications(), message.id());
+    }
+
+    private void moveToDeadLetter(QueueMessage message, String reason) {
+        redisStreamQueueService.moveToDeadLetter(message, reason);
+        queueMetrics.recordDeadLetter(message.stream());
     }
 
     private Long parseLong(String value) {

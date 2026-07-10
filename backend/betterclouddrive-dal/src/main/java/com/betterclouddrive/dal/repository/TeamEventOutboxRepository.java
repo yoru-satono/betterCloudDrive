@@ -10,4 +10,8 @@ import java.util.List;
 
 public interface TeamEventOutboxRepository extends JpaRepository<TeamEventOutboxEntity, Long>, JpaSpecificationExecutor<TeamEventOutboxEntity> {
     List<TeamEventOutboxEntity> findByStatusAndAvailableAtLessThanEqualOrderByIdAsc(String status, LocalDateTime availableAt, Pageable pageable);
+
+    long countByStatus(String status);
+
+    long countByStatusAndRetryCountGreaterThan(String status, Integer retryCount);
 }

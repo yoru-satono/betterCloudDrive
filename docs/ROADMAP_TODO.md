@@ -506,4 +506,5 @@
 
 - 目标：引入队列后能监控积压。
 - 范围：pending、retry、dead letter、处理耗时。
-- 验收：队列异常时有明确指标和日志。
+- 状态：已完成。
+- 验收：Actuator 暴露 Redis Stream 长度、consumer group pending、PostgreSQL outbox/team task pending 与 retry、dead-letter 新增次数、发布/消费批次结果与耗时、Redis/数据库观测源可用性；阈值跨越、恢复和指标源异常采用状态转换日志，避免周期任务重复刷屏。配置与排障说明见 `docs/OBSERVABILITY.md`、`docs/CONFIGURATION.md`。验证已通过：`QueueMetricsTest`、`RedisStreamQueueServiceTest`、`TeamNotificationDispatchServiceImplTest`、`QueueMetricsTaskTest`、`TeamEventOutboxPublishTaskTest`、`TeamNotificationDispatchTaskTest`；重建后端后可发现八个 `bcd.queue.*` 指标，Redis/数据库 `observation.available` 均为 `1`。同时修复 Spring Data Redis 4 将 `BUSYGROUP` 包装到异常链后导致重复启动误报的问题，容器重启日志已确认干净。
