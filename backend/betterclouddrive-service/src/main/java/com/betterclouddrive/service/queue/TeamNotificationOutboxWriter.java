@@ -2,11 +2,11 @@ package com.betterclouddrive.service.queue;
 
 import com.betterclouddrive.dal.entity.TeamEventOutboxEntity;
 import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 
@@ -72,7 +72,7 @@ public class TeamNotificationOutboxWriter {
     private String toJson(NotificationDispatchPayload payload) {
         try {
             return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize notification dispatch payload", e);
         }
     }

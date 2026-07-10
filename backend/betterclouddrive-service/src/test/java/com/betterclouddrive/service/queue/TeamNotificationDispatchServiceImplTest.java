@@ -4,13 +4,13 @@ import com.betterclouddrive.dal.entity.TeamEventOutboxEntity;
 import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.config.QueueProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.LocalDateTime;

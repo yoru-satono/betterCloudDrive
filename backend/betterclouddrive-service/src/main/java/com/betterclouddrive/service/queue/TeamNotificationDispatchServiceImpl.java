@@ -5,12 +5,12 @@ import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamNotificationDispatchService;
 import com.betterclouddrive.service.config.QueueProperties;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -126,7 +126,7 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
         }
         try {
             return objectMapper.readValue(payload, NotificationDispatchPayload.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Notification dispatch payload is invalid", e);
         }
     }

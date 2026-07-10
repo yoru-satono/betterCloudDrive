@@ -13,12 +13,12 @@ import com.betterclouddrive.service.csv.TeamAuditCsvService;
 import com.betterclouddrive.service.dto.TeamAuditExportPayload;
 import com.betterclouddrive.service.dto.TeamTaskDownload;
 import com.betterclouddrive.service.dto.TeamTaskResult;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 
@@ -133,7 +133,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
         }
         try {
             return objectMapper.readValue(task.getPayload(), TeamAuditExportPayload.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "Audit export task payload is invalid");
         }
     }
@@ -141,7 +141,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
     private String toJson(TeamAuditExportPayload payload) {
         try {
             return objectMapper.writeValueAsString(payload);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize audit export payload", e);
         }
     }
