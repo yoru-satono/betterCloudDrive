@@ -9,6 +9,7 @@ import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamTaskService;
+import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.dto.request.OnlyOfficeCallbackRequest;
 import com.betterclouddrive.web.dto.response.OfficeConfigResponse;
@@ -40,6 +41,7 @@ public class OfficeController {
     private final OnlyOfficeCallbackService onlyOfficeCallbackService;
     private final TeamPermissionService teamPermissionService;
     private final TeamTaskService teamTaskService;
+    private final OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
 
     @GetMapping("/api/v1/office/files/{fileId}/config")
     public ApiResponse<OfficeConfigResponse> personalConfig(
@@ -90,6 +92,7 @@ public class OfficeController {
             @PathVariable Long fileId,
             @RequestParam String token,
             @RequestBody OnlyOfficeCallbackRequest request) {
+        onlyOfficeSaveMetrics.recordCallbackReceived(request.getStatus());
         Long userId = onlyOfficeService.validateCallbackToken(token, fileId, teamId, request.getKey());
         teamPermissionService.requireWrite(userId, teamId, fileId);
         if (request.getToken() != null && !request.getToken().isBlank()) {
@@ -103,12 +106,16 @@ public class OfficeController {
                     teamId, fileId, userId, callbackKey, request.getStatus(), contentUrlHash, downloadUrl)) {
                 log.info("Skipping duplicate OnlyOffice callback, teamId={}, fileId={}, key={}, status={}",
                         teamId, fileId, callbackKey, request.getStatus());
+                onlyOfficeSaveMetrics.recordCallbackOutcome("duplicate");
                 return Map.of("error", 0);
             }
             TeamTaskEntity task = teamTaskService.queueTask(
                     teamId, userId, "ONLYOFFICE_SAVE", "FILE", fileId, "保存在线编辑文档");
             onlyOfficeCallbackService.attachTask(
                     teamId, fileId, callbackKey, request.getStatus(), contentUrlHash, task.getId());
+            onlyOfficeSaveMetrics.recordCallbackOutcome("queued");
+        } else {
+            onlyOfficeSaveMetrics.recordCallbackOutcome("ignored");
         }
         return Map.of("error", 0);
     }

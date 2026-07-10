@@ -19,3 +19,15 @@ Invoke-RestMethod http://127.0.0.1:8080/actuator/metrics/bcd.team.quota.usage.ra
 | `bcd.team.quota.notification.failures` | Counter | `channel` | `queue/direct/email` 通知失败次数 |
 
 告警触发和通知失败同时写入结构化运行日志。Loki 中可搜索 `Team quota alert triggered` 或 `Failed to dispatch team quota alert`，日志包含 `teamId`、`userId`、阈值和通知通道；指标不使用用户 ID 标签，避免无界基数。
+
+## OnlyOffice 保存
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `bcd.onlyoffice.callbacks` | Counter | `status` | 收到的 callback 数；未知状态归为 `other` |
+| `bcd.onlyoffice.callback.outcomes` | Counter | `outcome` | `queued/duplicate/ignored` callback 处理结果 |
+| `bcd.onlyoffice.save.results` | Counter | `outcome` | 后台保存 `success/failure` 次数 |
+| `bcd.onlyoffice.save.duration` | Timer | `outcome` | 下载编辑结果并创建版本的耗时 |
+| `bcd.onlyoffice.save.retries` | Counter | 无 | 用户从任务中心重试保存的次数 |
+
+保存失败日志包含 `callbackId`、`teamId`、`fileId` 和异常；成功日志包含生成的 `versionId`。排查时先比较 callback `queued` 数与 save result 数，再查看失败耗时、重试次数和 `ONLYOFFICE_SAVE` 任务状态。

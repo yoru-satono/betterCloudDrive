@@ -9,6 +9,7 @@ import com.betterclouddrive.service.OnlyOfficeContentDownloader;
 import com.betterclouddrive.service.OnlyOfficeSaveService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamTaskService;
+import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +27,7 @@ public class OnlyOfficeSaveServiceImpl implements OnlyOfficeSaveService {
     private final TeamTaskService teamTaskService;
     private final TeamAuditService teamAuditService;
     private final NotificationService notificationService;
+    private final OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
 
     @Override
     public int processPendingSaves(int limit) {
@@ -40,6 +42,7 @@ public class OnlyOfficeSaveServiceImpl implements OnlyOfficeSaveService {
 
     private void processCallback(OnlyOfficeCallbackEntity callback) {
         Long taskId = callback.getTaskId();
+        long startedAtNanos = onlyOfficeSaveMetrics.startSaveAttempt();
         teamTaskService.markRunning(taskId);
         try {
             byte[] content = onlyOfficeContentDownloader.download(callback.getDownloadUrl());
@@ -50,7 +53,11 @@ public class OnlyOfficeSaveServiceImpl implements OnlyOfficeSaveService {
                     content);
             onlyOfficeCallbackService.markSaved(callback.getId(), version.getId());
             teamTaskService.markSucceeded(taskId, "保存为版本 " + version.getVersionNumber());
+            onlyOfficeSaveMetrics.recordSaveSucceeded(startedAtNanos);
+            log.info("OnlyOffice async save succeeded, callbackId={}, teamId={}, fileId={}, versionId={}",
+                    callback.getId(), callback.getTeamId(), callback.getFileId(), version.getId());
         } catch (RuntimeException e) {
+            onlyOfficeSaveMetrics.recordSaveFailed(startedAtNanos);
             String message = errorMessage(e);
             onlyOfficeCallbackService.markFailed(callback.getId(), message);
             teamTaskService.markFailed(taskId, message);

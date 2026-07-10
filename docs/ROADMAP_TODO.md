@@ -499,7 +499,8 @@
 
 - 目标：监控文档编辑保存质量。
 - 范围：callback 次数、保存成功/失败、耗时、重试次数。
-- 验收：保存失败能在日志和指标中定位。
+- 状态：已完成。
+- 验收：Actuator 暴露 callback 状态与处理结果、后台保存成功/失败、按结果分组的保存耗时和用户重试次数；固定状态组合在启动时预注册，保存成功/失败日志保留 callback/team/file/version 定位字段。指标说明见 `docs/OBSERVABILITY.md`。验证已通过：`OnlyOfficeSaveMetricsTest`、`OnlyOfficeSaveServiceImplTest`、`TeamTaskServiceImplTest`、`OfficeControllerCallbackTest`；重建后端后 `/actuator/metrics` 可发现五个 `bcd.onlyoffice.*` 指标。
 
 ### OBS-03 队列积压指标
 

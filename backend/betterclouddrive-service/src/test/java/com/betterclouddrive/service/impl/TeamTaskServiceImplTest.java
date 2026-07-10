@@ -14,6 +14,7 @@ import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
 import com.betterclouddrive.service.dto.TeamTaskResult;
+import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -36,6 +37,9 @@ class TeamTaskServiceImplTest {
 
     @Mock
     private OnlyOfficeCallbackRepository onlyOfficeCallbackRepository;
+
+    @Mock
+    private OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
 
     @InjectMocks
     private TeamTaskServiceImpl teamTaskService;
@@ -214,6 +218,7 @@ class TeamTaskServiceImplTest {
         teamTaskService.retryTask(10L, 7L);
 
         verify(onlyOfficeCallbackRepository).resetFailedByTaskId(eq(7L), any());
+        verify(onlyOfficeSaveMetrics).recordRetry();
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.OnlyOfficeContentDownloader;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamTaskService;
+import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -41,6 +42,9 @@ class OnlyOfficeSaveServiceImplTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
+
     @InjectMocks
     private OnlyOfficeSaveServiceImpl onlyOfficeSaveService;
 
@@ -50,6 +54,7 @@ class OnlyOfficeSaveServiceImplTest {
         byte[] content = "edited".getBytes();
         FileVersionEntity version = FileVersionEntity.builder().id(99L).versionNumber(3).build();
         when(onlyOfficeCallbackService.listPendingSaves(20)).thenReturn(List.of(callback));
+        when(onlyOfficeSaveMetrics.startSaveAttempt()).thenReturn(123L);
         when(onlyOfficeContentDownloader.download("http://onlyoffice/output.docx")).thenReturn(content);
         when(fileVersionService.saveTeamEditedVersion(10L, 2L, 1L, content)).thenReturn(version);
 
@@ -59,12 +64,14 @@ class OnlyOfficeSaveServiceImplTest {
         verify(teamTaskService).markRunning(77L);
         verify(onlyOfficeCallbackService).markSaved(88L, 99L);
         verify(teamTaskService).markSucceeded(77L, "保存为版本 3");
+        verify(onlyOfficeSaveMetrics).recordSaveSucceeded(123L);
     }
 
     @Test
     void processPendingSaves_shouldMarkCallbackAndTaskFailed() {
         OnlyOfficeCallbackEntity callback = callback();
         when(onlyOfficeCallbackService.listPendingSaves(20)).thenReturn(List.of(callback));
+        when(onlyOfficeSaveMetrics.startSaveAttempt()).thenReturn(123L);
         when(onlyOfficeContentDownloader.download("http://onlyoffice/output.docx"))
                 .thenThrow(new RuntimeException("download failed"));
 
@@ -73,6 +80,7 @@ class OnlyOfficeSaveServiceImplTest {
         assertThat(processed).isEqualTo(1);
         verify(onlyOfficeCallbackService).markFailed(88L, "download failed");
         verify(teamTaskService).markFailed(77L, "download failed");
+        verify(onlyOfficeSaveMetrics).recordSaveFailed(123L);
         verify(teamAuditService).recordFailure(10L, 2L, "OFFICE_SAVE_FAILED", "FILE", 1L, 500003, "download failed");
         verify(notificationService).notifyUser(
                 2L,

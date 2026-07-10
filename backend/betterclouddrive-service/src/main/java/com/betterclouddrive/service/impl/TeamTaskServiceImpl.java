@@ -8,6 +8,7 @@ import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
 import com.betterclouddrive.service.TeamTaskService;
 import com.betterclouddrive.service.dto.TeamTaskResult;
+import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -29,6 +30,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
 
     private final TeamTaskRepository teamTaskRepository;
     private final OnlyOfficeCallbackRepository onlyOfficeCallbackRepository;
+    private final OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
 
     @Override
     public PageResult<TeamTaskEntity> listTasks(Long teamId, String status, String taskType, int page, int size) {
@@ -203,6 +205,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         TeamTaskEntity saved = teamTaskRepository.save(task);
         if ("ONLYOFFICE_SAVE".equals(task.getTaskType())) {
             onlyOfficeCallbackRepository.resetFailedByTaskId(taskId, LocalDateTime.now());
+            onlyOfficeSaveMetrics.recordRetry();
         }
         return saved;
     }

@@ -5,6 +5,7 @@ import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamTaskService;
+import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.dto.request.OnlyOfficeCallbackRequest;
 import com.betterclouddrive.web.service.OnlyOfficeService;
@@ -51,6 +52,9 @@ class OfficeControllerCallbackTest {
     @Mock
     private TeamTaskService teamTaskService;
 
+    @Mock
+    private OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
+
     private OfficeController controller;
     private MockMvc mockMvc;
 
@@ -62,7 +66,8 @@ class OfficeControllerCallbackTest {
                 onlyOfficeService,
                 onlyOfficeCallbackService,
                 teamPermissionService,
-                teamTaskService);
+                teamTaskService,
+                onlyOfficeSaveMetrics);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
@@ -94,6 +99,8 @@ class OfficeControllerCallbackTest {
         Map<String, Integer> response = controller.teamCallback(10L, 1L, "callback-token", request);
 
         assertThat(response).containsEntry("error", 0);
+        verify(onlyOfficeSaveMetrics).recordCallbackReceived(2);
+        verify(onlyOfficeSaveMetrics).recordCallbackOutcome("duplicate");
         verify(teamPermissionService).requireWrite(2L, 10L, 1L);
         verify(teamTaskService, never()).queueTask(anyLong(), anyLong(), anyString(), anyString(), anyLong(), anyString());
         verify(onlyOfficeService, never()).downloadEditedContent(anyString());
@@ -118,6 +125,8 @@ class OfficeControllerCallbackTest {
         Map<String, Integer> response = controller.teamCallback(10L, 1L, "callback-token", request);
 
         assertThat(response).containsEntry("error", 0);
+        verify(onlyOfficeSaveMetrics).recordCallbackReceived(2);
+        verify(onlyOfficeSaveMetrics).recordCallbackOutcome("queued");
         verify(onlyOfficeCallbackService).attachTask(10L, 1L, "doc-key", 2, "url-hash", 77L);
         verify(onlyOfficeService, never()).downloadEditedContent(anyString());
         verify(teamTaskService, never()).markSucceeded(anyLong(), anyString());
@@ -133,6 +142,8 @@ class OfficeControllerCallbackTest {
         Map<String, Integer> response = controller.teamCallback(10L, 1L, "callback-token", request);
 
         assertThat(response).containsEntry("error", 0);
+        verify(onlyOfficeSaveMetrics).recordCallbackReceived(1);
+        verify(onlyOfficeSaveMetrics).recordCallbackOutcome("ignored");
         verify(onlyOfficeCallbackService, never()).reserveSave(anyLong(), anyLong(), anyLong(), anyString(), any(), anyString(), anyString());
         verify(teamTaskService, never()).queueTask(anyLong(), anyLong(), anyString(), anyString(), anyLong(), anyString());
     }
