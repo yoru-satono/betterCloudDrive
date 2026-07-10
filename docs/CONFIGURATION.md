@@ -278,6 +278,7 @@ npm run build
 | `HOST_BACKEND_PORT` | `8080` | 后端宿主机端口 |
 | `HOST_FRONTEND_PORT` | `3000` | 前端宿主机端口 |
 | `HOST_ONLYOFFICE_PORT` | `8082` | OnlyOffice Document Server 宿主机端口 |
+| `POSTGRES_LOG_MIN_DURATION_MS` | `500` | PostgreSQL 慢查询日志阈值，毫秒；`-1` 表示关闭 |
 | `ONLYOFFICE_JWT_SECRET` | 本地开发密钥 | OnlyOffice Document Server 和后端共享的 JWT 密钥，生产必须替换 |
 | `VITE_API_BASE_URL` | 空 | Web 前端构建时 API 根地址。空值表示使用 `/api/v1` |
 | `VITE_WEB_BASE_URL` | 空 | Web 前端构建时 Web 根地址。空值表示使用当前 origin |

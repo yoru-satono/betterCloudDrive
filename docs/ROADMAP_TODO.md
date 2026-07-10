@@ -462,7 +462,8 @@
 
 - 目标：优化团队文件、权限、审计、通知查询。
 - 范围：补 explain、索引迁移、慢查询记录。
-- 验收：核心列表查询在测试数据规模下稳定。
+- 状态：已完成。
+- 验收：`V14__team_query_indexes.sql` 已补充团队目录列表、审计可选筛选、通知类型和未读分页索引，现有权限索引经核对无需重复添加；`scripts/explain-team-core.sql` 在 PostgreSQL 18 上以 50 万行临时测试数据执行，目录、审计、通知和权限查询均命中目标索引，单次执行约 `0.04-2.7ms`；Compose 默认记录超过 `500ms` 的 PostgreSQL 慢查询，可通过 `POSTGRES_LOG_MIN_DURATION_MS` 调整。验证已通过：Flyway `V14` 已在本地 Compose 数据库成功应用、`mvn -pl betterclouddrive-start -am -DskipTests package`、`docker compose config --quiet`、`docs/DATABASE_PERFORMANCE.md` 中的 EXPLAIN 脚本。
 
 ## 运维和可观测性
 
