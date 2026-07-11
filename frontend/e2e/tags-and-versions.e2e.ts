@@ -16,7 +16,7 @@ test.describe('tags and versions', () => {
 
     await loginViaUi(page, e2eUser)
     await page.getByRole('link', { name: '标签管理' }).click()
-    await expect(page.getByText('标签')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '标签' })).toBeVisible()
     await page.getByRole('button', { name: '+ 新建' }).click()
     await page.getByRole('dialog', { name: '新建标签' }).getByLabel('标签名称').fill(tagName)
     await page.getByRole('dialog', { name: '新建标签' }).getByRole('button', { name: '创建' }).click()
@@ -28,7 +28,7 @@ test.describe('tags and versions', () => {
     await tagRow.getByRole('button', { name: '编辑' }).click()
     await page.getByRole('dialog', { name: '编辑标签' }).getByLabel('标签名称').fill(editedTagName)
     await page.getByRole('dialog', { name: '编辑标签' }).getByRole('button', { name: '保存' }).click()
-    await expect(page.getByText('标签已更新')).toBeVisible()
+    await expect(page.getByText('标签已更新').last()).toBeVisible()
     await expect(page.getByText(editedTagName)).toBeVisible()
 
     await page.getByRole('link', { name: '全部文件' }).click()
@@ -38,7 +38,7 @@ test.describe('tags and versions', () => {
     await expect(page.getByRole('dialog', { name: '管理标签' })).toBeVisible()
     await page.getByRole('dialog', { name: '管理标签' }).getByText(editedTagName).click()
     await page.getByRole('dialog', { name: '管理标签' }).getByRole('button', { name: '保存' }).click()
-    await expect(page.getByText('标签已更新')).toBeVisible()
+    await expect(page.getByText('标签已更新').last()).toBeVisible()
 
     await page.getByRole('link', { name: '标签管理' }).click()
     await page.locator('.tag-item').filter({ hasText: editedTagName }).click()

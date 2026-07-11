@@ -3,7 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import AdminTeams from '@/pages/admin/AdminTeams.vue'
 import * as adminApi from '@/api/admin'
 import { toast } from 'vue-sonner'
-import type { AdminTeam } from '@/api/admin'
+import type { AdminTeam, AdminTeamRecoveryDetails } from '@/api/admin'
 import type { FileEntity } from '@/types/file'
 import type { TeamMember, TeamOperationLog } from '@/types/team'
 
@@ -15,6 +15,7 @@ vi.mock('@/api/admin', () => ({
   unarchiveTeam: vi.fn(),
   restoreTeam: vi.fn(),
   purgeTeam: vi.fn(),
+  getTeamRecoveryDetails: vi.fn(),
   listTeamMembers: vi.fn(),
   listTeamFiles: vi.fn(),
   listTeamAuditLogs: vi.fn(),
@@ -28,6 +29,7 @@ const archiveTeam = adminApi.archiveTeam as Mock
 const unarchiveTeam = adminApi.unarchiveTeam as Mock
 const restoreTeam = adminApi.restoreTeam as Mock
 const purgeTeam = adminApi.purgeTeam as Mock
+const getTeamRecoveryDetails = adminApi.getTeamRecoveryDetails as Mock
 const listTeamMembers = adminApi.listTeamMembers as Mock
 const listTeamFiles = adminApi.listTeamFiles as Mock
 const listTeamAuditLogs = adminApi.listTeamAuditLogs as Mock
@@ -115,6 +117,28 @@ function auditLog(): TeamOperationLog {
   }
 }
 
+function recoveryDetails(patch: Partial<AdminTeamRecoveryDetails> = {}): AdminTeamRecoveryDetails {
+  return {
+    teamId: 10,
+    teamName: 'E2E Admin Team',
+    deletedAt: null,
+    deletedBy: null,
+    deletedByUsername: null,
+    deleteReason: null,
+    purgeAfter: null,
+    archivedAt: null,
+    archivedBy: null,
+    archivedByUsername: null,
+    activeFileCount: 1,
+    deletedFileCount: 0,
+    memberCount: 1,
+    restoreAvailable: false,
+    purgeAvailable: false,
+    recentAuditLogs: [auditLog()],
+    ...patch,
+  }
+}
+
 function mountPage() {
   return mount(AdminTeams, {
     global: {
@@ -144,6 +168,7 @@ beforeEach(() => {
   unarchiveTeam.mockReset().mockResolvedValue({ data: { data: team() } })
   restoreTeam.mockReset().mockResolvedValue({ data: { data: team() } })
   purgeTeam.mockReset().mockResolvedValue({ data: { data: null } })
+  getTeamRecoveryDetails.mockReset().mockResolvedValue({ data: { data: recoveryDetails() } })
   listTeamMembers.mockReset().mockResolvedValue({ data: { data: [member()] } })
   listTeamFiles.mockReset().mockResolvedValue(page([file()]))
   listTeamAuditLogs.mockReset().mockResolvedValue(page([auditLog()]))

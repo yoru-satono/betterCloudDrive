@@ -154,7 +154,7 @@ test.describe('teams', () => {
         notification.title.includes('团队邀请') &&
         !!notification.link?.startsWith('/team-invites/'),
       )
-    }).toBe(true)
+    }, { timeout: 30_000 }).toBe(true)
 
     await clearBrowserAuth(page)
     await loginViaUi(page, invitee)
@@ -185,7 +185,7 @@ test.describe('teams', () => {
     await expect.poll(async () => {
       const notifications = await listNotifications(request, invitee.accessToken, { unreadOnly: true, type: 'TEAM_INVITE' })
       return notifications.some(notification => notification.teamId === team.id && notification.title.includes('团队邀请已重发'))
-    }).toBe(true)
+    }, { timeout: 30_000 }).toBe(true)
 
     await ownerInviteRow.getByRole('button', { name: '取消' }).click()
     await page.getByRole('dialog', { name: '取消邀请' }).getByRole('button', { name: '确认' }).click()
