@@ -113,11 +113,13 @@
 - `mvn test`
 - `backend-test/.venv/Scripts/pytest.exe tests/test_teams.py -v`
 - `backend-test/.venv/Scripts/pytest.exe -v`
+- `scripts/verify-all.ps1 -AndroidSerial localhost:16416 -KeepGoing`
 
 结果：
 
 - 后端 Maven 全量测试通过。
 - backend-test 全量黑盒测试通过：`135 passed, 1 skipped`。
+- 全量验证通过，覆盖后端、Web、Tauri、Android 单元和 E2E。
 
 ## 已知限制
 
@@ -126,5 +128,5 @@
 - 团队任务中心已提供审计导出、ZIP、缩略图、OnlyOffice 保存和团队回收站清理的状态入口；审计导出会创建后台任务并在成功后提供 CSV 下载结果，结果文件按保留时间自动清理；团队文件夹 ZIP 请求和图片上传会创建后台任务，失败后可在任务中心重试；OnlyOffice 保存失败重试会把任务和 callback 重新置为 `PENDING`，由后台 worker 再处理。
 - Redis Streams 与 PostgreSQL 队列事实表已提供 stream length、consumer pending、pending/retry、dead letter、处理结果/耗时和指标源可用性观测；达到配置阈值时记录一次告警，恢复后记录恢复日志。
 - 权限来源说明尚未完整展示，前端只能看到最终效果或基础权限配置。
-- Web/Tauri/Android 的完整团队 E2E 和契约测试仍需继续补齐。
+- Web/Tauri/Android 的完整团队 E2E 和契约测试已补齐，后续可继续扩展更细的场景覆盖。
 - 清理等业务异步化仍可按实际负载继续扩展；当前 ROADMAP 中的队列化、Compose 健康检查、OnlyOffice 部署说明、备份恢复手册和观测指标均已落地。
