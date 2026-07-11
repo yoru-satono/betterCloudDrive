@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "backend", "blackbox", "web", "tauri", "android", "office")]
+    [ValidateSet("all", "backend", "blackbox", "web", "tauri", "android", "office", "webdav", "observability", "resilience")]
     [string[]]$Module = @("all"),
     [switch]$SkipDockerBuild,
     [switch]$SkipTauri,
@@ -32,12 +32,18 @@ $RunWeb = $RunAll -or $SelectedModules.Contains("web")
 $RunTauri = ($RunAll -or $SelectedModules.Contains("tauri")) -and -not $SkipTauri
 $RunAndroid = ($RunAll -or $SelectedModules.Contains("android")) -and -not $SkipAndroid
 $RunOffice = -not $RunAll -and $SelectedModules.Contains("office") -and -not $SkipOnlyOffice
-$RunOfficeInWebE2E = $RunAll -and -not $SkipOnlyOffice
-$NeedsBackendHttp = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice
+$RunWebDav = $RunAll -or $SelectedModules.Contains("webdav")
+$RunObservability = $RunAll -or $SelectedModules.Contains("observability")
+$RunResilience = $RunAll -or $SelectedModules.Contains("resilience")
+$RunOfficeInWebE2E = $RunAll
+$NeedsBackendHttp = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience
 $NeedsFrontendHttp = $RunWeb -or $RunTauri -or $RunOffice
 $NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice
 $NeedsOnlyOffice = $RunOffice -or $RunOfficeInWebE2E
-$ShouldCleanupE2E = -not $SkipE2ECleanup -and ($RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice)
+$NeedsDocker = $NeedsBackendHttp -or $NeedsOnlyOffice
+$ShouldCleanupE2E = -not $SkipE2ECleanup -and $NeedsDocker
+$RunId = if ($env:BCD_TEST_RUN_ID) { $env:BCD_TEST_RUN_ID } else { "bcd_$(Get-Date -Format 'yyyyMMdd_HHmmss')_$PID" }
+$ResultRoot = Join-Path $RepoRoot "test-results"
 
 function Add-Result {
     param(
@@ -199,21 +205,36 @@ function Invoke-WithEnv {
 
 try {
     Write-Host "Selected modules: $($SelectedModules -join ', ')"
+    Write-Host "Test run ID: $RunId"
+    New-Item -ItemType Directory -Force -Path $ResultRoot | Out-Null
+    @("backend", "blackbox", "web", "tauri", "android", "office", "webdav", "observability", "resilience") |
+        ForEach-Object { New-Item -ItemType Directory -Force -Path (Join-Path $ResultRoot $_) | Out-Null }
+
+    if ($RunAll -and ($SkipTauri -or $SkipAndroid -or $SkipOnlyOffice)) {
+        throw "Module 'all' is a complete acceptance run; SkipTauri, SkipAndroid, and SkipOnlyOffice are not allowed."
+    }
+
+    if ($RunWebDav -and -not (Get-Command "rclone" -ErrorAction SilentlyContinue)) {
+        throw "rclone is required by the webdav module. Install it from https://rclone.org/install/ and ensure it is on PATH."
+    }
+    if ($RunAndroid -and -not (Get-Command "adb" -ErrorAction SilentlyContinue)) {
+        throw "adb is required by the android module and was not found on PATH."
+    }
 
     Invoke-Step "Prepare env files" {
         Initialize-EnvFiles
     }
 
-    Invoke-Step "Start Docker stack" {
+    if ($NeedsDocker) { Invoke-Step "Start Docker stack" {
         if ($SkipDockerBuild) {
             Invoke-External "docker" @("compose", "up", "-d")
         } else {
             Invoke-External "docker" @("compose", "up", "-d", "--build")
         }
         $script:StackStarted = $true
-    }
+    } }
 
-    Invoke-Step "Wait for services" {
+    if ($NeedsDocker) { Invoke-Step "Wait for services" {
         if ($NeedsBackendHttp) {
             Wait-Http "Backend" "http://127.0.0.1:8080/actuator/health"
         }
@@ -226,12 +247,12 @@ try {
         if ($NeedsOnlyOffice) {
             Wait-Http "OnlyOffice" "http://127.0.0.1:8082/healthcheck"
         }
-    }
+    } }
 
     if ($RunBackend) {
         Invoke-Step "Backend unit tests" {
             Invoke-InDirectory "backend" {
-                Invoke-External "mvn" @("test")
+                Invoke-External "mvn" @("test", "-Dsurefire.reportNameSuffix=backend")
             }
         }
     }
@@ -241,13 +262,13 @@ try {
             Invoke-InDirectory "backend-test" {
                 $pytest = Join-Path (Get-Location) ".venv/Scripts/pytest.exe"
                 if (Test-Path $pytest) {
-                    Invoke-External $pytest @("-v")
+                        Invoke-External $pytest @("-v", "-m", "not webdav and not office and not observability and not resilience", "--junitxml=../test-results/blackbox/junit.xml")
                 } elseif (Get-Command "uv" -ErrorAction SilentlyContinue) {
                     Invoke-WithEnv @{ UV_CACHE_DIR = "../.uv-cache" } {
-                        Invoke-External "uv" @("run", "pytest", "-v")
+                        Invoke-External "uv" @("run", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience", "--junitxml=../test-results/blackbox/junit.xml")
                     }
                 } else {
-                    Invoke-External "python" @("-m", "pytest", "-v")
+                    Invoke-External "python" @("-m", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience", "--junitxml=../test-results/blackbox/junit.xml")
                 }
             }
         }
@@ -274,7 +295,7 @@ try {
                     $webEnv["E2E_ONLYOFFICE"] = "1"
                 }
                 Invoke-WithEnv $webEnv {
-                    Invoke-External "npm" @("run", "test:e2e:docker")
+                    Invoke-External "npx" @("playwright", "test", "--project=core")
                 }
             }
         }
@@ -289,7 +310,7 @@ try {
                     E2E_BACKEND_URL = "http://127.0.0.1:8080"
                     E2E_ONLYOFFICE = "1"
                 } {
-                    Invoke-External "npx" @("playwright", "test", "onlyoffice-personal-preview.e2e.ts", "onlyoffice-edit-save.e2e.ts")
+                    Invoke-External "npx" @("playwright", "test", "--project=office")
                 }
             }
         }
@@ -305,6 +326,36 @@ try {
         Invoke-Step "Tauri E2E tests" {
             Invoke-InDirectory "frontend" {
                 Invoke-External "npm" @("run", "test:e2e:tauri")
+            }
+        }
+    }
+
+    if ($RunWebDav) {
+        Invoke-Step "WebDAV protocol and rclone acceptance" {
+            Invoke-InDirectory "backend-test" {
+                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
+                    Invoke-External "uv" @("run", "pytest", "-v", "-m", "webdav", "--junitxml=../test-results/webdav/junit.xml")
+                }
+            }
+        }
+    }
+
+    if ($RunObservability) {
+        Invoke-Step "Observability acceptance" {
+            Invoke-InDirectory "backend-test" {
+                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
+                    Invoke-External "uv" @("run", "pytest", "-v", "-m", "observability", "--junitxml=../test-results/observability/junit.xml")
+                }
+            }
+        }
+    }
+
+    if ($RunResilience) {
+        Invoke-Step "Resilience acceptance" {
+            Invoke-InDirectory "backend-test" {
+                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
+                    Invoke-External "uv" @("run", "pytest", "-v", "-m", "resilience", "--junitxml=../test-results/resilience/junit.xml")
+                }
             }
         }
     }

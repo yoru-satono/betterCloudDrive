@@ -23,8 +23,8 @@ test.describe('onlyoffice personal preview', () => {
   test.skip(process.env.E2E_ONLYOFFICE !== '1', 'OnlyOffice E2E is opt-in with E2E_ONLYOFFICE=1')
 
   test('opens personal docx, pptx, and xlsx files as read-only previews', async ({ page, request, e2eUser }) => {
-    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`).catch(() => null)
-    test.skip(!api?.ok(), `OnlyOffice Document Server is not reachable at ${onlyOfficeURL}`)
+    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`)
+    expect(api.ok(), `OnlyOffice Document Server must be reachable at ${onlyOfficeURL}`).toBe(true)
 
     const files = [
       {
@@ -82,8 +82,8 @@ test.describe('onlyoffice personal preview', () => {
   })
 
   test('opens team documents as read-only when the member lacks write permission', async ({ page, request, e2eUser }) => {
-    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`).catch(() => null)
-    test.skip(!api?.ok(), `OnlyOffice Document Server is not reachable at ${onlyOfficeURL}`)
+    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`)
+    expect(api.ok(), `OnlyOffice Document Server must be reachable at ${onlyOfficeURL}`).toBe(true)
 
     const viewer = await createUser(request)
     const team = await createTeam(request, e2eUser.accessToken, uniqueName('oo_readonly_team'))

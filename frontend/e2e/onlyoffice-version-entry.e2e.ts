@@ -17,8 +17,8 @@ test.describe('onlyoffice version entry', () => {
   test.skip(process.env.E2E_ONLYOFFICE !== '1', 'OnlyOffice E2E is opt-in with E2E_ONLYOFFICE=1')
 
   test('allows writers to download and restore versions from the editor while viewers can only download', async ({ page, request, e2eUser }) => {
-    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`).catch(() => null)
-    test.skip(!api?.ok(), `OnlyOffice Document Server is not reachable at ${onlyOfficeURL}`)
+    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`)
+    expect(api.ok(), `OnlyOffice Document Server must be reachable at ${onlyOfficeURL}`).toBe(true)
 
     const viewer = await createUser(request)
     const team = await createTeam(request, e2eUser.accessToken, uniqueName('oo_versions_team'))

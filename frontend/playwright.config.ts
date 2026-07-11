@@ -11,7 +11,12 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [['html', { open: 'never' }], ['list']] : 'list',
+  outputDir: '../test-results/web/playwright-artifacts',
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: '../test-results/web/playwright-html', open: 'never' }],
+    ['junit', { outputFile: '../test-results/web/playwright-junit.xml' }],
+  ],
   use: {
     baseURL,
     trace: 'retain-on-failure',
@@ -24,9 +29,14 @@ export default defineConfig({
       testMatch: /.*\.setup\.ts/,
     },
     {
-      name: 'chromium',
+      name: 'core',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: /.*\.e2e\.ts/,
+      testMatch: /^(?!.*onlyoffice).*\.e2e\.ts/,
+    },
+    {
+      name: 'office',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: /.*onlyoffice.*\.e2e\.ts/,
     },
   ],
   ...(useDockerStack

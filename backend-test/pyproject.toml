@@ -15,6 +15,11 @@ dev = ["ruff>=0.6.0"]
 testpaths = ["tests"]
 python_files = "test_*.py"
 markers = [
+    "core: fast black-box coverage required on every CI run",
+    "webdav: precise WebDAV protocol acceptance tests",
+    "office: OnlyOffice integration acceptance tests",
+    "observability: audit, logs, traces, and Grafana authorization acceptance tests",
+    "resilience: isolated queue/outbox recovery acceptance tests",
     "smoke: basic health check tests",
     "public: tests for public endpoints (no auth required)",
     "admin: tests requiring admin role",

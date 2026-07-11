@@ -15,6 +15,12 @@ BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8080")
 MAILPIT_URL = os.getenv("MAILPIT_URL", "http://localhost:8025")
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATABASE_ENV_FILE = REPO_ROOT / "config" / "env-files" / "database.env"
+RUN_ID = os.getenv("BCD_TEST_RUN_ID", uuid.uuid4().hex[:10])
+
+
+@pytest.fixture(scope="session")
+def run_id():
+    return RUN_ID
 
 
 @pytest.fixture(scope="session")
@@ -164,7 +170,7 @@ def _login_user(client, username: str, password: str):
 
 
 def _create_test_user(client, prefix: str = "test"):
-    username = f"{prefix}_{uuid.uuid4().hex[:10]}"
+    username = f"{prefix}_{RUN_ID}_{uuid.uuid4().hex[:6]}"
     password = "TestPass123!"
     email = f"{username}@test.local"
     verification_code = request_registration_code(client, email)

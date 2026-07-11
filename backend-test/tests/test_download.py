@@ -8,6 +8,7 @@ class TestDownload:
         r = client.get(f"/api/v1/download/{uploaded_file['fileId']}", headers=auth_headers)
         assert r.status_code == 200
         assert "attachment" in r.headers.get("Content-Disposition", "")
+        assert r.content
 
     def test_download_nonexistent(self, client, auth_headers):
         r = client.get("/api/v1/download/99999", headers=auth_headers)
@@ -18,22 +19,29 @@ class TestDownload:
         assert_api_error(r, 404001)
 
     def test_download_range_request(self, client, auth_headers, uploaded_file):
-        r = client.get(
+        complete = client.get(f"/api/v1/download/{uploaded_file['fileId']}", headers=auth_headers)
+        split_at = max(1, len(complete.content) // 2)
+        first = client.get(
             f"/api/v1/download/{uploaded_file['fileId']}",
-            headers={**auth_headers, "Range": "bytes=0-10"},
+            headers={**auth_headers, "Range": f"bytes=0-{split_at - 1}"},
         )
-        # May be 206 or 200 depending on file size and implementation
-        assert r.status_code in (200, 206)
+        second = client.get(
+            f"/api/v1/download/{uploaded_file['fileId']}",
+            headers={**auth_headers, "Range": f"bytes={split_at}-"},
+        )
+        assert first.status_code == second.status_code == 206
+        total = len(complete.content)
+        assert first.headers["Content-Range"] == f"bytes 0-{split_at - 1}/{total}"
+        assert second.headers["Content-Range"] == f"bytes {split_at}-{total - 1}/{total}"
+        assert first.content + second.content == complete.content
 
 
 class TestPreview:
     def test_preview_file(self, client, auth_headers, uploaded_file):
-        try:
-            r = client.get(f"/api/v1/preview/{uploaded_file['fileId']}", headers=auth_headers)
-            assert r.status_code == 200
-        except Exception:
-            # Streaming responses may fail on client side — server still served the request
-            pass
+        r = client.get(f"/api/v1/preview/{uploaded_file['fileId']}", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.headers["Content-Type"].startswith("text/plain")
+        assert r.content
 
     def test_preview_folder(self, client, auth_headers, created_folder):
         r = client.get(f"/api/v1/preview/{created_folder['id']}", headers=auth_headers)

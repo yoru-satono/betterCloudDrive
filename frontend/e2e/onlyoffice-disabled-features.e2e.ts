@@ -17,8 +17,8 @@ test.describe('onlyoffice disabled features', () => {
   test.skip(process.env.E2E_ONLYOFFICE !== '1', 'OnlyOffice E2E is opt-in with E2E_ONLYOFFICE=1')
 
   test('does not expose AI or plugin entry points in the editor', async ({ page, request, e2eUser }) => {
-    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`).catch(() => null)
-    test.skip(!api?.ok(), `OnlyOffice Document Server is not reachable at ${onlyOfficeURL}`)
+    const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`)
+    expect(api.ok(), `OnlyOffice Document Server must be reachable at ${onlyOfficeURL}`).toBe(true)
 
     const team = await createTeam(request, e2eUser.accessToken, uniqueName('oo_features_team'))
     const upload = await uploadTeamSampleFile(

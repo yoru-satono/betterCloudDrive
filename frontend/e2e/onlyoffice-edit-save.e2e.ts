@@ -42,8 +42,8 @@ test.describe('onlyoffice edit save', () => {
 
   for (const officeCase of officeSaveCases) {
     test(`saves team ${officeCase.extension} edits through the real OnlyOffice forcesave callback and creates a version`, async ({ page, request, e2eUser }) => {
-      const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`).catch(() => null)
-      test.skip(!api?.ok(), `OnlyOffice Document Server is not reachable at ${onlyOfficeURL}`)
+      const api = await request.get(`${onlyOfficeURL}/web-apps/apps/api/documents/api.js`)
+      expect(api.ok(), `OnlyOffice Document Server must be reachable at ${onlyOfficeURL}`).toBe(true)
 
       const team = await createTeam(request, e2eUser.accessToken, uniqueName('oo_team'))
       const upload = await uploadTeamSampleFile(
@@ -101,7 +101,8 @@ async function typeIntoOnlyOffice(page: Page, marker: string, documentType: 'wor
   const frameHandle = await iframe.elementHandle()
   const frame = await frameHandle?.contentFrame()
   if (frame) {
-    await frame.getByRole('button', { name: /知道了|Got it|OK/i }).click({ timeout: 5_000 }).catch(() => null)
+    const acknowledgement = frame.getByRole('button', { name: /知道了|Got it|OK/i })
+    if (await acknowledgement.isVisible()) await acknowledgement.click()
     await frame.locator('body').click({ position: { x: 520, y: 360 }, timeout: 10_000 })
   }
 
@@ -138,8 +139,7 @@ async function forceSaveOnlyOfficeDocument(request: APIRequestContext, config: R
     const res = await request.post(endpoint, {
       headers: { Authorization: `Bearer ${body.token}` },
       data: body,
-    }).catch(() => null)
-    if (!res) continue
+    })
     const text = await res.text()
     if (!res.ok()) {
       lastBody = text

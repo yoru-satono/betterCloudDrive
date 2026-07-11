@@ -19,6 +19,35 @@ def sample_image():
     return DATA_DIR / "sample_1x1.png"
 
 
+def _chunked_upload(client, headers, parent_id, file_name, content):
+    response = client.post("/api/v1/upload/init", json={
+        "parentId": parent_id, "fileName": file_name,
+        "fileSize": len(content), "totalChunks": 1,
+        "md5Hash": hashlib.md5(content).hexdigest(),
+    }, headers=headers)
+    session_id = response.json()["data"]["sessionId"]
+    chunk = client.post(
+        f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+        files={"file": (file_name, content, "text/plain")}, headers=headers,
+    )
+    assert chunk.json()["code"] == 200, chunk.text
+    complete = client.post(f"/api/v1/upload/{session_id}/complete", headers=headers)
+    assert complete.json()["code"] == 200, complete.text
+    return complete.json()["data"]
+
+
+@pytest.fixture
+def versioned_file(client, auth_headers, created_folder):
+    """Create two real versions deterministically by overwriting the same path."""
+    name = f"versions_{uuid.uuid4().hex[:6]}.txt"
+    first = _chunked_upload(client, auth_headers, created_folder["id"], name, b"version-one")
+    second = _chunked_upload(client, auth_headers, created_folder["id"], name, b"version-two")
+    file_id = second.get("fileId", second.get("id", first.get("fileId", first.get("id"))))
+    versions = client.get(f"/api/v1/files/{file_id}/versions", headers=auth_headers).json()
+    assert versions["code"] == 200 and len(versions["data"]) >= 2, versions
+    return {"fileId": file_id, "fileName": name, "contents": (b"version-one", b"version-two")}
+
+
 def _retry_create_folder(client, auth_headers, parent_id, folder_name, max_retries=3):
     """Create a folder with retry on transient errors."""
     last_error = None
@@ -45,10 +74,8 @@ def created_folder(client, auth_headers):
     data = _retry_create_folder(client, auth_headers, None, folder_name)
     folder_id = data["id"]
     yield data
-    try:
-        client.request("DELETE", "/api/v1/files", json={"fileIds": [folder_id]}, headers=auth_headers)
-    except Exception:
-        pass
+    cleanup = client.request("DELETE", "/api/v1/files", json={"fileIds": [folder_id]}, headers=auth_headers)
+    assert cleanup.status_code == 200, cleanup.text
 
 
 @pytest.fixture
@@ -97,8 +124,5 @@ def uploaded_file(client, auth_headers, created_folder, sample_file):
     else:
         raise RuntimeError(f"Failed to upload file after 3 attempts: {last_error}")
 
-    # Cleanup
-    try:
-        client.request("DELETE", "/api/v1/files", json={"fileIds": [file_id]}, headers=auth_headers)
-    except Exception:
-        pass
+    cleanup = client.request("DELETE", "/api/v1/files", json={"fileIds": [file_id]}, headers=auth_headers)
+    assert cleanup.status_code == 200, cleanup.text
