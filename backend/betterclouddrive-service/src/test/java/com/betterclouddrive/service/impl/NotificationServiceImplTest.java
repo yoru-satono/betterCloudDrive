@@ -159,6 +159,7 @@ class NotificationServiceImplTest {
                 .type("TEAM_INVITE")
                 .build();
         when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).email("user@test.local").build()));
+        when(teamRepository.existsById(10L)).thenReturn(true);
         when(notificationRepository.save(any())).thenReturn(saved);
         when(notificationRepository.countByUserIdAndReadAtIsNull(2L)).thenReturn(5L);
         when(notificationPreferenceRepository.findByUserIdAndNotificationType(2L, "TEAM_INVITE")).thenReturn(Optional.empty());
@@ -171,6 +172,25 @@ class NotificationServiceImplTest {
                         && "TEAM_INVITE".equals(notification.getType())));
         verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, 10L, "TEAM_INVITE", "加入团队");
         verify(notificationRealtimePublisher).publishNotificationsChanged(2L, 5L);
+    }
+
+    @Test
+    void notifyUser_shouldDropTeamIdWhenTeamWasHardDeleted() {
+        NotificationEntity saved = NotificationEntity.builder()
+                .id(99L)
+                .userId(2L)
+                .teamId(null)
+                .type("TEAM_INVITE")
+                .build();
+        when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).email("user@test.local").build()));
+        when(teamRepository.existsById(10L)).thenReturn(false);
+        when(notificationRepository.save(any())).thenReturn(saved);
+        when(notificationPreferenceRepository.findByUserIdAndNotificationType(2L, "TEAM_INVITE")).thenReturn(Optional.empty());
+
+        notificationService.notifyUser(2L, 10L, "TEAM_INVITE", "邀请", "加入团队", "/teams/10", false);
+
+        verify(notificationRepository).save(argThat(notification -> notification.getTeamId() == null));
+        verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, null, "TEAM_INVITE", "加入团队");
     }
 
     @Test
@@ -210,6 +230,7 @@ class NotificationServiceImplTest {
                 .thenReturn(List.of(owner, admin, viewer));
         when(userRepository.findById(2L)).thenReturn(Optional.of(UserEntity.builder().id(2L).email("owner@test.local").build()));
         when(userRepository.findById(3L)).thenReturn(Optional.of(UserEntity.builder().id(3L).email("admin@test.local").build()));
+        when(teamRepository.existsById(10L)).thenReturn(true);
         when(notificationRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(notificationPreferenceRepository.findByUserIdAndNotificationType(anyLong(), eq("TEAM_QUOTA_ALERT")))
                 .thenReturn(Optional.empty());

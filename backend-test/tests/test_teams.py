@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import re
+import time
 import uuid
 
 import pytest
@@ -115,17 +116,22 @@ def create_invite(client, owner_headers, team_id, email, role):
 
 
 def invite_token_from_notifications(client, invited_headers, team_id):
-    notifications = assert_paginated(client.get(
-        "/api/v1/notifications?type=TEAM_INVITE&page=1&size=20",
-        headers=invited_headers,
-    ))
-    for notification in notifications["records"]:
-        if notification.get("teamId") != team_id:
-            continue
-        match = re.search(r"team-invites/([A-Za-z0-9]+)", notification.get("link") or "")
-        if match:
-            return match.group(1)
-    raise AssertionError(f"Invite notification for team {team_id} not found: {notifications['records']}")
+    deadline = time.monotonic() + 10
+    last_records = []
+    while time.monotonic() < deadline:
+        notifications = assert_paginated(client.get(
+            "/api/v1/notifications?type=TEAM_INVITE&page=1&size=20",
+            headers=invited_headers,
+        ))
+        last_records = notifications["records"]
+        for notification in last_records:
+            if notification.get("teamId") != team_id:
+                continue
+            match = re.search(r"team-invites/([A-Za-z0-9]+)", notification.get("link") or "")
+            if match:
+                return match.group(1)
+        time.sleep(0.25)
+    raise AssertionError(f"Invite notification for team {team_id} not found: {last_records}")
 
 
 def create_team_folder(client, headers, team_id, parent_id=None, name=None):

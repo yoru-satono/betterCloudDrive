@@ -186,16 +186,17 @@ public class NotificationServiceImpl implements NotificationService {
             log.debug("Notification type {} is disabled for user {}", normalizedType, userId);
             return;
         }
+        Long deliverableTeamId = deliverableTeamId(teamId);
         NotificationEntity notification = notificationRepository.save(NotificationEntity.builder()
                 .userId(userId)
-                .teamId(teamId)
+                .teamId(deliverableTeamId)
                 .type(normalizedType)
                 .title(title.trim())
                 .content(content)
                 .link(link)
                 .createdAt(LocalDateTime.now())
                 .build());
-        teamEventOutboxService.recordNotificationEvent(notification.getId(), userId, teamId, normalizedType, content);
+        teamEventOutboxService.recordNotificationEvent(notification.getId(), userId, deliverableTeamId, normalizedType, content);
         publishNotificationsChangedAfterCommit(userId);
         if (email) {
             try {
@@ -207,6 +208,17 @@ public class NotificationServiceImpl implements NotificationService {
                 log.warn("Failed to enqueue notification email to user {}", userId, e);
             }
         }
+    }
+
+    private Long deliverableTeamId(Long teamId) {
+        if (teamId == null) {
+            return null;
+        }
+        if (teamRepository.existsById(teamId)) {
+            return teamId;
+        }
+        log.debug("Dropping team id {} from notification because the team no longer exists", teamId);
+        return null;
     }
 
     @Override

@@ -8,6 +8,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.Map;
 public class TeamEventOutboxQueuePublisher {
 
     private static final String AGGREGATE_NOTIFICATION = "NOTIFICATION";
+    private static final Duration PROCESSING_LOCK_TIMEOUT = Duration.ofSeconds(30);
 
     private final TeamEventOutboxRepository teamEventOutboxRepository;
     private final RedisStreamQueueService redisStreamQueueService;
@@ -27,6 +29,7 @@ public class TeamEventOutboxQueuePublisher {
         if (!queueProperties.isEnabled()) {
             return 0;
         }
+        resetStaleProcessingEvents();
         int limit = batchSize > 0 ? batchSize : queueProperties.getRedis().getOutboxPublishBatchSize();
         List<TeamEventOutboxEntity> events = teamEventOutboxRepository.findByStatusAndAvailableAtLessThanEqualOrderByIdAsc(
                 TeamEventOutboxEntity.STATUS_PENDING,
@@ -43,12 +46,18 @@ public class TeamEventOutboxQueuePublisher {
 
     private boolean publishEvent(TeamEventOutboxEntity event) {
         try {
-            String recordId = redisStreamQueueService.publish(streamFor(event), payloadFor(event));
-            if (!StringUtils.hasText(recordId)) {
-                return false;
-            }
             markProcessing(event);
             teamEventOutboxRepository.save(event);
+            String recordId = redisStreamQueueService.publish(streamFor(event), payloadFor(event));
+            if (!StringUtils.hasText(recordId)) {
+                markFailedOrRetry(event, new IllegalStateException("Redis Stream did not return a record id"));
+                teamEventOutboxRepository.save(event);
+                return false;
+            }
+            if (!isNotification(event)) {
+                markProcessed(event);
+                teamEventOutboxRepository.save(event);
+            }
             return true;
         } catch (RuntimeException e) {
             markFailedOrRetry(event, e);
@@ -57,11 +66,26 @@ public class TeamEventOutboxQueuePublisher {
         }
     }
 
+    private void resetStaleProcessingEvents() {
+        LocalDateTime now = LocalDateTime.now();
+        teamEventOutboxRepository.resetStaleProcessing(
+                TeamEventOutboxEntity.STATUS_PROCESSING,
+                TeamEventOutboxEntity.STATUS_PENDING,
+                now.minus(PROCESSING_LOCK_TIMEOUT),
+                now,
+                now,
+                "Processing lock expired before dispatch");
+    }
+
     private String streamFor(TeamEventOutboxEntity event) {
-        if (AGGREGATE_NOTIFICATION.equalsIgnoreCase(event.getAggregateType())) {
+        if (isNotification(event)) {
             return queueProperties.getRedis().getStreams().getNotifications();
         }
         return queueProperties.getRedis().getStreams().getTeamEvents();
+    }
+
+    private boolean isNotification(TeamEventOutboxEntity event) {
+        return AGGREGATE_NOTIFICATION.equalsIgnoreCase(event.getAggregateType());
     }
 
     private Map<String, String> payloadFor(TeamEventOutboxEntity event) {
@@ -87,6 +111,14 @@ public class TeamEventOutboxQueuePublisher {
         LocalDateTime now = LocalDateTime.now();
         event.setStatus(TeamEventOutboxEntity.STATUS_PROCESSING);
         event.setLockedAt(now);
+        event.setErrorMessage(null);
+        event.setUpdatedAt(now);
+    }
+
+    private void markProcessed(TeamEventOutboxEntity event) {
+        LocalDateTime now = LocalDateTime.now();
+        event.setStatus(TeamEventOutboxEntity.STATUS_PROCESSED);
+        event.setProcessedAt(now);
         event.setErrorMessage(null);
         event.setUpdatedAt(now);
     }
