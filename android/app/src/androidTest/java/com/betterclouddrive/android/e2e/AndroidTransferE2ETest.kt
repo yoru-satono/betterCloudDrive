@@ -2,7 +2,9 @@ package com.betterclouddrive.android.e2e
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import com.betterclouddrive.android.MainActivity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -38,8 +40,8 @@ class AndroidTransferE2ETest {
         composeRule.waitForText(uploadSeed.name).assertIsDisplayed()
 
         composeRule.waitForTag("nav-files").performClick()
-        composeRule.waitForTag("file-row-${remoteFile.fileName}").performClick()
-        composeRule.waitForTag("file-detail-download").performClick()
+        composeRule.waitForTag("file-row-${remoteFile.fileName}").performTouchInput { longClick() }
+        composeRule.waitForTag("file-menu-download").performClick()
         systemUi.acceptCreateDocument(remoteFile.fileName)
         composeRule.waitForTag("files-transfers").performClick()
         composeRule.waitForTag("transfer-tab-下载").performClick()

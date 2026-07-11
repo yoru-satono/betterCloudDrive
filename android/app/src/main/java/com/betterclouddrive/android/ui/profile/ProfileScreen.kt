@@ -1,6 +1,8 @@
 package com.betterclouddrive.android.ui.profile
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -40,7 +42,11 @@ fun ProfileScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // Avatar
@@ -98,8 +104,7 @@ fun ProfileScreen(
 
             OutlinedButton(
                 onClick = {
-                    authViewModel.logout()
-                    onLogout()
+                    authViewModel.logout(onComplete = onLogout)
                 },
                 modifier = Modifier.fillMaxWidth().testTag("profile-logout"),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),

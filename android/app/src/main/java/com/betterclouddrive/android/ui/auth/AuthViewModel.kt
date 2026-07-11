@@ -8,6 +8,7 @@ import com.betterclouddrive.android.domain.model.User
 import com.betterclouddrive.android.util.NetworkResult
 import com.betterclouddrive.android.util.UiEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -112,11 +113,14 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun logout() {
+    fun logout(onComplete: (() -> Unit)? = null) {
         viewModelScope.launch {
-            authRepository.logout()
             authRepository.clearTokens()
             _uiState.value = AuthUiState()
+            onComplete?.invoke()
+            launch(Dispatchers.IO) {
+                runCatching { authRepository.logout() }
+            }
         }
     }
 

@@ -343,7 +343,8 @@ fun BCDNavHost(
                 onNavigateMain = { route -> navController.navigateTopLevel(route) },
                 onLogout = {
                     navController.navigate(Screen.LOGIN) {
-                        popUpTo(0) { inclusive = true }
+                        popUpTo(Screen.FILES) { inclusive = true }
+                        launchSingleTop = true
                     }
                 },
             )

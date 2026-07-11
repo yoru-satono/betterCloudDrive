@@ -3,6 +3,7 @@ package com.betterclouddrive.android.e2e
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import com.betterclouddrive.android.MainActivity
@@ -47,7 +48,7 @@ class AndroidAuthAndNavigationE2ETest {
         composeRule.loginViaUi(user)
 
         composeRule.waitForTag("nav-profile").performClick()
-        composeRule.waitForTag("profile-logout").performClick()
+        composeRule.waitForTag("profile-logout").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForTag("login-submit").assertIsDisplayed()
     }
 
