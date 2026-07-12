@@ -16,6 +16,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -69,6 +70,11 @@ public class WebDavController {
             log.error("WebDAV error: method={} path={}", method, request.getServletPath(), e);
             response.setStatus(500);
         }
+    }
+
+    @RequestMapping(value = {"", "/", "/**"}, method = RequestMethod.OPTIONS)
+    public void options(HttpServletResponse response) {
+        handleOptions(response);
     }
 
     // ── OPTIONS ───────────────────────────────────────────────────────────────
@@ -143,12 +149,49 @@ public class WebDavController {
         if ("folder".equals(file.getFileType())) { response.setStatus(405); return; }
 
         response.setContentType(file.getMimeType() != null ? file.getMimeType() : "application/octet-stream");
-        response.setContentLengthLong(file.getFileSize() != null ? file.getFileSize() : 0L);
+        long fileSize = file.getFileSize() != null ? file.getFileSize() : 0L;
+        long start = 0L;
+        long end = Math.max(0L, fileSize - 1);
+        String range = request.getHeader("Range");
+        if (range != null && range.startsWith("bytes=")) {
+            String[] bounds = range.substring(6).split("-", 2);
+            try {
+                start = Long.parseLong(bounds[0]);
+                if (bounds.length > 1 && !bounds[1].isBlank()) end = Long.parseLong(bounds[1]);
+            } catch (NumberFormatException e) {
+                response.setHeader("Content-Range", "bytes */" + fileSize);
+                response.setStatus(416);
+                return;
+            }
+            if (start < 0 || start >= fileSize || end < start) {
+                response.setHeader("Content-Range", "bytes */" + fileSize);
+                response.setStatus(416);
+                return;
+            }
+            end = Math.min(end, fileSize - 1);
+            response.setStatus(206);
+            response.setHeader("Content-Range", "bytes " + start + "-" + end + "/" + fileSize);
+        }
+        long responseLength = fileSize == 0 ? 0 : end - start + 1;
+        response.setHeader("Accept-Ranges", "bytes");
+        response.setContentLengthLong(responseLength);
         if (file.getMd5Hash() != null) response.setHeader("ETag", "\"" + file.getMd5Hash() + "\"");
 
         if (!headOnly) {
             try (InputStream in = storageService.downloadObject(file.getStoragePath())) {
-                in.transferTo(response.getOutputStream());
+                in.skipNBytes(start);
+                in.transferTo(new java.io.OutputStream() {
+                    private long remaining = responseLength;
+                    @Override public void write(int b) throws IOException {
+                        if (remaining-- > 0) response.getOutputStream().write(b);
+                    }
+                    @Override public void write(byte[] b, int off, int len) throws IOException {
+                        if (remaining <= 0) return;
+                        int count = (int) Math.min(len, remaining);
+                        response.getOutputStream().write(b, off, count);
+                        remaining -= count;
+                    }
+                });
             }
         }
     }
@@ -159,14 +202,18 @@ public class WebDavController {
         Long userId = currentUserId();
         String davPath = extractDavPath(request);
         if (davPath.isEmpty() || davPath.equals("/")) { response.setStatus(405); return; }
+        if (rejectLockedWrite(request, response, userId, davPath)) return;
 
         Long parentId = pathResolver.resolveParentId(userId, davPath);
         String fileName = pathResolver.extractFileName(davPath);
         long contentLength = Math.max(0L, request.getContentLengthLong());
-        boolean exists = pathResolver.resolve(userId, davPath) != null;
+        FileEntity existing = pathResolver.resolve(userId, davPath);
 
         uploadService.streamUpload(userId, parentId, fileName, contentLength, request.getInputStream(), null);
-        response.setStatus(exists ? 204 : 201);
+        if (existing != null) {
+            fileService.deleteFiles(userId, List.of(existing.getId()));
+        }
+        response.setStatus(existing != null ? 204 : 201);
     }
 
     // ── MKCOL ─────────────────────────────────────────────────────────────────
@@ -280,6 +327,12 @@ public class WebDavController {
     private void handleUnlock(HttpServletRequest request, HttpServletResponse response) {
         Long userId = currentUserId();
         String davPath = extractDavPath(request);
+        String existing = redisTemplate.opsForValue().get(LOCK_PREFIX + userId + ":" + davPath);
+        String supplied = request.getHeader("Lock-Token");
+        if (existing == null || supplied == null || !supplied.contains(existing)) {
+            response.setStatus(409);
+            return;
+        }
         redisTemplate.delete(LOCK_PREFIX + userId + ":" + davPath);
         response.setStatus(204);
     }
@@ -289,6 +342,17 @@ public class WebDavController {
     private Long currentUserId() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return ((UserPrincipal) principal).getUserId();
+    }
+
+    private boolean rejectLockedWrite(HttpServletRequest request, HttpServletResponse response,
+                                      Long userId, String davPath) {
+        String token = redisTemplate.opsForValue().get(LOCK_PREFIX + userId + ":" + davPath);
+        if (token == null) return false;
+        String condition = String.valueOf(request.getHeader("If")) + " "
+                + String.valueOf(request.getHeader("Lock-Token"));
+        if (condition.contains(token)) return false;
+        response.setStatus(423);
+        return true;
     }
 
     private String extractDavPath(HttpServletRequest request) {

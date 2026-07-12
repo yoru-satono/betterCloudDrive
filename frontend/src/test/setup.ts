@@ -2,10 +2,11 @@ import { afterEach, beforeEach, vi } from 'vitest'
 
 const unexpectedConsoleErrors: unknown[][] = []
 const originalFetch = globalThis.fetch
+const originalConsoleError = console.error
 
 beforeEach(() => {
   unexpectedConsoleErrors.length = 0
-  vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+  console.error = vi.fn((...args: unknown[]) => {
     unexpectedConsoleErrors.push(args)
   })
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
@@ -41,12 +42,12 @@ if (!globalThis.crypto.randomUUID) {
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+  console.error = originalConsoleError
   if (unexpectedConsoleErrors.length) {
     const rendered = unexpectedConsoleErrors.map((args) => args.map(String).join(' ')).join('\n')
     unexpectedConsoleErrors.length = 0
     throw new Error(`Unexpected console.error in unit test:\n${rendered}`)
   }
   vi.clearAllMocks()
-  vi.restoreAllMocks()
   localStorage.clear()
 })

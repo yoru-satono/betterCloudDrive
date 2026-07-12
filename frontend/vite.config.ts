@@ -65,7 +65,6 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: ['src/test/setup.ts'],
       clearMocks: true,
-      restoreMocks: true,
       reporters: process.env.CI ? ['default', 'junit'] : ['default'],
       outputFile: process.env.CI ? { junit: '../test-results/web/unit-junit.xml' } : undefined,
     }

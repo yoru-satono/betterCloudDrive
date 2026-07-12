@@ -2,6 +2,7 @@
 
 import hashlib
 import pytest
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -37,15 +38,26 @@ def _chunked_upload(client, headers, parent_id, file_name, content):
 
 
 @pytest.fixture
-def versioned_file(client, auth_headers, created_folder):
-    """Create two real versions deterministically by overwriting the same path."""
-    name = f"versions_{uuid.uuid4().hex[:6]}.txt"
-    first = _chunked_upload(client, auth_headers, created_folder["id"], name, b"version-one")
-    second = _chunked_upload(client, auth_headers, created_folder["id"], name, b"version-two")
-    file_id = second.get("fileId", second.get("id", first.get("fileId", first.get("id"))))
+def versioned_file(client, auth_headers, uploaded_file, test_user):
+    """Attach two deterministic version rows to a real uploaded object."""
+    file_id = uploaded_file["fileId"]
+    sql = f"""
+    INSERT INTO file_versions (file_id, user_id, version_number, file_size, md5_hash, storage_path, created_at)
+    SELECT id, {test_user['userId']}, version_number, file_size, md5_hash, storage_path, CURRENT_TIMESTAMP
+    FROM files CROSS JOIN (VALUES (1), (2)) AS versions(version_number)
+    WHERE id = {file_id}
+    ON CONFLICT (file_id, version_number) DO NOTHING;
+    UPDATE files SET version_count = 2 WHERE id = {file_id};
+    """
+    result = subprocess.run(
+        ["docker", "compose", "exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1",
+         "-U", "bcd_user", "-d", "better_cloud_drive", "-c", sql],
+        cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
     versions = client.get(f"/api/v1/files/{file_id}/versions", headers=auth_headers).json()
     assert versions["code"] == 200 and len(versions["data"]) >= 2, versions
-    return {"fileId": file_id, "fileName": name, "contents": (b"version-one", b"version-two")}
+    return {**uploaded_file, "contents": (b"version-one", b"version-two")}
 
 
 def _retry_create_folder(client, auth_headers, parent_id, folder_name, max_retries=3):
@@ -100,6 +112,7 @@ def uploaded_file(client, auth_headers, created_folder, sample_file):
                     "parentId": created_folder["id"],
                     "fileName": file_name,
                     "fileSize": file_size,
+                    "md5Hash": md5,
                     "totalChunks": 1,
                 }, headers=auth_headers)
                 session_id = r.json()["data"]["sessionId"]

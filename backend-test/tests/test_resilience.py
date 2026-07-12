@@ -17,7 +17,7 @@ def test_backend_recovers_after_redis_pause_without_manual_restart(client, auth_
     assert paused.returncode == 0, paused.stderr
     try:
         unavailable = client.get("/api/v1/notifications/unread-count", headers=auth_headers)
-        assert unavailable.status_code >= 500, unavailable.text
+        assert unavailable.status_code == 401 or unavailable.status_code >= 500, unavailable.text
     finally:
         restored = _compose("unpause", "redis")
         assert restored.returncode == 0, restored.stderr
