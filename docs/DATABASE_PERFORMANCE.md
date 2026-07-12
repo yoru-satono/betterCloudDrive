@@ -2,7 +2,7 @@
 
 ## 团队核心查询
 
-`V14__team_query_indexes.sql` 针对当前 repository 生成的查询补充以下索引：
+`V1__schema.sql` 针对当前 repository 生成的查询定义以下索引：
 
 | 查询 | 索引 |
 |------|------|

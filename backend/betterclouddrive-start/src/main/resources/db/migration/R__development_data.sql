@@ -1,5 +1,5 @@
 -- ============================================================
--- Development seed users
+-- Development seed data (DML only)
 -- DML-only repeatable migration. Existing users are preserved.
 -- ============================================================
 

@@ -78,18 +78,8 @@
 
 ## 迁移要求
 
-- 数据库迁移使用 Flyway，部署时必须执行到当前最新版本：
-  - `V2__team_space_mvp.sql`
-  - `V3__team_share_links.sql`
-  - `V4__team_invites_audit_tags.sql`
-  - `V5__retain_team_audit_logs.sql`
-  - `V6__team_notifications_permissions_archival.sql`
-  - `V7__upload_completion_idempotency.sql`
-  - `V8__onlyoffice_callback_idempotency.sql`
-  - `V9__team_event_outbox.sql`
-  - `V10__notification_preferences.sql`
-  - `V11__team_tasks.sql`
-  - `V12__onlyoffice_async_save_tasks.sql`
+- 数据库使用合并后的 Flyway baseline：`V1__schema.sql` 定义最终结构，`R__development_data.sql` 提供幂等开发数据。
+- 合并后的 baseline 仅支持全新数据库；旧版 Flyway 数据库升级前必须备份并重建。
 - PostgreSQL 版本按当前环境模板使用 PostgreSQL 18。
 - 生产环境必须替换默认 JWT、数据库、邮箱、OnlyOffice JWT secret 等密钥。
 - 升级前建议备份 PostgreSQL 和 SeaweedFS 数据；团队文件、分享、版本、审计都依赖这两类存储。
