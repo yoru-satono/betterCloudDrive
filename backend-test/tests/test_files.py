@@ -90,22 +90,36 @@ class TestMove:
 
 class TestCopy:
     def test_copy_file(self, client, auth_headers, uploaded_file, created_folder):
+        destination = assert_api_ok(client.post("/api/v1/files/folder", json={
+            "parentId": created_folder["id"], "folderName": f"copy_dest_{uuid.uuid4().hex[:6]}"
+        }, headers=auth_headers))
         r = client.post(f"/api/v1/files/{uploaded_file['fileId']}/copy", json={
-            "targetParentId": created_folder["id"]
+            "targetParentId": destination["id"]
         }, headers=auth_headers)
         assert_api_ok(r)
+        records = assert_paginated(client.get(
+            f"/api/v1/files?parentId={destination['id']}", headers=auth_headers,
+        ))["records"]
+        assert len(records) == 1
+        assert records[0]["fileName"] == f"{uploaded_file['fileName']} (copy)"
+        assert records[0]["id"] != uploaded_file["fileId"]
 
     def test_copy_preserves_content(self, client, auth_headers, uploaded_file, created_folder, sample_file):
+        destination = assert_api_ok(client.post("/api/v1/files/folder", json={
+            "parentId": created_folder["id"], "folderName": f"copy_content_{uuid.uuid4().hex[:6]}"
+        }, headers=auth_headers))
         assert_api_ok(client.post(f"/api/v1/files/{uploaded_file['fileId']}/copy", json={
-            "targetParentId": created_folder["id"]
+            "targetParentId": destination["id"]
         }, headers=auth_headers))
 
-        # copyFile returns Void — find the copy by listing the folder
         files = assert_paginated(client.get(
-            f"/api/v1/files?parentId={created_folder['id']}&sortBy=createdAt&order=desc",
+            f"/api/v1/files?parentId={destination['id']}",
             headers=auth_headers,
         ))
+        assert len(files["records"]) == 1
         copy_id = files["records"][0]["id"]
+        assert files["records"][0]["fileName"] == f"{uploaded_file['fileName']} (copy)"
+        assert copy_id != uploaded_file["fileId"]
 
         original_bytes = sample_file.read_bytes()
         dl = client.get(f"/api/v1/download/{copy_id}", headers=auth_headers)

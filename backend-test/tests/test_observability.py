@@ -32,5 +32,11 @@ def test_request_id_reaches_loki_and_grafana_is_admin_only(client, auth_headers,
     assert denied.status_code in (401, 403) or denied.json().get("code") == 403
     allowed = client.post("/api/v1/admin/grafana/session", headers=admin_headers)
     assert allowed.status_code == 200 and allowed.json()["code"] == 200
-    assert httpx.get("http://localhost:3200/ready", timeout=5).status_code == 200
-
+    deadline = time.time() + 30
+    tempo_status = None
+    while time.time() < deadline:
+        tempo_status = httpx.get("http://localhost:3200/ready", timeout=5)
+        if tempo_status.status_code == 200:
+            break
+        time.sleep(1)
+    assert tempo_status is not None and tempo_status.status_code == 200, tempo_status.text if tempo_status else "no response"

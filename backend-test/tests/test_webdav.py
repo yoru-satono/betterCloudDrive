@@ -9,26 +9,6 @@ from tests.helpers.assert_helper import assert_api_ok
 pytestmark = pytest.mark.webdav
 
 
-@pytest.fixture
-def dav(client, test_user, auth_headers, backend_url):
-    password = "Dav-Test-456!"
-    updated = assert_api_ok(client.put(
-        "/api/v1/auth/webdav", json={"enabled": True, "password": password}, headers=auth_headers,
-    ))
-    assert updated["webdavEnabled"] is True
-    with client.__class__(
-        base_url=backend_url, auth=(test_user["username"], password), timeout=30,
-    ) as authenticated:
-        yield authenticated
-    disabled = assert_api_ok(client.put(
-        "/api/v1/auth/webdav", json={"enabled": False}, headers=auth_headers,
-    ))
-    assert disabled["webdavEnabled"] is False
-    assert client.request(
-        "PROPFIND", "/webdav/", auth=(test_user["username"], password), headers={"Depth": "0"},
-    ).status_code in (401, 403)
-
-
 def test_authentication_and_options(client, test_user, auth_headers, backend_url):
     password = "Dav-Auth-456!"
     assert_api_ok(client.put("/api/v1/auth/webdav", json={"enabled": True, "password": password}, headers=auth_headers))
@@ -100,4 +80,3 @@ def test_lock_conflict_and_unlock(dav, run_id):
     assert dav.request("UNLOCK", path, headers={"Lock-Token": token}).status_code == 204
     assert dav.put(path, content=b"after-unlock").status_code == 204
     assert dav.get(path).content == b"after-unlock"
-

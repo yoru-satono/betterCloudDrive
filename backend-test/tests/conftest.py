@@ -1,6 +1,7 @@
 """Test-scoped fixtures for the backend-test project."""
 
 import hashlib
+import httpx
 import pytest
 import subprocess
 import time
@@ -8,6 +9,27 @@ import uuid
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
+
+
+@pytest.fixture
+def dav(client, test_user, auth_headers, backend_url):
+    password = "Dav-Test-456!"
+    enabled = client.put(
+        "/api/v1/auth/webdav", json={"enabled": True, "password": password}, headers=auth_headers,
+    ).json()
+    assert enabled["code"] == 200 and enabled["data"]["webdavEnabled"] is True, enabled
+    with httpx.Client(
+        base_url=backend_url, auth=(test_user["username"], password), timeout=30,
+    ) as authenticated:
+        yield authenticated
+    disabled = client.put(
+        "/api/v1/auth/webdav", json={"enabled": False}, headers=auth_headers,
+    ).json()
+    assert disabled["code"] == 200 and disabled["data"]["webdavEnabled"] is False, disabled
+    refused = client.request(
+        "PROPFIND", "/webdav/", auth=(test_user["username"], password), headers={"Depth": "0"},
+    )
+    assert refused.status_code in (401, 403)
 
 
 @pytest.fixture(scope="session")
@@ -92,50 +114,13 @@ def created_folder(client, auth_headers):
 
 @pytest.fixture
 def uploaded_file(client, auth_headers, created_folder, sample_file):
-    """Upload a small file via instant upload (or chunked fallback). Retries on failure."""
-    file_size = sample_file.stat().st_size
+    """Upload a fresh physical object; instant upload has dedicated coverage."""
+    content = sample_file.read_bytes()
     file_name = f"tf_{uuid.uuid4().hex[:6]}.txt"
-    md5 = hashlib.md5(sample_file.read_bytes()).hexdigest()
-
-    last_error = None
-    for attempt in range(3):
-        try:
-            r = client.post("/api/v1/upload/instant", json={
-                "parentId": created_folder["id"],
-                "fileName": file_name,
-                "fileSize": file_size,
-                "md5Hash": md5,
-            }, headers=auth_headers)
-            if r.json()["code"] == 419010:
-                # Fallback: chunked upload
-                r = client.post("/api/v1/upload/init", json={
-                    "parentId": created_folder["id"],
-                    "fileName": file_name,
-                    "fileSize": file_size,
-                    "md5Hash": md5,
-                    "totalChunks": 1,
-                }, headers=auth_headers)
-                session_id = r.json()["data"]["sessionId"]
-                client.post(
-                    f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
-                    files={"file": sample_file.open("rb")},
-                    headers=auth_headers,
-                )
-                r = client.post(f"/api/v1/upload/{session_id}/complete", headers=auth_headers)
-
-            if r.json()["code"] == 200:
-                data = r.json()["data"]
-                file_id = data.get("fileId", data.get("id"))
-                yield {"fileId": file_id, "fileName": data.get("fileName", file_name), "fileSize": file_size}
-                break
-            last_error = r.json()
-        except Exception as e:
-            last_error = str(e)
-        if attempt < 2:
-            time.sleep(0.2 * (attempt + 1))
-            file_name = f"tf_{uuid.uuid4().hex[:6]}.txt"
-    else:
-        raise RuntimeError(f"Failed to upload file after 3 attempts: {last_error}")
+    data = _chunked_upload(client, auth_headers, created_folder["id"], file_name, content)
+    file_id = data.get("fileId", data.get("id"))
+    assert file_id is not None, data
+    yield {"fileId": file_id, "fileName": data.get("fileName", file_name), "fileSize": len(content)}
 
     cleanup = client.request("DELETE", "/api/v1/files", json={"fileIds": [file_id]}, headers=auth_headers)
     assert cleanup.status_code == 200, cleanup.text

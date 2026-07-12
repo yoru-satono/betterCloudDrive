@@ -120,6 +120,7 @@ __pycache__/
 venv/
 env/
 .uv-cache/
+rclone-v*-windows-amd64/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
