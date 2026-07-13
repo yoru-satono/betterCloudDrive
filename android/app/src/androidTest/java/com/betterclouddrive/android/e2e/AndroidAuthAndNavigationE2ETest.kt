@@ -1,6 +1,7 @@
 package com.betterclouddrive.android.e2e
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -37,7 +38,7 @@ class AndroidAuthAndNavigationE2ETest {
         composeRule.waitForText("标签管理").assertIsDisplayed()
         composeRule.waitForTag("nav-profile").performClick()
         composeRule.waitForText("个人设置").assertIsDisplayed()
-        composeRule.waitForTag("profile-recycle-bin").performClick()
+        composeRule.waitForTag("profile-recycle-bin").performScrollTo().performClick()
         composeRule.waitForTag("recycle-empty").assertIsDisplayed()
         composeRule.waitForTag("nav-files").performClick()
         composeRule.waitForTag("files-content").assertIsDisplayed()
@@ -50,6 +51,20 @@ class AndroidAuthAndNavigationE2ETest {
         composeRule.waitForTag("nav-profile").performClick()
         composeRule.waitForTag("profile-logout").performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForTag("login-submit").assertIsDisplayed()
+    }
+
+    @Test
+    fun themeCanBeSelectedFromProfileSettings() {
+        composeRule.loginViaUi(user)
+        composeRule.waitForTag("nav-profile").performClick()
+
+        composeRule.waitForTag("theme-option-light").performScrollTo().performClick()
+        composeRule.waitForTag("theme-option-light").assertIsSelected()
+        composeRule.waitForTag("nav-files").performClick()
+        composeRule.waitForTag("nav-profile").performClick()
+        composeRule.waitForTag("theme-option-light").performScrollTo().assertIsSelected()
+
+        composeRule.waitForTag("theme-option-system").performClick()
     }
 
     @Test

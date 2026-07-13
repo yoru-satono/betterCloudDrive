@@ -1,5 +1,6 @@
 package com.betterclouddrive.android.ui.profile
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,6 +11,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -18,6 +22,9 @@ import com.betterclouddrive.android.util.FormatUtil
 import com.betterclouddrive.android.ui.auth.AuthViewModel
 import com.betterclouddrive.android.ui.navigation.MainScaffold
 import com.betterclouddrive.android.ui.navigation.Screen
+import com.betterclouddrive.android.domain.model.ThemeMode
+import com.betterclouddrive.android.ui.theme.ThemeViewModel
+import com.betterclouddrive.android.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,9 +33,11 @@ fun ProfileScreen(
     onNavigateMain: (String) -> Unit,
     onLogout: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel(),
+    themeViewModel: ThemeViewModel = hiltViewModel(),
 ) {
     val authState by authViewModel.uiState.collectAsState()
     val user = authState.user
+    val themeMode by themeViewModel.themeMode.collectAsState()
 
     MainScaffold(
         currentRoute = Screen.PROFILE,
@@ -70,6 +79,49 @@ fun ProfileScreen(
                 Text(user.nickname, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(modifier = Modifier.height(24.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(stringResource(R.string.theme_appearance), style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ThemeMode.entries.forEach { option ->
+                            val selected = themeMode == option
+                            OutlinedButton(
+                                onClick = { themeViewModel.setThemeMode(option) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("theme-option-${option.storageValue}")
+                                    .semantics { this.selected = selected },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                    contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                ),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                ),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                            ) {
+                                Text(
+                                    when (option) {
+                                        ThemeMode.SYSTEM -> stringResource(R.string.theme_system)
+                                        ThemeMode.LIGHT -> stringResource(R.string.theme_light)
+                                        ThemeMode.DARK -> stringResource(R.string.theme_dark)
+                                    },
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(stringResource(R.string.theme_device_local_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Storage
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {

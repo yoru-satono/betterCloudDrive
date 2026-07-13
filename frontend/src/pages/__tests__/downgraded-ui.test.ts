@@ -12,6 +12,7 @@ import * as adminApi from '@/api/admin'
 import * as notificationsApi from '@/api/notifications'
 import { downloadSharedFile, downloadSharedFolderZip } from '@/api/download'
 import { toast } from 'vue-sonner'
+import { setThemeMode, themeMode } from '@/theme'
 
 const routerPush = vi.fn()
 
@@ -108,6 +109,18 @@ beforeEach(() => {
 })
 
 describe('downgraded frontend UI', () => {
+  it('changes and persists the device theme from profile settings', async () => {
+    setThemeMode('system')
+    const wrapper = mount(ProfilePage)
+
+    expect(wrapper.get('[data-testid="theme-option-system"]').attributes('aria-pressed')).toBe('true')
+    await wrapper.get('[data-testid="theme-option-dark"]').trigger('click')
+
+    expect(themeMode.value).toBe('dark')
+    expect(localStorage.getItem('bcd.themeMode')).toBe('dark')
+    expect(wrapper.get('[data-testid="theme-option-dark"]').attributes('aria-pressed')).toBe('true')
+  })
+
   it('renders profile info without unsupported email/password forms', () => {
     const auth = useAuthStore()
     auth.user = {

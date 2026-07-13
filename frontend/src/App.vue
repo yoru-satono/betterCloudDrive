@@ -4,6 +4,7 @@ import UploadQueue from '@/components/file/UploadQueue.vue'
 import DesktopTitleBar from '@/components/layout/DesktopTitleBar.vue'
 import { isDesktopRuntime } from '@/config/runtime'
 import { Toaster } from 'vue-sonner'
+import { resolvedTheme } from '@/theme'
 
 const desktopRuntime = isDesktopRuntime()
 </script>
@@ -18,11 +19,11 @@ const desktopRuntime = isDesktopRuntime()
     <OConfirmDialog />
     <Toaster
       position="bottom-right"
-      :theme="'dark'"
+      :theme="resolvedTheme"
       :toast-options="{
         style: {
           background: 'var(--bg-overlay)',
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid var(--border-hover)',
           color: 'var(--text-primary)',
           fontFamily: 'var(--font-sans)',
           fontSize: '13px',
@@ -45,7 +46,7 @@ const desktopRuntime = isDesktopRuntime()
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-base);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-hover);
   border-radius: 12px;
 }
 

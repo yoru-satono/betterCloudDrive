@@ -180,7 +180,7 @@ async function clearFinished() {
   background: var(--bg-overlay);
   border: 1px solid var(--border-hover);
   border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
 .transfer-queue__header {

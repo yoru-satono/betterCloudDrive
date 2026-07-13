@@ -211,7 +211,7 @@ onMounted(() => load())
   width: 100%; max-width: 400px;
   background: var(--bg-elevated); border: 1px solid var(--border);
   border-radius: 14px; padding: 28px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  box-shadow: var(--shadow-lg);
 }
 .share-page__brand {
   display: flex; align-items: center; gap: 8px;

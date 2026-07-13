@@ -276,7 +276,7 @@ function fileSourceLabel(source: SearchMode | 'tag-files') {
 <style scoped>
 .search-bg {
   position: fixed; inset: 0; z-index: 500;
-  background: rgba(0,0,0,0.65);
+  background: var(--backdrop);
   backdrop-filter: blur(6px);
   display: flex; align-items: flex-start; justify-content: center;
   padding-top: 15vh;
@@ -287,7 +287,7 @@ function fileSourceLabel(source: SearchMode | 'tag-files') {
   border: 1px solid var(--border-hover);
   border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  box-shadow: var(--shadow-lg);
 }
 .search-input-row {
   display: flex; align-items: center; gap: 10px;

@@ -208,7 +208,7 @@ onMounted(load)
 .team-bin__checkbox--on {
   background: var(--accent);
   border-color: var(--accent);
-  color: #080809;
+  color: var(--text-on-accent);
 }
 .team-bin__name {
   display: flex;

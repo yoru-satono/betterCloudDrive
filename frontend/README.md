@@ -21,6 +21,14 @@ and resolve to a local generic Chinese message; production UI must not render a
 raw server key. Notification, task, activity, and permission objects follow the
 same key/params convention. See [`docs/LOCALIZATION.md`](../docs/LOCALIZATION.md).
 
+## Appearance
+
+Web and Tauri support `system`, `light`, and `dark` theme modes. New devices
+default to the operating-system theme; users can select a fixed mode from the
+Appearance section of the profile page. The device-local preference uses the
+`bcd.themeMode` key, survives logout, and is not synchronized to the backend.
+Tauri also forwards the selection to the native application theme.
+
 ## Tauri Desktop
 
 The desktop client connects to an external backend. Defaults:

@@ -681,7 +681,7 @@ function handleFileInputChange(event: Event) {
 .share-password__segments button:hover { color: var(--text-primary); }
 .share-password__segments .share-password__segment--active {
   background: var(--accent);
-  color: #080809;
+  color: var(--text-on-accent);
 }
 .info-list { display: flex; flex-direction: column; gap: 8px; }
 .info-list div {

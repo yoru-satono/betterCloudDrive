@@ -73,6 +73,8 @@ describe('Tauri desktop window smoke', () => {
       await expectFileVisible(file.fileName)
       await expectFileVisible(folder.fileName)
       await expectFolderUploadAvailable()
+      await expectThemeSelection()
+      await openSidebarLink('全部文件')
       await captureClipboardWrites()
 
       const emptyUploadName = 'empty.txt'
@@ -119,6 +121,21 @@ describe('Tauri desktop window smoke', () => {
     }
   })
 })
+
+async function expectThemeSelection() {
+  await (await $('.sidebar__user')).click()
+  const darkOption = await $('[data-testid="theme-option-dark"]')
+  await darkOption.waitForDisplayed()
+  await darkOption.click()
+  await browser.waitUntil(async () => (await $('html').getAttribute('data-theme')) === 'dark', {
+    timeout: 5_000,
+    timeoutMsg: 'Desktop theme did not switch to dark mode',
+  })
+  const storedTheme = await browser.execute(() => localStorage.getItem('bcd.themeMode'))
+  assert.equal(storedTheme, 'dark')
+  const systemOption = await $('[data-testid="theme-option-system"]')
+  await systemOption.click()
+}
 
 async function waitForFileContents(filePath: string, expected: string) {
   await browser.waitUntil(async () => {

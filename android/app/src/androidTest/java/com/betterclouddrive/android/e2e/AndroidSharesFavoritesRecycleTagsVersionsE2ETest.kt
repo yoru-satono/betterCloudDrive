@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import com.betterclouddrive.android.MainActivity
 import org.junit.Before
@@ -43,7 +44,7 @@ class AndroidSharesFavoritesRecycleTagsVersionsE2ETest {
         composeRule.waitForText("密码: abcd").assertIsDisplayed()
 
         composeRule.waitForTag("nav-profile").performClick()
-        composeRule.waitForTag("profile-recycle-bin").performClick()
+        composeRule.waitForTag("profile-recycle-bin").performScrollTo().performClick()
         composeRule.waitForTag("recycle-restore-${recycleFile.fileName}").assertIsDisplayed()
         composeRule.waitForTag("recycle-delete-${recycleFile.fileName}").assertIsDisplayed()
     }

@@ -42,7 +42,7 @@ withDefaults(defineProps<{
 
 .o-btn--primary {
   background: var(--accent);
-  color: #080809;
+  color: var(--text-on-accent);
   border-color: var(--accent);
 }
 .o-btn--primary:not(:disabled):hover {

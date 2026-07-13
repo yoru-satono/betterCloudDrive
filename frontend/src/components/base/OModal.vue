@@ -55,7 +55,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 <style scoped>
 .o-modal-overlay {
   position: fixed; inset: 0; z-index: 200;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--backdrop);
   backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   padding: 20px;
@@ -67,7 +67,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
   max-width: 96vw;
   max-height: 90vh;
   display: flex; flex-direction: column;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  box-shadow: var(--shadow-lg);
 }
 .o-modal__header {
   display: flex; align-items: center; justify-content: space-between;

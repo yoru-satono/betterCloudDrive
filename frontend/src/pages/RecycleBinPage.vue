@@ -125,7 +125,7 @@ onMounted(load)
   width: 16px; height: 16px; border: 1px solid var(--border-hover); border-radius: 4px;
   display: flex; align-items: center; justify-content: center; transition: all var(--fast);
 }
-.checkbox--on { background: var(--accent); border-color: var(--accent); color: #080809; }
+.checkbox--on { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
 .file-table__name { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
 .file-table__size { font-size: 11px; color: var(--text-secondary); text-align: right; }
 .file-table__date { font-size: 11px; color: var(--text-secondary); text-align: right; }

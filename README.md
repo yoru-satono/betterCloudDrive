@@ -157,6 +157,8 @@ APK 输出在 `android/app/build/outputs/apk/debug/`。
 
 客户端展示文案采用后端语义 key + 结构化参数协议，详见 [客户端本地化与语义文案协议](docs/LOCALIZATION.md)。此协议不包含自然语言兜底字段，旧客户端不能与当前后端混用。
 
+Web、Tauri 与 Android 支持“跟随系统、浅色、深色”三种主题模式。首次启动默认跟随系统，用户可在个人设置的“外观”区域选择固定主题；偏好仅保存在当前设备并跨登录状态保留。
+
 ## 配置文档
 
 - [配置与部署文档](docs/CONFIGURATION.md)
@@ -226,7 +228,7 @@ UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
 
 `-Module` 可选 `all`、`backend`、`blackbox`、`web`、`tauri`、`android`、`office`、`webdav`、`observability`、`resilience`。默认是 `all`，保持完整验证；`web` 子集只跑前端单测和非 OnlyOffice Web E2E，`office` 子集单独跑 OnlyOffice Web E2E。除非传入 `-SkipE2ECleanup`，脚本结束时会自动调用 E2E 数据清理。
 
-当前完整验证基线（2026-07-13）：15 个阶段全部通过，包括后端单元 429 项、黑盒 136 项、Web E2E 28 项、WebDAV 4 项、Android 单元 16 项和设备 E2E 25 项，以及前端单元、Tauri、可观测性与韧性测试。
+当前完整验证基线（2026-07-13）：15 个阶段全部通过，包括后端单元 429 项、黑盒 136 项、前端单元 145 项、Web E2E 29 项、WebDAV 4 项、Android 单元 18 项和设备 E2E 26 项，以及 Tauri、可观测性与韧性测试。
 
 清理 E2E 和黑盒测试数据：
 

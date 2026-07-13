@@ -7,6 +7,7 @@ import OInput from '@/components/base/OInput.vue'
 import * as notificationsApi from '@/api/notifications'
 import type { NotificationPreferenceMap, NotificationTypeFilter } from '@/api/notifications'
 import { toast } from 'vue-sonner'
+import { setThemeMode, themeMode, type ThemeMode } from '@/theme'
 
 const auth = useAuthStore()
 const { formatSize } = useFormatters()
@@ -33,6 +34,11 @@ const notificationPreferenceOptions: Array<{ type: NotificationTypeFilter; label
   { type: 'TEAM_MEMBER_REMOVE', label: '成员移除' },
   { type: 'TEAM_OWNER_TRANSFER', label: '所有权转让' },
   { type: 'TEAM_OFFICE_SAVE_FAILED', label: '文档保存失败' },
+]
+const themeOptions: Array<{ value: ThemeMode; label: string }> = [
+  { value: 'system', label: '跟随系统' },
+  { value: 'light', label: '浅色' },
+  { value: 'dark', label: '深色' },
 ]
 
 async function saveWebDavSettings(enabled: boolean) {
@@ -95,6 +101,25 @@ onMounted(loadNotificationPreferences)
         <div class="profile-card__role">{{ auth.isAdmin ? '管理员' : '普通用户' }}</div>
         <div class="profile-card__email">{{ auth.user?.email || '未绑定邮箱' }}</div>
       </div>
+    </div>
+
+    <div class="section">
+      <h3 class="section__title">外观</h3>
+      <div class="theme-picker" role="group" aria-label="主题模式">
+        <button
+          v-for="option in themeOptions"
+          :key="option.value"
+          type="button"
+          class="theme-picker__option"
+          :class="{ 'theme-picker__option--active': themeMode === option.value }"
+          :aria-pressed="themeMode === option.value"
+          :data-testid="`theme-option-${option.value}`"
+          @click="setThemeMode(option.value)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+      <p class="section__hint theme-picker__hint">主题偏好仅保存在当前设备。</p>
     </div>
 
     <!-- Storage usage -->
@@ -183,6 +208,22 @@ onMounted(loadNotificationPreferences)
 .section__header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .section__header .section__title { margin-bottom: 0; }
 .section__hint { margin-bottom: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+.theme-picker {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  padding: 4px; border: 1px solid var(--border); border-radius: 9px;
+  background: var(--bg-elevated);
+}
+.theme-picker__option {
+  appearance: none; border: 1px solid transparent; border-radius: 6px;
+  padding: 8px 10px; color: var(--text-secondary); background: transparent;
+  font: inherit; cursor: pointer; transition: all var(--fast);
+}
+.theme-picker__option:hover { color: var(--text-primary); background: var(--bg-surface); }
+.theme-picker__option--active {
+  color: var(--accent); border-color: var(--border-focus); background: var(--accent-dim);
+}
+.theme-picker__option:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 1px; }
+.theme-picker__hint { margin: 7px 0 0; }
 
 .storage-bar { height: 6px; background: var(--border); border-radius: 3px; margin-bottom: 6px; overflow: hidden; }
 .storage-bar__fill { height: 100%; border-radius: 3px; transition: width 600ms; }

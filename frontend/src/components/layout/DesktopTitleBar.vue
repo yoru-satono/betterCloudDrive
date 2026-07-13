@@ -278,7 +278,7 @@ onBeforeUnmount(() => {
 
 .desktop-titlebar__button--close:hover {
   background: var(--danger);
-  color: #fff;
+  color: var(--text-on-danger);
 }
 
 .connection-settings {
@@ -294,7 +294,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border-hover);
   border-radius: 8px;
   background: var(--bg-elevated);
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-panel);
   user-select: text;
 }
 

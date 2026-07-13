@@ -55,7 +55,7 @@ const { formatSize, formatDate } = useFormatters()
   border-color: var(--border-hover);
   background: var(--bg-overlay);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-sm);
 }
 .file-card--selected {
   border-color: var(--accent) !important;
@@ -76,7 +76,7 @@ const { formatSize, formatDate } = useFormatters()
   background: var(--accent);
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  color: #080809;
+  color: var(--text-on-accent);
 }
 
 @keyframes slide-up {

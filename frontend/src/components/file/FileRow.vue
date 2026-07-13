@@ -67,7 +67,7 @@ const { formatSize, formatDate } = useFormatters()
 .file-row__checkbox--checked {
   background: var(--accent);
   border-color: var(--accent);
-  color: #080809;
+  color: var(--text-on-accent);
 }
 .file-row__name { font-size: 13px; color: var(--text-primary); }
 .file-row__size { font-size: 11px; color: var(--text-secondary); text-align: right; }

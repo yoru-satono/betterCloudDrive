@@ -77,6 +77,7 @@
 - Android 已接入团队 MVP、邀请深链、团队文件、分享、通知、OnlyOffice 入口和部分团队权限测试覆盖。
 - 后端展示协议已升级为纯语义 `messageKey/messageParams`；通知、任务、活动和权限来源使用各自的 key/params 字段，不再返回自然语言兜底。
 - Web/Tauri 使用 `vue-i18n` 简体中文资源，Android 使用 `strings.xml` 与集中式 resolver；未知键只显示客户端通用提示。
+- Web、Tauri 和 Android 支持跟随系统、浅色和深色主题；首次默认跟随系统，用户选择保存在当前设备并跨登录状态保留。
 
 ## 迁移要求
 
@@ -111,7 +112,7 @@
 
 - 后端 Maven 全量测试通过。
 - backend-test 全量黑盒测试通过：`136 passed`。
-- 全量验证 15/15 阶段通过：后端单元 429 项、Web E2E 28 项、WebDAV 4 项、Android 单元 16 项、Android E2E 25 项，并覆盖前端单元、Tauri、可观测性和韧性测试。
+- 全量验证 15/15 阶段通过：后端单元 429 项、黑盒 136 项、前端单元 145 项、Web E2E 29 项、WebDAV 4 项、Android 单元 18 项、Android E2E 26 项，并覆盖 Tauri、可观测性和韧性测试。
 
 ## 已知限制
 
