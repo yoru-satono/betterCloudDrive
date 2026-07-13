@@ -2,7 +2,8 @@ type ApiResponseData<T> = T extends void ? T | null | undefined : T
 
 export interface ApiResponse<T> {
   code: number
-  message: string
+  messageKey: string
+  messageParams: Record<string, string | number | boolean | null>
   data: ApiResponseData<T>
   timestamp?: number
   requestId?: string

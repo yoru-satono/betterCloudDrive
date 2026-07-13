@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import com.betterclouddrive.common.message.MessageKeys;
 
 @Slf4j
 @Service
@@ -174,7 +175,14 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public void notifyUser(Long userId, Long teamId, String type, String title, String content, String link, boolean email) {
-        if (userId == null || !StringUtils.hasText(type) || !StringUtils.hasText(title)) {
+        notifyUser(userId, teamId, type, MessageKeys.notificationTitle(type), MessageKeys.notificationContent(type), Map.of(), link, email);
+    }
+
+    @Override
+    @Transactional
+    public void notifyUser(Long userId, Long teamId, String type, String titleKey, String contentKey,
+                           Map<String, Object> messageParams, String link, boolean email) {
+        if (userId == null || !StringUtils.hasText(type) || !StringUtils.hasText(titleKey)) {
             return;
         }
         UserEntity user = userRepository.findById(userId).orElse(null);
@@ -191,16 +199,17 @@ public class NotificationServiceImpl implements NotificationService {
                 .userId(userId)
                 .teamId(deliverableTeamId)
                 .type(normalizedType)
-                .title(title.trim())
-                .content(content)
+                .titleKey(titleKey)
+                .contentKey(contentKey)
+                .messageParams(messageParams == null ? Map.of() : Map.copyOf(messageParams))
                 .link(link)
                 .createdAt(LocalDateTime.now())
                 .build());
-        teamEventOutboxService.recordNotificationEvent(notification.getId(), userId, deliverableTeamId, normalizedType, content);
+        teamEventOutboxService.recordNotificationEvent(notification.getId(), userId, deliverableTeamId, normalizedType, contentKey);
         publishNotificationsChangedAfterCommit(userId);
         if (email) {
             try {
-                emailService.sendNotification(user.getEmail(), title, content, link);
+                emailService.sendNotification(user.getEmail(), normalizedType, messageParams, link);
             } catch (Exception e) {
                 if ("TEAM_QUOTA_ALERT".equals(normalizedType)) {
                     teamQuotaMetrics.recordNotificationFailure("email");
@@ -223,10 +232,16 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void notifyTeamMembers(Long teamId, Long actorUserId, String type, String title, String content, String link, boolean email) {
+        notifyTeamMembers(teamId, actorUserId, type, MessageKeys.notificationTitle(type), MessageKeys.notificationContent(type), Map.of(), link, email);
+    }
+
+    @Override
+    public void notifyTeamMembers(Long teamId, Long actorUserId, String type, String titleKey, String contentKey,
+                                  Map<String, Object> messageParams, String link, boolean email) {
         teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(teamId, ACTIVE).stream()
                 .map(TeamMemberEntity::getUserId)
                 .filter(userId -> actorUserId == null || !actorUserId.equals(userId))
-                .forEach(userId -> notifyUser(userId, teamId, type, title, content, link, email));
+                .forEach(userId -> notifyUser(userId, teamId, type, titleKey, contentKey, messageParams, link, email));
     }
 
     @Override
@@ -273,8 +288,8 @@ public class NotificationServiceImpl implements NotificationService {
         teamQuotaMetrics.recordAlertTriggered(threshold);
         log.warn("Team quota alert triggered teamId={} usedBytes={} quotaBytes={} threshold={}",
                 team.getId(), usedBytes, team.getStorageQuota(), threshold);
-        String title = "团队配额告警";
-        String content = "团队「" + team.getName() + "」存储用量已达到 " + threshold + "%。";
+        String title = "Team quota alert";
+        String content = "Team " + team.getName() + " storage usage reached " + threshold + "%";
         String link = "/teams/" + team.getId() + "/settings";
         teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(team.getId(), ACTIVE).stream()
                 .filter(member -> Set.of(TeamService.ROLE_OWNER, TeamService.ROLE_ADMIN).contains(member.getRole()))
@@ -285,7 +300,11 @@ public class NotificationServiceImpl implements NotificationService {
                         if (queueProperties.isEnabled()) {
                             teamNotificationOutboxWriter.enqueueUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true);
                         } else {
-                            notifyUser(userId, team.getId(), "TEAM_QUOTA_ALERT", title, content, link, true);
+                            notifyUser(userId, team.getId(), "TEAM_QUOTA_ALERT",
+                                    MessageKeys.notificationTitle("TEAM_QUOTA_ALERT"),
+                                    MessageKeys.notificationContent("TEAM_QUOTA_ALERT"),
+                                    Map.of("teamName", team.getName(), "threshold", threshold, "usedBytes", usedBytes, "quotaBytes", team.getStorageQuota()),
+                                    link, true);
                         }
                     } catch (RuntimeException e) {
                         teamQuotaMetrics.recordNotificationFailure(channel);

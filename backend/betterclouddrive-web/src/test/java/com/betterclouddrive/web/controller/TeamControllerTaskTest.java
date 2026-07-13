@@ -129,19 +129,19 @@ class TeamControllerTaskTest {
 
     @Test
     void emptyRecycleBin_shouldRecordSuccessfulCleanupTask() {
-        when(teamTaskService.startTask(10L, 2L, "TEAM_CLEANUP", "TEAM", 10L, "清空团队回收站"))
+        when(teamTaskService.startTask(10L, 2L, "TEAM_CLEANUP", "TEAM", 10L, "Empty team recycle bin"))
                 .thenReturn(TeamTaskEntity.builder().id(88L).build());
 
         controller.emptyRecycleBin(user(), 10L);
 
         verify(teamService).requireManageMembers(2L, 10L);
         verify(fileService).emptyTeamRecycleBin(10L, 2L);
-        verify(teamTaskService).markSucceeded(88L, "团队回收站已清空");
+        verify(teamTaskService).markSucceeded(88L, "Team recycle bin emptied");
     }
 
     @Test
     void emptyRecycleBin_shouldRecordFailedCleanupTask() {
-        when(teamTaskService.startTask(10L, 2L, "TEAM_CLEANUP", "TEAM", 10L, "清空团队回收站"))
+        when(teamTaskService.startTask(10L, 2L, "TEAM_CLEANUP", "TEAM", 10L, "Empty team recycle bin"))
                 .thenReturn(TeamTaskEntity.builder().id(88L).build());
         doThrow(new RuntimeException("storage down")).when(fileService).emptyTeamRecycleBin(10L, 2L);
 

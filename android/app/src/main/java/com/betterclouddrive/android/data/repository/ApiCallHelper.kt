@@ -12,9 +12,9 @@ suspend fun <T> apiCall(call: suspend () -> ApiResponse<T>): NetworkResult<T> {
             @Suppress("UNCHECKED_CAST")
             NetworkResult.Success(Unit as T)
         } else {
-            NetworkResult.Error(response.code, response.message, response.requestId)
+            NetworkResult.Error(response.code, response.messageKey, response.messageParams, response.requestId)
         }
     } catch (e: Exception) {
-        NetworkResult.Error(-1, e.message ?: "Network error")
+        NetworkResult.Error(-1, "error.network")
     }
 }

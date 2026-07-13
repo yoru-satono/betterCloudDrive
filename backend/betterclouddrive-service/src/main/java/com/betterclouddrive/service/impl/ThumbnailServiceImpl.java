@@ -32,8 +32,8 @@ public class ThumbnailServiceImpl implements ThumbnailService {
     private static final int MAX_THUMBNAIL_SIDE = 320;
     private static final String THUMBNAIL_CONTENT_TYPE = "image/jpeg";
     private static final String TARGET_TYPE_FILE = "FILE";
-    private static final String TEAM_THUMBNAIL_TITLE = "生成团队文件缩略图";
-    private static final String PERSONAL_THUMBNAIL_TITLE = "生成个人文件缩略图";
+    private static final String TEAM_THUMBNAIL_TITLE = "Generate team file thumbnail";
+    private static final String PERSONAL_THUMBNAIL_TITLE = "Generate personal file thumbnail";
 
     private final FileRepository fileRepository;
     private final StorageService storageService;
@@ -84,13 +84,13 @@ public class ThumbnailServiceImpl implements ThumbnailService {
         }
         teamTaskService.markRunning(task.getId());
         if (!TARGET_TYPE_FILE.equals(task.getTargetType()) || task.getTargetId() == null) {
-            teamTaskService.markFailed(task.getId(), "缩略图任务目标无效");
+            teamTaskService.markFailed(task.getId(), "Invalid thumbnail task target");
             return;
         }
 
         ThumbnailGenerationResult result = generate(task.getTargetId());
         if (result.succeeded()) {
-            teamTaskService.markSucceeded(task.getId(), "缩略图已生成");
+            teamTaskService.markSucceeded(task.getId(), "Thumbnail generated");
         } else {
             teamTaskService.markFailed(task.getId(), result.message());
         }
@@ -98,17 +98,17 @@ public class ThumbnailServiceImpl implements ThumbnailService {
 
     private ThumbnailGenerationResult generate(Long fileId) {
         if (fileId == null) {
-            return ThumbnailGenerationResult.failure("文件不存在或不支持生成缩略图");
+            return ThumbnailGenerationResult.failure("File is missing or does not support thumbnails");
         }
         FileEntity file = fileRepository.findById(fileId).orElse(null);
         if (!canGenerate(file)) {
-            return ThumbnailGenerationResult.failure("文件不存在或不支持生成缩略图");
+            return ThumbnailGenerationResult.failure("File is missing or does not support thumbnails");
         }
         try (InputStream inputStream = storageService.downloadObject(file.getStoragePath())) {
             BufferedImage source = ImageIO.read(inputStream);
             if (source == null) {
                 log.warn("Thumbnail generation skipped because image cannot be decoded, fileId={}", fileId);
-                return ThumbnailGenerationResult.failure("图片无法解码");
+                return ThumbnailGenerationResult.failure("Image cannot be decoded");
             }
 
             BufferedImage thumbnail = resize(source);

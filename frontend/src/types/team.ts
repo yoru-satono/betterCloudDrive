@@ -66,16 +66,19 @@ export interface TeamTask {
   status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
   targetType: string | null
   targetId: number | null
-  title: string
+  titleKey: string
+  titleParams: Record<string, string | number | boolean | null>
   payload?: string | null
   progress: number
-  resultMessage: string | null
+  resultMessageKey: string | null
+  resultMessageParams: Record<string, string | number | boolean | null>
   resultPath?: string | null
   resultFileName?: string | null
   resultContentType?: string | null
   resultSizeBytes?: number | null
   resultExpiresAt?: string | null
-  errorMessage: string | null
+  errorMessageKey: string | null
+  errorMessageParams: Record<string, string | number | boolean | null>
   retryCount: number
   createdAt: string
   updatedAt: string
@@ -90,7 +93,8 @@ export interface TeamActivity {
   action: string
   targetType: string | null
   targetId: number | null
-  summary: string
+  summaryKey: string
+  summaryParams: Record<string, string | number | boolean | null>
   createdAt: string
 }
 
@@ -117,7 +121,8 @@ export interface TeamPermissionSource {
   canShare: boolean
   canDelete: boolean
   canManage: boolean
-  description: string
+  descriptionKey: string
+  descriptionParams: Record<string, string | number | boolean | null>
 }
 
 export interface TeamFilePermission {

@@ -10,6 +10,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -49,8 +51,9 @@ class TeamNotificationOutboxWriterTest {
         assertThat(payload.userId()).isEqualTo(2L);
         assertThat(payload.teamId()).isEqualTo(10L);
         assertThat(payload.type()).isEqualTo("TEAM_INVITE");
-        assertThat(payload.title()).isEqualTo("团队邀请");
-        assertThat(payload.content()).isEqualTo("加入团队");
+        assertThat(payload.titleKey()).isEqualTo("notification.team_invite.title");
+        assertThat(payload.contentKey()).isEqualTo("notification.team_invite.content");
+        assertThat(payload.messageParams()).isEmpty();
         assertThat(payload.link()).isEqualTo("/team-invites/token");
         assertThat(payload.email()).isFalse();
     }
@@ -72,6 +75,20 @@ class TeamNotificationOutboxWriterTest {
         assertThat(payload.excludeUserId()).isEqualTo(1L);
         assertThat(payload.type()).isEqualTo("TEAM_DELETE");
         assertThat(payload.email()).isTrue();
+    }
+
+    @Test
+    void enqueueUser_shouldPersistSemanticParameters() throws Exception {
+        Map<String, Object> params = Map.of("teamName", "Product", "role", "EDITOR");
+
+        writer.enqueueUser(2L, 10L, "TEAM_INVITE", params, "/team-invites/token", false);
+
+        ArgumentCaptor<TeamEventOutboxEntity> eventCaptor = ArgumentCaptor.forClass(TeamEventOutboxEntity.class);
+        verify(teamEventOutboxRepository).save(eventCaptor.capture());
+        TeamEventOutboxEntity event = eventCaptor.getValue();
+        NotificationDispatchPayload payload = objectMapper.readValue(event.getPayload(), NotificationDispatchPayload.class);
+        assertThat(payload.messageParams()).containsAllEntriesOf(params);
+        assertThat(event.getMessageParams()).containsAllEntriesOf(params);
     }
 
     @Test

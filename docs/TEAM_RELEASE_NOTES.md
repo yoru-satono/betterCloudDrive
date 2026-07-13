@@ -75,6 +75,8 @@
 - Web/Tauri 已接入团队核心流程、团队设置、连接设置、上下文搜索和 OnlyOffice 预览/编辑入口。
 - Tauri 标题栏保留连接设置入口，登录后通过弹窗管理 API 地址和 Web 分享地址。
 - Android 已接入团队 MVP、邀请深链、团队文件、分享、通知、OnlyOffice 入口和部分团队权限测试覆盖。
+- 后端展示协议已升级为纯语义 `messageKey/messageParams`；通知、任务、活动和权限来源使用各自的 key/params 字段，不再返回自然语言兜底。
+- Web/Tauri 使用 `vue-i18n` 简体中文资源，Android 使用 `strings.xml` 与集中式 resolver；未知键只显示客户端通用提示。
 
 ## 迁移要求
 
@@ -98,18 +100,18 @@
 
 ## 验证记录
 
-最近一次团队权限矩阵收尾验证：
+最近一次完整验证（2026-07-13）：
 
 - `mvn test`
 - `backend-test/.venv/Scripts/pytest.exe tests/test_teams.py -v`
 - `backend-test/.venv/Scripts/pytest.exe -v`
-- `scripts/verify-all.ps1 -AndroidSerial localhost:16416 -KeepGoing`
+- `scripts/verify-all.ps1 -KeepGoing`
 
 结果：
 
 - 后端 Maven 全量测试通过。
-- backend-test 全量黑盒测试通过：`135 passed, 1 skipped`。
-- 全量验证通过，覆盖后端、Web、Tauri、Android 单元和 E2E。
+- backend-test 全量黑盒测试通过：`136 passed`。
+- 全量验证 15/15 阶段通过：后端单元 429 项、Web E2E 28 项、WebDAV 4 项、Android 单元 16 项、Android E2E 25 项，并覆盖前端单元、Tauri、可观测性和韧性测试。
 
 ## 已知限制
 

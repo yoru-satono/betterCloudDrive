@@ -244,7 +244,7 @@ class AndroidTeamsE2ETest {
         api.createTeamInvite(owner.accessToken, team.id, invitee.email, "VIEWER")
         val inviteToken = api.latestTeamInviteToken(invitee.email)
         api.acceptTeamInvite(inviteToken, invitee.accessToken)
-        val notification = waitForNotification("TEAM_INVITE_ACCEPT")
+        val notification = waitForNotification("TEAM_INVITE_ACCEPT", team.id)
 
         composeRule.loginViaUi(owner)
         openTeam(team)
@@ -509,9 +509,10 @@ class AndroidTeamsE2ETest {
         }
     }
 
-    private fun waitForNotification(type: String): E2ENotification {
+    private fun waitForNotification(type: String, teamId: Long): E2ENotification {
         return eventually("notification $type") {
-            api.listNotifications(owner.accessToken, unreadOnly = true).firstOrNull { it.type == type }
+            api.listNotifications(owner.accessToken, unreadOnly = true)
+                .firstOrNull { it.type == type && it.teamId == teamId }
         }
     }
 

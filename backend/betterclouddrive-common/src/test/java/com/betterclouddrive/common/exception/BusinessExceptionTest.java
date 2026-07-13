@@ -13,6 +13,7 @@ class BusinessExceptionTest {
 
         assertThat(ex.getCode()).isEqualTo(500);
         assertThat(ex.getMessage()).isEqualTo("err");
+        assertThat(ex.getMessageKey()).isEqualTo("err");
     }
 
     @Test
@@ -21,6 +22,7 @@ class BusinessExceptionTest {
 
         assertThat(ex.getCode()).isEqualTo(404001);
         assertThat(ex.getMessage()).isEqualTo("file not found");
+        assertThat(ex.getMessageKey()).isEqualTo("error.file_not_found");
     }
 
     @Test
@@ -29,6 +31,7 @@ class BusinessExceptionTest {
 
         assertThat(ex.getCode()).isEqualTo(401);
         assertThat(ex.getMessage()).isEqualTo("bad credentials");
+        assertThat(ex.getMessageKey()).isEqualTo("error.unauthorized");
     }
 
     @Test

@@ -42,8 +42,9 @@ function notification(patch: Partial<NotificationEntity> = {}): NotificationEnti
     userId: 2,
     teamId: 10,
     type: 'TEAM_INVITE',
-    title: '团队邀请',
-    content: '邀请你加入团队',
+    titleKey: 'notification.team_invite.title',
+    contentKey: 'notification.team_invite.content',
+    messageParams: {},
     link: '/teams/10/settings',
     isRead: false,
     readAt: null,
@@ -134,12 +135,12 @@ describe('NotificationsPage', () => {
     const wrapper = mountPage()
     await flushPromises()
     listNotifications.mockClear()
-    listNotifications.mockResolvedValue(page([notification({ id: 2, title: '新通知' })]))
+    listNotifications.mockResolvedValue(page([notification({ id: 2, titleKey: 'notification.team_delete.title', contentKey: 'notification.team_delete.content' })]))
 
     window.dispatchEvent(new CustomEvent('bcd:notifications-changed', { detail: { unreadCount: 1 } }))
     await flushPromises()
 
     expect(listNotifications).toHaveBeenCalledWith(1, 20, false, undefined)
-    expect(wrapper.text()).toContain('新通知')
+    expect(wrapper.text()).toContain('团队已删除')
   })
 })

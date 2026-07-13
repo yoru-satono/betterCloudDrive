@@ -129,7 +129,8 @@ struct DesktopUploadBatchEvent {
 #[serde(rename_all = "camelCase")]
 struct ApiEnvelope<T> {
     code: i64,
-    message: String,
+    message_key: String,
+    message_params: serde_json::Value,
     data: Option<T>,
 }
 
@@ -797,7 +798,11 @@ async fn parse_response<T: for<'de> Deserialize<'de>>(response: reqwest::Respons
     }
     let envelope: ApiEnvelope<T> = serde_json::from_str(&text).map_err(|e| format!("解析响应失败: {e}: {text}"))?;
     if envelope.code != 200 {
-        return Err(format!("{}: {}", envelope.code, envelope.message));
+        eprintln!(
+            "Desktop upload API rejected request: code={} messageKey={} messageParams={}",
+            envelope.code, envelope.message_key, envelope.message_params
+        );
+        return Err(format!("服务端拒绝了上传请求（代码 {}）", envelope.code));
     }
     envelope.data.ok_or_else(|| "响应缺少 data".to_string())
 }

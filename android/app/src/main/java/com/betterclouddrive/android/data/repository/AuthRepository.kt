@@ -31,7 +31,7 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun refresh(): NetworkResult<AuthTokens> {
-        val rt = tokenManager.getRefreshToken() ?: return NetworkResult.Error(401, "No refresh token")
+        val rt = tokenManager.getRefreshToken() ?: return NetworkResult.Error(401, "error.unauthorized")
         return apiCall { api.refresh(RefreshRequest(rt)) }
     }
 

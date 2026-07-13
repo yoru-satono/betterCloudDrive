@@ -152,14 +152,14 @@ public class GrafanaAuthService {
     private String sign(String payload) {
         String secret = properties.getGrafanaAuth().getSecret();
         if (!StringUtils.hasText(secret)) {
-            throw new BusinessException(500, "Grafana auth proxy secret is not configured");
+            throw new BusinessException(500, "error.internal", java.util.Map.of(), "Grafana auth proxy secret is not configured");
         }
         try {
             Mac mac = Mac.getInstance(HMAC_ALGORITHM);
             mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), HMAC_ALGORITHM));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
-            throw new BusinessException(500, "Failed to sign Grafana session");
+            throw new BusinessException(500, "error.internal", java.util.Map.of(), "Failed to sign Grafana session");
         }
     }
 

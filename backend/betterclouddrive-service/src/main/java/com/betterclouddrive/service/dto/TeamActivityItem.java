@@ -1,6 +1,7 @@
 package com.betterclouddrive.service.dto;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 public record TeamActivityItem(
         Long id,
@@ -9,6 +10,7 @@ public record TeamActivityItem(
         String action,
         String targetType,
         Long targetId,
-        String summary,
+        String summaryKey,
+        Map<String, Object> summaryParams,
         LocalDateTime createdAt) {
 }

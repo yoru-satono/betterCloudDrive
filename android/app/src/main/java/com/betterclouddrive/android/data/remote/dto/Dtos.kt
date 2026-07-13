@@ -2,11 +2,13 @@ package com.betterclouddrive.android.data.remote.dto
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class ApiResponse<T>(
     val code: Int = 200,
-    val message: String = "success",
+    @SerialName("messageKey") val messageKey: String = "common.success",
+    @SerialName("messageParams") val messageParams: Map<String, JsonElement> = emptyMap(),
     val data: T? = null,
     val timestamp: Long = 0,
     @SerialName("requestId") val requestId: String? = null,

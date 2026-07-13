@@ -63,7 +63,7 @@ class OnlyOfficeSaveServiceImplTest {
         assertThat(processed).isEqualTo(1);
         verify(teamTaskService).markRunning(77L);
         verify(onlyOfficeCallbackService).markSaved(88L, 99L);
-        verify(teamTaskService).markSucceeded(77L, "保存为版本 3");
+        verify(teamTaskService).markSucceeded(77L, "Saved as version 3");
         verify(onlyOfficeSaveMetrics).recordSaveSucceeded(123L);
     }
 
@@ -86,8 +86,8 @@ class OnlyOfficeSaveServiceImplTest {
                 2L,
                 10L,
                 "TEAM_OFFICE_SAVE_FAILED",
-                "在线文档保存失败",
-                "文档保存失败，请在团队任务中心重试。原因：download failed",
+                "Online document save failed",
+                "Document save failed; retry from the team task center. Cause: download failed",
                 "/teams/10/settings",
                 false);
     }

@@ -59,7 +59,7 @@ class FolderZipTaskServiceImplTest {
         FileEntity folder = teamFolder();
         TeamTaskEntity task = TeamTaskEntity.builder().id(77L).status(TeamTaskEntity.STATUS_PENDING).build();
         when(fileService.getTeamFile(10L, 20L)).thenReturn(folder);
-        when(teamTaskService.queueTask(10L, 2L, "FOLDER_ZIP", "FILE", 20L, "生成团队文件夹 ZIP"))
+        when(teamTaskService.queueTask(10L, 2L, "FOLDER_ZIP", "FILE", 20L, "Generate team folder ZIP"))
                 .thenReturn(task);
 
         TeamTaskEntity queued = service.queueTeamFolderZip(2L, 10L, 20L);
@@ -93,7 +93,7 @@ class FolderZipTaskServiceImplTest {
         assertThat(processed).isEqualTo(1);
         verify(teamTaskService).markRunning(77L);
         ArgumentCaptor<TeamTaskResult> resultCaptor = ArgumentCaptor.forClass(TeamTaskResult.class);
-        verify(teamTaskService).markSucceeded(eq(77L), eq("ZIP 已生成：Docs.zip"), resultCaptor.capture());
+        verify(teamTaskService).markSucceeded(eq(77L), eq("ZIP generated: Docs.zip"), resultCaptor.capture());
         TeamTaskResult result = resultCaptor.getValue();
         assertThat(result.path()).isEqualTo("folder-zips/teams/10/20/a.zip");
         assertThat(result.fileName()).isEqualTo("Docs.zip");

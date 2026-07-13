@@ -42,9 +42,9 @@ class UploadRepository @Inject constructor(
             val part = MultipartBody.Part.createFormData("file", "chunk_$chunkNumber", requestBody)
             val response = api.uploadChunk(sessionId, part, chunkNumber)
             if (response.code == 200) NetworkResult.Success(response.data!!)
-            else NetworkResult.Error(response.code, response.message)
+            else NetworkResult.Error(response.code, response.messageKey, response.messageParams)
         } catch (e: Exception) {
-            NetworkResult.Error(-1, e.message ?: "Upload chunk failed")
+            NetworkResult.Error(-1, "error.upload_failed")
         }
     }
 

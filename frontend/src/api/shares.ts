@@ -12,8 +12,8 @@ export interface SaveSharedItemRequest {
 export const createShare = (req: CreateShareRequest) =>
   api.post<ApiResponse<ShareLinkEntity>>('/shares', req)
 
-export const listShares = (page = 1, size = 20, q?: string) =>
-  api.get<ApiResponse<PageResult<ShareLinkEntity>>>('/shares', { params: { page, size, q } })
+export const listShares = (page = 1, size = 20, q?: string, passwordProtected?: boolean, expirationStatus?: 'ACTIVE' | 'EXPIRED' | 'NEVER') =>
+  api.get<ApiResponse<PageResult<ShareLinkEntity>>>('/shares', { params: { page, size, q, passwordProtected, expirationStatus } })
 
 export const getShare = (shareId: number) =>
   api.get<ApiResponse<ShareLinkEntity>>(`/shares/${shareId}`)

@@ -7,6 +7,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Data
 @Builder
@@ -29,11 +32,16 @@ public class NotificationEntity {
     @Column(name = "type")
     private String type;
 
-    @Column(name = "title")
-    private String title;
+    @Column(name = "title_key")
+    private String titleKey;
 
-    @Column(name = "content")
-    private String content;
+    @Column(name = "content_key")
+    private String contentKey;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "message_params", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> messageParams = Map.of();
 
     @Column(name = "link")
     private String link;

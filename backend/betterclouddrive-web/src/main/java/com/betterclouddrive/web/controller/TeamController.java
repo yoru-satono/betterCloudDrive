@@ -244,11 +244,11 @@ public class TeamController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startAt,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt) {
         TeamTaskEntity task = teamTaskService.startTask(
-                teamId, user.getUserId(), "AUDIT_EXPORT", "TEAM", teamId, "导出团队审计日志");
+                teamId, user.getUserId(), "AUDIT_EXPORT", "TEAM", teamId, "Export team audit log");
         try {
             PageResult<TeamOperationLogEntity> logs = teamAuditService.exportLogs(
                     user.getUserId(), teamId, actorUserId, action, targetType, result, startAt, endAt, AUDIT_EXPORT_LIMIT);
-            teamTaskService.markSucceeded(task.getId(), "导出 " + logs.getRecords().size() + " 条审计日志");
+            teamTaskService.markSucceeded(task.getId(), "Exported " + logs.getRecords().size() + " audit records");
             return auditCsvExporter.teamAuditResponse(teamId, logs.getRecords());
         } catch (RuntimeException e) {
             teamTaskService.markFailed(task.getId(), e.getMessage());
@@ -593,10 +593,10 @@ public class TeamController {
             @PathVariable Long teamId) {
         teamService.requireManageMembers(user.getUserId(), teamId);
         TeamTaskEntity task = teamTaskService.startTask(
-                teamId, user.getUserId(), "TEAM_CLEANUP", "TEAM", teamId, "清空团队回收站");
+                teamId, user.getUserId(), "TEAM_CLEANUP", "TEAM", teamId, "Empty team recycle bin");
         try {
             fileService.emptyTeamRecycleBin(teamId, user.getUserId());
-            teamTaskService.markSucceeded(task.getId(), "团队回收站已清空");
+            teamTaskService.markSucceeded(task.getId(), "Team recycle bin emptied");
         } catch (RuntimeException e) {
             teamTaskService.markFailed(task.getId(), e.getMessage());
             throw e;
@@ -738,10 +738,12 @@ public class TeamController {
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) Boolean passwordProtected,
+            @RequestParam(required = false) String expirationStatus,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
         teamService.requireRead(user.getUserId(), teamId);
-        PageResult<ShareLinkEntity> shares = shareService.listTeamShares(user.getUserId(), teamId, q, page, size);
+        PageResult<ShareLinkEntity> shares = shareService.listTeamShares(user.getUserId(), teamId, q, passwordProtected, expirationStatus, page, size);
         List<ShareLinkResponse> readableShares = shares.getRecords().stream()
                 .map(ShareLinkResponse::from)
                 .toList();
@@ -865,7 +867,7 @@ public class TeamController {
                 "FOLDER_ZIP",
                 "FILE",
                 fileId,
-                "生成团队文件夹 ZIP");
+                "Generate team folder ZIP");
         try {
             FolderZipDownloadCacheEntity cache = folderZipDownloadService.getOrCreateCachedZip(folder);
             ResponseEntity<StreamingResponseBody> response = rangedObjectResponse(
@@ -875,7 +877,7 @@ public class TeamController {
                     attachmentDisposition(cache.getFileName()),
                     rangeHeader);
             folderZipDownloadService.markDownloaded(cache);
-            teamTaskService.markSucceeded(task.getId(), "ZIP 已生成：" + cache.getFileName());
+            teamTaskService.markSucceeded(task.getId(), "ZIP generated: " + cache.getFileName());
             return response;
         } catch (RuntimeException e) {
             teamTaskService.markFailed(task.getId(), e.getMessage());

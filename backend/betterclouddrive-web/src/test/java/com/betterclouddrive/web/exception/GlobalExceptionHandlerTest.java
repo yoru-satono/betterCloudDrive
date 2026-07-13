@@ -30,7 +30,7 @@ class GlobalExceptionHandlerTest {
         BusinessException ex = new BusinessException(ApiCode.FILE_NOT_FOUND);
         ApiResponse<?> response = handler.handleBusinessException(ex);
         assertThat(response.getCode()).isEqualTo(404001);
-        assertThat(response.getMessage()).isEqualTo("file not found");
+        assertThat(response.getMessageKey()).isEqualTo("error.file_not_found");
     }
 
     @Test
@@ -42,8 +42,8 @@ class GlobalExceptionHandlerTest {
 
         ApiResponse<?> response = handler.handleValidation(ex);
         assertThat(response.getCode()).isEqualTo(400);
-        assertThat(response.getMessage()).contains("username");
-        assertThat(response.getMessage()).contains("must not be blank");
+        assertThat(response.getMessageKey()).isEqualTo("error.validation");
+        assertThat(response.getMessageParams()).containsEntry("fields", "username");
     }
 
     @Test
@@ -54,7 +54,7 @@ class GlobalExceptionHandlerTest {
         MethodArgumentNotValidException ex = new MethodArgumentNotValidException(null, bindingResult);
 
         ApiResponse<?> response = handler.handleValidation(ex);
-        assertThat(response.getMessage()).contains("username").contains("password");
+        assertThat(response.getMessageParams().get("fields").toString()).contains("username").contains("password");
     }
 
     @Test
@@ -62,7 +62,7 @@ class GlobalExceptionHandlerTest {
         Exception ex = new RuntimeException("unexpected error");
         ApiResponse<?> response = handler.handleUnknown(ex);
         assertThat(response.getCode()).isEqualTo(500);
-        assertThat(response.getMessage()).isEqualTo("internal server error");
+        assertThat(response.getMessageKey()).isEqualTo("error.internal");
     }
 
     @Test
@@ -74,7 +74,8 @@ class GlobalExceptionHandlerTest {
         ApiResponse<?> response = handler.handleTypeMismatch(ex);
 
         assertThat(response.getCode()).isEqualTo(400);
-        assertThat(response.getMessage()).isEqualTo("Invalid request parameter: startAt");
+        assertThat(response.getMessageKey()).isEqualTo("error.invalid_parameter");
+        assertThat(response.getMessageParams()).containsEntry("name", "startAt");
     }
 
     private static class TestController {

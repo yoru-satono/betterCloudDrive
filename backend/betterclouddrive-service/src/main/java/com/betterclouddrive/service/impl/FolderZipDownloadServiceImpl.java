@@ -123,12 +123,12 @@ public class FolderZipDownloadServiceImpl implements FolderZipDownloadService {
                 stats.fileCount++;
                 if (stats.fileCount > properties.getMaxFiles()) {
                     throw new BusinessException(ApiCode.FOLDER_DOWNLOAD_LIMIT_EXCEEDED,
-                            "文件夹内文件数量超过网页下载限制");
+                            "Folder file count exceeds the web download limit");
                 }
                 stats.totalSize += child.getFileSize() != null ? child.getFileSize() : 0L;
                 if (stats.totalSize > properties.getMaxSizeBytes()) {
                     throw new BusinessException(ApiCode.FOLDER_DOWNLOAD_LIMIT_EXCEEDED,
-                            "文件夹总大小超过网页下载限制");
+                            "Folder size exceeds the web download limit");
                 }
             }
         }
@@ -208,13 +208,13 @@ public class FolderZipDownloadServiceImpl implements FolderZipDownloadService {
     }
 
     private String normalizeEntryName(String name) {
-        String normalized = name == null || name.isBlank() ? "未命名" : name.trim();
+        String normalized = name == null || name.isBlank() ? "unnamed" : name.trim();
         normalized = normalized.replace('\\', '/');
         while (normalized.startsWith("/")) {
             normalized = normalized.substring(1);
         }
         normalized = normalized.replace("../", "").replace("..", "");
-        return normalized.isBlank() ? "未命名" : normalized;
+        return normalized.isBlank() ? "unnamed" : normalized;
     }
 
     private List<FileEntity> listChildren(FileEntity folder) {

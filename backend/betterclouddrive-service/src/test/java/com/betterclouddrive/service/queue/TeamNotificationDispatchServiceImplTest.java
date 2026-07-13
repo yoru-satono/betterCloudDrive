@@ -69,8 +69,17 @@ class TeamNotificationDispatchServiceImplTest {
     void enqueueUserNotification_shouldWriteOutboxWhenQueueEnabled() {
         service.enqueueUserNotification(2L, 10L, "TEAM_INVITE", "团队邀请", "加入团队", "/teams/10", true);
 
-        verify(teamNotificationOutboxWriter).enqueueUser(2L, 10L, "TEAM_INVITE", "团队邀请", "加入团队", "/teams/10", true);
+        verify(teamNotificationOutboxWriter).enqueueUser(2L, 10L, "TEAM_INVITE", Map.of(), "/teams/10", true);
         verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void enqueueUserNotification_shouldPreserveSemanticParameters() {
+        Map<String, Object> params = Map.of("teamName", "Product", "role", "EDITOR");
+
+        service.enqueueUserNotification(2L, 10L, "TEAM_INVITE", params, "/teams/10", true);
+
+        verify(teamNotificationOutboxWriter).enqueueUser(2L, 10L, "TEAM_INVITE", params, "/teams/10", true);
     }
 
     @Test
@@ -99,7 +108,7 @@ class TeamNotificationDispatchServiceImplTest {
         int processed = service.processQueuedNotifications(10);
 
         assertThat(processed).isEqualTo(1);
-        verify(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "团队邀请", "加入团队", "/teams/10", false);
+        verify(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "notification.team_invite.title", "notification.team_invite.content", Map.of(), "/teams/10", false);
         ArgumentCaptor<TeamEventOutboxEntity> eventCaptor = ArgumentCaptor.forClass(TeamEventOutboxEntity.class);
         verify(teamEventOutboxRepository).save(eventCaptor.capture());
         assertThat(eventCaptor.getValue().getStatus()).isEqualTo(TeamEventOutboxEntity.STATUS_PROCESSED);
@@ -116,7 +125,7 @@ class TeamNotificationDispatchServiceImplTest {
                 .thenReturn(List.of(message));
         when(teamEventOutboxRepository.findById(99L)).thenReturn(Optional.of(event));
         doThrow(new IllegalStateException("notification db down"))
-                .when(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "团队邀请", "加入团队", "/teams/10", false);
+                .when(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "notification.team_invite.title", "notification.team_invite.content", Map.of(), "/teams/10", false);
 
         int processed = service.processQueuedNotifications(10);
 
@@ -140,7 +149,7 @@ class TeamNotificationDispatchServiceImplTest {
                 .thenReturn(List.of(message));
         when(teamEventOutboxRepository.findById(99L)).thenReturn(Optional.of(event));
         doThrow(new IllegalStateException("notification db down"))
-                .when(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "团队邀请", "加入团队", "/teams/10", false);
+                .when(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "notification.team_invite.title", "notification.team_invite.content", Map.of(), "/teams/10", false);
 
         int processed = service.processQueuedNotifications(10);
 
@@ -206,8 +215,9 @@ class TeamNotificationDispatchServiceImplTest {
                 10L,
                 null,
                 "TEAM_INVITE",
-                "团队邀请",
-                "加入团队",
+                "notification.team_invite.title",
+                "notification.team_invite.content",
+                Map.of(),
                 "/teams/10",
                 false);
         return new QueueMessage("bcd:stream:notifications", "1-0", Map.of(

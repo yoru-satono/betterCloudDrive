@@ -80,8 +80,9 @@ export interface E2ENotification {
   userId: number
   teamId: number | null
   type: string
-  title: string
-  content: string
+  titleKey: string
+  contentKey: string
+  messageParams: Record<string, string | number | boolean | null>
   link: string | null
   isRead: boolean
   readAt: string | null

@@ -5,7 +5,9 @@ def assert_api_ok(response):
     """Assert response has code=200 and return data."""
     body = response.json()
     assert body["code"] == 200, f"Expected 200, got {body}"
-    assert body["message"] == "success"
+    assert body["messageKey"] == "common.success"
+    assert body["messageParams"] == {}
+    assert "message" not in body
     assert "requestId" in body
     return body.get("data")
 
@@ -16,6 +18,9 @@ def assert_api_error(response, expected_code: int):
     if "application/json" in content_type:
         body = response.json()
         assert body["code"] == expected_code, f"Expected {expected_code}, got {body}"
+        assert isinstance(body.get("messageKey"), str) and body["messageKey"]
+        assert isinstance(body.get("messageParams"), dict)
+        assert "message" not in body
         return body
     else:
         # Spring Security may return empty/HTML error responses

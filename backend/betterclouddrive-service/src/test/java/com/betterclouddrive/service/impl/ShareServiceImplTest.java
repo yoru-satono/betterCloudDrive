@@ -97,7 +97,7 @@ class ShareServiceImplTest {
         when(teamPermissionService.effectivePermissions(7L, 20L, 11L)).thenReturn(TeamEffectivePermission.viewer());
         when(teamPermissionService.effectivePermissions(7L, 20L, 12L)).thenReturn(TeamEffectivePermission.viewer());
 
-        PageResult<ShareLinkEntity> result = shareService.listTeamShares(7L, 20L, null, 1, 1);
+        PageResult<ShareLinkEntity> result = shareService.listTeamShares(7L, 20L, null, null, null, 1, 1);
 
         assertThat(result.getRecords()).extracting(ShareLinkEntity::getId).containsExactly(11L);
         assertThat(result.getTotal()).isEqualTo(2);
@@ -290,7 +290,7 @@ class ShareServiceImplTest {
         Page<ShareLinkEntity> page = new PageImpl<>(List.of(share), PageRequest.of(0, 20), 1);
         when(shareLinkRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
 
-        PageResult<ShareLinkEntity> result = shareService.listShares(1L, "abcd", 1, 20);
+        PageResult<ShareLinkEntity> result = shareService.listShares(1L, "abcd", null, null, 1, 20);
 
         assertThat(result.getRecords()).hasSize(1);
     }

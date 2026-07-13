@@ -64,7 +64,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
                 TASK_TYPE_AUDIT_EXPORT,
                 "TEAM",
                 teamId,
-                "导出团队审计日志",
+                "Export team audit log",
                 toJson(payload));
     }
 
@@ -98,7 +98,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
             if (teamTaskResultStorageService.delete(task)) {
                 cleaned++;
             }
-            teamTaskService.clearResult(task.getId(), appendExpiredMessage(task.getResultMessage()));
+            teamTaskService.clearResult(task.getId(), "task.result_expired");
         }
         return cleaned;
     }
@@ -120,7 +120,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
             String csv = teamAuditCsvService.teamAuditCsv(logs.getRecords());
             String fileName = teamAuditCsvService.teamAuditFileName(payload.teamId());
             TeamTaskResult result = teamTaskResultStorageService.saveAuditExport(task.getId(), fileName, csv);
-            teamTaskService.markSucceeded(task.getId(), "导出 " + logs.getRecords().size() + " 条审计日志", result);
+            teamTaskService.markSucceeded(task.getId(), "Exported " + logs.getRecords().size() + " audit records", result);
         } catch (RuntimeException e) {
             log.warn("Failed to process team audit export task {}", task.getId(), e);
             teamTaskService.markFailed(task.getId(), StringUtils.hasText(e.getMessage()) ? e.getMessage() : e.getClass().getSimpleName());
@@ -159,7 +159,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
     }
 
     private String appendExpiredMessage(String resultMessage) {
-        String prefix = StringUtils.hasText(resultMessage) ? resultMessage.trim() : "任务结果";
-        return prefix + "；结果文件已过期清理";
+        String prefix = StringUtils.hasText(resultMessage) ? resultMessage.trim() : "Task result";
+        return prefix + "; expired result file removed";
     }
 }

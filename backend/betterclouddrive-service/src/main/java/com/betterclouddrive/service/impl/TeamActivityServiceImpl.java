@@ -24,6 +24,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.betterclouddrive.common.message.MessageKeys;
 
 @Service
 @RequiredArgsConstructor
@@ -123,22 +124,16 @@ public class TeamActivityServiceImpl implements TeamActivityService {
                 log.getAction(),
                 log.getTargetType(),
                 log.getTargetId(),
-                summary(log),
+                MessageKeys.activitySummary(log.getAction()),
+                activityParams(log),
                 log.getCreatedAt());
     }
 
-    private String summary(TeamOperationLogEntity log) {
-        String action = normalize(log.getAction());
-        if (action.startsWith("INVITE_")) {
-            return "团队邀请状态已更新";
-        }
-        if (StringUtils.hasText(log.getDetails())) {
-            return log.getDetails().trim();
-        }
-        String target = StringUtils.hasText(log.getTargetType())
-                ? " " + log.getTargetType() + (log.getTargetId() != null ? " " + log.getTargetId() : "")
-                : "";
-        return action + target;
+    private Map<String, Object> activityParams(TeamOperationLogEntity log) {
+        Map<String, Object> params = new HashMap<>();
+        if (log.getTargetType() != null) params.put("targetType", log.getTargetType());
+        if (log.getTargetId() != null) params.put("targetId", log.getTargetId());
+        return Map.copyOf(params);
     }
 
     private String normalize(String value) {

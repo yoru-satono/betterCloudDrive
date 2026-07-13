@@ -12,6 +12,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Data
 @Builder
@@ -48,8 +51,13 @@ public class TeamTaskEntity {
     @Column(name = "target_id")
     private Long targetId;
 
-    @Column(name = "title", nullable = false)
-    private String title;
+    @Column(name = "title_key", nullable = false)
+    private String titleKey;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "title_params", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> titleParams = Map.of();
 
     @Column(name = "payload")
     private String payload;
@@ -57,8 +65,13 @@ public class TeamTaskEntity {
     @Column(name = "progress", nullable = false)
     private Integer progress;
 
-    @Column(name = "result_message")
-    private String resultMessage;
+    @Column(name = "result_message_key")
+    private String resultMessageKey;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "result_message_params", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> resultMessageParams = Map.of();
 
     @Column(name = "result_path")
     private String resultPath;
@@ -75,8 +88,13 @@ public class TeamTaskEntity {
     @Column(name = "result_expires_at")
     private LocalDateTime resultExpiresAt;
 
-    @Column(name = "error_message")
-    private String errorMessage;
+    @Column(name = "error_message_key")
+    private String errorMessageKey;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "error_message_params", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> errorMessageParams = Map.of();
 
     @Column(name = "retry_count", nullable = false)
     private Integer retryCount;

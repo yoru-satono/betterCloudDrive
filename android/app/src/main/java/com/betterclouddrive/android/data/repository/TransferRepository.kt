@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.betterclouddrive.android.data.remote.ApiService
 import com.betterclouddrive.android.util.Constants
+import com.betterclouddrive.android.util.MessageResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -174,7 +175,7 @@ class TransferRepository(
                 null
             }
             val sessionId = existing?.sessionId ?: init?.data?.sessionId
-                ?: return@withContext markError(initialTask.id, init?.message ?: "初始化上传失败")
+                ?: return@withContext markError(initialTask.id, init?.let { MessageResolver.resolve(it.messageKey, it.messageParams) } ?: "初始化上传失败")
             val chunkSize = init?.data?.chunkSize ?: Constants.CHUNK_SIZE
 
             val completed = mutableSetOf<Int>()
@@ -215,7 +216,7 @@ class TransferRepository(
                     api.uploadTeamChunk(initialTask.teamId, sessionId, part, chunkNumber)
                 }
                 if (response.code != 200) {
-                    return@withContext markError(initialTask.id, response.message)
+                    return@withContext markError(initialTask.id, MessageResolver.resolve(response.messageKey, response.messageParams))
                 }
                 val doneSet = current(initialTask.id)?.completedChunks.orEmpty() + chunkNumber
                 update(initialTask.id) {
@@ -239,7 +240,7 @@ class TransferRepository(
                     it.copy(status = TransferStatus.DONE, bytesDone = fileSize, bytesTotal = fileSize, error = null)
                 }
             } else {
-                markError(initialTask.id, complete.message)
+                markError(initialTask.id, MessageResolver.resolve(complete.messageKey, complete.messageParams))
             }
         } catch (e: CancellationException) {
             if (current(initialTask.id)?.status != TransferStatus.CANCELED) {

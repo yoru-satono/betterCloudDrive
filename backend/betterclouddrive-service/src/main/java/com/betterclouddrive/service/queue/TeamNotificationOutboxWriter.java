@@ -9,6 +9,8 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import com.betterclouddrive.common.message.MessageKeys;
 
 @Service
 @RequiredArgsConstructor
@@ -22,7 +24,14 @@ public class TeamNotificationOutboxWriter {
     private final ObjectMapper objectMapper;
 
     public void enqueueUser(Long userId, Long teamId, String type, String title, String content, String link, boolean email) {
-        if (userId == null || !StringUtils.hasText(type) || !StringUtils.hasText(title)) {
+        if (!StringUtils.hasText(title)) {
+            return;
+        }
+        enqueueUser(userId, teamId, type, Map.of(), link, email);
+    }
+
+    public void enqueueUser(Long userId, Long teamId, String type, Map<String, Object> messageParams, String link, boolean email) {
+        if (userId == null || !StringUtils.hasText(type)) {
             return;
         }
         save(teamId, type, TARGET_USER, userId, new NotificationDispatchPayload(
@@ -30,8 +39,9 @@ public class TeamNotificationOutboxWriter {
                 teamId,
                 null,
                 normalize(type),
-                title,
-                content,
+                MessageKeys.notificationTitle(type),
+                MessageKeys.notificationContent(type),
+                messageParams == null ? Map.of() : Map.copyOf(messageParams),
                 link,
                 email));
     }
@@ -45,8 +55,9 @@ public class TeamNotificationOutboxWriter {
                 teamId,
                 excludeUserId,
                 normalize(type),
-                title,
-                content,
+                MessageKeys.notificationTitle(type),
+                MessageKeys.notificationContent(type),
+                Map.of(),
                 link,
                 email));
     }
@@ -61,6 +72,8 @@ public class TeamNotificationOutboxWriter {
                 .targetType(targetType)
                 .targetId(targetId)
                 .payload(toJson(payload))
+                .messageKey(payload.contentKey())
+                .messageParams(payload.messageParams())
                 .status(TeamEventOutboxEntity.STATUS_PENDING)
                 .retryCount(0)
                 .availableAt(now)

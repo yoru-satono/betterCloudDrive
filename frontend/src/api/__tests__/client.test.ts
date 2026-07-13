@@ -47,16 +47,16 @@ const apiHttpError = (status: number, data: unknown = {}) => (config: unknown) =
 
 describe('api client', () => {
   it('rejects backend business errors and shows a toast by default', async () => {
-    adapter.mockImplementation(apiResponse({ code: 419001, message: 'storage quota exceeded' }))
+    adapter.mockImplementation(apiResponse({ code: 419001, messageKey: 'error.storage_quota_exceeded', messageParams: {} }))
 
     await expect(api.get('/files')).rejects.toMatchObject({
-      response: { data: { code: 419001, message: 'storage quota exceeded' } },
+      response: { data: { code: 419001, messageKey: 'error.storage_quota_exceeded' } },
     })
-    expect(toastError).toHaveBeenCalledWith('storage quota exceeded')
+    expect(toastError).toHaveBeenCalledWith('存储空间不足')
   })
 
   it('does not show a toast when suppressToast is set', async () => {
-    adapter.mockImplementation(apiResponse({ code: 419010, message: 'no matching file found for instant upload' }))
+    adapter.mockImplementation(apiResponse({ code: 419010, messageKey: 'error.instant_upload_not_found', messageParams: {} }))
 
     await expect(api.post('/upload/instant', {}, { suppressToast: true })).rejects.toBeTruthy()
     expect(toastError).not.toHaveBeenCalled()
@@ -66,13 +66,13 @@ describe('api client', () => {
     localStorage.setItem('refreshToken', 'old-refresh')
 
     adapter
-      .mockImplementationOnce(apiResponse({ code: 401001, message: 'token expired' }))
-      .mockImplementationOnce(apiResponse({ code: 200, message: 'success', data: { ok: true } }))
+      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.token_expired', messageParams: {} }))
+      .mockImplementationOnce(apiResponse({ code: 200, messageKey: 'common.success', messageParams: {}, data: { ok: true } }))
 
     axiosPost.mockResolvedValue({
       data: {
         code: 200,
-        message: 'success',
+        messageKey: 'common.success', messageParams: {},
         data: { accessToken: 'new-access', refreshToken: 'new-refresh' },
       },
     })
@@ -90,10 +90,10 @@ describe('api client', () => {
     localStorage.setItem('refreshToken', 'old-refresh')
 
     adapter
-      .mockImplementationOnce(apiResponse({ code: 401001, message: 'token expired' }))
-      .mockImplementationOnce(apiResponse({ code: 401001, message: 'token expired' }))
-      .mockImplementationOnce(apiResponse({ code: 200, message: 'success', data: { id: 1 } }))
-      .mockImplementationOnce(apiResponse({ code: 200, message: 'success', data: { id: 2 } }))
+      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.token_expired', messageParams: {} }))
+      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.token_expired', messageParams: {} }))
+      .mockImplementationOnce(apiResponse({ code: 200, messageKey: 'common.success', messageParams: {}, data: { id: 1 } }))
+      .mockImplementationOnce(apiResponse({ code: 200, messageKey: 'common.success', messageParams: {}, data: { id: 2 } }))
 
     let resolveRefresh: (value: unknown) => void
     axiosPost.mockReturnValue(new Promise(resolve => {
@@ -109,7 +109,7 @@ describe('api client', () => {
     resolveRefresh!({
       data: {
         code: 200,
-        message: 'success',
+        messageKey: 'common.success', messageParams: {},
         data: { accessToken: 'queued-access', refreshToken: 'queued-refresh' },
       },
     })
@@ -126,7 +126,7 @@ describe('api client', () => {
     axiosPost.mockResolvedValue({
       data: {
         code: 200,
-        message: 'success',
+        messageKey: 'common.success', messageParams: {},
         data: { accessToken: 'new-access', refreshToken: 'new-refresh' },
       },
     })

@@ -178,7 +178,7 @@ class AdminServiceImplTest {
         assertThat(details.deletedAt()).isEqualTo(deletedAt);
         assertThat(details.deletedBy()).isEqualTo(2L);
         assertThat(details.deletedByUsername()).isEqualTo("owner");
-        assertThat(details.deleteReason()).isEqualTo("团队所有者删除：Product");
+        assertThat(details.deleteReason()).isEqualTo("Deleted by team owner: Product");
         assertThat(details.purgeAfter()).isEqualTo(purgeAfter);
         assertThat(details.activeFileCount()).isEqualTo(12L);
         assertThat(details.deletedFileCount()).isEqualTo(3L);

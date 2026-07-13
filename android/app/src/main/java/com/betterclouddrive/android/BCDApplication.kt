@@ -4,4 +4,9 @@ import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
-class BCDApplication : Application()
+class BCDApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        com.betterclouddrive.android.util.MessageResolver.initialize(this)
+    }
+}

@@ -24,7 +24,13 @@ public interface NotificationService {
 
     void notifyUser(Long userId, Long teamId, String type, String title, String content, String link, boolean email);
 
+    void notifyUser(Long userId, Long teamId, String type, String titleKey, String contentKey,
+                    Map<String, Object> messageParams, String link, boolean email);
+
     void notifyTeamMembers(Long teamId, Long actorUserId, String type, String title, String content, String link, boolean email);
+
+    void notifyTeamMembers(Long teamId, Long actorUserId, String type, String titleKey, String contentKey,
+                           Map<String, Object> messageParams, String link, boolean email);
 
     void checkTeamQuota(Long teamId);
 

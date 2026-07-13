@@ -65,9 +65,11 @@ public class ShareController {
     public ApiResponse<PageResult<ShareLinkResponse>> listShares(
             @CurrentUser UserPrincipal user,
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) Boolean passwordProtected,
+            @RequestParam(required = false) String expirationStatus,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        PageResult<ShareLinkEntity> shares = shareService.listShares(user.getUserId(), q, page, size);
+        PageResult<ShareLinkEntity> shares = shareService.listShares(user.getUserId(), q, passwordProtected, expirationStatus, page, size);
         List<ShareLinkResponse> records = shares.getRecords().stream()
                 .map(ShareLinkResponse::from)
                 .toList();

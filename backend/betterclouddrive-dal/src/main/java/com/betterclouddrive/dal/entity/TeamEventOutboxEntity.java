@@ -7,6 +7,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Data
 @Builder
@@ -46,6 +49,14 @@ public class TeamEventOutboxEntity {
     @Column(name = "payload")
     private String payload;
 
+    @Column(name = "message_key")
+    private String messageKey;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "message_params", columnDefinition = "jsonb")
+    @Builder.Default
+    private Map<String, Object> messageParams = Map.of();
+
     @Column(name = "status")
     @Builder.Default
     private String status = STATUS_PENDING;
@@ -63,7 +74,7 @@ public class TeamEventOutboxEntity {
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
 
-    @Column(name = "error_message")
+    @Column(name = "last_error")
     private String errorMessage;
 
     @Column(name = "created_at", updatable = false)

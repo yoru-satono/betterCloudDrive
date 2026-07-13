@@ -2,6 +2,8 @@ package com.betterclouddrive.android.domain.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import com.betterclouddrive.android.util.MessageResolver
 
 @Serializable
 enum class TeamRole {
@@ -71,13 +73,17 @@ data class NotificationItem(
     @SerialName("userId") val userId: Long = 0,
     @SerialName("teamId") val teamId: Long? = null,
     val type: String = "",
-    val title: String = "",
-    val content: String = "",
+    @SerialName("titleKey") val titleKey: String = "",
+    @SerialName("contentKey") val contentKey: String = "",
+    @SerialName("messageParams") val messageParams: Map<String, JsonElement> = emptyMap(),
     val link: String? = null,
     @SerialName("isRead") val isRead: Boolean = false,
     @SerialName("readAt") val readAt: String? = null,
     @SerialName("createdAt") val createdAt: String? = null,
-)
+) {
+    val title: String get() = MessageResolver.resolve(titleKey, messageParams)
+    val content: String get() = MessageResolver.resolve(contentKey, messageParams)
+}
 
 @Serializable
 data class TeamInvite(

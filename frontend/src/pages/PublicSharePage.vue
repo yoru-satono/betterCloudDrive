@@ -81,11 +81,11 @@ function closeFolderPicker() {
 }
 
 function saveErrorMessage(e: unknown) {
-  const response = (e as { response?: { data?: { code?: number; message?: string } } }).response
+  const response = (e as { response?: { data?: { code?: number; messageKey?: string; messageParams?: Record<string, string | number | boolean | null> } } }).response
   if (response?.data?.code === 409001) return '目标文件夹已存在同名项目'
-  if (response?.data?.code === 419001) return response.data.message || '网盘空间不足'
+  if (response?.data?.code === 419001) return '网盘空间不足'
   if (response?.data?.code === 419005) return '分享访问次数已达上限'
-  return response?.data?.message || '保存失败'
+  return '保存失败'
 }
 
 async function confirmSave(targetParentId: number | null) {

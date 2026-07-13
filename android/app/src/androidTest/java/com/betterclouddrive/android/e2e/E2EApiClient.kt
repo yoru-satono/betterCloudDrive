@@ -84,8 +84,11 @@ data class E2ETeamAuditLog(
 
 data class E2ENotification(
     val id: Long,
+    val teamId: Long?,
     val type: String,
-    val title: String,
+    val titleKey: String,
+    val contentKey: String,
+    val messageParams: JSONObject,
     val link: String?,
     val isRead: Boolean,
 )
@@ -948,8 +951,11 @@ class E2EApiClient(
     private fun parseNotification(json: JSONObject): E2ENotification {
         return E2ENotification(
             id = json.getLong("id"),
+            teamId = if (json.isNull("teamId")) null else json.getLong("teamId"),
             type = json.getString("type"),
-            title = json.getString("title"),
+            titleKey = json.getString("titleKey"),
+            contentKey = json.getString("contentKey"),
+            messageParams = json.getJSONObject("messageParams"),
             link = json.optString("link").takeIf { it.isNotBlank() },
             isRead = json.optBoolean("isRead"),
         )

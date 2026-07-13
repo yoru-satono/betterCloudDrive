@@ -52,7 +52,7 @@ public class OnlyOfficeSaveServiceImpl implements OnlyOfficeSaveService {
                     callback.getFileId(),
                     content);
             onlyOfficeCallbackService.markSaved(callback.getId(), version.getId());
-            teamTaskService.markSucceeded(taskId, "保存为版本 " + version.getVersionNumber());
+            teamTaskService.markSucceeded(taskId, "Saved as version " + version.getVersionNumber());
             onlyOfficeSaveMetrics.recordSaveSucceeded(startedAtNanos);
             log.info("OnlyOffice async save succeeded, callbackId={}, teamId={}, fileId={}, versionId={}",
                     callback.getId(), callback.getTeamId(), callback.getFileId(), version.getId());
@@ -73,8 +73,8 @@ public class OnlyOfficeSaveServiceImpl implements OnlyOfficeSaveService {
                     callback.getActorUserId(),
                     callback.getTeamId(),
                     "TEAM_OFFICE_SAVE_FAILED",
-                    "在线文档保存失败",
-                    "文档保存失败，请在团队任务中心重试。原因：" + message,
+                    "Online document save failed",
+                    "Document save failed; retry from the team task center. Cause: " + message,
                     "/teams/" + callback.getTeamId() + "/settings",
                     false);
             log.warn("OnlyOffice async save failed, callbackId={}, teamId={}, fileId={}",

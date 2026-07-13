@@ -73,7 +73,8 @@ function page(records: FileEntity[], page = 1, pages = 1) {
   return Promise.resolve({
     data: {
       code: 200,
-      message: 'ok',
+      messageKey: 'common.success',
+      messageParams: {},
       data: {
         records,
         total: records.length,

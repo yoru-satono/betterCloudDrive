@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -144,7 +145,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
         TeamFilePermissionEntity saved = permissionRepository.save(permission);
         teamAuditService.record(teamId, actorUserId, "PERMISSION_UPDATE", "FILE", fileId,
                 normalizedType + ":" + (SUBJECT_USER.equals(normalizedType) ? subjectUserId : permission.getSubjectRole()));
-        notifyPermissionChange(teamId, actorUserId, file, saved, "团队文件权限已更新");
+        notifyPermissionChange(teamId, actorUserId, file, saved, "Team file permission updated");
         return saved;
     }
 
@@ -159,7 +160,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
         }
         permissionRepository.delete(permission);
         teamAuditService.record(teamId, actorUserId, "PERMISSION_DELETE", "FILE", fileId, String.valueOf(permissionId));
-        notifyPermissionChange(teamId, actorUserId, requireTeamFileAnyState(teamId, fileId), permission, "团队文件权限已移除");
+        notifyPermissionChange(teamId, actorUserId, requireTeamFileAnyState(teamId, fileId), permission, "Team file permission removed");
     }
 
     @Override
@@ -276,7 +277,8 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
                 permission.canShare(),
                 permission.canDelete(),
                 permission.canManage(),
-                "基础角色权限：" + role);
+                "permission.base_role",
+                Map.of("role", role));
     }
 
     private TeamEffectivePermission.PermissionSource overrideSource(
@@ -284,8 +286,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
             FileEntity sourceFile,
             boolean inherited) {
         String sourceType = SUBJECT_USER.equals(permission.getSubjectType()) ? "USER_OVERRIDE" : "ROLE_OVERRIDE";
-        String description = (inherited ? "继承自「" + sourceFile.getFileName() + "」的" : "当前文件的")
-                + (SUBJECT_USER.equals(permission.getSubjectType()) ? "用户覆盖" : "角色覆盖");
+        String descriptionKey = inherited ? "permission.inherited_override" : "permission.current_override";
         return new TeamEffectivePermission.PermissionSource(
                 sourceType,
                 sourceFile.getId(),
@@ -299,7 +300,8 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
                 Boolean.TRUE.equals(permission.getCanShare()),
                 Boolean.TRUE.equals(permission.getCanDelete()),
                 Boolean.TRUE.equals(permission.getCanManage()),
-                description);
+                descriptionKey,
+                Map.of("fileName", sourceFile.getFileName(), "subjectType", permission.getSubjectType()));
     }
 
     private FileEntity requireTeamFileAnyState(Long teamId, Long fileId) {
@@ -332,7 +334,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
             FileEntity file,
             TeamFilePermissionEntity permission,
             String title) {
-        String content = "文件「" + file.getFileName() + "」的团队权限已变更。";
+        String content = "Team permissions changed for file " + file.getFileName();
         String link = "/teams/" + teamId + "/files" + (file.getParentId() != null ? "/" + file.getParentId() : "");
         if (SUBJECT_USER.equals(permission.getSubjectType())) {
             teamNotificationDispatchService.enqueueUserNotification(permission.getSubjectUserId(), teamId, "TEAM_PERMISSION_UPDATE", title, content, link, true);

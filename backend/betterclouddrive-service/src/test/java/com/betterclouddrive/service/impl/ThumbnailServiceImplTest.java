@@ -86,12 +86,12 @@ class ThumbnailServiceImplTest {
                 .isDeleted(false)
                 .build();
         when(fileRepository.findById(2L)).thenReturn(Optional.of(file));
-        when(teamTaskService.queueTask(10L, 8L, "THUMBNAIL", "FILE", 2L, "生成团队文件缩略图"))
+        when(teamTaskService.queueTask(10L, 8L, "THUMBNAIL", "FILE", 2L, "Generate team file thumbnail"))
                 .thenReturn(TeamTaskEntity.builder().id(55L).build());
 
         thumbnailService.generateThumbnailAsync(2L);
 
-        verify(teamTaskService).queueTask(10L, 8L, "THUMBNAIL", "FILE", 2L, "生成团队文件缩略图");
+        verify(teamTaskService).queueTask(10L, 8L, "THUMBNAIL", "FILE", 2L, "Generate team file thumbnail");
         verifyNoInteractions(storageService);
     }
 
@@ -106,12 +106,12 @@ class ThumbnailServiceImplTest {
                 .isDeleted(false)
                 .build();
         when(fileRepository.findById(3L)).thenReturn(Optional.of(file));
-        when(teamTaskService.queueTask(null, 7L, "THUMBNAIL", "FILE", 3L, "生成个人文件缩略图"))
+        when(teamTaskService.queueTask(null, 7L, "THUMBNAIL", "FILE", 3L, "Generate personal file thumbnail"))
                 .thenReturn(TeamTaskEntity.builder().id(56L).build());
 
         thumbnailService.generateThumbnailAsync(3L);
 
-        verify(teamTaskService).queueTask(null, 7L, "THUMBNAIL", "FILE", 3L, "生成个人文件缩略图");
+        verify(teamTaskService).queueTask(null, 7L, "THUMBNAIL", "FILE", 3L, "Generate personal file thumbnail");
         verifyNoInteractions(storageService);
     }
 
@@ -143,7 +143,7 @@ class ThumbnailServiceImplTest {
         assertThat(processed).isEqualTo(1);
         assertThat(file.getThumbnailPath()).isEqualTo("thumbnails/teams/10/2.jpg");
         verify(teamTaskService).markRunning(55L);
-        verify(teamTaskService).markSucceeded(55L, "缩略图已生成");
+        verify(teamTaskService).markSucceeded(55L, "Thumbnail generated");
     }
 
     @Test
@@ -192,7 +192,7 @@ class ThumbnailServiceImplTest {
         verify(storageService, never()).uploadObject(any(), any(), anyLong(), any());
         verify(fileRepository, never()).save(any(FileEntity.class));
         verify(teamTaskService).markRunning(56L);
-        verify(teamTaskService).markFailed(56L, "图片无法解码");
+        verify(teamTaskService).markFailed(56L, "Image cannot be decoded");
     }
 
     private byte[] pngBytes() throws Exception {

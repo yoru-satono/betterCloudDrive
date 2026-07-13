@@ -8,6 +8,7 @@ import { useFormatters } from '@/composables/useFormatters'
 import * as notificationsApi from '@/api/notifications'
 import type { NotificationEntity, NotificationTypeFilter } from '@/api/notifications'
 import { toast } from 'vue-sonner'
+import { resolveMessage } from '@/i18n'
 
 const router = useRouter()
 const { formatDateFull } = useFormatters()
@@ -131,8 +132,8 @@ onUnmounted(() => {
       >
         <span class="notification-row__dot" />
         <span class="notification-row__main">
-          <span class="notification-row__title">{{ notification.title }}</span>
-          <span class="notification-row__content">{{ notification.content }}</span>
+          <span class="notification-row__title">{{ resolveMessage(notification.titleKey, notification.messageParams) }}</span>
+          <span class="notification-row__content">{{ resolveMessage(notification.contentKey, notification.messageParams) }}</span>
         </span>
         <span class="notification-row__meta">
           <span class="notification-row__type">{{ notification.type }}</span>

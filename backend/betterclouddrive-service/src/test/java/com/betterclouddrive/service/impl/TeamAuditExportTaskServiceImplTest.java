@@ -60,7 +60,7 @@ class TeamAuditExportTaskServiceImplTest {
         when(teamService.requireManageMembers(2L, 10L))
                 .thenReturn(TeamMemberEntity.builder().teamId(10L).userId(2L).role("ADMIN").build());
         TeamTaskEntity task = TeamTaskEntity.builder().id(77L).build();
-        when(teamTaskService.queueTask(eq(10L), eq(2L), eq("AUDIT_EXPORT"), eq("TEAM"), eq(10L), eq("导出团队审计日志"), any()))
+        when(teamTaskService.queueTask(eq(10L), eq(2L), eq("AUDIT_EXPORT"), eq("TEAM"), eq(10L), eq("Export team audit log"), any()))
                 .thenReturn(task);
         LocalDateTime startAt = LocalDateTime.of(2026, 7, 9, 12, 0);
         LocalDateTime endAt = startAt.plusHours(1);
@@ -69,7 +69,7 @@ class TeamAuditExportTaskServiceImplTest {
 
         assertThat(queued).isSameAs(task);
         ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
-        verify(teamTaskService).queueTask(eq(10L), eq(2L), eq("AUDIT_EXPORT"), eq("TEAM"), eq(10L), eq("导出团队审计日志"), payloadCaptor.capture());
+        verify(teamTaskService).queueTask(eq(10L), eq(2L), eq("AUDIT_EXPORT"), eq("TEAM"), eq(10L), eq("Export team audit log"), payloadCaptor.capture());
         TeamAuditExportPayload payload = objectMapper.readValue(payloadCaptor.getValue(), TeamAuditExportPayload.class);
         assertThat(payload.requesterUserId()).isEqualTo(2L);
         assertThat(payload.teamId()).isEqualTo(10L);
@@ -121,7 +121,7 @@ class TeamAuditExportTaskServiceImplTest {
 
         assertThat(processed).isEqualTo(1);
         verify(teamTaskService).markRunning(77L);
-        verify(teamTaskService).markSucceeded(77L, "导出 1 条审计日志", result);
+        verify(teamTaskService).markSucceeded(77L, "Exported 1 audit records", result);
     }
 
     @Test
@@ -184,7 +184,7 @@ class TeamAuditExportTaskServiceImplTest {
     void cleanupExpiredResults_shouldDeleteFilesAndClearMetadata() {
         TeamTaskEntity task = TeamTaskEntity.builder()
                 .id(77L)
-                .resultMessage("导出 1 条审计日志")
+                .resultMessageKey("task.succeeded")
                 .resultPath("audit-exports/77.csv")
                 .build();
         when(teamTaskService.listExpiredResults(any())).thenReturn(List.of(task));
@@ -193,6 +193,6 @@ class TeamAuditExportTaskServiceImplTest {
         int cleaned = service.cleanupExpiredResults();
 
         assertThat(cleaned).isEqualTo(1);
-        verify(teamTaskService).clearResult(77L, "导出 1 条审计日志；结果文件已过期清理");
+        verify(teamTaskService).clearResult(77L, "task.result_expired");
     }
 }

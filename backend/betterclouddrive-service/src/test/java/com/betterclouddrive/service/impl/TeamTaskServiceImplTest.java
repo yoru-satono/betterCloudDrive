@@ -61,7 +61,7 @@ class TeamTaskServiceImplTest {
         assertThat(task.getTaskType()).isEqualTo("AUDIT_EXPORT");
         assertThat(task.getTargetType()).isEqualTo("FILE");
         assertThat(task.getTargetId()).isEqualTo(7L);
-        assertThat(task.getTitle()).isEqualTo("导出审计");
+        assertThat(task.getTitleKey()).isEqualTo("task.audit_export.title");
         assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_RUNNING);
         assertThat(task.getProgress()).isZero();
         assertThat(task.getRetryCount()).isZero();
@@ -113,7 +113,7 @@ class TeamTaskServiceImplTest {
         TeamTaskEntity task = TeamTaskEntity.builder()
                 .id(7L)
                 .status(TeamTaskEntity.STATUS_PENDING)
-                .errorMessage("retry")
+                .errorMessageKey("task.failed")
                 .build();
         when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
         when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -121,7 +121,7 @@ class TeamTaskServiceImplTest {
         teamTaskService.markRunning(7L);
 
         assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_RUNNING);
-        assertThat(task.getErrorMessage()).isNull();
+        assertThat(task.getErrorMessageKey()).isNull();
         assertThat(task.getStartedAt()).isNotNull();
         assertThat(task.getCompletedAt()).isNull();
     }
@@ -130,6 +130,7 @@ class TeamTaskServiceImplTest {
     void markSucceeded_shouldStoreResultMetadata() {
         TeamTaskEntity task = TeamTaskEntity.builder()
                 .id(7L)
+                .taskType("AUDIT_EXPORT")
                 .status(TeamTaskEntity.STATUS_RUNNING)
                 .progress(20)
                 .build();
@@ -145,7 +146,8 @@ class TeamTaskServiceImplTest {
 
         assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_SUCCEEDED);
         assertThat(task.getProgress()).isEqualTo(100);
-        assertThat(task.getResultMessage()).isEqualTo("导出 3 条审计日志");
+        assertThat(task.getResultMessageKey()).isEqualTo("task.succeeded");
+        assertThat(task.getResultMessageParams()).containsEntry("taskType", "AUDIT_EXPORT");
         assertThat(task.getResultPath()).isEqualTo("audit-exports/7.csv");
         assertThat(task.getResultFileName()).isEqualTo("team-10-audit.csv");
         assertThat(task.getResultContentType()).isEqualTo("text/csv;charset=UTF-8");
@@ -184,7 +186,7 @@ class TeamTaskServiceImplTest {
                 .teamId(10L)
                 .status(TeamTaskEntity.STATUS_FAILED)
                 .progress(40)
-                .errorMessage("download failed")
+                .errorMessageKey("task.failed")
                 .retryCount(2)
                 .build();
         when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
@@ -194,8 +196,8 @@ class TeamTaskServiceImplTest {
 
         assertThat(retried.getStatus()).isEqualTo(TeamTaskEntity.STATUS_PENDING);
         assertThat(retried.getProgress()).isZero();
-        assertThat(retried.getErrorMessage()).isNull();
-        assertThat(retried.getResultMessage()).isNull();
+        assertThat(retried.getErrorMessageKey()).isNull();
+        assertThat(retried.getResultMessageKey()).isNull();
         assertThat(retried.getResultPath()).isNull();
         assertThat(retried.getRetryCount()).isEqualTo(3);
         assertThat(retried.getStartedAt()).isNull();
@@ -258,7 +260,7 @@ class TeamTaskServiceImplTest {
                 .resultContentType("text/csv")
                 .resultSizeBytes(12L)
                 .resultExpiresAt(LocalDateTime.now())
-                .resultMessage("导出完成")
+                .resultMessageKey("task.succeeded")
                 .build();
         when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
 
@@ -269,7 +271,7 @@ class TeamTaskServiceImplTest {
         assertThat(task.getResultContentType()).isNull();
         assertThat(task.getResultSizeBytes()).isNull();
         assertThat(task.getResultExpiresAt()).isNull();
-        assertThat(task.getResultMessage()).isEqualTo("结果已清理");
+        assertThat(task.getResultMessageKey()).isEqualTo("task.result_expired");
         verify(teamTaskRepository).save(task);
     }
 

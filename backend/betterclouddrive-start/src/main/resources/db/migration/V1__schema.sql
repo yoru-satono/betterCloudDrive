@@ -47,14 +47,14 @@ CREATE TRIGGER trg_users_updated_at
     BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE users IS '用户表';
+COMMENT ON TABLE users IS 'Users';
 COMMENT ON COLUMN users.email_verified IS 'Whether the user has verified their email address';
 COMMENT ON COLUMN users.role IS 'User role: ROLE_USER (default) or ROLE_ADMIN';
 COMMENT ON COLUMN users.status IS '1=active, 0=disabled, -1=frozen';
-COMMENT ON COLUMN users.storage_quota IS '存储配额（字节），默认10GB';
-COMMENT ON COLUMN users.storage_used IS '已用存储（字节）';
-COMMENT ON COLUMN users.webdav_enabled IS '是否启用 WebDAV，默认关闭';
-COMMENT ON COLUMN users.webdav_password_hash IS 'WebDAV 独立密码 BCrypt 哈希';
+COMMENT ON COLUMN users.storage_quota IS 'Storage quota in bytes; default 10 GB';
+COMMENT ON COLUMN users.storage_used IS 'Used storage in bytes';
+COMMENT ON COLUMN users.webdav_enabled IS 'Whether WebDAV is enabled; disabled by default';
+COMMENT ON COLUMN users.webdav_password_hash IS 'BCrypt hash of the independent WebDAV password';
 
 
 -- ============================================================
@@ -88,13 +88,13 @@ CREATE TRIGGER trg_teams_updated_at
     BEFORE UPDATE ON teams
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE teams IS '团队表';
-COMMENT ON COLUMN teams.storage_quota IS '团队独立存储配额（字节）';
-COMMENT ON COLUMN teams.storage_used IS '团队已用存储（字节）';
-COMMENT ON COLUMN teams.archived_at IS '团队归档时间，NULL 表示未归档';
-COMMENT ON COLUMN teams.archived_by IS '归档操作管理员';
-COMMENT ON COLUMN teams.deleted_by IS '删除团队的用户或管理员';
-COMMENT ON COLUMN teams.purge_after IS '团队可被物理清理的时间';
+COMMENT ON TABLE teams IS 'Teams';
+COMMENT ON COLUMN teams.storage_quota IS 'Independent team storage quota in bytes';
+COMMENT ON COLUMN teams.storage_used IS 'Team storage used in bytes';
+COMMENT ON COLUMN teams.archived_at IS 'Archive time; NULL when active';
+COMMENT ON COLUMN teams.archived_by IS 'Administrator that archived the team';
+COMMENT ON COLUMN teams.deleted_by IS 'User or administrator that deleted the team';
+COMMENT ON COLUMN teams.purge_after IS 'Time after which the team may be physically purged';
 
 CREATE TABLE team_members (
     id          BIGSERIAL PRIMARY KEY,
@@ -117,7 +117,7 @@ CREATE TRIGGER trg_team_members_updated_at
     BEFORE UPDATE ON team_members
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE team_members IS '团队成员表';
+COMMENT ON TABLE team_members IS 'Team members';
 COMMENT ON COLUMN team_members.role IS 'OWNER, ADMIN, EDITOR, VIEWER';
 COMMENT ON COLUMN team_members.status IS '1=active, 0=removed';
 
@@ -166,14 +166,14 @@ CREATE TRIGGER trg_files_updated_at
     BEFORE UPDATE ON files
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE files IS '文件/文件夹表（邻接表树结构）';
-COMMENT ON COLUMN files.parent_id IS 'NULL = 根目录';
-COMMENT ON COLUMN files.team_id IS 'NULL=个人文件，非空=团队文件空间';
-COMMENT ON COLUMN files.file_type IS 'file 或 folder';
-COMMENT ON COLUMN files.storage_path IS '对象存储 key，格式: {userId}/{year}/{month}/{uuid}.{ext}';
-COMMENT ON COLUMN files.md5_hash IS '文件MD5，用于秒传去重';
-COMMENT ON COLUMN files.is_deleted IS 'FALSE=正常, TRUE=回收站';
-COMMENT ON COLUMN files.version_count IS '当前版本数量';
+COMMENT ON TABLE files IS 'Files and folders stored as an adjacency-list tree';
+COMMENT ON COLUMN files.parent_id IS 'NULL denotes a root item';
+COMMENT ON COLUMN files.team_id IS 'NULL for personal files; non-NULL for team files';
+COMMENT ON COLUMN files.file_type IS 'file or folder';
+COMMENT ON COLUMN files.storage_path IS 'Object storage key: {userId}/{year}/{month}/{uuid}.{ext}';
+COMMENT ON COLUMN files.md5_hash IS 'File MD5 used for instant-upload deduplication';
+COMMENT ON COLUMN files.is_deleted IS 'FALSE for active items; TRUE for recycle bin items';
+COMMENT ON COLUMN files.version_count IS 'Current version count';
 
 
 -- ============================================================
@@ -197,8 +197,8 @@ CREATE UNIQUE INDEX uk_file_version ON file_versions(file_id, version_number);
 CREATE INDEX idx_file_versions_file ON file_versions(file_id);
 CREATE INDEX idx_file_versions_user ON file_versions(user_id);
 
-COMMENT ON TABLE file_versions IS '文件版本表';
-COMMENT ON COLUMN file_versions.version_number IS '版本号，从1开始递增';
+COMMENT ON TABLE file_versions IS 'File versions';
+COMMENT ON COLUMN file_versions.version_number IS 'Version number starting at 1';
 
 
 -- ============================================================
@@ -235,11 +235,11 @@ CREATE TRIGGER trg_share_links_updated_at
     BEFORE UPDATE ON share_links
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE share_links IS '分享链接表';
-COMMENT ON COLUMN share_links.share_code IS '8位随机短码，用于生成分享URL';
-COMMENT ON COLUMN share_links.password_ciphertext IS '分享密码密文，使用 AES-GCM 加密；NULL 表示无密码';
-COMMENT ON COLUMN share_links.max_visits IS '最大访问次数，NULL表示无限制';
-COMMENT ON COLUMN share_links.team_id IS 'NULL=个人分享，非空=团队文件分享';
+COMMENT ON TABLE share_links IS 'Share links';
+COMMENT ON COLUMN share_links.share_code IS 'Eight-character random code used in share URLs';
+COMMENT ON COLUMN share_links.password_ciphertext IS 'AES-GCM encrypted share password; NULL means no password';
+COMMENT ON COLUMN share_links.max_visits IS 'Maximum visits; NULL means unlimited';
+COMMENT ON COLUMN share_links.team_id IS 'NULL for personal shares; non-NULL for team shares';
 
 
 -- ============================================================
@@ -276,9 +276,9 @@ CREATE TRIGGER trg_upload_sessions_updated_at
     BEFORE UPDATE ON upload_sessions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE upload_sessions IS '上传会话表（分片上传）';
-COMMENT ON COLUMN upload_sessions.parent_id IS 'NULL = 根目录';
-COMMENT ON COLUMN upload_sessions.team_id IS 'NULL=个人上传，非空=团队上传';
+COMMENT ON TABLE upload_sessions IS 'Multipart upload sessions';
+COMMENT ON COLUMN upload_sessions.parent_id IS 'NULL denotes the root folder';
+COMMENT ON COLUMN upload_sessions.team_id IS 'NULL for personal uploads; non-NULL for team uploads';
 COMMENT ON COLUMN upload_sessions.status IS '1=uploading, 2=completed, 3=expired';
 COMMENT ON COLUMN upload_sessions.completed_file_id IS 'File created by a completed upload session; used for idempotent complete retries';
 
@@ -307,7 +307,7 @@ CREATE UNIQUE INDEX uk_folder_zip_cache_user_folder
 CREATE INDEX idx_folder_zip_cache_last_downloaded
     ON folder_zip_download_cache(last_downloaded_at);
 
-COMMENT ON TABLE folder_zip_download_cache IS '文件夹 ZIP 下载缓存表';
+COMMENT ON TABLE folder_zip_download_cache IS 'Folder ZIP download cache';
 
 
 -- ============================================================
@@ -368,12 +368,12 @@ CREATE INDEX idx_oplog_request_id ON operation_logs(request_id);
 CREATE INDEX idx_oplog_trace_id ON operation_logs(trace_id);
 CREATE INDEX idx_oplog_status_created ON operation_logs(status_code, created_at);
 
-COMMENT ON TABLE operation_logs IS '操作日志表（按月分区）';
-COMMENT ON COLUMN operation_logs.detail IS 'JSONB扩展字段，如 {"from":"/a.txt","to":"/b.txt"}';
-COMMENT ON COLUMN operation_logs.request_id IS '单次 HTTP 请求 ID，用于 API 响应、运行日志和审计日志关联';
-COMMENT ON COLUMN operation_logs.trace_id IS '分布式追踪 ID，用于关联 OpenTelemetry/Tempo trace';
-COMMENT ON COLUMN operation_logs.status_code IS 'HTTP 状态码';
-COMMENT ON COLUMN operation_logs.error_code IS '业务错误码，暂无业务响应解析时可为空';
+COMMENT ON TABLE operation_logs IS 'Monthly partitioned operation logs';
+COMMENT ON COLUMN operation_logs.detail IS 'Extensible JSONB data, for example {"from":"/a.txt","to":"/b.txt"}';
+COMMENT ON COLUMN operation_logs.request_id IS 'HTTP request ID correlating API responses, runtime logs, and audit logs';
+COMMENT ON COLUMN operation_logs.trace_id IS 'Distributed trace ID for OpenTelemetry and Tempo correlation';
+COMMENT ON COLUMN operation_logs.status_code IS 'HTTP status code';
+COMMENT ON COLUMN operation_logs.error_code IS 'Business error code; nullable when no business response was parsed';
 
 
 -- ============================================================
@@ -436,8 +436,8 @@ CREATE UNIQUE INDEX uk_user_tokens_jti ON user_tokens(jti);
 CREATE INDEX idx_user_tokens_user ON user_tokens(user_id);
 CREATE INDEX idx_user_tokens_expires ON user_tokens(expires_at);
 
-COMMENT ON TABLE user_tokens IS 'JWT令牌表';
-COMMENT ON COLUMN user_tokens.jti IS 'JWT ID，用于黑名单和追踪';
+COMMENT ON TABLE user_tokens IS 'JWT tokens';
+COMMENT ON COLUMN user_tokens.jti IS 'JWT ID used for revocation and tracing';
 
 
 -- ============================================================
@@ -455,7 +455,7 @@ CREATE TABLE favorites (
 
 CREATE UNIQUE INDEX uk_fav_user_file ON favorites(user_id, file_id);
 
-COMMENT ON TABLE favorites IS '收藏表';
+COMMENT ON TABLE favorites IS 'Favorites';
 
 
 -- ============================================================
@@ -478,8 +478,8 @@ CREATE UNIQUE INDEX uk_tags_team_tag ON tags(team_id, tag_name) WHERE team_id IS
 CREATE INDEX idx_tags_user ON tags(user_id);
 CREATE INDEX idx_tags_team ON tags(team_id, tag_name) WHERE team_id IS NOT NULL;
 
-COMMENT ON TABLE tags IS '标签表';
-COMMENT ON COLUMN tags.team_id IS 'NULL=个人标签，非空=团队共享标签';
+COMMENT ON TABLE tags IS 'Tags';
+COMMENT ON COLUMN tags.team_id IS 'NULL for personal tags; non-NULL for shared team tags';
 
 
 -- ============================================================
@@ -503,8 +503,8 @@ CREATE UNIQUE INDEX uk_file_tag ON file_tags(file_id, tag_id);
 CREATE INDEX idx_file_tags_tag ON file_tags(tag_id);
 CREATE INDEX idx_file_tags_team_tag ON file_tags(team_id, tag_id) WHERE team_id IS NOT NULL;
 
-COMMENT ON TABLE file_tags IS '文件-标签关联表';
-COMMENT ON COLUMN file_tags.team_id IS 'NULL=个人文件标签，非空=团队文件标签';
+COMMENT ON TABLE file_tags IS 'File-to-tag associations';
+COMMENT ON COLUMN file_tags.team_id IS 'NULL for personal file tags; non-NULL for team file tags';
 
 
 -- ============================================================
@@ -538,7 +538,7 @@ CREATE TRIGGER trg_team_invites_updated_at
     BEFORE UPDATE ON team_invites
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE team_invites IS '团队邀请表';
+COMMENT ON TABLE team_invites IS 'Team invitations';
 COMMENT ON COLUMN team_invites.status IS 'PENDING, ACCEPTED, REJECTED, CANCELED, EXPIRED';
 
 CREATE TABLE team_operation_logs (
@@ -567,16 +567,17 @@ CREATE INDEX idx_team_operation_logs_team_action_created ON team_operation_logs(
 CREATE INDEX idx_team_operation_logs_team_target_type_created ON team_operation_logs(team_id, target_type, created_at DESC);
 CREATE INDEX idx_team_operation_logs_team_result_created ON team_operation_logs(team_id, result, created_at DESC);
 
-COMMENT ON TABLE team_operation_logs IS '团队审计日志';
-COMMENT ON COLUMN team_operation_logs.team_id IS '团队 ID 快照；团队硬删除后仍保留审计日志用于追溯';
+COMMENT ON TABLE team_operation_logs IS 'Team audit log';
+COMMENT ON COLUMN team_operation_logs.team_id IS 'Team ID snapshot retained for audit after hard deletion';
 
 CREATE TABLE notifications (
     id          BIGSERIAL PRIMARY KEY,
     user_id     BIGINT       NOT NULL,
     team_id     BIGINT,
     type        VARCHAR(64)  NOT NULL,
-    title       VARCHAR(160) NOT NULL,
-    content     TEXT,
+    title_key       VARCHAR(160) NOT NULL,
+    content_key     VARCHAR(160) NOT NULL,
+    message_params JSONB        NOT NULL DEFAULT '{}'::jsonb,
     link        VARCHAR(512),
     read_at     TIMESTAMP,
     created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -590,7 +591,7 @@ CREATE INDEX idx_notifications_user_unread_created ON notifications(user_id, cre
 CREATE INDEX idx_notifications_team_type ON notifications(team_id, type, created_at DESC);
 CREATE INDEX idx_notifications_user_type_created ON notifications(user_id, type, created_at DESC);
 
-COMMENT ON TABLE notifications IS '用户站内通知';
+COMMENT ON TABLE notifications IS 'In-app user notifications with locale-neutral message keys';
 
 CREATE TABLE team_file_permissions (
     id              BIGSERIAL PRIMARY KEY,
@@ -628,7 +629,7 @@ CREATE TRIGGER trg_team_file_permissions_updated_at
     BEFORE UPDATE ON team_file_permissions
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE team_file_permissions IS '团队文件/文件夹细粒度权限，子项继承最近父级配置';
+COMMENT ON TABLE team_file_permissions IS 'Fine-grained team file permissions inherited from the nearest configured ancestor';
 
 CREATE TABLE notification_preferences (
     id                  BIGSERIAL PRIMARY KEY,
@@ -648,7 +649,7 @@ CREATE TRIGGER trg_notification_preferences_updated_at
     BEFORE UPDATE ON notification_preferences
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE notification_preferences IS '用户通知类型偏好，未设置时默认开启';
+COMMENT ON TABLE notification_preferences IS 'User notification preferences; enabled by default when unset';
 
 CREATE TABLE team_event_outbox (
     id             BIGSERIAL PRIMARY KEY,
@@ -659,12 +660,14 @@ CREATE TABLE team_event_outbox (
     target_type    VARCHAR(64),
     target_id      BIGINT,
     payload        TEXT,
+    message_key    VARCHAR(200),
+    message_params JSONB        NOT NULL DEFAULT '{}'::jsonb,
     status         VARCHAR(24)  NOT NULL DEFAULT 'PENDING',
     retry_count    INT          NOT NULL DEFAULT 0,
     available_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     locked_at      TIMESTAMP,
     processed_at   TIMESTAMP,
-    error_message  VARCHAR(512),
+    last_error     VARCHAR(512),
     created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -689,10 +692,13 @@ CREATE TABLE team_tasks (
     status              VARCHAR(24)  NOT NULL,
     target_type         VARCHAR(32),
     target_id           BIGINT,
-    title               VARCHAR(200) NOT NULL,
+    title_key           VARCHAR(200) NOT NULL,
+    title_params        JSONB        NOT NULL DEFAULT '{}'::jsonb,
     progress            INTEGER      NOT NULL DEFAULT 0,
-    result_message      TEXT,
-    error_message       TEXT,
+    result_message_key    VARCHAR(200),
+    result_message_params JSONB      NOT NULL DEFAULT '{}'::jsonb,
+    error_message_key     VARCHAR(200),
+    error_message_params  JSONB      NOT NULL DEFAULT '{}'::jsonb,
     retry_count         INTEGER      NOT NULL DEFAULT 0,
     payload             TEXT,
     result_path         VARCHAR(1024),
@@ -719,7 +725,7 @@ CREATE TRIGGER trg_team_tasks_updated_at
     BEFORE UPDATE ON team_tasks
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-COMMENT ON TABLE team_tasks IS '团队长任务状态中心';
+COMMENT ON TABLE team_tasks IS 'Team long-running task status center';
 
 CREATE TABLE onlyoffice_callbacks (
     id               BIGSERIAL PRIMARY KEY,

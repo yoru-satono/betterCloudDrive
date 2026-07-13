@@ -16,6 +16,8 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import com.betterclouddrive.common.message.MessageKeys;
 
 @Slf4j
 @Service
@@ -32,11 +34,17 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
 
     @Override
     public void enqueueUserNotification(Long userId, Long teamId, String type, String title, String content, String link, boolean email) {
+        enqueueUserNotification(userId, teamId, type, Map.of(), link, email);
+    }
+
+    @Override
+    public void enqueueUserNotification(Long userId, Long teamId, String type, Map<String, Object> messageParams, String link, boolean email) {
         if (!queueProperties.isEnabled()) {
-            notificationService.notifyUser(userId, teamId, type, title, content, link, email);
+            notificationService.notifyUser(userId, teamId, type, MessageKeys.notificationTitle(type),
+                    MessageKeys.notificationContent(type), messageParams, link, email);
             return;
         }
-        teamNotificationOutboxWriter.enqueueUser(userId, teamId, type, title, content, link, email);
+        teamNotificationOutboxWriter.enqueueUser(userId, teamId, type, messageParams, link, email);
     }
 
     @Override
@@ -106,8 +114,9 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
                     payload.userId(),
                     payload.teamId(),
                     payload.type(),
-                    payload.title(),
-                    payload.content(),
+                    payload.titleKey(),
+                    payload.contentKey(),
+                    payload.messageParams(),
                     payload.link(),
                     payload.email());
             return;
@@ -116,8 +125,9 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
                 payload.teamId(),
                 payload.excludeUserId(),
                 payload.type(),
-                payload.title(),
-                payload.content(),
+                payload.titleKey(),
+                payload.contentKey(),
+                payload.messageParams(),
                 payload.link(),
                 payload.email());
     }

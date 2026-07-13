@@ -60,7 +60,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 response.setStatus(429);
                 response.setContentType(MediaType.APPLICATION_JSON_VALUE);
                 ApiResponse<Void> error = ApiResponse.error(
-                        ApiCode.RATE_LIMITED.getCode(), ApiCode.RATE_LIMITED.getMessage());
+                        ApiCode.RATE_LIMITED.getCode(), ApiCode.RATE_LIMITED.getMessageKey());
                 response.getWriter().write(objectMapper.writeValueAsString(error));
                 return;
             }

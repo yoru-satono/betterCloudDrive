@@ -23,6 +23,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -91,8 +92,8 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         TeamInviteEntity saved = teamInviteRepository.save(invite);
         sendInvite(team, saved);
         if (existingUser != null) {
-            teamNotificationDispatchService.enqueueUserNotification(existingUser.getId(), teamId, "TEAM_INVITE", "团队邀请",
-                    "你被邀请加入团队「" + team.getName() + "」，角色为 " + normalizedRole + "。",
+            teamNotificationDispatchService.enqueueUserNotification(existingUser.getId(), teamId, "TEAM_INVITE",
+                    Map.of("teamName", team.getName(), "role", normalizedRole, "resent", false),
                     "/team-invites/" + saved.getToken(), false);
         }
         teamAuditService.record(teamId, actorUserId, "INVITE_CREATE", "INVITE", saved.getId(), normalizedEmail + " as " + normalizedRole);
@@ -120,11 +121,13 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         invite.setExpiresAt(now.plusHours(inviteTtlHours));
         invite.setUpdatedAt(now);
         TeamInviteEntity saved = teamInviteRepository.save(invite);
-        sendInvite(teamService.requireTeam(teamId), saved);
+        TeamEntity team = teamService.requireTeam(teamId);
+        sendInvite(team, saved);
         UserEntity invited = userRepository.findByEmail(saved.getEmail()).orElse(null);
         if (invited != null) {
-            teamNotificationDispatchService.enqueueUserNotification(invited.getId(), teamId, "TEAM_INVITE", "团队邀请已重发",
-                    "你的团队邀请已重发。", "/team-invites/" + saved.getToken(), false);
+            teamNotificationDispatchService.enqueueUserNotification(invited.getId(), teamId, "TEAM_INVITE",
+                    Map.of("teamName", team.getName(), "role", saved.getRole(), "resent", true),
+                    "/team-invites/" + saved.getToken(), false);
         }
         teamAuditService.record(teamId, actorUserId, "INVITE_RESEND", "INVITE", saved.getId(), saved.getEmail());
         return view(saved);
@@ -189,8 +192,10 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         invite.setUpdatedAt(now);
         TeamInviteEntity saved = teamInviteRepository.save(invite);
         teamAuditService.record(invite.getTeamId(), userId, "INVITE_ACCEPT", "INVITE", invite.getId(), invite.getEmail());
-        teamNotificationDispatchService.enqueueUserNotification(invite.getInvitedByUserId(), invite.getTeamId(), "TEAM_INVITE_ACCEPT", "团队邀请已接受",
-                user.getUsername() + " 已接受团队邀请。", "/teams/" + invite.getTeamId() + "/settings", true);
+        TeamEntity team = teamService.requireTeam(invite.getTeamId());
+        teamNotificationDispatchService.enqueueUserNotification(invite.getInvitedByUserId(), invite.getTeamId(), "TEAM_INVITE_ACCEPT",
+                Map.of("teamName", team.getName(), "userName", user.getUsername()),
+                "/teams/" + invite.getTeamId() + "/settings", true);
         return saved;
     }
 
@@ -212,8 +217,10 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         invite.setUpdatedAt(LocalDateTime.now());
         TeamInviteEntity saved = teamInviteRepository.save(invite);
         teamAuditService.record(invite.getTeamId(), userId, "INVITE_REJECT", "INVITE", invite.getId(), invite.getEmail());
-        teamNotificationDispatchService.enqueueUserNotification(invite.getInvitedByUserId(), invite.getTeamId(), "TEAM_INVITE_REJECT", "团队邀请已拒绝",
-                user.getUsername() + " 已拒绝团队邀请。", "/teams/" + invite.getTeamId() + "/settings", true);
+        TeamEntity team = teamService.requireTeam(invite.getTeamId());
+        teamNotificationDispatchService.enqueueUserNotification(invite.getInvitedByUserId(), invite.getTeamId(), "TEAM_INVITE_REJECT",
+                Map.of("teamName", team.getName(), "userName", user.getUsername()),
+                "/teams/" + invite.getTeamId() + "/settings", true);
         return saved;
     }
 

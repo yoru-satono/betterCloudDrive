@@ -410,7 +410,7 @@
 - 目标：让验证脚本既能全量跑，也能按模块跑。
 - 范围：backend、web、tauri、android、office、blackbox 参数。
 - 状态：已完成。
-- 验收：`scripts/verify-all.ps1` 保持默认全量；新增 `-Module backend|blackbox|web|tauri|android|office|all`，并默认在结束时调用 E2E 数据清理；`scripts/verify-all.ps1 -Module web -SkipDockerBuild` 已通过。
+- 验收：`scripts/verify-all.ps1` 保持默认全量；支持 `-Module backend|blackbox|web|tauri|android|office|webdav|observability|resilience|all`，并默认在结束时调用 E2E 数据清理；`scripts/verify-all.ps1 -Module web -SkipDockerBuild` 已通过。
 
 ## 性能、异步和消息队列
 

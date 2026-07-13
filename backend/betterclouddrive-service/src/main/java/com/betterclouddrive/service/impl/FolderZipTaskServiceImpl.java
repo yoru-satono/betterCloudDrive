@@ -48,7 +48,7 @@ public class FolderZipTaskServiceImpl implements FolderZipTaskService {
                 TASK_TYPE_FOLDER_ZIP,
                 TARGET_TYPE_FILE,
                 fileId,
-                "生成团队文件夹 ZIP");
+                "Generate team folder ZIP");
     }
 
     @Override
@@ -108,7 +108,7 @@ public class FolderZipTaskServiceImpl implements FolderZipTaskService {
             FolderZipDownloadCacheEntity cache = folderZipDownloadService.getOrCreateCachedZip(folder);
             teamTaskService.markSucceeded(
                     task.getId(),
-                    "ZIP 已生成：" + cache.getFileName(),
+                    "ZIP generated: " + cache.getFileName(),
                     new TeamTaskResult(
                             cache.getObjectKey(),
                             cache.getFileName(),

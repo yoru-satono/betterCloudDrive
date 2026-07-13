@@ -9,6 +9,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -96,7 +97,7 @@ public class EmailServiceImpl implements EmailService {
 
     @Override
     @Async("emailExecutor")
-    public void sendNotification(String toEmail, String title, String content, String link) {
+    public void sendNotification(String toEmail, String eventType, Map<String, Object> params, String link) {
         if (toEmail == null || toEmail.isBlank()) {
             log.warn("Cannot send notification email: email is empty");
             return;
@@ -104,9 +105,18 @@ public class EmailServiceImpl implements EmailService {
         SimpleMailMessage msg = new SimpleMailMessage();
         msg.setFrom(FROM);
         msg.setTo(toEmail);
-        msg.setSubject(APP_NAME + " - " + title);
-        msg.setText((content != null ? content : "") + (link != null && !link.isBlank() ? "\n\n" + link : ""));
+        String safeType = eventType == null ? "Notification" : eventType.replace('_', ' ');
+        msg.setSubject(APP_NAME + " - " + safeType);
+        msg.setText("A " + safeType.toLowerCase(java.util.Locale.ROOT) + " event occurred."
+                + formatParams(params) + (link != null && !link.isBlank() ? "\n\n" + link : ""));
         mailSender.send(msg);
         log.info("Notification email sent to: {}", toEmail);
+    }
+
+    private String formatParams(Map<String, Object> params) {
+        if (params == null || params.isEmpty()) return "";
+        StringBuilder result = new StringBuilder("\n\nDetails:\n");
+        params.forEach((key, value) -> result.append(key).append(": ").append(String.valueOf(value).replace("\r", " ").replace("\n", " ")).append('\n'));
+        return result.toString();
     }
 }

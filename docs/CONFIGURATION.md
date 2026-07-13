@@ -629,6 +629,9 @@ Docker Compose 使用这些 volume：
 | 黑盒 API | 执行 `backend-test` pytest；admin 测试会自动创建用户并提升为 `ROLE_ADMIN` |
 | Web | 执行前端单测和 Docker Web E2E；默认开启 `E2E_ONLYOFFICE=1` |
 | Office | 通过 `-Module office` 单独执行 OnlyOffice Web E2E |
+| WebDAV | 通过 `-Module webdav` 使用 rclone 执行 WebDAV 黑盒测试 |
+| 可观测性 | 通过 `-Module observability` 验证指标、日志和告警链路 |
+| 韧性 | 通过 `-Module resilience` 执行依赖故障与恢复场景测试 |
 | Tauri | 构建 Tauri release 测试包并运行 WebDriver E2E |
 | Android | 执行 Android 单元测试和连接设备 E2E |
 | 清理 | 默认在脚本结束时调用 `scripts/cleanup-e2e-data.ps1` 清理 E2E/黑盒测试数据 |
@@ -637,7 +640,7 @@ Docker Compose 使用这些 volume：
 
 | 参数 | 说明 |
 |------|------|
-| `-Module <name[]>` | 按模块运行，支持 `all`、`backend`、`blackbox`、`web`、`tauri`、`android`、`office`，默认 `all` |
+| `-Module <name[]>` | 按模块运行，支持 `all`、`backend`、`blackbox`、`web`、`tauri`、`android`、`office`、`webdav`、`observability`、`resilience`，默认 `all` |
 | `-SkipDockerBuild` | 启动 Docker 栈但不重新 build 镜像 |
 | `-SkipTauri` | 跳过 Tauri 构建和 E2E |
 | `-SkipAndroid` | 跳过 Android 单元测试和 Android E2E |

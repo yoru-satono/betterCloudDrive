@@ -116,8 +116,8 @@ public class TeamServiceImpl implements TeamService {
         team.setUpdatedAt(now);
         teamRepository.save(team);
         teamAuditService.record(teamId, userId, "TEAM_DELETE", "TEAM", teamId, team.getName());
-        teamNotificationDispatchService.enqueueTeamMembersNotification(teamId, userId, "TEAM_DELETE", "团队已删除",
-                "团队「" + team.getName() + "」已被所有者删除，可在清理前由管理员恢复。", null, true);
+        teamNotificationDispatchService.enqueueTeamMembersNotification(teamId, userId, "TEAM_DELETE", "Team deleted",
+                "The team was deleted by its owner", null, true);
     }
 
     @Override
@@ -164,8 +164,8 @@ public class TeamServiceImpl implements TeamService {
         }
         TeamMemberEntity saved = teamMemberRepository.save(member);
         teamAuditService.record(teamId, actorUserId, "MEMBER_ADD", "USER", user.getId(), user.getUsername() + " as " + normalizedRole);
-        teamNotificationDispatchService.enqueueUserNotification(user.getId(), teamId, "TEAM_MEMBER_ADD", "已加入团队",
-                "你已被加入团队，角色为 " + normalizedRole + "。", "/teams/" + teamId + "/files", true);
+        teamNotificationDispatchService.enqueueUserNotification(user.getId(), teamId, "TEAM_MEMBER_ADD", "Added to team",
+                "You were added to a team with role " + normalizedRole, "/teams/" + teamId + "/files", true);
         return new TeamMemberView(saved, user);
     }
 
@@ -187,8 +187,8 @@ public class TeamServiceImpl implements TeamService {
         UserEntity user = userRepository.findById(targetUserId).orElse(null);
         TeamMemberEntity saved = teamMemberRepository.save(member);
         teamAuditService.record(teamId, actorUserId, "MEMBER_ROLE_UPDATE", "USER", targetUserId, normalizedRole);
-        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_ROLE_UPDATE", "团队角色已更新",
-                "你的团队角色已更新为 " + normalizedRole + "。", "/teams/" + teamId + "/settings", true);
+        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_ROLE_UPDATE", "Team role updated",
+                "Your team role is now " + normalizedRole, "/teams/" + teamId + "/settings", true);
         return new TeamMemberView(saved, user);
     }
 
@@ -208,8 +208,8 @@ public class TeamServiceImpl implements TeamService {
         member.setUpdatedAt(LocalDateTime.now());
         teamMemberRepository.save(member);
         teamAuditService.record(teamId, actorUserId, "MEMBER_REMOVE", "USER", targetUserId, member.getRole());
-        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_MEMBER_REMOVE", "已被移出团队",
-                "你已被移出团队。", null, true);
+        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_MEMBER_REMOVE", "Removed from team",
+                "You were removed from a team", null, true);
     }
 
     @Override
@@ -246,8 +246,8 @@ public class TeamServiceImpl implements TeamService {
         teamMemberRepository.save(target);
         TeamEntity savedTeam = teamRepository.save(team);
         teamAuditService.record(teamId, ownerUserId, "OWNER_TRANSFER", "USER", targetUserId, null);
-        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_OWNER_TRANSFER", "团队所有权已转让给你",
-                "你现在是团队「" + team.getName() + "」的所有者。", "/teams/" + teamId + "/settings", true);
+        teamNotificationDispatchService.enqueueUserNotification(targetUserId, teamId, "TEAM_OWNER_TRANSFER", "Team ownership transferred",
+                "You are now the team owner", "/teams/" + teamId + "/settings", true);
         return new TeamView(savedTeam, ROLE_ADMIN);
     }
 

@@ -1,6 +1,7 @@
 import api from './client'
 import { toast } from 'vue-sonner'
 import { getApiBaseUrl } from '@/config/runtime'
+import { resolveMessage } from '@/i18n'
 import {
   downloadDesktopFile,
   downloadDesktopFolder,
@@ -24,8 +25,8 @@ function responseHeader(headers: Record<string, unknown> | undefined, name: stri
 export const saveBlobResponse = async (response: { data: Blob; headers?: Record<string, unknown> }, fallbackFileName: string) => {
   const contentType = responseHeader(response.headers, 'content-type')
   if (contentType.includes('application/json')) {
-    const payload = JSON.parse(await response.data.text()) as { message?: string }
-    throw new Error(payload.message || '下载失败')
+    const payload = JSON.parse(await response.data.text()) as { messageKey?: string; messageParams?: Record<string, string | number | boolean | null> }
+    throw new Error(resolveMessage(payload.messageKey || 'error.download_failed', payload.messageParams))
   }
 
   const url = URL.createObjectURL(response.data)

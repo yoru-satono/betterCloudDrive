@@ -151,7 +151,7 @@ test.describe('teams', () => {
       const notifications = await listNotifications(request, invitee.accessToken, { unreadOnly: true, type: 'TEAM_INVITE' })
       return notifications.some(notification =>
         notification.teamId === team.id &&
-        notification.title.includes('团队邀请') &&
+        notification.titleKey === 'notification.team_invite.title' &&
         !!notification.link?.startsWith('/team-invites/'),
       )
     }, { timeout: 30_000 }).toBe(true)
@@ -169,7 +169,9 @@ test.describe('teams', () => {
     await expect(page.getByRole('button', { name: '拒绝' })).toBeVisible()
     await expect.poll(async () => {
       const notifications = await listNotifications(request, invitee.accessToken, { type: 'TEAM_INVITE' })
-      return notifications.find(notification => notification.teamId === team.id && notification.title.includes('团队邀请'))?.isRead
+      return notifications.find(notification =>
+        notification.teamId === team.id && notification.titleKey === 'notification.team_invite.title'
+      )?.isRead
     }).toBe(true)
 
     await clearBrowserAuth(page)
@@ -184,7 +186,10 @@ test.describe('teams', () => {
     await expect(page.getByText('邀请已重发')).toBeVisible()
     await expect.poll(async () => {
       const notifications = await listNotifications(request, invitee.accessToken, { unreadOnly: true, type: 'TEAM_INVITE' })
-      return notifications.some(notification => notification.teamId === team.id && notification.title.includes('团队邀请已重发'))
+      return notifications.some(notification =>
+        notification.teamId === team.id &&
+        notification.titleKey === 'notification.team_invite.title'
+      )
     }, { timeout: 30_000 }).toBe(true)
 
     await ownerInviteRow.getByRole('button', { name: '取消' }).click()

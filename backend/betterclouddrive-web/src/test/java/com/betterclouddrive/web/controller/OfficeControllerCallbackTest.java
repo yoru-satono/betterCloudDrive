@@ -119,7 +119,7 @@ class OfficeControllerCallbackTest {
         when(onlyOfficeCallbackService.reserveSave(
                 10L, 1L, 2L, "doc-key", 2, "url-hash", "http://onlyoffice/output.docx"))
                 .thenReturn(true);
-        when(teamTaskService.queueTask(10L, 2L, "ONLYOFFICE_SAVE", "FILE", 1L, "保存在线编辑文档"))
+        when(teamTaskService.queueTask(10L, 2L, "ONLYOFFICE_SAVE", "FILE", 1L, "Save online document"))
                 .thenReturn(task);
 
         Map<String, Integer> response = controller.teamCallback(10L, 1L, "callback-token", request);

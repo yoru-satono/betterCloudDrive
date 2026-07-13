@@ -2,6 +2,7 @@ import axios, { AxiosError } from 'axios'
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { toast } from 'vue-sonner'
 import { getApiBaseUrl } from '@/config/runtime'
+import { resolveMessage } from '@/i18n'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
@@ -12,7 +13,8 @@ declare module 'axios' {
 
 interface ApiEnvelope {
   code: number
-  message: string
+  messageKey: string
+  messageParams?: Record<string, string | number | boolean | null>
   data?: unknown
 }
 
@@ -41,7 +43,7 @@ const processQueue = (error: unknown, token: string | null) => {
 }
 
 const isApiEnvelope = (data: unknown): data is ApiEnvelope => {
-  return !!data && typeof data === 'object' && 'code' in data && 'message' in data
+  return !!data && typeof data === 'object' && 'code' in data && 'messageKey' in data
 }
 
 const shouldSkipEnvelopeCheck = (res: AxiosResponse) => {
@@ -74,7 +76,7 @@ export async function refreshAccessToken() {
       `${getApiBaseUrl()}/auth/refresh`,
       { refreshToken }
     )
-    if (data.code !== 200 || !data.data) throw new Error(data.message || '刷新令牌失败')
+    if (data.code !== 200 || !data.data) throw new Error(resolveMessage(data.messageKey, data.messageParams))
     const { accessToken, refreshToken: newRefresh } = data.data
     localStorage.setItem('accessToken', accessToken)
     localStorage.setItem('refreshToken', newRefresh)
@@ -130,7 +132,8 @@ const handleApiError = async (error: AxiosError<ApiEnvelope>) => {
     }
   }
 
-  const msg = error.response?.data?.message || error.message || '请求失败'
+  const envelope = error.response?.data
+  const msg = envelope ? resolveMessage(envelope.messageKey, envelope.messageParams) : '网络连接失败，请稍后重试'
   if (error.response?.status !== 401 && !error.config?.suppressToast) toast.error(msg)
   return Promise.reject(error)
 }
@@ -138,7 +141,7 @@ const handleApiError = async (error: AxiosError<ApiEnvelope>) => {
 api.interceptors.response.use(
   (res) => {
     if (!shouldSkipEnvelopeCheck(res) && isApiEnvelope(res.data) && res.data.code !== 200) {
-      const error = new AxiosError(res.data.message || '请求失败', undefined, res.config, res.request, res)
+      const error = new AxiosError(resolveMessage(res.data.messageKey, res.data.messageParams), undefined, res.config, res.request, res)
       return handleApiError(error)
     }
     return res

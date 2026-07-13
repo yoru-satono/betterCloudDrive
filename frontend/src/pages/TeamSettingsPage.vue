@@ -19,6 +19,7 @@ import type { TagEntity } from '@/types/tag'
 import type { FileEntity } from '@/types/file'
 import type { ShareLinkEntity } from '@/types/share'
 import type { Team, TeamActivity, TeamInvite, TeamMember, TeamOperationLog, TeamRole, TeamTask } from '@/types/team'
+import { resolveMessage } from '@/i18n'
 
 const route = useRoute()
 const router = useRouter()
@@ -617,7 +618,7 @@ onMounted(async () => {
           <div v-for="activity in activities" :key="activity.id" class="team-activity__row">
             <div class="team-activity__time font-mono">{{ formatDateFull(activity.createdAt) }}</div>
             <div class="team-activity__main">
-              <div class="team-activity__summary">{{ activity.summary }}</div>
+              <div class="team-activity__summary">{{ resolveMessage(activity.summaryKey, activity.summaryParams) }}</div>
               <div class="team-activity__meta">
                 <span class="font-mono">{{ activity.action }}</span>
                 <span v-if="activity.targetType">{{ activity.targetType }} {{ activity.targetId || '' }}</span>
@@ -654,14 +655,14 @@ onMounted(async () => {
         <div v-else class="team-tasks">
           <div v-for="task in teamTasks" :key="task.id" class="team-tasks__row">
             <div class="team-tasks__main">
-              <div class="team-tasks__title">{{ task.title }}</div>
+              <div class="team-tasks__title">{{ resolveMessage(task.titleKey, task.titleParams) }}</div>
               <div class="team-tasks__meta">
                 <span class="font-mono">{{ task.taskType }}</span>
                 <span>{{ formatDateFull(task.createdAt) }}</span>
                 <span v-if="task.targetType">{{ task.targetType }} {{ task.targetId || '' }}</span>
               </div>
-              <div v-if="task.errorMessage" class="team-tasks__error">{{ task.errorMessage }}</div>
-              <div v-else-if="task.resultMessage" class="team-tasks__result">{{ task.resultMessage }}</div>
+              <div v-if="task.errorMessageKey" class="team-tasks__error">{{ resolveMessage(task.errorMessageKey, task.errorMessageParams) }}</div>
+              <div v-else-if="task.resultMessageKey" class="team-tasks__result">{{ resolveMessage(task.resultMessageKey, task.resultMessageParams) }}</div>
             </div>
             <div class="team-tasks__side">
               <span class="team-tasks__status" :class="`team-tasks__status--${task.status.toLowerCase()}`">{{ task.status }}</span>

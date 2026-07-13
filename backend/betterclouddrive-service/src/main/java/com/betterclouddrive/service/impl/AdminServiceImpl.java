@@ -188,8 +188,8 @@ public class AdminServiceImpl implements AdminService {
             team.setArchivedBy(adminUserId);
             team = teamRepository.save(team);
             teamAuditService.record(teamId, adminUserId, "TEAM_ARCHIVE", "TEAM", teamId, team.getName());
-            notificationService.notifyTeamMembers(teamId, adminUserId, "TEAM_ARCHIVE", "团队已归档",
-                    "团队「" + team.getName() + "」已被管理员归档。", "/admin/teams", true);
+            notificationService.notifyTeamMembers(teamId, adminUserId, "TEAM_ARCHIVE", "Team archived",
+                    "The team was archived by an administrator", "/admin/teams", true);
         }
         return team;
     }
@@ -206,8 +206,8 @@ public class AdminServiceImpl implements AdminService {
             team.setArchivedBy(null);
             team = teamRepository.save(team);
             teamAuditService.record(teamId, adminUserId, "TEAM_UNARCHIVE", "TEAM", teamId, team.getName());
-            notificationService.notifyTeamMembers(teamId, adminUserId, "TEAM_UNARCHIVE", "团队已取消归档",
-                    "团队「" + team.getName() + "」已恢复为活跃状态。", "/teams/" + teamId + "/files", true);
+            notificationService.notifyTeamMembers(teamId, adminUserId, "TEAM_UNARCHIVE", "Team unarchived",
+                    "The team is active again", "/teams/" + teamId + "/files", true);
         }
         return team;
     }
@@ -226,8 +226,8 @@ public class AdminServiceImpl implements AdminService {
         team.setArchivedBy(null);
         team = teamRepository.save(team);
         teamAuditService.record(teamId, adminUserId, "TEAM_RESTORE", "TEAM", teamId, team.getName());
-        notificationService.notifyTeamMembers(teamId, adminUserId, "TEAM_RESTORE", "团队已恢复",
-                "团队「" + team.getName() + "」已由管理员恢复。", "/teams/" + teamId + "/files", true);
+        notificationService.notifyTeamMembers(teamId, adminUserId, "TEAM_RESTORE", "Team restored",
+                "The team was restored by an administrator", "/teams/" + teamId + "/files", true);
         return team;
     }
 
@@ -269,11 +269,11 @@ public class AdminServiceImpl implements AdminService {
 
     private String deleteReason(TeamOperationLogEntity deleteLog) {
         if (deleteLog == null) {
-            return "团队所有者删除";
+            return "Deleted by team owner";
         }
         return deleteLog.getDetails() == null || deleteLog.getDetails().isBlank()
-                ? "团队所有者删除"
-                : "团队所有者删除：" + deleteLog.getDetails();
+                ? "Deleted by team owner"
+                : "Deleted by team owner: " + deleteLog.getDetails();
     }
 
     @Override

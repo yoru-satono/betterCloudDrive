@@ -74,7 +74,7 @@ public class SharePasswordCryptoServiceImpl implements SharePasswordCryptoServic
             byte[] plainBytes = cipher.doFinal(parsed.cipherBytes);
             return new String(plainBytes, StandardCharsets.UTF_8);
         } catch (GeneralSecurityException | IllegalArgumentException e) {
-            throw new BusinessException(400, "分享密码已失效或格式错误");
+            throw new BusinessException(400, "error.invalid_share_password");
         }
     }
 

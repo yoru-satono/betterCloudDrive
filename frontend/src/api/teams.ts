@@ -220,8 +220,8 @@ export const emptyTeamRecycleBin = (teamId: number) =>
 export const createTeamShare = (teamId: number, req: CreateShareRequest) =>
   api.post<ApiResponse<ShareLinkEntity>>(`/teams/${teamId}/shares`, req)
 
-export const listTeamShares = (teamId: number, page = 1, size = 20, q?: string) =>
-  api.get<ApiResponse<PageResult<ShareLinkEntity>>>(`/teams/${teamId}/shares`, { params: { page, size, q } })
+export const listTeamShares = (teamId: number, page = 1, size = 20, q?: string, passwordProtected?: boolean, expirationStatus?: 'ACTIVE' | 'EXPIRED' | 'NEVER') =>
+  api.get<ApiResponse<PageResult<ShareLinkEntity>>>(`/teams/${teamId}/shares`, { params: { page, size, q, passwordProtected, expirationStatus } })
 
 export const getTeamShare = (teamId: number, shareId: number) =>
   api.get<ApiResponse<ShareLinkEntity>>(`/teams/${teamId}/shares/${shareId}`)

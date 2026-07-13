@@ -10,7 +10,8 @@
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": { ... },
   "timestamp": 1717000000000,
   "requestId": "a1b2c3d4"
@@ -80,7 +81,8 @@ POST /api/v1/auth/register
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "userId": 1,
     "username": "zhangsan"
@@ -92,7 +94,8 @@ POST /api/v1/auth/register
 ```json
 {
   "code": 409,
-  "message": "Username already exists"
+  "messageKey": "error.conflict",
+  "messageParams": {}
 }
 ```
 
@@ -135,7 +138,8 @@ POST /api/v1/auth/login
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "accessToken": "eyJhbGciOi...",
     "refreshToken": "eyJhbGciOi...",
@@ -151,7 +155,8 @@ POST /api/v1/auth/login
 ```json
 {
   "code": 401,
-  "message": "Invalid username or password"
+  "messageKey": "error.unauthorized",
+  "messageParams": {}
 }
 ```
 
@@ -174,7 +179,8 @@ POST /api/v1/auth/refresh
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "accessToken": "eyJhbGciOi...",
     "refreshToken": "eyJhbGciOi...",
@@ -198,7 +204,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -217,7 +224,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "id": 1,
     "username": "zhangsan",
@@ -250,7 +258,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "enabled": false
   }
@@ -285,7 +294,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 400,
-  "message": "WebDAV password is required"
+  "messageKey": "error.bad_request",
+  "messageParams": {}
 }
 ```
 
@@ -314,7 +324,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "records": [
       {
@@ -371,7 +382,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "id": 11,
     "fileName": "photo.jpg",
@@ -390,7 +402,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 404001,
-  "message": "file not found"
+  "messageKey": "error.file_not_found",
+  "messageParams": {}
 }
 ```
 
@@ -415,7 +428,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "id": 12,
     "fileName": "新建文件夹",
@@ -430,7 +444,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 409001,
-  "message": "file name already exists in this folder"
+  "messageKey": "error.file_name_conflict",
+  "messageParams": {}
 }
 ```
 
@@ -454,7 +469,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "id": 11,
     "fileName": "新文件名.jpg",
@@ -487,7 +503,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -515,7 +532,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -541,7 +559,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -575,7 +594,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "sessionId": "a1b2c3d4-e5f6-...",
     "chunkSize": 5242880,
@@ -588,7 +608,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 419001,
-  "message": "storage quota exceeded"
+  "messageKey": "error.storage_quota_exceeded",
+  "messageParams": {}
 }
 ```
 
@@ -614,7 +635,8 @@ Content-Type: multipart/form-data
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "chunkNumber": 2
   }
@@ -636,7 +658,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "sessionId": "a1b2c3d4-e5f6-...",
     "totalChunks": 3,
@@ -675,12 +698,17 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "fileId": 42
   }
 }
 ```
+
+`messageKey` 是稳定语义键，`messageParams` 是客户端本地化插值参数。后端不返回旧 `message` 字段，也不会把异常诊断文本序列化给客户端。业务代码和自动化测试应优先使用 `code`、对象 `type/status` 或稳定 key 判断状态，不得按中文翻译分支。完整约定见 [客户端本地化与语义文案协议](LOCALIZATION.md)。
+
+未知或内部异常返回 `error.internal`；Web/Tauri 与 Android 使用各自本地资源显示通用中文提示，生产 UI 不直接展示未知 key。
 
 `complete` 支持幂等重试：同一 `sessionId` 第一次成功后会记录产物文件 ID，后续重复调用返回同一个 `fileId`，不会重复合并对象、重复创建文件或重复累计存储配额。
 
@@ -688,7 +716,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 419006,
-  "message": "Chunk 2 is missing"
+  "messageKey": "error.chunk_upload_invalid",
+  "messageParams": {}
 }
 ```
 
@@ -705,7 +734,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -736,7 +766,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "fileId": 43,
     "instant": true
@@ -748,7 +779,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 419001,
-  "message": "storage quota exceeded"
+  "messageKey": "error.storage_quota_exceeded",
+  "messageParams": {}
 }
 ```
 
@@ -756,7 +788,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 419010,
-  "message": "no matching file found for instant upload"
+  "messageKey": "error.instant_upload_not_found",
+  "messageParams": {}
 }
 ```
 
@@ -777,7 +810,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "url": "/api/v1/download/42?ticket=F6imJ4..."
   }
@@ -830,7 +864,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "url": "/api/v1/download/folders/10/zip?ticket=F6imJ4..."
   }
@@ -908,7 +943,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "records": [
       {
@@ -941,7 +977,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -958,7 +995,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -977,7 +1015,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -1122,7 +1161,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "records": [
       {
@@ -1203,7 +1243,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "id": 1,
     "fileId": 42,
@@ -1228,11 +1269,11 @@ Authorization: Bearer <accessToken>
 ### 10.2 列出我的分享
 
 ```
-GET /api/v1/shares?page=1&size=20
+GET /api/v1/shares?q=&passwordProtected=&expirationStatus=&page=1&size=20
 Authorization: Bearer <accessToken>
 ```
 
-分页返回当前用户创建的所有分享。
+分页返回当前用户创建的所有分享。`q` 只匹配用户数据，不解析“有密码”“已过期”等中文状态词；密码状态使用独立布尔参数 `passwordProtected`，过期状态使用 `expirationStatus=ACTIVE|EXPIRED|NEVER`。
 
 ---
 
@@ -1260,7 +1301,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "password": "1234"
   }
@@ -1272,7 +1314,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "password": null
   }
@@ -1334,7 +1377,8 @@ POST /api/v1/shares/access/{shareCode}
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "fileId": 42,
     "fileName": "report.pdf",
@@ -1497,7 +1541,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": true
 }
 ```
@@ -1615,7 +1660,8 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": [
     {
       "id": 5,
@@ -1771,7 +1817,8 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 ```json
 {
   "code": 200,
-  "message": "success"
+  "messageKey": "common.success",
+  "messageParams": {}
 }
 ```
 
@@ -1922,7 +1969,8 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 ```json
 {
   "code": 200,
-  "message": "success",
+  "messageKey": "common.success",
+  "messageParams": {},
   "data": {
     "totalUsers": 150,
     "activeUsers": 120,
@@ -2009,7 +2057,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 | 方法 | 路径 | 权限 | 请求/响应 |
 |------|------|------|------|
 | POST | `/api/v1/teams/{teamId}/shares` | 可分享 | Body 同个人分享；响应 `ShareLinkResponse`，含 `teamId` |
-| GET | `/api/v1/teams/{teamId}/shares?q=&page=&size=` | 团队成员 | 返回当前用户可读文件对应的分享 |
+| GET | `/api/v1/teams/{teamId}/shares?q=&passwordProtected=&expirationStatus=&page=&size=` | 团队成员 | 返回当前用户可读文件对应的分享；状态过滤参数与个人分享一致 |
 | GET | `/api/v1/teams/{teamId}/shares/{shareId}` | 分享文件可读 | 分享详情 |
 | GET | `/api/v1/teams/{teamId}/shares/{shareId}/password` | 可分享 | 读取分享密码 |
 | PUT | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | Body 同个人更新分享；可更新或清空密码、过期时间和访问次数 |
@@ -2068,7 +2116,8 @@ Authorization: Bearer <accessToken>
       "canShare": true,
       "canDelete": true,
       "canManage": false,
-      "description": "基础角色权限：EDITOR"
+      "descriptionKey": "permission.base_role",
+      "descriptionParams": { "role": "EDITOR" }
     },
     {
       "type": "ROLE_OVERRIDE",
@@ -2083,7 +2132,8 @@ Authorization: Bearer <accessToken>
       "canShare": false,
       "canDelete": false,
       "canManage": false,
-      "description": "继承自「项目资料」的角色覆盖"
+      "descriptionKey": "permission.inherited_override",
+      "descriptionParams": { "fileName": "项目资料" }
     }
   ]
 }
@@ -2158,7 +2208,7 @@ Authorization: Bearer <accessToken>
 | `POST /tasks/{taskId}/retry` | 团队成员 | 仅允许重试 `FAILED` 任务，状态重置为 `PENDING`，清空失败原因并递增 `retryCount` |
 | `GET /tasks/{taskId}/download` | 按任务类型 | 审计导出要求 OWNER/ADMIN；文件夹 ZIP 要求对目标文件夹可读；响应为任务结果文件二进制流 |
 
-**TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`title`、`progress`、`resultMessage`、`errorMessage`、`retryCount`、`payload`、`resultPath`、`resultFileName`、`resultContentType`、`resultSizeBytes`、`resultExpiresAt`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。
+**TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`titleKey`、`titleParams`、`progress`、`resultMessageKey`、`resultMessageParams`、`errorMessageKey`、`errorMessageParams`、`retryCount`、`payload`、`resultPath`、`resultFileName`、`resultContentType`、`resultSizeBytes`、`resultExpiresAt`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。文案 key 必须由客户端解析，任务状态仍以 `status` 为准。
 
 **状态:** `PENDING`、`RUNNING`、`SUCCEEDED`、`FAILED`。
 
@@ -2175,7 +2225,7 @@ Authorization: Bearer <accessToken>
 
 团队成员可查看按时间倒序排列的精简活动流。活动流复用团队审计数据，但不会开放完整审计字段；`FILE` 目标和可解析出文件 ID 的团队分享活动会按当前用户对文件的有效 `read` 权限过滤，普通成员不会看到无权读取文件的活动摘要。OWNER/ADMIN 的完整审计仍使用 `/audit-logs`。
 
-**TeamActivity 字段:** `id`、`teamId`、`actorUserId`、`action`、`targetType`、`targetId`、`summary`、`createdAt`。
+**TeamActivity 字段:** `id`、`teamId`、`actorUserId`、`action`、`targetType`、`targetId`、`summaryKey`、`summaryParams`、`createdAt`。客户端按 key/params 生成摘要，权限过滤和程序判断使用结构化字段。
 
 **错误码:** 403（非团队成员）、404（团队不存在）。
 
@@ -2193,7 +2243,28 @@ Authorization: Bearer <accessToken>
 | POST | `/api/v1/notifications/{notificationId}/read` | 通知所有者 | 标记单条已读 |
 | POST | `/api/v1/notifications/read-all` | 登录用户 | 标记当前用户全部通知已读 |
 
-**Notification 字段:** `id`、`userId`、`teamId`、`type`、`title`、`content`、`link`、`readAt`、`createdAt`、`isRead`。
+**Notification 字段:** `id`、`userId`、`teamId`、`type`、`titleKey`、`contentKey`、`messageParams`、`link`、`readAt`、`createdAt`、`isRead`。
+
+示例：
+
+```json
+{
+  "id": 53,
+  "userId": 126,
+  "teamId": 42,
+  "type": "TEAM_INVITE_ACCEPT",
+  "titleKey": "notification.team_invite_accept.title",
+  "contentKey": "notification.team_invite_accept.content",
+  "messageParams": {
+    "teamName": "产品组",
+    "userName": "zhangsan"
+  },
+  "link": "/teams/42/settings",
+  "readAt": null,
+  "createdAt": "2026-07-13T18:34:59",
+  "isRead": false
+}
+```
 
 通知偏好为用户级配置，未设置的类型默认开启。关闭某个类型后，后续该类型不再生成站内通知或邮件通知；团队审计不受影响。
 

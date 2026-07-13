@@ -19,6 +19,7 @@ import type { ContextMenuItem } from '@/composables/useContextMenu'
 import { useConfirm } from '@/composables/useConfirm'
 import { usePreviewStore } from '@/stores/preview'
 import { useFormatters } from '@/composables/useFormatters'
+import { resolveMessage } from '@/i18n'
 import * as teamsApi from '@/api/teams'
 import * as versionsApi from '@/api/versions'
 import { downloadTeamFile, downloadTeamFolderZip } from '@/api/download'
@@ -453,7 +454,7 @@ function permissionBits(permission: Pick<TeamEffectivePermission, 'canRead' | 'c
 
 function permissionSourceTitle(source: TeamPermissionSource) {
   if (source.type === 'BASE_ROLE') return `基础角色：${source.subjectRole || '-'}`
-  return source.description || (source.type === 'USER_OVERRIDE' ? '用户权限覆盖' : '角色权限覆盖')
+  return resolveMessage(source.descriptionKey, source.descriptionParams)
 }
 
 function permissionSourceMeta(source: TeamPermissionSource) {

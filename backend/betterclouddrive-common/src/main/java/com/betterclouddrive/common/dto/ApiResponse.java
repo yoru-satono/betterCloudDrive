@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -15,7 +17,9 @@ import lombok.NoArgsConstructor;
 public class ApiResponse<T> {
 
     private int code;
-    private String message;
+    private String messageKey;
+    @Builder.Default
+    private Map<String, Object> messageParams = Map.of();
     private T data;
     private long timestamp;
     private String requestId;
@@ -23,7 +27,8 @@ public class ApiResponse<T> {
     public static <T> ApiResponse<T> success(T data) {
         return ApiResponse.<T>builder()
                 .code(200)
-                .message("success")
+                .messageKey(com.betterclouddrive.common.message.MessageKeys.SUCCESS)
+                .messageParams(Map.of())
                 .data(data)
                 .timestamp(System.currentTimeMillis())
                 .requestId(RequestTraceContext.getRequestId())
@@ -34,22 +39,23 @@ public class ApiResponse<T> {
         return success(null);
     }
 
-    public static <T> ApiResponse<T> error(int code, String message) {
-        return ApiResponse.<T>builder()
-                .code(code)
-                .message(message)
-                .timestamp(System.currentTimeMillis())
-                .requestId(RequestTraceContext.getRequestId())
-                .build();
+    public static <T> ApiResponse<T> error(int code, String messageKey) {
+        return error(code, messageKey, Map.of(), null);
     }
 
-    public static <T> ApiResponse<T> error(int code, String message, T data) {
+    public static <T> ApiResponse<T> error(int code, String messageKey, Map<String, Object> messageParams) {
+        return error(code, messageKey, messageParams, null);
+    }
+
+    public static <T> ApiResponse<T> error(int code, String messageKey, Map<String, Object> messageParams, T data) {
         return ApiResponse.<T>builder()
                 .code(code)
-                .message(message)
+                .messageKey(messageKey)
+                .messageParams(messageParams == null ? Map.of() : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(messageParams)))
                 .data(data)
                 .timestamp(System.currentTimeMillis())
                 .requestId(RequestTraceContext.getRequestId())
                 .build();
     }
+
 }

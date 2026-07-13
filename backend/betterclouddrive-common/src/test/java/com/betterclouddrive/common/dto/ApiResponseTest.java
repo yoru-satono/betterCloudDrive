@@ -12,7 +12,8 @@ class ApiResponseTest {
         ApiResponse<Object> response = ApiResponse.success();
 
         assertThat(response.getCode()).isEqualTo(200);
-        assertThat(response.getMessage()).isEqualTo("success");
+        assertThat(response.getMessageKey()).isEqualTo("common.success");
+        assertThat(response.getMessageParams()).isEmpty();
         assertThat(response.getTimestamp()).isNotNull();
         assertThat(response.getRequestId()).isNotNull();
         assertThat(response.getData()).isNull();
@@ -23,7 +24,7 @@ class ApiResponseTest {
         ApiResponse<String> response = ApiResponse.success("test");
 
         assertThat(response.getCode()).isEqualTo(200);
-        assertThat(response.getMessage()).isEqualTo("success");
+        assertThat(response.getMessageKey()).isEqualTo("common.success");
         assertThat(response.getData()).isEqualTo("test");
     }
 
@@ -32,7 +33,7 @@ class ApiResponseTest {
         ApiResponse<Object> response = ApiResponse.error(500, "error msg");
 
         assertThat(response.getCode()).isEqualTo(500);
-        assertThat(response.getMessage()).isEqualTo("error msg");
+        assertThat(response.getMessageKey()).isEqualTo("error msg");
         assertThat(response.getData()).isNull();
         assertThat(response.getRequestId()).isNotNull();
     }
@@ -40,10 +41,11 @@ class ApiResponseTest {
     @Test
     void shouldCreateErrorWithData() {
         String details = "validation failed";
-        ApiResponse<String> response = ApiResponse.error(400, "bad", details);
+        ApiResponse<String> response = ApiResponse.error(400, "bad", java.util.Map.of("field", "name"), details);
 
         assertThat(response.getCode()).isEqualTo(400);
-        assertThat(response.getMessage()).isEqualTo("bad");
+        assertThat(response.getMessageKey()).isEqualTo("bad");
+        assertThat(response.getMessageParams()).containsEntry("field", "name");
         assertThat(response.getData()).isEqualTo(details);
     }
 

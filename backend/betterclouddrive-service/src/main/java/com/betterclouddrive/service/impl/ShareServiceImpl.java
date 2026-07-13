@@ -32,6 +32,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Service
@@ -97,46 +98,8 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
-    public PageResult<ShareLinkEntity> listShares(Long userId, String keyword, int page, int size) {
-        Specification<ShareLinkEntity> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("userId"), userId));
-            predicates.add(cb.isNull(root.get("teamId")));
-            predicates.add(cb.equal(root.get("isCanceled"), false));
-            if (StringUtils.hasText(keyword)) {
-                String normalizedKeyword = keyword.trim().toLowerCase();
-                List<Predicate> keywordPredicates = new ArrayList<>();
-                keywordPredicates.add(cb.like(cb.lower(root.get("shareCode")), "%" + normalizedKeyword + "%"));
-                try {
-                    keywordPredicates.add(cb.equal(root.get("fileId"), Long.parseLong(normalizedKeyword)));
-                } catch (NumberFormatException ignored) {
-                }
-                if ("有密码".contains(normalizedKeyword) || normalizedKeyword.contains("有密码")) {
-                    keywordPredicates.add(cb.isNotNull(root.get("passwordCiphertext")));
-                }
-                if ("无密码".contains(normalizedKeyword) || normalizedKeyword.contains("无密码")) {
-                    keywordPredicates.add(cb.isNull(root.get("passwordCiphertext")));
-                }
-                LocalDateTime now = LocalDateTime.now();
-                if ("已过期".contains(normalizedKeyword) || normalizedKeyword.contains("已过期")) {
-                    keywordPredicates.add(cb.lessThan(root.get("expireAt"), now));
-                } else if ("永不过期".contains(normalizedKeyword) || normalizedKeyword.contains("永不过期")) {
-                    keywordPredicates.add(cb.isNull(root.get("expireAt")));
-                } else if ("过期".contains(normalizedKeyword) || normalizedKeyword.contains("过期")) {
-                    keywordPredicates.add(cb.or(
-                            cb.isNull(root.get("expireAt")),
-                            cb.isNotNull(root.get("expireAt"))
-                    ));
-                } else if ("有效".contains(normalizedKeyword) || normalizedKeyword.contains("有效")) {
-                    keywordPredicates.add(cb.or(
-                            cb.isNull(root.get("expireAt")),
-                            cb.greaterThanOrEqualTo(root.get("expireAt"), now)
-                    ));
-                }
-                predicates.add(cb.or(keywordPredicates.toArray(new Predicate[0])));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
+    public PageResult<ShareLinkEntity> listShares(Long userId, String keyword, Boolean passwordProtected, String expirationStatus, int page, int size) {
+        Specification<ShareLinkEntity> spec = shareListSpec(userId, null, keyword, passwordProtected, expirationStatus);
 
         PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<ShareLinkEntity> result = shareLinkRepository.findAll(spec, pageable);
@@ -144,8 +107,8 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
-    public PageResult<ShareLinkEntity> listTeamShares(Long userId, Long teamId, String keyword, int page, int size) {
-        Specification<ShareLinkEntity> spec = shareListSpec(null, teamId, keyword);
+    public PageResult<ShareLinkEntity> listTeamShares(Long userId, Long teamId, String keyword, Boolean passwordProtected, String expirationStatus, int page, int size) {
+        Specification<ShareLinkEntity> spec = shareListSpec(null, teamId, keyword, passwordProtected, expirationStatus);
         List<ShareLinkEntity> readable = shareLinkRepository
                 .findAll(spec, Sort.by(Sort.Direction.DESC, "createdAt"))
                 .stream()
@@ -154,7 +117,7 @@ public class ShareServiceImpl implements ShareService {
         return PageResults.fromFiltered(readable, page, size);
     }
 
-    private Specification<ShareLinkEntity> shareListSpec(Long userId, Long teamId, String keyword) {
+    private Specification<ShareLinkEntity> shareListSpec(Long userId, Long teamId, String keyword, Boolean passwordProtected, String expirationStatus) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (teamId != null) {
@@ -173,6 +136,18 @@ public class ShareServiceImpl implements ShareService {
                 } catch (NumberFormatException ignored) {
                 }
                 predicates.add(cb.or(keywordPredicates.toArray(new Predicate[0])));
+            }
+            if (passwordProtected != null) {
+                predicates.add(passwordProtected ? cb.isNotNull(root.get("passwordCiphertext")) : cb.isNull(root.get("passwordCiphertext")));
+            }
+            if (StringUtils.hasText(expirationStatus)) {
+                LocalDateTime now = LocalDateTime.now();
+                switch (expirationStatus.trim().toUpperCase(Locale.ROOT)) {
+                    case "ACTIVE" -> predicates.add(cb.or(cb.isNull(root.get("expireAt")), cb.greaterThanOrEqualTo(root.get("expireAt"), now)));
+                    case "EXPIRED" -> predicates.add(cb.lessThan(root.get("expireAt"), now));
+                    case "NEVER" -> predicates.add(cb.isNull(root.get("expireAt")));
+                    default -> throw new BusinessException(ApiCode.BAD_REQUEST, "Unsupported expiration status filter");
+                }
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };

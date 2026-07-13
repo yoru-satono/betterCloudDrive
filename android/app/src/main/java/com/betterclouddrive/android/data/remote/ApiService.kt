@@ -403,6 +403,9 @@ interface ApiService {
     suspend fun listShares(
         @Query("page") page: Int = 1,
         @Query("size") size: Int = 20,
+        @Query("q") keyword: String? = null,
+        @Query("passwordProtected") passwordProtected: Boolean? = null,
+        @Query("expirationStatus") expirationStatus: String? = null,
     ): ApiResponse<PageResult<ShareLink>>
 
     @GET("shares/{shareId}")
@@ -431,6 +434,9 @@ interface ApiService {
         @Path("teamId") teamId: Long,
         @Query("page") page: Int = 1,
         @Query("size") size: Int = 20,
+        @Query("q") keyword: String? = null,
+        @Query("passwordProtected") passwordProtected: Boolean? = null,
+        @Query("expirationStatus") expirationStatus: String? = null,
     ): ApiResponse<PageResult<ShareLink>>
 
     @GET("teams/{teamId}/shares/{shareId}")

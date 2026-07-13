@@ -12,6 +12,15 @@ npm run dev
 The web app uses relative `/api/v1` requests. Vite proxies `/api` and `/webdav`
 to `http://localhost:8080` during development.
 
+## Localization
+
+The backend returns semantic `messageKey` / `messageParams` values and never a
+user-facing fallback message. Web and Tauri resolve those keys through
+`src/i18n.ts` and `src/locales/zh-CN.ts`. Unknown keys are logged for diagnosis
+and resolve to a local generic Chinese message; production UI must not render a
+raw server key. Notification, task, activity, and permission objects follow the
+same key/params convention. See [`docs/LOCALIZATION.md`](../docs/LOCALIZATION.md).
+
 ## Tauri Desktop
 
 The desktop client connects to an external backend. Defaults:
@@ -54,3 +63,7 @@ npm run test:e2e:tauri
 ```
 
 Set `TAURI_E2E_APP_PATH` to test a different built executable.
+
+The Rust desktop upload client also consumes the semantic API envelope. Keep
+its `ApiEnvelope` aligned with `code/messageKey/messageParams/data`; restoring
+the removed `message` field will break folder uploads at runtime.

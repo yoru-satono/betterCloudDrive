@@ -23,6 +23,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import com.betterclouddrive.common.message.MessageKeys;
 
 @Service
 @RequiredArgsConstructor
@@ -97,7 +99,8 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         LocalDateTime now = LocalDateTime.now();
         task.setStatus(TeamTaskEntity.STATUS_RUNNING);
         task.setProgress(0);
-        task.setErrorMessage(null);
+        task.setErrorMessageKey(null);
+        task.setErrorMessageParams(Map.of());
         task.setCompletedAt(null);
         task.setStartedAt(now);
         task.setUpdatedAt(now);
@@ -121,7 +124,8 @@ public class TeamTaskServiceImpl implements TeamTaskService {
                 .status(status)
                 .targetType(StringUtils.hasText(targetType) ? normalize(targetType) : null)
                 .targetId(targetId)
-                .title(StringUtils.hasText(title) ? title.trim() : normalizeRequired(taskType, "Task type is required"))
+                .titleKey(MessageKeys.taskTitle(taskType))
+                .titleParams(Map.of("taskType", normalizeRequired(taskType, "Task type is required")))
                 .payload(payload)
                 .progress(0)
                 .retryCount(0)
@@ -149,8 +153,10 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         }
         task.setStatus(TeamTaskEntity.STATUS_SUCCEEDED);
         task.setProgress(100);
-        task.setResultMessage(resultMessage);
-        task.setErrorMessage(null);
+        task.setResultMessageKey(MessageKeys.TASK_SUCCEEDED);
+        task.setResultMessageParams(taskTypeParams(task));
+        task.setErrorMessageKey(null);
+        task.setErrorMessageParams(Map.of());
         task.setCompletedAt(LocalDateTime.now());
         if (result != null) {
             task.setResultPath(result.path());
@@ -173,7 +179,8 @@ public class TeamTaskServiceImpl implements TeamTaskService {
             return;
         }
         task.setStatus(TeamTaskEntity.STATUS_FAILED);
-        task.setErrorMessage(StringUtils.hasText(errorMessage) ? errorMessage.trim() : "Task failed");
+        task.setErrorMessageKey(MessageKeys.TASK_FAILED);
+        task.setErrorMessageParams(taskTypeParams(task));
         task.setCompletedAt(LocalDateTime.now());
         teamTaskRepository.save(task);
     }
@@ -191,8 +198,10 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         }
         task.setStatus(TeamTaskEntity.STATUS_PENDING);
         task.setProgress(0);
-        task.setErrorMessage(null);
-        task.setResultMessage(null);
+        task.setErrorMessageKey(null);
+        task.setErrorMessageParams(Map.of());
+        task.setResultMessageKey(null);
+        task.setResultMessageParams(Map.of());
         task.setResultPath(null);
         task.setResultFileName(null);
         task.setResultContentType(null);
@@ -225,7 +234,8 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         task.setResultContentType(null);
         task.setResultSizeBytes(null);
         task.setResultExpiresAt(null);
-        task.setResultMessage(StringUtils.hasText(resultMessage) ? resultMessage.trim() : task.getResultMessage());
+        task.setResultMessageKey(MessageKeys.TASK_RESULT_EXPIRED);
+        task.setResultMessageParams(taskTypeParams(task));
         task.setUpdatedAt(LocalDateTime.now());
         teamTaskRepository.save(task);
     }
@@ -245,5 +255,9 @@ public class TeamTaskServiceImpl implements TeamTaskService {
 
     private String normalize(String value) {
         return value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private Map<String, Object> taskTypeParams(TeamTaskEntity task) {
+        return task.getTaskType() == null ? Map.of() : Map.of("taskType", task.getTaskType());
     }
 }

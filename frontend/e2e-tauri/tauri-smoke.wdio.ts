@@ -208,7 +208,7 @@ async function expectInviteNotification(
     const notifications = await listNotifications(request, token, { unreadOnly: true, type: 'TEAM_INVITE' })
     return notifications.some(notification =>
       notification.teamId === teamId &&
-      notification.title.includes('团队邀请') &&
+      notification.titleKey === 'notification.team_invite.title' &&
       !!notification.link?.startsWith('/team-invites/'),
     )
   }, {

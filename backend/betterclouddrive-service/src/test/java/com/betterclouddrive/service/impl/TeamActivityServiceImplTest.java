@@ -76,7 +76,8 @@ class TeamActivityServiceImplTest {
         PageResult<TeamActivityItem> result = teamActivityService.listActivities(2L, 10L, 1, 20);
 
         assertThat(result.getRecords()).hasSize(1);
-        assertThat(result.getRecords().getFirst().summary()).isEqualTo("团队邀请状态已更新");
+        assertThat(result.getRecords().getFirst().summaryKey()).isEqualTo("activity.invite_create");
+        assertThat(result.getRecords().getFirst().summaryParams()).isNotNull();
     }
 
     @Test

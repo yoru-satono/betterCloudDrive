@@ -48,4 +48,10 @@ public enum ApiCode {
 
     private final int code;
     private final String message;
+
+    public String getMessageKey() {
+        return this == SUCCESS
+                ? com.betterclouddrive.common.message.MessageKeys.SUCCESS
+                : com.betterclouddrive.common.message.MessageKeys.api(name());
+    }
 }

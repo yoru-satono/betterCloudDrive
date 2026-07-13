@@ -1,6 +1,7 @@
 package com.betterclouddrive.service.dto;
 
 import java.util.List;
+import java.util.Map;
 
 public record TeamEffectivePermission(
         boolean canRead,
@@ -49,6 +50,7 @@ public record TeamEffectivePermission(
             boolean canShare,
             boolean canDelete,
             boolean canManage,
-            String description) {
+            String descriptionKey,
+            Map<String, Object> descriptionParams) {
     }
 }

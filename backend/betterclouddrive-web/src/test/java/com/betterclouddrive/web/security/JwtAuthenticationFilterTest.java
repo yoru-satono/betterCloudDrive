@@ -44,7 +44,7 @@ class JwtAuthenticationFilterTest {
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentType()).isEqualTo("application/json");
         assertThat(response.getContentAsString()).contains("\"code\":401001");
-        assertThat(response.getContentAsString()).contains("\"message\":\"token expired\"");
+        assertThat(response.getContentAsString()).contains("\"messageKey\":\"error.token_expired\"").doesNotContain("\"message\"");
     }
 
     @Test
@@ -96,7 +96,7 @@ class JwtAuthenticationFilterTest {
         assertThat(chainCalled).isFalse();
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentAsString()).contains("\"code\":401");
-        assertThat(response.getContentAsString()).contains("\"message\":\"unauthorized\"");
+        assertThat(response.getContentAsString()).contains("\"messageKey\":\"error.unauthorized\"").doesNotContain("\"message\"");
     }
 
     @Test

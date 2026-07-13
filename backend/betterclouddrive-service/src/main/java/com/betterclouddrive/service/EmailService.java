@@ -14,5 +14,5 @@ public interface EmailService {
     void sendTeamInvite(String toEmail, String teamName, String role, String inviteLink, java.time.LocalDateTime expiresAt);
 
     /** Send a generic notification email */
-    void sendNotification(String toEmail, String title, String content, String link);
+    void sendNotification(String toEmail, String eventType, java.util.Map<String, Object> params, String link);
 }

@@ -110,7 +110,7 @@ public class OfficeController {
                 return Map.of("error", 0);
             }
             TeamTaskEntity task = teamTaskService.queueTask(
-                    teamId, userId, "ONLYOFFICE_SAVE", "FILE", fileId, "保存在线编辑文档");
+                    teamId, userId, "ONLYOFFICE_SAVE", "FILE", fileId, "Save online document");
             onlyOfficeCallbackService.attachTask(
                     teamId, fileId, callbackKey, request.getStatus(), contentUrlHash, task.getId());
             onlyOfficeSaveMetrics.recordCallbackOutcome("queued");
