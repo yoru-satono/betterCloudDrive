@@ -277,7 +277,7 @@ try {
     if ($RunWeb) {
         Invoke-Step "Frontend unit tests" {
             Invoke-InDirectory "frontend" {
-                Invoke-External "npm" @("run", "test")
+                Invoke-External "pnpm" @("run", "test")
             }
         }
     }
@@ -295,7 +295,7 @@ try {
                     $webEnv["E2E_ONLYOFFICE"] = "1"
                 }
                 Invoke-WithEnv $webEnv {
-                    Invoke-External "npx" @("playwright", "test", "--project=core")
+                    Invoke-External "pnpm" @("exec", "playwright", "test", "--project=core")
                 }
             }
         }
@@ -310,7 +310,7 @@ try {
                     E2E_BACKEND_URL = "http://127.0.0.1:8080"
                     E2E_ONLYOFFICE = "1"
                 } {
-                    Invoke-External "npx" @("playwright", "test", "--project=office")
+                    Invoke-External "pnpm" @("exec", "playwright", "test", "--project=office")
                 }
             }
         }
@@ -319,13 +319,13 @@ try {
     if ($RunTauri) {
         Invoke-Step "Tauri E2E build" {
             Invoke-InDirectory "frontend" {
-                Invoke-External "npm" @("run", "tauri:e2e:build")
+                Invoke-External "pnpm" @("run", "tauri:e2e:build")
             }
         }
 
         Invoke-Step "Tauri E2E tests" {
             Invoke-InDirectory "frontend" {
-                Invoke-External "npm" @("run", "test:e2e:tauri")
+                Invoke-External "pnpm" @("run", "test:e2e:tauri")
             }
         }
     }

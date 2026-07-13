@@ -139,14 +139,14 @@
 - 目标：团队通知不只依赖刷新列表。
 - 范围：Web 可先做 SSE 或 WebSocket；Android 预留接口。
 - 状态：已完成。
-- 验收：新增 `/api/v1/notifications/stream` SSE 通道，Web/Tauri 通过当前 access token 建立 EventSource；通知创建、单条已读和全部已读后推送 `notifications-changed` 事件并实时刷新未读数，通知页会按当前筛选自动重载。验证已通过：`mvn -pl betterclouddrive-service,betterclouddrive-web -am "-Dtest=NotificationServiceImplTest,JwtAuthenticationFilterTest,NotificationSseServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- endpoint-contracts.test.ts notifications-page.test.ts AppHeader.test.ts`。
+- 验收：新增 `/api/v1/notifications/stream` SSE 通道，Web/Tauri 通过当前 access token 建立 EventSource；通知创建、单条已读和全部已读后推送 `notifications-changed` 事件并实时刷新未读数，通知页会按当前筛选自动重载。验证已通过：`mvn -pl betterclouddrive-service,betterclouddrive-web -am "-Dtest=NotificationServiceImplTest,JwtAuthenticationFilterTest,NotificationSseServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`pnpm run test endpoint-contracts.test.ts notifications-page.test.ts AppHeader.test.ts`。
 
 ### TEAM-03 通知偏好
 
 - 目标：允许用户控制团队通知类型。
 - 范围：通知类型开关、默认值、接口和 Web 设置入口。
 - 状态：已完成。
-- 验收：新增 `notification_preferences` 表和 `/api/v1/notifications/preferences` 读写接口；偏好默认开启，ProfilePage 提供团队通知开关；关闭类型后 `notifyUser` 不再生成站内通知或邮件，团队审计路径不受影响。验证已通过：`mvn -pl betterclouddrive-service,betterclouddrive-web -am "-Dtest=NotificationServiceImplTest,JwtAuthenticationFilterTest,NotificationSseServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- endpoint-contracts.test.ts notifications-page.test.ts downgraded-ui.test.ts`。
+- 验收：新增 `notification_preferences` 表和 `/api/v1/notifications/preferences` 读写接口；偏好默认开启，ProfilePage 提供团队通知开关；关闭类型后 `notifyUser` 不再生成站内通知或邮件，团队审计路径不受影响。验证已通过：`mvn -pl betterclouddrive-service,betterclouddrive-web -am "-Dtest=NotificationServiceImplTest,JwtAuthenticationFilterTest,NotificationSseServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`pnpm run test endpoint-contracts.test.ts notifications-page.test.ts downgraded-ui.test.ts`。
 
 ### TEAM-04 团队任务中心
 
@@ -198,7 +198,7 @@
 - 范围：Web E2E 优先；团队可编辑文件生成新版本。
 - 验收：编辑后下载文件内容变化；历史版本数量增加。
 - 状态：已完成。
-- 验证：`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-edit-save.e2e.ts --project=chromium` 中 docx、xlsx、pptx 三个用例均显示通过；Playwright 退出阶段未返回，外层命令在 600 秒超时。
+- 验证：`E2E_ONLYOFFICE=1 pnpm run test:e2e onlyoffice-edit-save.e2e.ts --project=chromium` 中 docx、xlsx、pptx 三个用例均显示通过；Playwright 退出阶段未返回，外层命令在 600 秒超时。
 
 ### OFFICE-04 个人只读预览 E2E
 
@@ -206,7 +206,7 @@
 - 范围：docx/xlsx/pptx 个人文件预览、编辑按钮隐藏、callback 不接受编辑保存。
 - 验收：OnlyOffice UI 只读；后端拒绝个人编辑保存。
 - 状态：已完成。
-- 验证：后端 `mvn -pl betterclouddrive-web -am "-Dtest=OnlyOfficeServiceTest,OfficeControllerCallbackTest,JwtAuthenticationFilterTest" "-Dsurefire.failIfNoSpecifiedTests=false" test` 已通过，覆盖个人配置无 callback、个人 callback 路由不可用、个人 callback 不跳过 JWT；`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-personal-preview.e2e.ts --project=chromium` 中个人 docx/xlsx/pptx 只读预览和团队无写权限只读预览两个用例均显示通过；Playwright 退出阶段未返回，外层命令在 300 秒超时。
+- 验证：后端 `mvn -pl betterclouddrive-web -am "-Dtest=OnlyOfficeServiceTest,OfficeControllerCallbackTest,JwtAuthenticationFilterTest" "-Dsurefire.failIfNoSpecifiedTests=false" test` 已通过，覆盖个人配置无 callback、个人 callback 路由不可用、个人 callback 不跳过 JWT；`E2E_ONLYOFFICE=1 pnpm run test:e2e onlyoffice-personal-preview.e2e.ts --project=chromium` 中个人 docx/xlsx/pptx 只读预览和团队无写权限只读预览两个用例均显示通过；Playwright 退出阶段未返回，外层命令在 300 秒超时。
 
 ### OFFICE-05 编辑器内版本入口
 
@@ -214,7 +214,7 @@
 - 范围：Web OnlyOffice 弹窗底部或侧栏增加版本列表入口。
 - 验收：可下载/恢复旧版本；权限不足时隐藏恢复。
 - 状态：已完成。
-- 验证：`npm run test -- endpoint-contracts.test.ts` 已通过；`npm run build` 已通过；新增 `onlyoffice-version-entry.e2e.ts` 覆盖编辑者在 OnlyOffice 预览弹窗内下载/恢复历史版本、只读成员仅可下载且隐藏恢复按钮。`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-version-entry.e2e.ts --project=chromium` 中用例显示通过；Playwright 退出阶段未返回，外层命令在 360 秒超时。
+- 验证：`pnpm run test endpoint-contracts.test.ts` 已通过；`pnpm run build` 已通过；新增 `onlyoffice-version-entry.e2e.ts` 覆盖编辑者在 OnlyOffice 预览弹窗内下载/恢复历史版本、只读成员仅可下载且隐藏恢复按钮。`E2E_ONLYOFFICE=1 pnpm run test:e2e onlyoffice-version-entry.e2e.ts --project=chromium` 中用例显示通过；Playwright 退出阶段未返回，外层命令在 360 秒超时。
 
 ### OFFICE-06 禁用 AI 和插件回归测试
 
@@ -222,7 +222,7 @@
 - 范围：OnlyOffice config、Web 预览弹窗、E2E 断言。
 - 验收：编辑器界面不出现 AI/插件入口。
 - 状态：已完成。
-- 验证：`mvn -pl betterclouddrive-web -am "-Dtest=OnlyOfficeServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test` 已通过，覆盖 `customization.plugins=false`、宏禁用、AI 插件 GUID 禁用；`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-disabled-features.e2e.ts --project=chromium` 中禁用 AI/插件入口用例显示通过；Playwright 退出阶段未返回，外层命令在 300 秒超时。
+- 验证：`mvn -pl betterclouddrive-web -am "-Dtest=OnlyOfficeServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test` 已通过，覆盖 `customization.plugins=false`、宏禁用、AI 插件 GUID 禁用；`E2E_ONLYOFFICE=1 pnpm run test:e2e onlyoffice-disabled-features.e2e.ts --project=chromium` 中禁用 AI/插件入口用例显示通过；Playwright 退出阶段未返回，外层命令在 300 秒超时。
 
 ## Web 和 Tauri
 
@@ -266,21 +266,21 @@
 - 目标：确认 Tauri 打包产物包含最新 Web 改动。
 - 范围：执行 Tauri build，检查 target/release 时间和应用行为。
 - 状态：已完成。
-- 验收：`npm run tauri:e2e:build` 已通过；`frontend/src-tauri/target/release/betterclouddrive.exe` 已更新，注册、忘记密码、连接设置、团队、OnlyOffice 由后续 Tauri E2E 验证。
+- 验收：`pnpm run tauri:e2e:build` 已通过；`frontend/src-tauri/target/release/betterclouddrive.exe` 已更新，注册、忘记密码、连接设置、团队、OnlyOffice 由后续 Tauri E2E 验证。
 
 ### WEB-07 Tauri 连接设置 E2E
 
 - 目标：覆盖标题栏连接设置弹窗。
 - 范围：登录前、注册、忘记密码、登录后设置弹窗。
 - 状态：已完成。
-- 验收：`npm run test:e2e:tauri` 已覆盖登录前、注册、忘记密码、登录后的连接设置入口；API 地址和 Web 分享地址可读写。
+- 验收：`pnpm run test:e2e:tauri` 已覆盖登录前、注册、忘记密码、登录后的连接设置入口；API 地址和 Web 分享地址可读写。
 
 ### WEB-08 Tauri 团队 E2E
 
 - 目标：Tauri 覆盖团队核心流程。
 - 范围：登录、创建团队、邀请、上传团队文件、预览、分享、回收站。
 - 状态：已完成。
-- 验收：`npm run test:e2e:tauri` 已覆盖团队文件可见、拖放上传团队文件、邀请通知并接受、OnlyOffice 预览/编辑权限、团队分享和团队回收站入口。
+- 验收：`pnpm run test:e2e:tauri` 已覆盖团队文件可见、拖放上传团队文件、邀请通知并接受、OnlyOffice 预览/编辑权限、团队分享和团队回收站入口。
 
 ## Android
 
@@ -368,21 +368,21 @@
 - 目标：浏览器覆盖团队核心用户流程。
 - 范围：团队设置、邀请、文件、分享、标签、收藏、回收站、通知。
 - 状态：已完成。
-- 验收：`npm run test:e2e -- teams.e2e.ts teams-permissions.e2e.ts` 已通过；`scripts/verify-all.ps1` 的 Web E2E 阶段会运行全量 Playwright。
+- 验收：`pnpm run test:e2e teams.e2e.ts teams-permissions.e2e.ts` 已通过；`scripts/verify-all.ps1` 的 Web E2E 阶段会运行全量 Playwright。
 
 ### TEST-05 Web OnlyOffice E2E
 
 - 目标：浏览器覆盖预览和真实保存。
 - 范围：个人只读预览、团队可编辑保存、权限不足只读。
 - 状态：已完成。
-- 验收：`E2E_ONLYOFFICE=1 npm run test:e2e -- onlyoffice-personal-preview.e2e.ts onlyoffice-edit-save.e2e.ts` 已通过；内容变化、版本数量、只读配置和 UI 状态均基于后端 API 与浏览器断言。
+- 验收：`E2E_ONLYOFFICE=1 pnpm run test:e2e onlyoffice-personal-preview.e2e.ts onlyoffice-edit-save.e2e.ts` 已通过；内容变化、版本数量、只读配置和 UI 状态均基于后端 API 与浏览器断言。
 
 ### TEST-06 Tauri E2E
 
 - 目标：桌面端覆盖关键回归。
 - 范围：连接设置、登录注册、团队文件、OnlyOffice、搜索上下文。
 - 状态：已完成。
-- 验收：`npm run test:e2e:tauri` 已在 Windows 本地通过；覆盖连接设置、登录注册、团队文件、OnlyOffice、搜索上下文。
+- 验收：`pnpm run test:e2e:tauri` 已在 Windows 本地通过；覆盖连接设置、登录注册、团队文件、OnlyOffice、搜索上下文。
 
 ### TEST-07 Android 团队 E2E
 
@@ -396,7 +396,7 @@
 - 目标：防止前后端接口漂移。
 - 范围：Web、Tauri、Android 使用的团队、OnlyOffice、admin、通知接口。
 - 状态：已完成。
-- 验收：Web/Tauri `endpoint-contracts.test.ts` 覆盖团队、OnlyOffice、admin、通知 API wrapper 的路径、方法、查询参数和请求体；Android `ApiServiceContractTest` 覆盖团队管理、成员、邀请、审计、权限、文件、分享、标签、收藏、通知、OnlyOffice、版本和下载/预览 Retrofit 契约。验证已通过：`npm run test -- endpoint-contracts.test.ts`、`.\gradlew.bat testDebugUnitTest`。
+- 验收：Web/Tauri `endpoint-contracts.test.ts` 覆盖团队、OnlyOffice、admin、通知 API wrapper 的路径、方法、查询参数和请求体；Android `ApiServiceContractTest` 覆盖团队管理、成员、邀请、审计、权限、文件、分享、标签、收藏、通知、OnlyOffice、版本和下载/预览 Retrofit 契约。验证已通过：`pnpm run test endpoint-contracts.test.ts`、`.\gradlew.bat testDebugUnitTest`。
 
 ### TEST-09 E2E 数据清理
 
@@ -442,21 +442,21 @@
 - 目标：大审计导出改为后台任务。
 - 范围：提交导出任务、查询状态、下载结果、过期清理。
 - 状态：已完成。
-- 验收：团队审计导出支持 `POST /api/v1/teams/{teamId}/audit-logs/export-tasks` 创建后台任务，worker 生成 CSV 结果文件，任务中心可下载成功结果，过期结果会被清理；保留同步导出接口兼容旧客户端。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=TeamTaskServiceImplTest,TeamAuditExportTaskServiceImplTest,TeamTaskResultStorageServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-web -am "-Dtest=TeamControllerTaskTest,TeamControllerContractTest,AuditCsvExporterTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=TeamAuditExportTaskTest,TeamTaskResultCleanupTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- endpoint-contracts.test.ts`。
+- 验收：团队审计导出支持 `POST /api/v1/teams/{teamId}/audit-logs/export-tasks` 创建后台任务，worker 生成 CSV 结果文件，任务中心可下载成功结果，过期结果会被清理；保留同步导出接口兼容旧客户端。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=TeamTaskServiceImplTest,TeamAuditExportTaskServiceImplTest,TeamTaskResultStorageServiceTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-web -am "-Dtest=TeamControllerTaskTest,TeamControllerContractTest,AuditCsvExporterTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=TeamAuditExportTaskTest,TeamTaskResultCleanupTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`pnpm run test endpoint-contracts.test.ts`。
 
 ### PERF-05 缩略图异步化
 
 - 目标：上传后后台生成缩略图。
 - 范围：图片上传事件、worker、失败重试、默认占位。
 - 状态：已完成。
-- 验收：图片上传完成后只创建 `THUMBNAIL` 后台任务，`ThumbnailGenerationTask` worker 扫描 `PENDING` 任务生成缩略图并更新 `thumbnailPath`；失败任务会进入 `FAILED`，团队任务中心可重试；Web/Tauri 列表在 `thumbnailPath` 为空时显示文件图标，占位刷新后可显示真实缩略图。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=ThumbnailServiceImplTest,UploadServiceImplTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=ThumbnailGenerationTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- FileThumbnail.test.ts`。
+- 验收：图片上传完成后只创建 `THUMBNAIL` 后台任务，`ThumbnailGenerationTask` worker 扫描 `PENDING` 任务生成缩略图并更新 `thumbnailPath`；失败任务会进入 `FAILED`，团队任务中心可重试；Web/Tauri 列表在 `thumbnailPath` 为空时显示文件图标，占位刷新后可显示真实缩略图。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=ThumbnailServiceImplTest,UploadServiceImplTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=ThumbnailGenerationTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`pnpm run test FileThumbnail.test.ts`。
 
 ### PERF-06 ZIP 任务化
 
 - 目标：大文件夹下载 ZIP 不阻塞请求。
 - 范围：创建 ZIP 任务、进度、下载临时包、清理。
 - 状态：已完成。
-- 验收：团队文件夹 ZIP 支持 `POST /api/v1/teams/{teamId}/download/folders/{fileId}/zip/tasks` 创建 `FOLDER_ZIP` 后台任务，`FolderZipTask` worker 生成缓存 ZIP 并写入任务结果，任务中心可通过 `GET /tasks/{taskId}/download` 下载成功结果；Web 浏览器端团队文件夹下载改为提交后台任务，Tauri 保持本地递归下载，旧 ticket/GET 同步 ZIP 路径保留兼容旧客户端，缓存对象继续由现有 ZIP cache cleanup 清理。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=FolderZipTaskServiceImplTest,FolderZipDownloadServiceImplTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-web -am "-Dtest=TeamControllerTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=FolderZipTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`npm run test -- download.test.ts endpoint-contracts.test.ts`。
+- 验收：团队文件夹 ZIP 支持 `POST /api/v1/teams/{teamId}/download/folders/{fileId}/zip/tasks` 创建 `FOLDER_ZIP` 后台任务，`FolderZipTask` worker 生成缓存 ZIP 并写入任务结果，任务中心可通过 `GET /tasks/{taskId}/download` 下载成功结果；Web 浏览器端团队文件夹下载改为提交后台任务，Tauri 保持本地递归下载，旧 ticket/GET 同步 ZIP 路径保留兼容旧客户端，缓存对象继续由现有 ZIP cache cleanup 清理。验证已通过：`mvn -pl betterclouddrive-service -am "-Dtest=FolderZipTaskServiceImplTest,FolderZipDownloadServiceImplTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-web -am "-Dtest=TeamControllerTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`mvn -pl betterclouddrive-scheduler -am "-Dtest=FolderZipTaskTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`、`pnpm run test download.test.ts endpoint-contracts.test.ts`。
 
 ### PERF-07 数据库索引检查
 

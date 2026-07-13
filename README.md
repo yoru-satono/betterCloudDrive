@@ -138,7 +138,7 @@ docker compose up -d --build backend
 启动 Web 前端开发服务器：
 
 ```bash
-cd frontend && npm install && npm run dev
+cd frontend && pnpm install && pnpm run dev
 ```
 
 开发服务器访问 `http://localhost:5173`，Vite 会把 `/api` 和 `/webdav` 代理到 `VITE_DEV_BACKEND_PROXY_BASE`，默认是 `http://localhost:8080`。
@@ -249,11 +249,11 @@ cd ..\backend-test
 .\.venv\Scripts\pytest.exe -v
 
 cd ..\frontend
-npm run test
+pnpm run test
 $env:E2E_ONLYOFFICE = '1'
-npm run test:e2e:docker
-npm run tauri:e2e:build
-npm run test:e2e:tauri
+pnpm run test:e2e:docker
+pnpm run tauri:e2e:build
+pnpm run test:e2e:tauri
 
 cd ..\android
 .\gradlew.bat testDebugUnitTest

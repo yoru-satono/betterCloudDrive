@@ -199,17 +199,17 @@ run_pytest() {
 
 backend_tests() { (cd backend && mvn test -Dsurefire.reportNameSuffix=backend); }
 blackbox_tests() { run_pytest 'not webdav and not office and not observability and not resilience' ../test-results/blackbox/junit.xml; }
-web_unit_tests() { (cd frontend && npm run test); }
+web_unit_tests() { (cd frontend && pnpm run test); }
 web_e2e_tests() {
   (cd frontend && E2E_USE_DOCKER=1 E2E_BASE_URL=http://127.0.0.1:3000 \
-    E2E_BACKEND_URL=http://127.0.0.1:8080 E2E_ONLYOFFICE=0 npx playwright test --project=core)
+    E2E_BACKEND_URL=http://127.0.0.1:8080 E2E_ONLYOFFICE=0 pnpm exec playwright test --project=core)
 }
 office_tests() {
   (cd frontend && E2E_USE_DOCKER=1 E2E_BASE_URL=http://127.0.0.1:3000 \
-    E2E_BACKEND_URL=http://127.0.0.1:8080 E2E_ONLYOFFICE=1 npx playwright test --project=office)
+    E2E_BACKEND_URL=http://127.0.0.1:8080 E2E_ONLYOFFICE=1 pnpm exec playwright test --project=office)
 }
-tauri_build() { (cd frontend && npm run tauri:e2e:build); }
-tauri_tests() { (cd frontend && npm run test:e2e:tauri); }
+tauri_build() { (cd frontend && pnpm run tauri:e2e:build); }
+tauri_tests() { (cd frontend && pnpm run test:e2e:tauri); }
 webdav_tests() { run_pytest webdav ../test-results/webdav/junit.xml; }
 observability_tests() { run_pytest observability ../test-results/observability/junit.xml; }
 resilience_tests() { run_pytest resilience ../test-results/resilience/junit.xml; }

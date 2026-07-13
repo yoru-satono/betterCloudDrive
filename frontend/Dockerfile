@@ -8,10 +8,11 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_WEB_BASE_URL=$VITE_WEB_BASE_URL
 ENV VITE_DESKTOP_API_BASE_URL=$VITE_DESKTOP_API_BASE_URL
 ENV VITE_DESKTOP_WEB_BASE_URL=$VITE_DESKTOP_WEB_BASE_URL
-COPY package*.json ./
-RUN npm ci
+RUN corepack enable && corepack prepare pnpm@11.12.0 --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 COPY . .
-RUN npm run build
+RUN pnpm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html

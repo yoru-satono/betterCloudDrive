@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.betterclouddrive.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev -- --host 127.0.0.1",
-    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "pnpm run dev --host 127.0.0.1",
+    "beforeBuildCommand": "pnpm run build",
     "devUrl": "http://127.0.0.1:5173",
     "frontendDist": "../dist"
   },

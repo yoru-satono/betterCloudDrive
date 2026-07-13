@@ -233,10 +233,10 @@ docker run -d \
 
 ```bash
 cd frontend
-npm ci
+pnpm install --frozen-lockfile
 VITE_API_BASE_URL=https://drive.example.com/api/v1 \
 VITE_WEB_BASE_URL=https://drive.example.com \
-npm run build
+pnpm run build
 ```
 
 将 `frontend/dist` 部署到 Nginx 或静态托管服务。若要复用项目 Nginx 模板，需要提供 `FRONTEND_BACKEND_PROXY_BASE`，并确保 Nginx 支持 `auth_request` 模块。

@@ -5,8 +5,8 @@ Vue 3 + Vite web client for BetterCloudDrive. The same app is also used by the T
 ## Web Development
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 The web app uses relative `/api/v1` requests. Vite proxies `/api` and `/webdav`
@@ -39,13 +39,13 @@ The desktop client connects to an external backend. Defaults:
 Run the desktop client:
 
 ```bash
-npm run tauri:dev
+pnpm run tauri:dev
 ```
 
 Build a desktop bundle:
 
 ```bash
-npm run tauri:build
+pnpm run tauri:build
 ```
 
 The login page exposes API and Web share URL fields in desktop mode.
@@ -66,8 +66,8 @@ Prerequisites:
 Run:
 
 ```bash
-npm run tauri:e2e:build
-npm run test:e2e:tauri
+pnpm run tauri:e2e:build
+pnpm run test:e2e:tauri
 ```
 
 Set `TAURI_E2E_APP_PATH` to test a different built executable.

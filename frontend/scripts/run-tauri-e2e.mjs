@@ -18,11 +18,11 @@ const uploadDir = path.resolve(process.env.BCD_E2E_UPLOAD_DIR || path.join(root,
 let nativeDriverPath = process.env.EDGEWEBDRIVER_PATH || process.env.TAURI_NATIVE_DRIVER_PATH
 
 if (!fs.existsSync(appPath)) {
-  fail(`Tauri app not found at ${appPath}. Run "npm run tauri:e2e:build" first, or set TAURI_E2E_APP_PATH.`)
+  fail(`Tauri app not found at ${appPath}. Run "pnpm run tauri:e2e:build" first, or set TAURI_E2E_APP_PATH.`)
 }
 
 if (!fs.existsSync(wdioBin)) {
-  fail('WebdriverIO CLI is not installed. Run "npm install" in frontend first.')
+  fail('WebdriverIO CLI is not installed. Run "pnpm install" in frontend first.')
 }
 
 const tauriDriverArgs = [
