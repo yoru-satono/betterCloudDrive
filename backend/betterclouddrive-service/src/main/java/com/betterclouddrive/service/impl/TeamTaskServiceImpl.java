@@ -12,6 +12,7 @@ import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.service.dto.TeamTaskResult;
+import com.betterclouddrive.service.config.TeamTaskProperties;
 import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     private final OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
     private final TeamService teamService;
     private final TeamPermissionService teamPermissionService;
+    private final TeamTaskProperties teamTaskProperties;
 
     @Override
     public PageResult<TeamTaskEntity> listTasks(Long requesterUserId, Long teamId, String status, String taskType, int page, int size) {
@@ -109,33 +111,14 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     }
 
     @Override
-    public List<TeamTaskEntity> listPendingTasks(String taskType, int limit) {
-        int pageSize = Math.max(limit, 1);
-        return teamTaskRepository.findByTaskTypeAndStatusOrderByCreatedAtAsc(
-                normalizeRequired(taskType, "Task type is required"),
-                TeamTaskEntity.STATUS_PENDING,
-                PageRequest.of(0, pageSize));
-    }
-
-    @Override
     @Transactional
-    public void markRunning(Long taskId) {
-        if (taskId == null) {
-            return;
-        }
-        TeamTaskEntity task = teamTaskRepository.findById(taskId).orElse(null);
-        if (task == null) {
-            return;
-        }
+    public List<TeamTaskEntity> claimTasks(String taskType, int limit) {
         LocalDateTime now = LocalDateTime.now();
-        task.setStatus(TeamTaskEntity.STATUS_RUNNING);
-        task.setProgress(0);
-        task.setErrorMessageKey(null);
-        task.setErrorMessageParams(Map.of());
-        task.setCompletedAt(null);
-        task.setStartedAt(now);
-        task.setUpdatedAt(now);
-        teamTaskRepository.save(task);
+        long timeoutSeconds = Math.max(teamTaskProperties.getRunningTimeoutSeconds(), 1);
+        teamTaskRepository.recoverTimedOutTasks(now.minusSeconds(timeoutSeconds), now);
+        return teamTaskRepository.claimPendingTasks(
+                normalizeRequired(taskType, "Task type is required"),
+                Math.max(limit, 1));
     }
 
     private TeamTaskEntity createTask(

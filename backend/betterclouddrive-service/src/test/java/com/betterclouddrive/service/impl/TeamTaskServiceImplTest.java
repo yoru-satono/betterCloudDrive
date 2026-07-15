@@ -19,6 +19,7 @@ import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
+import com.betterclouddrive.service.config.TeamTaskProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -51,6 +52,9 @@ class TeamTaskServiceImplTest {
 
     @Mock
     private TeamPermissionService teamPermissionService;
+
+    @Mock
+    private TeamTaskProperties teamTaskProperties;
 
     @InjectMocks
     private TeamTaskServiceImpl teamTaskService;
@@ -102,39 +106,16 @@ class TeamTaskServiceImplTest {
     }
 
     @Test
-    void listPendingTasks_shouldNormalizeTypeAndApplyLimit() {
-        TeamTaskEntity task = TeamTaskEntity.builder().id(7L).taskType("AUDIT_EXPORT").status(TeamTaskEntity.STATUS_PENDING).build();
-        when(teamTaskRepository.findByTaskTypeAndStatusOrderByCreatedAtAsc(
-                eq("AUDIT_EXPORT"),
-                eq(TeamTaskEntity.STATUS_PENDING),
-                any(Pageable.class)))
-                .thenReturn(List.of(task));
+    void claimTasks_shouldRecoverTimedOutWorkBeforeAtomicClaim() {
+        TeamTaskEntity claimed = TeamTaskEntity.builder().id(7L).status(TeamTaskEntity.STATUS_RUNNING).build();
+        when(teamTaskProperties.getRunningTimeoutSeconds()).thenReturn(120L);
+        when(teamTaskRepository.claimPendingTasks("THUMBNAIL", 5)).thenReturn(List.of(claimed));
 
-        List<TeamTaskEntity> tasks = teamTaskService.listPendingTasks(" audit_export ", 5);
+        List<TeamTaskEntity> result = teamTaskService.claimTasks(" thumbnail ", 5);
 
-        assertThat(tasks).containsExactly(task);
-        verify(teamTaskRepository).findByTaskTypeAndStatusOrderByCreatedAtAsc(
-                eq("AUDIT_EXPORT"),
-                eq(TeamTaskEntity.STATUS_PENDING),
-                argThat((Pageable pageable) -> pageable.getPageSize() == 5));
-    }
-
-    @Test
-    void markRunning_shouldMoveTaskToRunning() {
-        TeamTaskEntity task = TeamTaskEntity.builder()
-                .id(7L)
-                .status(TeamTaskEntity.STATUS_PENDING)
-                .errorMessageKey("task.failed")
-                .build();
-        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
-        when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        teamTaskService.markRunning(7L);
-
-        assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_RUNNING);
-        assertThat(task.getErrorMessageKey()).isNull();
-        assertThat(task.getStartedAt()).isNotNull();
-        assertThat(task.getCompletedAt()).isNull();
+        assertThat(result).containsExactly(claimed);
+        verify(teamTaskRepository).recoverTimedOutTasks(any(LocalDateTime.class), any(LocalDateTime.class));
+        verify(teamTaskRepository).claimPendingTasks("THUMBNAIL", 5);
     }
 
     @Test

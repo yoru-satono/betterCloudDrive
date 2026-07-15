@@ -4,17 +4,6 @@
 
 ## P0 安全与数据正确性
 
-### TASK-01 原子领取后台任务
-
-- 状态：待完成。
-- 目标：避免多个 scheduler 实例重复处理同一个团队任务。
-- 实现要求：
-  - 使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 在同一事务内领取任务并将其从 `PENDING` 更新为 `RUNNING`。
-  - worker 只处理成功领取的任务，不再先查询再单独调用 `markRunning`。
-  - 为长时间停留在 `RUNNING` 的任务增加可配置超时和恢复策略。
-  - 保留上传完成、OnlyOffice callback 和结果写入的业务幂等保护。
-- 验收：并发集成测试证明两个 worker 不会领取同一任务；进程异常退出后的超时任务可以恢复。
-
 ## P1 大数据量可用性
 
 ### CLIENT-01 修复团队集合的 100 条截断
@@ -66,7 +55,6 @@
 ### QUEUE-01 团队后台任务接入 Redis Streams
 
 - 状态：待完成。
-- 前置：`TASK-01` 已完成。
 - 目标：降低轮询延迟并支持可靠的多实例任务处理。
 - 实现要求：
   - `team_tasks` 继续作为事实来源，创建任务的事务只写数据库。
@@ -89,6 +77,6 @@
 
 ## 执行顺序
 
-`TASK-01` → `CLIENT-01` → `AUDIT-01` → `ANDROID-01` → `ANDROID-02` → `NOTIFY-01` → `QUEUE-01`
+`CLIENT-01` → `AUDIT-01` → `ANDROID-01` → `ANDROID-02` → `NOTIFY-01` → `QUEUE-01`
 
 P2 项目不阻塞上述任务，按真实产品和部署需求独立排期。

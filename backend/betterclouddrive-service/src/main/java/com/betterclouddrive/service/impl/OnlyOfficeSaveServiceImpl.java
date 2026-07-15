@@ -2,6 +2,7 @@ package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.OnlyOfficeCallbackEntity;
+import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
@@ -13,8 +14,6 @@ import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Slf4j
 @Service
@@ -31,10 +30,14 @@ public class OnlyOfficeSaveServiceImpl implements OnlyOfficeSaveService {
 
     @Override
     public int processPendingSaves(int limit) {
-        List<OnlyOfficeCallbackEntity> callbacks = onlyOfficeCallbackService.listPendingSaves(limit);
         int processed = 0;
-        for (OnlyOfficeCallbackEntity callback : callbacks) {
-            processCallback(callback);
+        for (TeamTaskEntity task : teamTaskService.claimTasks("ONLYOFFICE_SAVE", limit)) {
+            OnlyOfficeCallbackEntity callback = onlyOfficeCallbackService.findByTaskId(task.getId()).orElse(null);
+            if (callback == null) {
+                teamTaskService.markFailed(task.getId(), "OnlyOffice callback is missing");
+            } else {
+                processCallback(callback);
+            }
             processed++;
         }
         return processed;
@@ -43,7 +46,6 @@ public class OnlyOfficeSaveServiceImpl implements OnlyOfficeSaveService {
     private void processCallback(OnlyOfficeCallbackEntity callback) {
         Long taskId = callback.getTaskId();
         long startedAtNanos = onlyOfficeSaveMetrics.startSaveAttempt();
-        teamTaskService.markRunning(taskId);
         try {
             byte[] content = onlyOfficeContentDownloader.download(callback.getDownloadUrl());
             FileVersionEntity version = fileVersionService.saveTeamEditedVersion(

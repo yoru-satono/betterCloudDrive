@@ -167,6 +167,7 @@ drive:
     folder-zip-batch-size: ${FOLDER_ZIP_TASK_BATCH_SIZE:5}
     folder-zip-interval-ms: ${FOLDER_ZIP_TASK_INTERVAL_MS:5000}
     result-cleanup-interval-ms: ${TEAM_TASK_RESULT_CLEANUP_INTERVAL_MS:3600000}
+    running-timeout-seconds: ${TEAM_TASK_RUNNING_TIMEOUT_SECONDS:1800}
   rate-limit:
     default-permits: 100
     default-period-seconds: 60

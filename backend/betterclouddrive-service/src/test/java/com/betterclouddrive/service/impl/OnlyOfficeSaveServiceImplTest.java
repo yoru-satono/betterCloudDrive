@@ -2,6 +2,7 @@ package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.OnlyOfficeCallbackEntity;
+import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
@@ -53,7 +54,8 @@ class OnlyOfficeSaveServiceImplTest {
         OnlyOfficeCallbackEntity callback = callback();
         byte[] content = "edited".getBytes();
         FileVersionEntity version = FileVersionEntity.builder().id(99L).versionNumber(3).build();
-        when(onlyOfficeCallbackService.listPendingSaves(20)).thenReturn(List.of(callback));
+        when(teamTaskService.claimTasks("ONLYOFFICE_SAVE", 20)).thenReturn(List.of(task()));
+        when(onlyOfficeCallbackService.findByTaskId(77L)).thenReturn(java.util.Optional.of(callback));
         when(onlyOfficeSaveMetrics.startSaveAttempt()).thenReturn(123L);
         when(onlyOfficeContentDownloader.download("http://onlyoffice/output.docx")).thenReturn(content);
         when(fileVersionService.saveTeamEditedVersion(10L, 2L, 1L, content)).thenReturn(version);
@@ -61,7 +63,6 @@ class OnlyOfficeSaveServiceImplTest {
         int processed = onlyOfficeSaveService.processPendingSaves(20);
 
         assertThat(processed).isEqualTo(1);
-        verify(teamTaskService).markRunning(77L);
         verify(onlyOfficeCallbackService).markSaved(88L, 99L);
         verify(teamTaskService).markSucceeded(77L, "Saved as version 3");
         verify(onlyOfficeSaveMetrics).recordSaveSucceeded(123L);
@@ -70,7 +71,8 @@ class OnlyOfficeSaveServiceImplTest {
     @Test
     void processPendingSaves_shouldMarkCallbackAndTaskFailed() {
         OnlyOfficeCallbackEntity callback = callback();
-        when(onlyOfficeCallbackService.listPendingSaves(20)).thenReturn(List.of(callback));
+        when(teamTaskService.claimTasks("ONLYOFFICE_SAVE", 20)).thenReturn(List.of(task()));
+        when(onlyOfficeCallbackService.findByTaskId(77L)).thenReturn(java.util.Optional.of(callback));
         when(onlyOfficeSaveMetrics.startSaveAttempt()).thenReturn(123L);
         when(onlyOfficeContentDownloader.download("http://onlyoffice/output.docx"))
                 .thenThrow(new RuntimeException("download failed"));
@@ -101,5 +103,9 @@ class OnlyOfficeSaveServiceImplTest {
                 .taskId(77L)
                 .downloadUrl("http://onlyoffice/output.docx")
                 .build();
+    }
+
+    private TeamTaskEntity task() {
+        return TeamTaskEntity.builder().id(77L).taskType("ONLYOFFICE_SAVE").status(TeamTaskEntity.STATUS_RUNNING).build();
     }
 }

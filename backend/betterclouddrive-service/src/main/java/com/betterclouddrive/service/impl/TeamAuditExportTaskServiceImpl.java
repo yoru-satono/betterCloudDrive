@@ -71,7 +71,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
     @Override
     public int processPendingExports(int batchSize) {
         int processed = 0;
-        for (TeamTaskEntity task : teamTaskService.listPendingTasks(TASK_TYPE_AUDIT_EXPORT, batchSize)) {
+        for (TeamTaskEntity task : teamTaskService.claimTasks(TASK_TYPE_AUDIT_EXPORT, batchSize)) {
             processTask(task);
             processed++;
         }
@@ -104,7 +104,6 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
     }
 
     private void processTask(TeamTaskEntity task) {
-        teamTaskService.markRunning(task.getId());
         try {
             TeamAuditExportPayload payload = readPayload(task);
             PageResult<TeamOperationLogEntity> logs = teamAuditService.exportLogs(

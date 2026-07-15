@@ -110,7 +110,7 @@ class TeamAuditExportTaskServiceImplTest {
                 "text/csv;charset=UTF-8",
                 18,
                 LocalDateTime.now().plusHours(1));
-        when(teamTaskService.listPendingTasks("AUDIT_EXPORT", 5)).thenReturn(List.of(task));
+        when(teamTaskService.claimTasks("AUDIT_EXPORT", 5)).thenReturn(List.of(task));
         when(teamAuditService.exportLogs(2L, 10L, null, null, null, null, startAt, endAt, 10000))
                 .thenReturn(PageResult.of(List.of(log), 1, 1, 10000));
         when(teamAuditCsvService.teamAuditCsv(List.of(log))).thenReturn("csv");
@@ -120,7 +120,6 @@ class TeamAuditExportTaskServiceImplTest {
         int processed = service.processPendingExports(5);
 
         assertThat(processed).isEqualTo(1);
-        verify(teamTaskService).markRunning(77L);
         verify(teamTaskService).markSucceeded(77L, "Exported 1 audit records", result);
     }
 
@@ -133,12 +132,11 @@ class TeamAuditExportTaskServiceImplTest {
                 .status(TeamTaskEntity.STATUS_PENDING)
                 .payload("{")
                 .build();
-        when(teamTaskService.listPendingTasks("AUDIT_EXPORT", 5)).thenReturn(List.of(task));
+        when(teamTaskService.claimTasks("AUDIT_EXPORT", 5)).thenReturn(List.of(task));
 
         int processed = service.processPendingExports(5);
 
         assertThat(processed).isEqualTo(1);
-        verify(teamTaskService).markRunning(77L);
         verify(teamTaskService).markFailed(eq(77L), any());
     }
 

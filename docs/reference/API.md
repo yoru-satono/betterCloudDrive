@@ -2214,6 +2214,8 @@ Authorization: Bearer <accessToken>
 
 **当前任务类型:** `AUDIT_EXPORT`、`FOLDER_ZIP`、`THUMBNAIL`、`ONLYOFFICE_SAVE`、`TEAM_CLEANUP`。
 
+后台 worker 使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 原子领取任务，并在同一事务内将状态更新为 `RUNNING`。超过 `TEAM_TASK_RUNNING_TIMEOUT_SECONDS`（默认 1800 秒）的 `RUNNING` 任务会在下一次领取前恢复为 `PENDING` 并增加重试计数。
+
 **错误码:** 400（非失败任务重试、任务未成功或参数错误）、403（非团队成员或缺少任务结果下载权限）、404（团队、任务或结果文件不存在）。
 
 ### 16.9 团队活动流

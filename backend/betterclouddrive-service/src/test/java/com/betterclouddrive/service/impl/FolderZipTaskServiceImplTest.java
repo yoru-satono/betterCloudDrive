@@ -84,14 +84,13 @@ class FolderZipTaskServiceImplTest {
                 .fileSize(123L)
                 .build();
         FileEntity folder = teamFolder();
-        when(teamTaskService.listPendingTasks("FOLDER_ZIP", 5)).thenReturn(List.of(task));
+        when(teamTaskService.claimTasks("FOLDER_ZIP", 5)).thenReturn(List.of(task));
         when(fileService.getTeamFile(10L, 20L)).thenReturn(folder);
         when(folderZipDownloadService.getOrCreateCachedZip(folder)).thenReturn(cache);
 
         int processed = service.processPendingFolderZips(5);
 
         assertThat(processed).isEqualTo(1);
-        verify(teamTaskService).markRunning(77L);
         ArgumentCaptor<TeamTaskResult> resultCaptor = ArgumentCaptor.forClass(TeamTaskResult.class);
         verify(teamTaskService).markSucceeded(eq(77L), eq("ZIP generated: Docs.zip"), resultCaptor.capture());
         TeamTaskResult result = resultCaptor.getValue();

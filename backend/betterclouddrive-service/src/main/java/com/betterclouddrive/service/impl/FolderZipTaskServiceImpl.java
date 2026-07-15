@@ -54,7 +54,7 @@ public class FolderZipTaskServiceImpl implements FolderZipTaskService {
     @Override
     public int processPendingFolderZips(int batchSize) {
         int processed = 0;
-        for (TeamTaskEntity task : teamTaskService.listPendingTasks(TASK_TYPE_FOLDER_ZIP, batchSize)) {
+        for (TeamTaskEntity task : teamTaskService.claimTasks(TASK_TYPE_FOLDER_ZIP, batchSize)) {
             processTask(task);
             processed++;
         }
@@ -99,7 +99,6 @@ public class FolderZipTaskServiceImpl implements FolderZipTaskService {
         if (task == null || task.getId() == null) {
             return;
         }
-        teamTaskService.markRunning(task.getId());
         try {
             if (!TARGET_TYPE_FILE.equals(task.getTargetType()) || task.getTargetId() == null || task.getTeamId() == null) {
                 throw new BusinessException(ApiCode.BAD_REQUEST, "Folder ZIP task target is invalid");

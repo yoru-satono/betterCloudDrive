@@ -2,7 +2,7 @@ package com.betterclouddrive.service;
 
 import com.betterclouddrive.dal.entity.OnlyOfficeCallbackEntity;
 
-import java.util.List;
+import java.util.Optional;
 
 public interface OnlyOfficeCallbackService {
 
@@ -14,7 +14,7 @@ public interface OnlyOfficeCallbackService {
 
     void attachTask(Long teamId, Long fileId, String callbackKey, Integer status, String contentUrlHash, Long taskId);
 
-    List<OnlyOfficeCallbackEntity> listPendingSaves(int limit);
+    Optional<OnlyOfficeCallbackEntity> findByTaskId(Long taskId);
 
     void markSaved(Long teamId, Long fileId, String callbackKey, Integer status, String contentUrlHash, Long versionId);
 

@@ -54,7 +54,7 @@ public class ThumbnailServiceImpl implements ThumbnailService {
     @Override
     public int processPendingThumbnails(int batchSize) {
         int processed = 0;
-        for (TeamTaskEntity task : teamTaskService.listPendingTasks(TASK_TYPE_THUMBNAIL, batchSize)) {
+        for (TeamTaskEntity task : teamTaskService.claimTasks(TASK_TYPE_THUMBNAIL, batchSize)) {
             processThumbnailTask(task);
             processed++;
         }
@@ -82,7 +82,6 @@ public class ThumbnailServiceImpl implements ThumbnailService {
         if (task == null || task.getId() == null) {
             return;
         }
-        teamTaskService.markRunning(task.getId());
         if (!TARGET_TYPE_FILE.equals(task.getTargetType()) || task.getTargetId() == null) {
             teamTaskService.markFailed(task.getId(), "Invalid thumbnail task target");
             return;

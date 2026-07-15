@@ -21,9 +21,7 @@ public interface TeamTaskService {
 
     TeamTaskEntity getTaskForUser(Long requesterUserId, Long teamId, Long taskId);
 
-    List<TeamTaskEntity> listPendingTasks(String taskType, int limit);
-
-    void markRunning(Long taskId);
+    List<TeamTaskEntity> claimTasks(String taskType, int limit);
 
     void markSucceeded(Long taskId, String resultMessage);
 

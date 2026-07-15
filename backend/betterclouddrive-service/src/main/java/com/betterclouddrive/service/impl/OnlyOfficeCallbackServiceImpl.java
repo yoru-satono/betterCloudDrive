@@ -6,7 +6,6 @@ import com.betterclouddrive.dal.entity.OnlyOfficeCallbackEntity;
 import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -16,7 +15,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
-import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -84,8 +83,8 @@ public class OnlyOfficeCallbackServiceImpl implements OnlyOfficeCallbackService 
     }
 
     @Override
-    public List<OnlyOfficeCallbackEntity> listPendingSaves(int limit) {
-        return onlyOfficeCallbackRepository.findByStateOrderByCreatedAtAsc(1, PageRequest.of(0, Math.max(limit, 1)));
+    public Optional<OnlyOfficeCallbackEntity> findByTaskId(Long taskId) {
+        return taskId == null ? Optional.empty() : onlyOfficeCallbackRepository.findByTaskId(taskId);
     }
 
     @Transactional

@@ -131,7 +131,7 @@ class ThumbnailServiceImplTest {
                 .targetType("FILE")
                 .targetId(2L)
                 .build();
-        when(teamTaskService.listPendingTasks("THUMBNAIL", 5)).thenReturn(List.of(task));
+        when(teamTaskService.claimTasks("THUMBNAIL", 5)).thenReturn(List.of(task));
         when(fileRepository.findById(2L)).thenReturn(Optional.of(file));
         when(storageService.downloadObject("objects/team-photo.png")).thenReturn(new ByteArrayInputStream(pngBytes()));
         when(storageService.uploadObject(eq("thumbnails/teams/10/2.jpg"), any(InputStream.class), anyLong(), eq("image/jpeg")))
@@ -142,7 +142,6 @@ class ThumbnailServiceImplTest {
 
         assertThat(processed).isEqualTo(1);
         assertThat(file.getThumbnailPath()).isEqualTo("thumbnails/teams/10/2.jpg");
-        verify(teamTaskService).markRunning(55L);
         verify(teamTaskService).markSucceeded(55L, "Thumbnail generated");
     }
 
@@ -180,7 +179,7 @@ class ThumbnailServiceImplTest {
                 .targetType("FILE")
                 .targetId(1L)
                 .build();
-        when(teamTaskService.listPendingTasks("THUMBNAIL", 5)).thenReturn(List.of(task));
+        when(teamTaskService.claimTasks("THUMBNAIL", 5)).thenReturn(List.of(task));
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
         when(storageService.downloadObject("objects/broken.png"))
                 .thenReturn(new ByteArrayInputStream("not an image".getBytes()));
@@ -191,7 +190,6 @@ class ThumbnailServiceImplTest {
         assertThat(file.getThumbnailPath()).isNull();
         verify(storageService, never()).uploadObject(any(), any(), anyLong(), any());
         verify(fileRepository, never()).save(any(FileEntity.class));
-        verify(teamTaskService).markRunning(56L);
         verify(teamTaskService).markFailed(56L, "Image cannot be decoded");
     }
 

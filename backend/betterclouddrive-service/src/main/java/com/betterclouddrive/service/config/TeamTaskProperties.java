@@ -13,4 +13,5 @@ public class TeamTaskProperties {
     private int auditExportBatchSize = 10;
     private long auditExportIntervalMs = 5000;
     private long resultCleanupIntervalMs = 3600000;
+    private long runningTimeoutSeconds = 1800;
 }
