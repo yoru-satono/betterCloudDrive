@@ -12,6 +12,7 @@ import com.betterclouddrive.android.domain.model.TeamFilePermission
 import com.betterclouddrive.android.domain.model.TeamInvite
 import com.betterclouddrive.android.domain.model.TeamMember
 import com.betterclouddrive.android.domain.model.TeamOperationLog
+import com.betterclouddrive.android.domain.model.TeamTask
 import com.betterclouddrive.android.domain.model.UploadStatus
 import com.betterclouddrive.android.domain.model.User
 import okhttp3.MultipartBody
@@ -194,6 +195,28 @@ interface ApiService {
         @Query("result") result: Int? = null,
         @Query("startAt") startAt: String? = null,
         @Query("endAt") endAt: String? = null,
+    ): ResponseBody
+
+    @GET("teams/{teamId}/tasks")
+    suspend fun listTeamTasks(
+        @Path("teamId") teamId: Long,
+        @Query("status") status: String? = null,
+        @Query("type") type: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("size") size: Int = 20,
+    ): ApiResponse<PageResult<TeamTask>>
+
+    @POST("teams/{teamId}/tasks/{taskId}/retry")
+    suspend fun retryTeamTask(
+        @Path("teamId") teamId: Long,
+        @Path("taskId") taskId: Long,
+    ): ApiResponse<TeamTask>
+
+    @Streaming
+    @GET("teams/{teamId}/tasks/{taskId}/download")
+    suspend fun downloadTeamTaskResult(
+        @Path("teamId") teamId: Long,
+        @Path("taskId") taskId: Long,
     ): ResponseBody
 
     @GET("teams/{teamId}/files")

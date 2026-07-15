@@ -688,6 +688,7 @@ fun TeamSettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateRecycleBin: (Long) -> Unit,
     onNavigateTeams: () -> Unit,
+    onNavigateTasks: (Long) -> Unit,
     viewModel: TeamSettingsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -713,6 +714,9 @@ fun TeamSettingsScreen(
                 title = { Text("团队设置") },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 actions = {
+                    IconButton(onClick = { onNavigateTasks(teamId) }, modifier = Modifier.testTag("team-settings-tasks")) {
+                        Icon(Icons.Default.FolderOpen, "后台任务")
+                    }
                     IconButton(onClick = { onNavigateRecycleBin(teamId) }, modifier = Modifier.testTag("team-settings-recycle")) {
                         Icon(Icons.Default.Delete, "团队回收站")
                     }

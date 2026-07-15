@@ -137,3 +137,24 @@ data class TeamOperationLog(
     val details: String? = null,
     @SerialName("createdAt") val createdAt: String? = null,
 )
+
+@Serializable
+data class TeamTask(
+    val id: Long = 0,
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("taskType") val taskType: String = "",
+    val status: String = "",
+    val progress: Int = 0,
+    @SerialName("resultFileName") val resultFileName: String? = null,
+    @SerialName("resultContentType") val resultContentType: String? = null,
+    @SerialName("resultSizeBytes") val resultSizeBytes: Long? = null,
+    @SerialName("resultExpiresAt") val resultExpiresAt: String? = null,
+    @SerialName("errorMessageKey") val errorMessageKey: String? = null,
+    @SerialName("errorMessageParams") val errorMessageParams: Map<String, JsonElement> = emptyMap(),
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("completedAt") val completedAt: String? = null,
+) {
+    val errorMessage: String? get() = errorMessageKey?.let { MessageResolver.resolve(it, errorMessageParams) }
+    val canDownload: Boolean get() = status == "SUCCEEDED" && !resultFileName.isNullOrBlank()
+    val canRetry: Boolean get() = status == "FAILED"
+}

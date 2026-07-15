@@ -485,6 +485,27 @@ class ApiServiceContractTest {
         }
     }
 
+    @Test
+    fun `team task endpoints preserve filters retry and download paths`() = runBlocking {
+        val server = MockWebServer()
+        server.enqueue(pageResponse(page = 2, size = 20))
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(
+            """{"code":200,"data":{"id":9,"teamId":7,"taskType":"ONLYOFFICE_SAVE","status":"PENDING"}}"""
+        ))
+        server.enqueue(MockResponse().setBody("result"))
+        server.start()
+        try {
+            api(server).listTeamTasks(7, "FAILED", "ONLYOFFICE_SAVE", 2, 20)
+            assertEquals("/teams/7/tasks?status=FAILED&type=ONLYOFFICE_SAVE&page=2&size=20", server.takeRequest().path)
+            api(server).retryTeamTask(7, 9)
+            val retry = server.takeRequest()
+            assertEquals("POST", retry.method)
+            assertEquals("/teams/7/tasks/9/retry", retry.path)
+            api(server).downloadTeamTaskResult(7, 9)
+            assertEquals("/teams/7/tasks/9/download", server.takeRequest().path)
+        } finally { server.shutdown() }
+    }
+
     private fun api(server: MockWebServer): ApiService {
         return Retrofit.Builder()
             .baseUrl(server.url("/"))

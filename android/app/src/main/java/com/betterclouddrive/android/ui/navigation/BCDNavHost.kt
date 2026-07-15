@@ -32,6 +32,7 @@ import com.betterclouddrive.android.ui.teams.TeamMembersScreen
 import com.betterclouddrive.android.ui.teams.NotificationsScreen
 import com.betterclouddrive.android.ui.teams.TeamRecycleBinScreen
 import com.betterclouddrive.android.ui.teams.TeamSettingsScreen
+import com.betterclouddrive.android.ui.teams.TeamTasksScreen
 import com.betterclouddrive.android.ui.teams.TeamsScreen
 import com.betterclouddrive.android.ui.transfer.TransferQueueScreen
 import com.betterclouddrive.android.ui.versions.VersionsScreen
@@ -238,7 +239,15 @@ fun BCDNavHost(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateRecycleBin = { id -> navController.navigate(Screen.teamRecycleBin(id)) },
                 onNavigateTeams = { navController.navigateTopLevel(Screen.TEAMS) },
+                onNavigateTasks = { id -> navController.navigate(Screen.teamTasks(id)) },
             )
+        }
+        composable(
+            route = Screen.TEAM_TASKS,
+            arguments = listOf(navArgument("teamId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val teamId = backStackEntry.arguments?.getLong("teamId") ?: return@composable
+            TeamTasksScreen(teamId = teamId, onNavigateBack = { navController.popBackStack() })
         }
         composable(
             route = Screen.TEAM_RECYCLE_BIN,
