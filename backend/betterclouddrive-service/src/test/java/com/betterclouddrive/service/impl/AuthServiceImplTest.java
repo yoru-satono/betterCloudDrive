@@ -130,7 +130,7 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> authService.login("user", "pass"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("Invalid username or password")
-                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(401));
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(401003));
     }
 
     @Test

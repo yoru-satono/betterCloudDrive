@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { ensureFreshAccessToken } from './client'
@@ -111,7 +113,7 @@ export async function registerTransferListeners(handlers: {
   if (!isDesktopTransferRuntime()) return () => undefined
   const unlisten = await Promise.all([
     listen<TransferQueue>('transfer:queue-updated', event => handlers.onQueueUpdated(event.payload)),
-    listen<{ message?: string }>('transfer:error', event => handlers.onError(event.payload.message || '传输失败')),
+    listen<{ message?: string }>('transfer:error', event => handlers.onError(event.payload.message || __t('desktop.desktoptransfer.transferFailed'))),
   ])
   return () => {
     unlisten.forEach((dispose: UnlistenFn) => dispose())

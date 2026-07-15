@@ -8,12 +8,15 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getSearchTriggerPlaceholder, resolveSearchMode } from '@/config/search'
 import { Bell } from 'lucide-vue-next'
 import * as notificationsApi from '@/api/notifications'
+import { Menu } from 'lucide-vue-next'
+import { i18n } from '@/i18n'
 
 const ui = useUIStore()
 const auth = useAuthStore()
 const searchContext = useSearchContextStore()
 const router = useRouter()
 const route = useRoute()
+const t = i18n.global.t
 const searchMode = computed(() => resolveSearchMode(route))
 const searchPlaceholder = computed(() => getSearchTriggerPlaceholder(searchMode.value, searchContext.activeTag))
 const unreadCount = ref(0)
@@ -83,6 +86,9 @@ watch(() => route.fullPath, () => {
 
 <template>
   <header class="app-header">
+    <OButton class="app-header__menu" variant="subtle" size="sm" :icon="true" :aria-label="t('nav.openMenu')" @click="ui.openMobileNav">
+      <Menu :size="17" />
+    </OButton>
     <div class="app-header__search" @click="ui.openSearch">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -91,11 +97,11 @@ watch(() => route.fullPath, () => {
       <kbd>⌘K</kbd>
     </div>
     <div class="app-header__right">
-      <OButton class="app-header__notification" variant="subtle" size="sm" :icon="true" @click="router.push('/notifications')">
+      <OButton class="app-header__notification" variant="subtle" size="sm" :icon="true" :aria-label="t('nav.notifications')" @click="router.push('/notifications')">
         <Bell :size="14" />
         <span v-if="unreadCount > 0" class="app-header__badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
       </OButton>
-      <OButton variant="subtle" size="sm" :icon="true" @click="handleLogout">
+      <OButton variant="subtle" size="sm" :icon="true" :aria-label="t('nav.signOut')" @click="handleLogout">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
         </svg>
@@ -128,6 +134,12 @@ watch(() => route.fullPath, () => {
   border-radius: 4px; padding: 1px 5px;
 }
 .app-header__right { display: flex; align-items: center; gap: 6px; }
+.app-header__menu { display: none; }
+@media (max-width: 719px) {
+  .app-header { padding: 0 10px; }
+  .app-header__menu { display: inline-flex; }
+  .app-header__search kbd { display: none; }
+}
 .app-header__notification {
   position: relative;
 }

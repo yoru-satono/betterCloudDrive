@@ -51,8 +51,8 @@ class TeamNotificationOutboxWriterTest {
         assertThat(payload.userId()).isEqualTo(2L);
         assertThat(payload.teamId()).isEqualTo(10L);
         assertThat(payload.type()).isEqualTo("TEAM_INVITE");
-        assertThat(payload.titleKey()).isEqualTo("notification.team_invite.title");
-        assertThat(payload.contentKey()).isEqualTo("notification.team_invite.content");
+        assertThat(payload.titleKey()).isEqualTo("notification.teamInvite.title");
+        assertThat(payload.contentKey()).isEqualTo("notification.teamInvite.content");
         assertThat(payload.messageParams()).isEmpty();
         assertThat(payload.link()).isEqualTo("/team-invites/token");
         assertThat(payload.email()).isFalse();

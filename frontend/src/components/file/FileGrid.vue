@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import FileCard from './FileCard.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
 import type { FileEntity } from '@/types/file'
@@ -20,7 +23,7 @@ const emit = defineEmits<{
     <div v-for="n in 12" :key="n" class="file-grid__skeleton" />
   </div>
   <div v-else-if="files.length === 0" class="file-grid__empty">
-    <OEmptyState title="此处没有文件" description="将文件拖拽到此处或点击上传">
+    <OEmptyState :title="__t('file.filegrid.noFilesHere')" :description="__t('file.filegrid.dragFilesHereOrClickToUpload')">
       <template #icon>
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
           <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>

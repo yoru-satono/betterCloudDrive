@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import OButton from '@/components/base/OButton.vue'
 import { useFilesStore } from '@/stores/files'
 import { isDesktopRuntime } from '@/config/runtime'
@@ -20,23 +23,17 @@ const desktopRuntime = isDesktopRuntime()
       <OButton variant="primary" size="sm" @click="emit('upload')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-        </svg>
-        上传文件
-      </OButton>
+        </svg>{{ __t('team.filetoolbar.uploadFiles') }}</OButton>
       <OButton v-if="desktopRuntime" variant="ghost" size="sm" @click="emit('upload-folder')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
           <path d="M12 16V9"/>
           <path d="M9 12l3-3 3 3"/>
-        </svg>
-        上传文件夹
-      </OButton>
+        </svg>{{ __t('team.filetoolbar.uploadFolder') }}</OButton>
       <OButton variant="ghost" size="sm" @click="emit('new-folder')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
-        </svg>
-        新建文件夹
-      </OButton>
+        </svg>{{ __t('commonUi.filetoolbar.createNewFolder') }}</OButton>
       <OButton
         v-if="store.hasSelection"
         variant="danger"
@@ -45,12 +42,11 @@ const desktopRuntime = isDesktopRuntime()
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-        </svg>
-        删除 ({{ store.selectedIds.size }})
+        </svg>{{ __t('team.filetoolbar.delete') }}{{ store.selectedIds.size }})
       </OButton>
     </div>
     <div class="toolbar__right">
-      <span v-if="store.hasSelection" class="toolbar__sel-info">已选 {{ store.selectedIds.size }} 项</span>
+      <span v-if="store.hasSelection" class="toolbar__sel-info">{{ __t('file.filetoolbar.selected') }}{{ store.selectedIds.size }}{{ __t('file.filetoolbar.item') }}</span>
       <OButton variant="subtle" size="sm" :icon="true" @click="emit('refresh')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="23 4 23 10 17 10"/><path d="M20.5 16a9 9 0 11-2.5-8.5L23 10"/>

@@ -44,7 +44,7 @@ class JwtAuthenticationFilterTest {
         assertThat(response.getStatus()).isEqualTo(401);
         assertThat(response.getContentType()).isEqualTo("application/json");
         assertThat(response.getContentAsString()).contains("\"code\":401001");
-        assertThat(response.getContentAsString()).contains("\"messageKey\":\"error.token_expired\"").doesNotContain("\"message\"");
+        assertThat(response.getContentAsString()).contains("\"messageKey\":\"error.tokenExpired\"").doesNotContain("\"message\"");
     }
 
     @Test

@@ -22,7 +22,7 @@ importers:
         version: 12.8.2(typescript@6.0.3)
       axios:
         specifier: ^1.17.0
-        version: 1.17.0
+        version: 1.17.0(supports-color@8.1.1)
       lucide-vue-next:
         specifier: ^0.525.0
         version: 0.525.0(vue@3.5.35(typescript@6.0.3))
@@ -66,6 +66,12 @@ importers:
       '@vitejs/plugin-vue':
         specifier: ^6.0.6
         version: 6.0.7(vite@8.0.16(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.22.4))(vue@3.5.35(typescript@6.0.3))
+      '@vue/compiler-dom':
+        specifier: ^3.5.35
+        version: 3.5.35
+      '@vue/compiler-sfc':
+        specifier: ^3.5.35
+        version: 3.5.35
       '@vue/test-utils':
         specifier: ^2.4.11
         version: 2.4.11(@vue/compiler-dom@3.5.35)(@vue/server-renderer@3.5.35(vue@3.5.35(typescript@6.0.3)))(vue@3.5.35(typescript@6.0.3))
@@ -3939,7 +3945,7 @@ snapshots:
     dependencies:
       event-target-shim: 5.0.1
 
-  agent-base@6.0.2:
+  agent-base@6.0.2(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -4010,11 +4016,11 @@ snapshots:
 
   asynckit@0.4.0: {}
 
-  axios@1.17.0:
+  axios@1.17.0(supports-color@8.1.1):
     dependencies:
       follow-redirects: 1.16.0
       form-data: 4.0.5
-      https-proxy-agent: 5.0.1
+      https-proxy-agent: 5.0.1(supports-color@8.1.1)
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
       - debug
@@ -4723,9 +4729,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  https-proxy-agent@5.0.1:
+  https-proxy-agent@5.0.1(supports-color@8.1.1):
     dependencies:
-      agent-base: 6.0.2
+      agent-base: 6.0.2(supports-color@8.1.1)
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color

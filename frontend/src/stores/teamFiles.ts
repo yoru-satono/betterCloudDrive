@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import * as teamsApi from '@/api/teams'
@@ -12,7 +14,7 @@ export const useTeamFilesStore = defineStore('teamFiles', () => {
   const pages = ref(0)
   const loading = ref(false)
   const currentParentId = ref<number | null>(null)
-  const breadcrumb = ref<BreadcrumbItem[]>([{ id: null, name: '团队文件' }])
+  const breadcrumb = ref<BreadcrumbItem[]>([{ id: null, name: __t('team.teamfiles.teamDocuments') }])
   const viewMode = ref<'grid' | 'list'>('grid')
   const selectedIds = ref<Set<number>>(new Set())
   const sortBy = ref('fileName')
@@ -102,7 +104,7 @@ export const useTeamFilesStore = defineStore('teamFiles', () => {
       await loadTeam(teamId)
     }
     breadcrumb.value = folderId === null
-      ? [{ id: null, name: currentTeam.value?.name || '团队文件' }]
+      ? [{ id: null, name: currentTeam.value?.name || __t('team.teamfiles.teamDocuments') }]
       : await buildBreadcrumb(teamId, folderId, folderHint)
     await fetchFiles(teamId, folderId)
     clearSelection()
@@ -125,7 +127,7 @@ export const useTeamFilesStore = defineStore('teamFiles', () => {
       current = null
     }
 
-    return [{ id: null, name: currentTeam.value?.name || '团队文件' }, ...items]
+    return [{ id: null, name: currentTeam.value?.name || __t('team.teamfiles.teamDocuments') }, ...items]
   }
 
   function enterFolder(teamId: number, folder: FileEntity) {

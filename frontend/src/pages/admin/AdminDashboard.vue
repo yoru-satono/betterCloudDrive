@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onMounted, ref } from 'vue'
 import OSpinner from '@/components/base/OSpinner.vue'
 import { useFormatters } from '@/composables/useFormatters'
@@ -17,14 +20,14 @@ onMounted(async () => {
 })
 
 const cards = (s: AdminStats) => [
-  { label: '总用户数',   value: s.totalUsers,      sub: `${s.activeUsers} 活跃` },
-  { label: '已用存储',   value: formatSize(s.totalStorageUsed), sub: '' },
+  { label: __t('adminUi.admindashboard.totalNumberOfUsers'),   value: s.totalUsers,      sub: __t('adminUi.admindashboard.active', { p0: s.activeUsers }) },
+  { label: __t('adminUi.admindashboard.usedStorage'),   value: formatSize(s.totalStorageUsed), sub: '' },
 ]
 </script>
 
 <template>
   <div class="page-enter">
-    <h2 style="margin-bottom:24px">系统概览</h2>
+    <h2 style="margin-bottom:24px">{{ __t('adminUi.admindashboard.systemOverview') }}</h2>
     <div v-if="loading" style="display:flex;justify-content:center;padding:60px"><OSpinner /></div>
     <div v-else-if="stats" class="stats-grid">
       <div v-for="card in cards(stats)" :key="card.label" class="stat-card">

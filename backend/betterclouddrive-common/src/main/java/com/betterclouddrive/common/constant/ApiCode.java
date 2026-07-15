@@ -15,6 +15,8 @@ public enum ApiCode {
     UNAUTHORIZED(401, "unauthorized"),
     TOKEN_EXPIRED(401001, "token expired"),
     TOKEN_BLACKLISTED(401002, "token revoked"),
+    INVALID_CREDENTIALS(401003, "Invalid username or password"),
+    ACCOUNT_DISABLED(401004, "Account is disabled"),
     FORBIDDEN(403, "forbidden"),
     NOT_FOUND(404, "resource not found"),
     FILE_NOT_FOUND(404001, "file not found"),

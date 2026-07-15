@@ -84,7 +84,7 @@ class TeamTaskServiceImplTest {
         assertThat(task.getTaskType()).isEqualTo("AUDIT_EXPORT");
         assertThat(task.getTargetType()).isEqualTo("FILE");
         assertThat(task.getTargetId()).isEqualTo(7L);
-        assertThat(task.getTitleKey()).isEqualTo("task.audit_export.title");
+        assertThat(task.getTitleKey()).isEqualTo("task.auditExport.title");
         assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_RUNNING);
         assertThat(task.getProgress()).isZero();
         assertThat(task.getRetryCount()).isZero();
@@ -335,7 +335,7 @@ class TeamTaskServiceImplTest {
         assertThat(task.getResultContentType()).isNull();
         assertThat(task.getResultSizeBytes()).isNull();
         assertThat(task.getResultExpiresAt()).isNull();
-        assertThat(task.getResultMessageKey()).isEqualTo("task.result_expired");
+        assertThat(task.getResultMessageKey()).isEqualTo("task.resultExpired");
         verify(teamTaskRepository).save(task);
     }
 

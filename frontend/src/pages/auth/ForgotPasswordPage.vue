@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { ref } from 'vue'
 import { useForm, useField } from 'vee-validate'
 import { z } from 'zod'
@@ -10,13 +13,13 @@ import { toast } from 'vue-sonner'
 
 const step = ref<'email' | 'reset'>('email')
 
-const emailSchema = toTypedSchema(z.object({ email: z.string().email('请输入有效邮箱') }))
+const emailSchema = toTypedSchema(z.object({ email: z.string().email(__t('auth.forgotpassword.pleaseEnterAValidEmailAddress')) }))
 const { handleSubmit: handleEmail, isSubmitting: emailSubmitting } = useForm({ validationSchema: emailSchema })
 const { value: email, errorMessage: emailError } = useField<string>('email')
 
 const resetSchema = toTypedSchema(z.object({
-  code:        z.string().min(1, '请输入验证码'),
-  newPassword: z.string().min(6, '密码至少 6 个字符'),
+  code:        z.string().min(1, __t('auth.forgotpassword.pleaseEnterTheVerificationCode')),
+  newPassword: z.string().min(6, __t('auth.forgotpassword.passwordMustBeAtLeast6Characters')),
 }))
 const { handleSubmit: handleReset, isSubmitting: resetSubmitting } = useForm({ validationSchema: resetSchema })
 const { value: code,        errorMessage: codeError    } = useField<string>('code')
@@ -27,13 +30,13 @@ const savedEmail = ref('')
 const submitEmail = handleEmail(async (values) => {
   await authApi.forgotPassword(values.email)
   savedEmail.value = values.email
-  toast.success('验证码已发送至邮箱')
+  toast.success(__t('auth.forgotpassword.verificationCodeHasBeenSentToEmail'))
   step.value = 'reset'
 })
 
 const submitReset = handleReset(async (values) => {
   await authApi.resetPassword(savedEmail.value, values.code, values.newPassword)
-  toast.success('密码重置成功，请登录')
+  toast.success(__t('auth.forgotpassword.passwordResetSuccessfulPleaseLogIn'))
   window.location.href = '/login'
 })
 </script>
@@ -41,30 +44,24 @@ const submitReset = handleReset(async (values) => {
 <template>
   <div class="forgot-page page-enter">
     <div class="forgot-page__head">
-      <h1>找回密码</h1>
-      <p>{{ step === 'email' ? '输入注册邮箱接收验证码' : `验证码已发送到 ${savedEmail}` }}</p>
+      <h1>{{ __t('auth.forgotpassword.retrievePassword') }}</h1>
+      <p>{{ step === 'email' ? __t('auth.forgotpassword.enterYourRegisteredEmailToReceiveTheVerificationCode') : __t('auth.forgotpassword.verificationCodeSentTo', { p0: savedEmail }) }}</p>
     </div>
 
     <form v-if="step === 'email'" class="forgot-page__form" @submit.prevent="submitEmail">
-      <OInput v-model="email" label="邮箱地址" placeholder="输入注册邮箱" type="email" :error="emailError" />
-      <OButton type="submit" variant="primary" :loading="emailSubmitting" style="width:100%;justify-content:center">
-        发送验证码
-      </OButton>
+      <OInput v-model="email" :label="__t('auth.forgotpassword.emailAddress')" :placeholder="__t('auth.forgotpassword.enterRegisteredEmail')" type="email" :error="emailError" />
+      <OButton type="submit" variant="primary" :loading="emailSubmitting" style="width:100%;justify-content:center">{{ __t('auth.forgotpassword.sendVerificationCode') }}</OButton>
     </form>
 
     <form v-else class="forgot-page__form" @submit.prevent="submitReset">
-      <OInput v-model="code"        label="验证码"  placeholder="输入邮件中的验证码" :error="codeError" />
-      <OInput v-model="newPassword" label="新密码"  placeholder="至少 6 个字符" type="password" :error="passwordError" />
-      <OButton type="submit" variant="primary" :loading="resetSubmitting" style="width:100%;justify-content:center">
-        重置密码
-      </OButton>
-      <OButton type="button" variant="ghost" style="width:100%;justify-content:center" @click="step = 'email'">
-        重新发送
-      </OButton>
+      <OInput v-model="code"        :label="__t('auth.forgotpassword.verificationCode')"  :placeholder="__t('auth.forgotpassword.enterTheVerificationCodeInTheEmail')" :error="codeError" />
+      <OInput v-model="newPassword" :label="__t('auth.forgotpassword.newPassword')"  :placeholder="__t('auth.forgotpassword.atLeast6Characters')" type="password" :error="passwordError" />
+      <OButton type="submit" variant="primary" :loading="resetSubmitting" style="width:100%;justify-content:center">{{ __t('auth.forgotpassword.resetPassword') }}</OButton>
+      <OButton type="button" variant="ghost" style="width:100%;justify-content:center" @click="step = 'email'">{{ __t('auth.forgotpassword.resend') }}</OButton>
     </form>
 
     <div class="forgot-page__links">
-      <RouterLink to="/login">← 返回登录</RouterLink>
+      <RouterLink to="/login">{{ __t('auth.forgotpassword.returnToLogin') }}</RouterLink>
     </div>
   </div>
 </template>

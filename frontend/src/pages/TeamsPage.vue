@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
@@ -24,7 +27,7 @@ async function createTeam() {
   const team = await teams.createTeam(name)
   teamName.value = ''
   showCreate.value = false
-  toast.success('团队已创建')
+  toast.success(__t('team.teams.teamCreated'))
   await router.push({ name: 'TeamFiles', params: { teamId: team.id } })
 }
 </script>
@@ -33,17 +36,17 @@ async function createTeam() {
   <section class="teams-page">
     <header class="teams-page__header">
       <div>
-        <h1>团队空间</h1>
-        <p>选择团队以访问共享文件和协作功能。</p>
+        <h1>{{ __t('team.teams.teamSpace') }}</h1>
+        <p>{{ __t('team.teams.selectATeamToAccessSharedFilesAndCollaborationFeatures') }}</p>
       </div>
       <div class="teams-page__actions">
-        <OButton variant="primary" @click="showCreate = true">新建团队</OButton>
+        <OButton variant="primary" @click="showCreate = true">{{ __t('team.teams.createANewTeam') }}</OButton>
       </div>
     </header>
 
     <div v-if="teams.loading" class="teams-page__loading"><OSpinner /></div>
-    <OEmptyState v-else-if="teams.teams.length === 0" title="暂无团队" description="创建团队空间后即可与成员共享文件">
-      <OButton variant="primary" @click="showCreate = true">新建团队</OButton>
+    <OEmptyState v-else-if="teams.teams.length === 0" :title="__t('team.teams.noTeamYet')" :description="__t('team.teams.onceYouCreateATeamSpaceYouCanShareFiles')">
+      <OButton variant="primary" @click="showCreate = true">{{ __t('team.teams.createANewTeam') }}</OButton>
     </OEmptyState>
     <div v-else class="teams-page__grid" data-testid="teams-list">
       <button
@@ -60,11 +63,11 @@ async function createTeam() {
       </button>
     </div>
 
-    <OModal title="新建团队" :open="showCreate" @close="showCreate = false">
-      <OInput v-model="teamName" label="团队名称" placeholder="输入团队名称" @keyup.enter="createTeam" />
+    <OModal :title="__t('team.teams.createANewTeam')" :open="showCreate" @close="showCreate = false">
+      <OInput v-model="teamName" :label="__t('team.teams.teamName')" :placeholder="__t('team.teams.enterTeamName')" @keyup.enter="createTeam" />
       <template #footer>
-        <OButton variant="ghost" @click="showCreate = false">取消</OButton>
-        <OButton variant="primary" @click="createTeam">创建</OButton>
+        <OButton variant="ghost" @click="showCreate = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="createTeam">{{ __t('commonUi.adminuserfiles.create') }}</OButton>
       </template>
     </OModal>
   </section>

@@ -22,22 +22,7 @@ const webdavLoading = ref(false)
 const webdavEnabled = computed(() => Boolean(auth.user?.webdavEnabled))
 const notificationPreferences = ref<NotificationPreferenceMap>({})
 const notificationPreferencesLoading = ref(false)
-const notificationPreferenceOptions: Array<{ type: NotificationTypeFilter; label: string }> = [
-  { type: 'TEAM_INVITE', label: '团队邀请' },
-  { type: 'TEAM_INVITE_ACCEPT', label: '邀请接受' },
-  { type: 'TEAM_INVITE_REJECT', label: '邀请拒绝' },
-  { type: 'TEAM_QUOTA_ALERT', label: '配额告警' },
-  { type: 'TEAM_ARCHIVE', label: '团队归档' },
-  { type: 'TEAM_UNARCHIVE', label: '取消归档' },
-  { type: 'TEAM_RESTORE', label: '团队恢复' },
-  { type: 'TEAM_PERMISSION_UPDATE', label: '权限变更' },
-  { type: 'TEAM_DELETE', label: '团队删除' },
-  { type: 'TEAM_MEMBER_ADD', label: '成员加入' },
-  { type: 'TEAM_ROLE_UPDATE', label: '角色变更' },
-  { type: 'TEAM_MEMBER_REMOVE', label: '成员移除' },
-  { type: 'TEAM_OWNER_TRANSFER', label: '所有权转让' },
-  { type: 'TEAM_OFFICE_SAVE_FAILED', label: '文档保存失败' },
-]
+const notificationPreferenceOptions: NotificationTypeFilter[] = ['TEAM_INVITE', 'TEAM_INVITE_ACCEPT', 'TEAM_INVITE_REJECT', 'TEAM_QUOTA_ALERT', 'TEAM_ARCHIVE', 'TEAM_UNARCHIVE', 'TEAM_RESTORE', 'TEAM_PERMISSION_UPDATE', 'TEAM_DELETE', 'TEAM_MEMBER_ADD', 'TEAM_ROLE_UPDATE', 'TEAM_MEMBER_REMOVE', 'TEAM_OWNER_TRANSFER', 'TEAM_OFFICE_SAVE_FAILED']
 const themeOptions = computed<Array<{ value: ThemeMode; label: string }>>(() => [
   { value: 'system', label: t('ui.system') },
   { value: 'light', label: t('ui.light') },
@@ -46,14 +31,14 @@ const themeOptions = computed<Array<{ value: ThemeMode; label: string }>>(() => 
 
 async function saveWebDavSettings(enabled: boolean) {
   if (enabled && !webdavPassword.value.trim()) {
-    toast.error('请设置 WebDAV 独立密码')
+    toast.error(t('profile.passwordRequired'))
     return
   }
   webdavLoading.value = true
   try {
     await auth.updateWebDavSettings(enabled, enabled ? webdavPassword.value : undefined)
     webdavPassword.value = ''
-    toast.success(enabled ? 'WebDAV 已开启' : 'WebDAV 已关闭')
+    toast.success(enabled ? t('profile.webdavEnabled') : t('profile.webdavDisabled'))
   } finally {
     webdavLoading.value = false
   }
@@ -80,7 +65,7 @@ async function toggleNotificationPreference(type: NotificationTypeFilter, enable
   try {
     const { data } = await notificationsApi.updateNotificationPreferences({ [type]: enabled })
     notificationPreferences.value = data.data
-    toast.success('通知偏好已更新')
+    toast.success(t('profile.preferencesUpdated'))
   } catch (error) {
     notificationPreferences.value = { ...next, [type]: !enabled }
     throw error
@@ -148,21 +133,21 @@ onMounted(loadNotificationPreferences)
       <div class="section__header">
         <h3 class="section__title">WebDAV</h3>
         <span class="webdav-status" :class="{ 'webdav-status--on': webdavEnabled }">
-          {{ webdavEnabled ? '已开启' : '已关闭' }}
+          {{ webdavEnabled ? t('common.enabled') : t('common.disabled') }}
         </span>
       </div>
-      <p class="section__hint">WebDAV 默认关闭，开启时必须设置独立密码。</p>
+      <p class="section__hint">{{ t('profile.webdavHint') }}</p>
       <div class="webdav-form">
         <OInput
           v-model="webdavPassword"
           type="password"
-          :label="webdavEnabled ? '新的 WebDAV 密码' : 'WebDAV 密码'"
-          placeholder="输入独立密码"
+          :label="webdavEnabled ? t('profile.newWebdavPassword') : t('profile.webdavPassword')"
+          :placeholder="t('profile.passwordPlaceholder')"
           :disabled="webdavLoading"
         />
         <div class="webdav-actions">
           <OButton variant="primary" :loading="webdavLoading" @click="saveWebDavSettings(true)">
-            {{ webdavEnabled ? '更新密码' : '开启 WebDAV' }}
+            {{ webdavEnabled ? t('profile.updatePassword') : t('profile.enableWebdav') }}
           </OButton>
           <OButton
             v-if="webdavEnabled"
@@ -170,7 +155,7 @@ onMounted(loadNotificationPreferences)
             :disabled="webdavLoading"
             @click="saveWebDavSettings(false)"
           >
-            关闭 WebDAV
+            {{ t('profile.disableWebdav') }}
           </OButton>
         </div>
       </div>
@@ -178,16 +163,16 @@ onMounted(loadNotificationPreferences)
 
     <div class="section">
       <div class="section__header">
-        <h3 class="section__title">团队通知</h3>
+        <h3 class="section__title">{{ t('profile.teamNotifications') }}</h3>
       </div>
       <div class="notification-prefs">
-        <label v-for="option in notificationPreferenceOptions" :key="option.type" class="notification-prefs__row">
-          <span>{{ option.label }}</span>
+        <label v-for="option in notificationPreferenceOptions" :key="option" class="notification-prefs__row">
+          <span>{{ t(`profile.preference.${option}`) }}</span>
           <input
             type="checkbox"
-            :checked="isNotificationEnabled(option.type)"
+            :checked="isNotificationEnabled(option)"
             :disabled="notificationPreferencesLoading"
-            @change="event => toggleNotificationPreference(option.type, (event.target as HTMLInputElement).checked)"
+            @change="event => toggleNotificationPreference(option, (event.target as HTMLInputElement).checked)"
           />
         </label>
       </div>
@@ -196,7 +181,8 @@ onMounted(loadNotificationPreferences)
 </template>
 
 <style scoped>
-.profile-page { max-width: 560px; }
+.profile-page { width: 100%; max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; align-content: start; }
+.profile-page > h2, .profile-card, .profile-page > .section:nth-last-child(-n + 2) { grid-column: 1 / -1; }
 .profile-card {
   display: flex; align-items: center; gap: 16px;
   padding: 20px; border: 1px solid var(--border); border-radius: 12px;
@@ -276,6 +262,7 @@ onMounted(loadNotificationPreferences)
   accent-color: var(--accent);
 }
 @media (max-width: 720px) {
+  .profile-page { display: block; }
   .notification-prefs {
     grid-template-columns: 1fr;
   }

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import OButton from '@/components/base/OButton.vue'
 import { useUploadStore, type UploadItem } from '@/stores/upload'
 import { computed } from 'vue'
@@ -9,14 +12,14 @@ const activeCount = computed(() => store.queue.filter(i => i.status === 'uploadi
 const allDone = computed(() => store.queue.length > 0 && store.queue.every(i => i.status === 'done' || i.status === 'instant' || i.status === 'error' || i.status === 'canceled'))
 
 const statusLabel: Record<string, string> = {
-  pending: '等待中',
-  hashing: '计算中',
-  uploading: '上传中',
-  done: '完成',
-  instant: '秒传',
-  error: '失败',
-  canceled: '已取消',
-  resume_required: '待续传'
+  pending: __t('transferUi.transfer.waiting'),
+  hashing: __t('transferUi.transfer.calculating'),
+  uploading: __t('transferUi.upload.uploading'),
+  done: __t('transferUi.transfer.finish'),
+  instant: __t('transferUi.transfer.secondTransfer'),
+  error: __t('commonUi.transfer.fail'),
+  canceled: __t('commonUi.transfer.canceled'),
+  resume_required: __t('transferUi.upload.toBeContinued')
 }
 
 const formatProgress = (progress: number) => progress.toFixed(2)
@@ -37,10 +40,10 @@ function selectResumeFile(item: UploadItem) {
     <div v-if="store.isOpen && store.queue.length > 0" class="upload-queue">
       <div class="upload-queue__header">
         <span class="upload-queue__title">
-          {{ activeCount > 0 ? `上传中 (${activeCount})` : allDone ? '全部完成' : '上传队列' }}
+          {{ activeCount > 0 ? __t('transfer.activeUploads', { count: activeCount }) : allDone ? __t('transfer.allDone') : __t('transfer.uploadQueue') }}
         </span>
         <div style="display:flex;gap:4px">
-          <OButton v-if="allDone" variant="subtle" size="sm" @click="store.clearDone">清除</OButton>
+          <OButton v-if="allDone" variant="subtle" size="sm" @click="store.clearDone">{{ __t('transferUi.transfer.clear') }}</OButton>
           <OButton variant="subtle" size="sm" :icon="true" @click="store.isOpen = false">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -62,12 +65,10 @@ function selectResumeFile(item: UploadItem) {
             <div class="upload-queue__bar-fill" :style="{ width: `${item.progress}%` }" />
           </div>
           <div v-if="item.status === 'uploading' || item.status === 'resume_required' || (item.status === 'error' && item.resumable)" class="upload-queue__actions">
-            <OButton v-if="item.uploadId" variant="subtle" size="sm" @click="store.refreshUploadStatus(item.id)">刷新状态</OButton>
-            <OButton v-if="item.status === 'resume_required' || (item.status === 'error' && item.resumable)" variant="subtle" size="sm" @click="selectResumeFile(item)">
-              选择文件继续
-            </OButton>
-            <OButton v-if="item.status === 'error' && item.file" variant="subtle" size="sm" @click="store.retryUpload(item.id)">重试</OButton>
-            <OButton variant="danger" size="sm" @click="store.cancelUpload(item.id)">取消</OButton>
+            <OButton v-if="item.uploadId" variant="subtle" size="sm" @click="store.refreshUploadStatus(item.id)">{{ __t('transferUi.upload.refreshStatus') }}</OButton>
+            <OButton v-if="item.status === 'resume_required' || (item.status === 'error' && item.resumable)" variant="subtle" size="sm" @click="selectResumeFile(item)">{{ __t('transferUi.upload.selectFileToContinue') }}</OButton>
+            <OButton v-if="item.status === 'error' && item.file" variant="subtle" size="sm" @click="store.retryUpload(item.id)">{{ __t('team.upload.tryAgain') }}</OButton>
+            <OButton variant="danger" size="sm" @click="store.cancelUpload(item.id)">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
           </div>
           <p v-if="item.error" class="upload-queue__error">{{ item.error }}</p>
         </div>
@@ -79,7 +80,7 @@ function selectResumeFile(item: UploadItem) {
 <style scoped>
 .upload-queue {
   position: fixed; bottom: 20px; right: 20px; z-index: 150;
-  width: 300px;
+  width: min(300px, calc(100vw - 24px));
   background: var(--bg-overlay);
   border: 1px solid var(--border-hover);
   border-radius: 12px;

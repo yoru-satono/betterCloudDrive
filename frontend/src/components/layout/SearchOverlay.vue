@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
@@ -155,7 +158,7 @@ function openSearchContextMenu(result: SearchResult, event: MouseEvent) {
   if (result.source === 'recycle') {
     ctx.open(event, [
       {
-        label: '打开回收站',
+        label: __t('file.searchoverlay.openRecycleBin'),
         action: () => router.push({ name: 'RecycleBin' }).then(handleClose),
       },
     ])
@@ -165,13 +168,13 @@ function openSearchContextMenu(result: SearchResult, event: MouseEvent) {
   if (handled) return
   ctx.open(event, [
     {
-      label: '打开文件所在位置',
+      label: __t('file.searchoverlay.openFileLocation'),
       action: () => router.push(file.parentId
         ? { name: 'Folder', params: { folderId: file.parentId } }
         : { name: 'Files' }).then(handleClose),
     },
     {
-      label: '下载',
+      label: __t('commonUi.filepreview.download'),
       action: () => {
         if (file.fileType === 'folder') downloadFolderZip(file.id, file.fileName)
         else downloadFile(file.id, file.fileName)
@@ -183,19 +186,19 @@ function openSearchContextMenu(result: SearchResult, event: MouseEvent) {
 
 async function copyShareLink(share: ShareLinkEntity) {
   await navigator.clipboard.writeText(buildShareUrl(share.shareCode)).catch(() => {})
-  toast.success('链接已复制')
+  toast.success(__t('share.searchoverlay.linkCopied'))
 }
 
 function shareStatus(share: ShareLinkEntity) {
-  if (share.expireAt && new Date(share.expireAt) < new Date()) return '已过期'
-  return share.expireAt ? `过期：${formatDateFull(share.expireAt)}` : '永不过期'
+  if (share.expireAt && new Date(share.expireAt) < new Date()) return __t('commonUi.searchoverlay.expiredStatus')
+  return share.expireAt ? __t('commonUi.searchoverlay.expired', { p0: formatDateFull(share.expireAt) }) : __t('commonUi.searchoverlay.neverExpires')
 }
 
 function fileSourceLabel(source: SearchMode | 'tag-files') {
-  if (source === 'favorites') return '收藏'
-  if (source === 'recycle') return '回收站'
-  if (source === 'tag-files') return searchContext.activeTag ? `标签：${searchContext.activeTag.tagName}` : '标签文件'
-  return '文件'
+  if (source === 'favorites') return __t('commonUi.searchoverlay.collect')
+  if (source === 'recycle') return __t('commonUi.searchoverlay.recycleBin')
+  if (source === 'tag-files') return searchContext.activeTag ? __t('file.searchoverlay.tag', { p0: searchContext.activeTag.tagName }) : __t('file.searchoverlay.labelFile')
+  return __t('commonUi.searchoverlay.document')
 }
 </script>
 
@@ -217,7 +220,7 @@ function fileSourceLabel(source: SearchMode | 'tag-files') {
             <kbd @click="handleClose">Esc</kbd>
           </div>
           <div v-if="q.length > 0" class="search-results">
-            <div v-if="loading" class="search-loading">搜索中...</div>
+            <div v-if="loading" class="search-loading">{{ __t('file.searchoverlay.searching') }}</div>
             <div
               v-else-if="results.length === 0"
               class="search-empty"
@@ -235,7 +238,7 @@ function fileSourceLabel(source: SearchMode | 'tag-files') {
                 <span class="search-item__name truncate">{{ result.file.fileName }}</span>
                 <span class="search-item__meta">{{ fileSourceLabel(result.source) }}</span>
                 <span class="search-item__size font-mono">
-                  {{ result.file.fileType === 'folder' ? '文件夹' : formatSize(result.file.fileSize) }}
+                  {{ result.file.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(result.file.fileSize) }}
                 </span>
               </template>
 
@@ -246,17 +249,16 @@ function fileSourceLabel(source: SearchMode | 'tag-files') {
                   </svg>
                 </span>
                 <span class="search-item__name truncate">{{ buildShareUrl(result.share.shareCode) }}</span>
-                <span class="search-item__meta">
-                  文件 {{ result.share.fileId }} · {{ shareStatus(result.share) }} · {{ result.share.hasPassword ? '有密码' : '无密码' }}
+                <span class="search-item__meta">{{ __t('commonUi.searchoverlay.document') }}{{ result.share.fileId }} · {{ shareStatus(result.share) }} · {{ result.share.hasPassword ? __t('commonUi.searchoverlay.havePassword') : __t('commonUi.searchoverlay.noPassword') }}
                 </span>
-                <button class="search-item__action" type="button" @click.stop="copyShareLink(result.share)">复制</button>
+                <button class="search-item__action" type="button" @click.stop="copyShareLink(result.share)">{{ __t('team.searchoverlay.copy') }}</button>
               </template>
 
               <template v-else>
                 <span class="search-item__tag-dot" :style="{ background: result.tag.color || '#00d4aa' }" />
                 <span class="search-item__name truncate">{{ result.tag.tagName }}</span>
-                <span class="search-item__meta">标签</span>
-                <span class="search-item__size font-mono">{{ result.tag.fileCount ?? 0 }} 个文件</span>
+                <span class="search-item__meta">{{ __t('commonUi.searchoverlay.label') }}</span>
+                <span class="search-item__size font-mono">{{ result.tag.fileCount ?? 0 }}{{ __t('adminUi.searchoverlay.files') }}</span>
               </template>
             </div>
           </div>

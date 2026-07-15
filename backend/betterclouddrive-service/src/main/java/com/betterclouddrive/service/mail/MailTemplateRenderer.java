@@ -20,6 +20,7 @@ public class MailTemplateRenderer {
     private final TemplateEngine textEngine = engine("mail/templates/", ".txt", TemplateMode.TEXT);
 
     public RenderedEmail render(String messageKey, String localeTag, Map<String, Object> variables) {
+        messageKey = semanticKey(messageKey);
         Locale locale = normalizeLocale(localeTag);
         ResourceBundle messages = ResourceBundle.getBundle(BUNDLE, locale);
         Map<String, Object> model = new LinkedHashMap<>();
@@ -51,9 +52,25 @@ public class MailTemplateRenderer {
             case "team_invite", "team_invite_accept", "team_invite_reject", "team_quota_alert",
                  "team_archive", "team_unarchive", "team_restore", "team_permission_update",
                  "team_delete", "team_member_add", "team_role_update", "team_member_remove",
-                 "team_owner_transfer", "team_office_save_failed" -> "notification." + normalized;
+                 "team_owner_transfer", "team_office_save_failed" -> "notification." + semanticKey(normalized);
             default -> "notification.generic";
         };
+    }
+
+    private static String semanticKey(String value) {
+        StringBuilder result = new StringBuilder();
+        boolean capitalize = false;
+        for (char character : value.toCharArray()) {
+            if (character == '_') {
+                capitalize = true;
+            } else if (capitalize) {
+                result.append(Character.toUpperCase(character));
+                capitalize = false;
+            } else {
+                result.append(character);
+            }
+        }
+        return result.toString();
     }
 
     private static TemplateEngine engine(String prefix, String suffix, TemplateMode mode) {

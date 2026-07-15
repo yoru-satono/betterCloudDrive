@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onMounted, ref } from 'vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
 import OSpinner from '@/components/base/OSpinner.vue'
@@ -24,7 +27,7 @@ async function load() {
 
 async function removeFav(file: FileEntity) {
   await favApi.removeFavorite(file.id)
-  toast.success('已取消收藏')
+  toast.success(__t('file.favorites.canceledFavorites'))
   load()
 }
 
@@ -34,22 +37,22 @@ onMounted(load)
 <template>
   <div class="page-enter">
     <div class="page-header">
-      <h2>我的收藏</h2>
+      <h2>{{ __t('file.favorites.myCollection') }}</h2>
     </div>
 
     <div v-if="loading" class="page-loading"><OSpinner /></div>
-    <OEmptyState v-else-if="files.length === 0" title="暂无收藏" description="在文件上右键选择「收藏」即可添加" />
+    <OEmptyState v-else-if="files.length === 0" :title="__t('file.favorites.noFavoritesYet')" :description="__t('file.favorites.rightClickOnTheFileAndSelectCollectToAdd')" />
     <div v-else class="fav-list">
       <div v-for="file in files" :key="file.id" class="fav-item">
         <FileIcon :mime-type="file.mimeType" :file-type="file.fileType" :size="16" />
         <div class="fav-item__name truncate">{{ file.fileName }}</div>
         <div class="fav-item__meta">
-          <span class="font-mono">{{ file.fileType === 'folder' ? '文件夹' : formatSize(file.fileSize) }}</span>
+          <span class="font-mono">{{ file.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(file.fileSize) }}</span>
           <span class="text-muted">{{ formatDate(file.updatedAt) }}</span>
         </div>
         <div class="fav-item__actions">
-          <OButton v-if="file.fileType !== 'folder'" variant="subtle" size="sm" @click="downloadFile(file.id, file.fileName)">下载</OButton>
-          <OButton variant="subtle" size="sm" @click="removeFav(file)">取消收藏</OButton>
+          <OButton v-if="file.fileType !== 'folder'" variant="subtle" size="sm" @click="downloadFile(file.id, file.fileName)">{{ __t('commonUi.filepreview.download') }}</OButton>
+          <OButton variant="subtle" size="sm" @click="removeFav(file)">{{ __t('file.favorites.cancelFavorites') }}</OButton>
         </div>
       </div>
     </div>

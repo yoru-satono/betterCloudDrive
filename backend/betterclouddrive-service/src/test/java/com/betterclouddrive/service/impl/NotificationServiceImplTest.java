@@ -170,7 +170,7 @@ class NotificationServiceImplTest {
                 Long.valueOf(2L).equals(notification.getUserId())
                         && Long.valueOf(10L).equals(notification.getTeamId())
                         && "TEAM_INVITE".equals(notification.getType())));
-        verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, 10L, "TEAM_INVITE", "notification.team_invite.content");
+        verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, 10L, "TEAM_INVITE", "notification.teamInvite.content");
         verify(notificationRealtimePublisher).publishNotificationsChanged(2L, 5L);
     }
 
@@ -190,7 +190,7 @@ class NotificationServiceImplTest {
         notificationService.notifyUser(2L, 10L, "TEAM_INVITE", "邀请", "加入团队", "/teams/10", false);
 
         verify(notificationRepository).save(argThat(notification -> notification.getTeamId() == null));
-        verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, null, "TEAM_INVITE", "notification.team_invite.content");
+        verify(teamEventOutboxService).recordNotificationEvent(99L, 2L, null, "TEAM_INVITE", "notification.teamInvite.content");
     }
 
     @Test
@@ -245,7 +245,7 @@ class NotificationServiceImplTest {
                 "TEAM_QUOTA_ALERT".equals(notification.getType())
                         && Long.valueOf(10L).equals(notification.getTeamId())));
         verify(teamEventOutboxService, times(2)).recordNotificationEvent(
-                isNull(), anyLong(), eq(10L), eq("TEAM_QUOTA_ALERT"), eq("notification.team_quota_alert.content"));
+                isNull(), anyLong(), eq(10L), eq("TEAM_QUOTA_ALERT"), eq("notification.teamQuotaAlert.content"));
         verify(userRepository, never()).findById(4L);
     }
 

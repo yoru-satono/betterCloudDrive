@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref } from 'vue'
 import OButton from '@/components/base/OButton.vue'
 import OInput from '@/components/base/OInput.vue'
@@ -24,9 +27,9 @@ const maxConcurrentUploads = ref(String(DEFAULT_DESKTOP_SETTINGS.maxConcurrentUp
 const maxConcurrentDownloads = ref(String(DEFAULT_DESKTOP_SETTINGS.maxConcurrentDownloads))
 
 const proxyModes: Array<{ value: ProxyMode; label: string }> = [
-  { value: 'system', label: '跟随系统' },
-  { value: 'manual', label: '手动代理' },
-  { value: 'disabled', label: '关闭代理' },
+  { value: 'system', label: __t('desktop.desktopsettings.followTheSystem') },
+  { value: 'manual', label: __t('desktop.desktopsettings.manualProxy') },
+  { value: 'disabled', label: __t('desktop.desktopsettings.turnOffProxy') },
 ]
 
 const isDesktop = computed(() => isDesktopSettingsRuntime())
@@ -47,7 +50,7 @@ async function loadSettings() {
   try {
     applySettings(await getDesktopSettings())
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '读取设置失败')
+    toast.error(e instanceof Error ? e.message : __t('desktop.desktopsettings.failedToReadSettings'))
   } finally {
     loading.value = false
   }
@@ -76,9 +79,9 @@ async function saveSettings() {
       proxyUrl: settings.value.proxyUrl.trim(),
       proxyUsername: settings.value.proxyUsername.trim(),
     }))
-    toast.success('设置已保存')
+    toast.success(__t('desktop.desktopsettings.settingsSaved'))
   } catch (e) {
-    toast.error(e instanceof Error ? e.message : '保存设置失败')
+    toast.error(e instanceof Error ? e.message : __t('desktop.desktopsettings.failedToSaveSettings'))
   } finally {
     saving.value = false
   }
@@ -88,17 +91,17 @@ function validateSettings() {
   const uploadConcurrency = Number(maxConcurrentUploads.value)
   const downloadConcurrency = Number(maxConcurrentDownloads.value)
   if (!Number.isInteger(uploadConcurrency) || uploadConcurrency < 1 || uploadConcurrency > 16) {
-    return '上传并发数需在 1-16 之间'
+    return __t('desktop.desktopsettings.theNumberOfConcurrentUploadsMustBeBetween116')
   }
   if (!Number.isInteger(downloadConcurrency) || downloadConcurrency < 1 || downloadConcurrency > 16) {
-    return '下载并发数需在 1-16 之间'
+    return __t('desktop.desktopsettings.theNumberOfConcurrentDownloadsMustBeBetween116')
   }
-  if (uploadLimit.value && Number(uploadLimit.value) < 0) return '上传限速不能为负数'
-  if (downloadLimit.value && Number(downloadLimit.value) < 0) return '下载限速不能为负数'
+  if (uploadLimit.value && Number(uploadLimit.value) < 0) return __t('desktop.desktopsettings.uploadSpeedLimitCannotBeANegativeNumber')
+  if (downloadLimit.value && Number(downloadLimit.value) < 0) return __t('desktop.desktopsettings.downloadSpeedLimitCannotBeANegativeNumber')
   if (settings.value.proxyMode === 'manual') {
     const lower = settings.value.proxyUrl.trim().toLowerCase()
     if (!lower.startsWith('http://') && !lower.startsWith('https://') && !lower.startsWith('socks5://')) {
-      return '代理地址必须以 http://、https:// 或 socks5:// 开头'
+      return __t('desktop.desktopsettings.proxyAddressMustStartWithHttpHttpsOrSocks5')
     }
   }
   return ''
@@ -108,54 +111,50 @@ function validateSettings() {
 <template>
   <div class="desktop-settings-panel">
     <div class="desktop-settings-panel__toolbar">
-      <span v-if="loading" class="desktop-settings-panel__status">正在读取设置...</span>
-      <span v-else class="desktop-settings-panel__status">客户端内置上传和下载会使用这些设置。</span>
-      <OButton variant="primary" :loading="saving" :disabled="loading || !isDesktop" @click="saveSettings">
-        保存
-      </OButton>
+      <span v-if="loading" class="desktop-settings-panel__status">{{ __t('desktop.desktopsettings.readingSettings') }}</span>
+      <span v-else class="desktop-settings-panel__status">{{ __t('desktop.desktopsettings.builtInClientUploadsAndDownloadsUseTheseSettings') }}</span>
+      <OButton variant="primary" :loading="saving" :disabled="loading || !isDesktop" @click="saveSettings">{{ __t('commonUi.desktopsettings.save') }}</OButton>
     </div>
 
-    <div v-if="!isDesktop" class="settings-empty">
-      设置仅在 Tauri 客户端中生效。
-    </div>
+    <div v-if="!isDesktop" class="settings-empty">{{ __t('desktop.desktopsettings.settingsOnlyTakeEffectInTauriClient') }}</div>
 
     <template v-else>
       <section class="settings-section">
         <div class="settings-section__head">
-          <h3>传输</h3>
-          <span>留空或 0 表示不限速，单位为 MB/s。</span>
+          <h3>{{ __t('desktop.desktopsettings.transmission') }}</h3>
+          <span>{{ __t('desktop.desktopsettings.leaveBlankOr0ToIndicateNoSpeedLimitIn') }}</span>
         </div>
         <div class="settings-grid">
-          <OInput v-model="uploadLimit" label="上传限速" type="number" placeholder="不限速" />
-          <OInput v-model="downloadLimit" label="下载限速" type="number" placeholder="不限速" />
-          <OInput v-model="maxConcurrentUploads" label="上传并发数" type="number" placeholder="3" />
-          <OInput v-model="maxConcurrentDownloads" label="下载并发数" type="number" placeholder="3" />
+          <OInput v-model="uploadLimit" :label="__t('desktop.desktopsettings.uploadSpeedLimit')" type="number" :placeholder="__t('desktop.desktopsettings.noSpeedLimit')" />
+          <OInput v-model="downloadLimit" :label="__t('desktop.desktopsettings.downloadSpeedLimit')" type="number" :placeholder="__t('desktop.desktopsettings.noSpeedLimit')" />
+          <OInput v-model="maxConcurrentUploads" :label="__t('desktop.desktopsettings.numberOfConcurrentUploads')" type="number" placeholder="3" />
+          <OInput v-model="maxConcurrentDownloads" :label="__t('desktop.desktopsettings.numberOfConcurrentDownloads')" type="number" placeholder="3" />
         </div>
       </section>
 
       <section class="settings-section">
         <div class="settings-section__head">
-          <h3>下载位置</h3>
-          <span>设置后，单文件和文件夹下载将直接保存到该目录。</span>
+          <h3>{{ __t('desktop.desktopsettings.downloadLocation') }}</h3>
+          <span>{{ __t('desktop.desktopsettings.onceSetUpSingleFileAndFolderDownloadsWillBe') }}</span>
         </div>
         <div class="download-dir">
           <OInput
             :model-value="settings.defaultDownloadDir || ''"
-            label="默认下载位置"
-            placeholder="未设置，下载时询问"
+            :label="__t('desktop.desktopsettings.defaultDownloadLocation')"
+            :placeholder="__t('desktop.desktopsettings.notSetAskedWhenDownloading')"
             disabled
           />
           <div class="download-dir__actions">
-            <OButton variant="ghost" @click="chooseDownloadDir">选择目录</OButton>
-            <OButton variant="subtle" @click="settings.defaultDownloadDir = null">清空</OButton>
+            <OButton variant="ghost" @click="chooseDownloadDir">{{ __t('desktop.desktopsettings.selectDirectory') }}</OButton>
+            <OButton variant="subtle" @click="settings.defaultDownloadDir = null">{{ __t('desktop.desktopsettings.clear') }}</OButton>
           </div>
         </div>
       </section>
 
       <section class="settings-section">
         <div class="settings-section__head">
-          <h3>代理</h3>
-          <span>代理设置只影响客户端内置上传和下载。</span>
+          <h3>{{ __t('desktop.desktopsettings.acting') }}</h3>
+          <span>{{ __t('desktop.desktopsettings.proxySettingsOnlyAffectBuiltInClientUploadsAndDownloads') }}</span>
         </div>
         <div class="proxy-mode">
           <button
@@ -172,21 +171,21 @@ function validateSettings() {
         <div class="settings-grid">
           <OInput
             v-model="settings.proxyUrl"
-            label="代理地址"
+            :label="__t('desktop.desktopsettings.proxyAddress')"
             placeholder="http://127.0.0.1:7890"
             :disabled="!isManualProxy"
           />
           <OInput
             v-model="settings.proxyUsername"
-            label="用户名"
-            placeholder="可选"
+            :label="__t('commonUi.desktopsettings.username')"
+            :placeholder="__t('desktop.desktopsettings.optional')"
             :disabled="!isManualProxy"
           />
           <OInput
             v-model="settings.proxyPassword"
-            label="密码"
+            :label="__t('commonUi.desktopsettings.password')"
             type="password"
-            placeholder="可选"
+            :placeholder="__t('desktop.desktopsettings.optional')"
             :disabled="!isManualProxy"
           />
         </div>

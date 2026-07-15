@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
@@ -21,27 +24,27 @@ const page = ref(1)
 const total = ref(0)
 const pageSize = 20
 const typeOptions: Array<{ label: string; value: NotificationTypeFilter | '' }> = [
-  { label: '全部类型', value: '' },
-  { label: '团队邀请', value: 'TEAM_INVITE' },
-  { label: '邀请接受', value: 'TEAM_INVITE_ACCEPT' },
-  { label: '邀请拒绝', value: 'TEAM_INVITE_REJECT' },
-  { label: '配额告警', value: 'TEAM_QUOTA_ALERT' },
-  { label: '团队归档', value: 'TEAM_ARCHIVE' },
-  { label: '取消归档', value: 'TEAM_UNARCHIVE' },
-  { label: '团队恢复', value: 'TEAM_RESTORE' },
-  { label: '团队删除', value: 'TEAM_DELETE' },
-  { label: '权限变更', value: 'TEAM_PERMISSION_UPDATE' },
-  { label: '成员加入', value: 'TEAM_MEMBER_ADD' },
-  { label: '角色变更', value: 'TEAM_ROLE_UPDATE' },
-  { label: '成员移除', value: 'TEAM_MEMBER_REMOVE' },
-  { label: '所有权转让', value: 'TEAM_OWNER_TRANSFER' },
-  { label: '文档保存失败', value: 'TEAM_OFFICE_SAVE_FAILED' },
+  { label: __t('notificationUi.notifications.allTypes'), value: '' },
+  { label: __t('team.notifications.teamInvitation'), value: 'TEAM_INVITE' },
+  { label: __t('notificationUi.notifications.invitationAccepted'), value: 'TEAM_INVITE_ACCEPT' },
+  { label: __t('notificationUi.notifications.invitationDeclined'), value: 'TEAM_INVITE_REJECT' },
+  { label: __t('notificationUi.notifications.quotaAlarm'), value: 'TEAM_QUOTA_ALERT' },
+  { label: __t('notificationUi.notifications.teamArchive'), value: 'TEAM_ARCHIVE' },
+  { label: __t('adminUi.adminteams.unarchive'), value: 'TEAM_UNARCHIVE' },
+  { label: __t('notificationUi.notifications.teamRecovery'), value: 'TEAM_RESTORE' },
+  { label: __t('notificationUi.notifications.teamDelete'), value: 'TEAM_DELETE' },
+  { label: __t('notificationUi.notifications.permissionChanges'), value: 'TEAM_PERMISSION_UPDATE' },
+  { label: __t('notificationUi.notifications.membersJoin'), value: 'TEAM_MEMBER_ADD' },
+  { label: __t('notificationUi.notifications.roleChange'), value: 'TEAM_ROLE_UPDATE' },
+  { label: __t('notificationUi.notifications.memberRemoval'), value: 'TEAM_MEMBER_REMOVE' },
+  { label: __t('notificationUi.notifications.transferOfOwnership'), value: 'TEAM_OWNER_TRANSFER' },
+  { label: __t('notificationUi.notifications.documentSaveFailed'), value: 'TEAM_OFFICE_SAVE_FAILED' },
 ]
 const emptyTitle = computed(() => {
-  if (unreadOnly.value && typeFilter.value) return '暂无匹配的未读通知'
-  if (unreadOnly.value) return '暂无未读通知'
-  if (typeFilter.value) return '暂无匹配类型的通知'
-  return '暂无通知'
+  if (unreadOnly.value && typeFilter.value) return __t('notificationUi.notifications.noMatchingUnreadNotificationsYet')
+  if (unreadOnly.value) return __t('notificationUi.notifications.noUnreadNotificationsYet')
+  if (typeFilter.value) return __t('notificationUi.notifications.thereAreNoNotificationsOfMatchingTypeYet')
+  return __t('notificationUi.notifications.noNotificationYet')
 })
 
 async function load() {
@@ -73,7 +76,7 @@ async function openNotification(notification: NotificationEntity) {
 
 async function markAllRead() {
   await notificationsApi.markAllNotificationsRead()
-  toast.success('通知已全部标记为已读')
+  toast.success(__t('notificationUi.notifications.notificationsAreAllMarkedAsRead'))
   window.dispatchEvent(new Event('bcd:notifications-changed'))
   await load()
 }
@@ -107,15 +110,15 @@ onUnmounted(() => {
   <div class="notifications-page page-enter">
     <div class="notifications-page__header">
       <div>
-        <h2>通知</h2>
-        <p>团队邀请、配额告警和团队状态变更会出现在这里</p>
+        <h2>{{ __t('notificationUi.notifications.notify') }}</h2>
+        <p>{{ __t('notificationUi.notifications.teamInvitationsQuotaAlertsAndTeamStatusChangesWillAppear') }}</p>
       </div>
       <div class="notifications-page__actions">
         <select v-model="typeFilter" class="notifications-page__type" @change="changeTypeFilter">
           <option v-for="option in typeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
         </select>
-        <OButton variant="ghost" size="sm" @click="toggleUnreadOnly">{{ unreadOnly ? '全部通知' : '仅未读' }}</OButton>
-        <OButton variant="ghost" size="sm" @click="markAllRead">全部已读</OButton>
+        <OButton variant="ghost" size="sm" @click="toggleUnreadOnly">{{ unreadOnly ? __t('notificationUi.notifications.allNotifications') : __t('notificationUi.notifications.onlyUnread') }}</OButton>
+        <OButton variant="ghost" size="sm" @click="markAllRead">{{ __t('notificationUi.notifications.allRead') }}</OButton>
       </div>
     </div>
 
@@ -143,9 +146,9 @@ onUnmounted(() => {
     </div>
 
     <div v-if="total > pageSize" class="notifications-page__pagination">
-      <OButton variant="ghost" size="sm" :disabled="page <= 1" @click="page--; load()">上一页</OButton>
-      <span class="font-mono">第 {{ page }} 页 · 共 {{ total }} 条</span>
-      <OButton variant="ghost" size="sm" :disabled="page * pageSize >= total" @click="page++; load()">下一页</OButton>
+      <OButton variant="ghost" size="sm" :disabled="page <= 1" @click="page--; load()">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+      <span class="font-mono">{{ __t('commonUi.adminlogs.no') }}{{ page }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ total }}{{ __t('notificationUi.notifications.strip') }}</span>
+      <OButton variant="ghost" size="sm" :disabled="page * pageSize >= total" @click="page++; load()">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
     </div>
   </div>
 </template>

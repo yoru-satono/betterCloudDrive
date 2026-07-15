@@ -2,9 +2,11 @@
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { onMounted } from 'vue'
+import { i18n } from '@/i18n'
 
 const auth = useAuthStore()
 const router = useRouter()
+const t = i18n.global.t
 onMounted(() => { if (!auth.isAdmin) router.push('/files') })
 </script>
 
@@ -12,14 +14,14 @@ onMounted(() => { if (!auth.isAdmin) router.push('/files') })
   <div class="admin-layout">
     <div class="admin-layout__header">
       <span class="admin-layout__badge">ADMIN</span>
-      <span class="admin-layout__title">管理后台</span>
-      <RouterLink to="/files" style="color:var(--text-secondary);font-size:13px;text-decoration:none">← 返回云盘</RouterLink>
+      <span class="admin-layout__title">{{ t('admin.title') }}</span>
+      <RouterLink to="/files" style="color:var(--text-secondary);font-size:13px;text-decoration:none">← {{ t('admin.back') }}</RouterLink>
     </div>
     <nav class="admin-layout__nav">
-      <RouterLink to="/admin" exact-active-class="admin-nav--active" class="admin-nav-link">概览</RouterLink>
-      <RouterLink to="/admin/users" active-class="admin-nav--active" class="admin-nav-link">用户管理</RouterLink>
-      <RouterLink to="/admin/teams" active-class="admin-nav--active" class="admin-nav-link">团队管理</RouterLink>
-      <RouterLink to="/admin/logs" active-class="admin-nav--active" class="admin-nav-link">日志中心</RouterLink>
+      <RouterLink to="/admin" exact-active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.overview') }}</RouterLink>
+      <RouterLink to="/admin/users" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.users') }}</RouterLink>
+      <RouterLink to="/admin/teams" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.teams') }}</RouterLink>
+      <RouterLink to="/admin/logs" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.logs') }}</RouterLink>
     </nav>
     <main class="admin-layout__content">
       <RouterView />
@@ -59,4 +61,10 @@ onMounted(() => { if (!auth.isAdmin) router.push('/files') })
   position: relative; bottom: -1px;
 }
 .admin-layout__content { padding: 24px; }
+@media (max-width: 719px) {
+  .admin-layout__header { height: auto; min-height: 52px; padding: 10px 16px; flex-wrap: wrap; }
+  .admin-layout__nav { padding: 8px 12px 0; overflow-x: auto; }
+  .admin-nav-link { white-space: nowrap; padding-inline: 11px; }
+  .admin-layout__content { padding: 16px; overflow-x: hidden; }
+}
 </style>

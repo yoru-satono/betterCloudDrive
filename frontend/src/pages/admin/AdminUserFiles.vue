@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
@@ -20,7 +23,7 @@ const files = ref<FileEntity[]>([])
 const loading = ref(false)
 const detailOpen = ref(false)
 const detail = ref<FileEntity | null>(null)
-const stack = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: '根目录' }])
+const stack = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: __t('adminUi.adminuserfiles.rootDirectory') }])
 const currentParentId = computed(() => stack.value[stack.value.length - 1].id)
 
 async function load() {
@@ -51,10 +54,10 @@ async function openDetail(file: FileEntity) {
 }
 
 async function deleteFile(file: FileEntity) {
-  const ok = await confirm('管理员删除文件', `确认删除「${file.fileName}」？`)
+  const ok = await confirm(__t('adminUi.adminuserfiles.administratorDeletesFiles'), __t('adminUi.adminuserfiles.confirmToDelete', { p0: file.fileName }))
   if (!ok) return
   await adminApi.deleteFile(file.id)
-  toast.success('文件已删除')
+  toast.success(__t('adminUi.adminuserfiles.fileDeleted'))
   await load()
 }
 
@@ -65,34 +68,34 @@ onMounted(load)
   <div class="page-enter">
     <div class="page-header">
       <div>
-        <h2>用户 {{ userId }} 的文件</h2>
+        <h2>{{ __t('commonUi.adminlogs.user') }}{{ userId }}{{ __t('adminUi.adminuserfiles.files') }}</h2>
         <p class="text-muted" style="font-size:12px;margin-top:2px">{{ stack.map(item => item.name).join(' / ') }}</p>
       </div>
-      <OButton variant="ghost" :disabled="stack.length <= 1 || loading" @click="goBack">返回上级</OButton>
+      <OButton variant="ghost" :disabled="stack.length <= 1 || loading" @click="goBack">{{ __t('adminUi.adminuserfiles.returnToPreviousLevel') }}</OButton>
     </div>
 
     <div v-if="loading" class="page-loading"><OSpinner /></div>
-    <OEmptyState v-else-if="files.length === 0" title="当前目录没有文件" />
+    <OEmptyState v-else-if="files.length === 0" :title="__t('adminUi.adminuserfiles.thereAreNoFilesInTheCurrentDirectory')" />
     <div v-else class="admin-files">
       <div v-for="file in files" :key="file.id" class="admin-file-row">
         <FileIcon :mime-type="file.mimeType" :file-type="file.fileType" :size="16" />
         <button v-if="file.fileType === 'folder'" class="admin-file-row__name" @click="enterFolder(file)">{{ file.fileName }}</button>
         <span v-else class="admin-file-row__name">{{ file.fileName }}</span>
-        <span class="font-mono">{{ file.fileType === 'folder' ? '文件夹' : formatSize(file.fileSize) }}</span>
-        <OButton variant="subtle" size="sm" @click="openDetail(file)">详情</OButton>
-        <OButton variant="danger" size="sm" @click="deleteFile(file)">删除</OButton>
+        <span class="font-mono">{{ file.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(file.fileSize) }}</span>
+        <OButton variant="subtle" size="sm" @click="openDetail(file)">{{ __t('commonUi.adminlogs.details') }}</OButton>
+        <OButton variant="danger" size="sm" @click="deleteFile(file)">{{ __t('commonUi.adminuserfiles.delete') }}</OButton>
       </div>
     </div>
 
-    <OModal title="文件详情" :open="detailOpen" @close="detailOpen = false">
+    <OModal :title="__t('commonUi.adminuserfiles.documentDetails')" :open="detailOpen" @close="detailOpen = false">
       <div v-if="detail" class="admin-file-info">
         <div><span>ID</span><strong class="font-mono">{{ detail.id }}</strong></div>
-        <div><span>名称</span><strong>{{ detail.fileName }}</strong></div>
-        <div><span>类型</span><strong>{{ detail.fileType === 'folder' ? '文件夹' : detail.mimeType || '文件' }}</strong></div>
-        <div><span>大小</span><strong class="font-mono">{{ detail.fileType === 'folder' ? '文件夹' : formatSize(detail.fileSize) }}</strong></div>
+        <div><span>{{ __t('commonUi.filelist.name') }}</span><strong>{{ detail.fileName }}</strong></div>
+        <div><span>{{ __t('commonUi.adminlogs.type') }}</span><strong>{{ detail.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : detail.mimeType || __t('commonUi.searchoverlay.document') }}</strong></div>
+        <div><span>{{ __t('commonUi.filelist.size') }}</span><strong class="font-mono">{{ detail.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(detail.fileSize) }}</strong></div>
         <div><span>MD5</span><strong class="font-mono">{{ detail.md5Hash || '-' }}</strong></div>
-        <div><span>创建</span><strong>{{ formatDateFull(detail.createdAt) }}</strong></div>
-        <div><span>更新</span><strong>{{ formatDateFull(detail.updatedAt) }}</strong></div>
+        <div><span>{{ __t('commonUi.adminuserfiles.create') }}</span><strong>{{ formatDateFull(detail.createdAt) }}</strong></div>
+        <div><span>{{ __t('adminUi.adminuserfiles.renew') }}</span><strong>{{ formatDateFull(detail.updatedAt) }}</strong></div>
       </div>
     </OModal>
   </div>

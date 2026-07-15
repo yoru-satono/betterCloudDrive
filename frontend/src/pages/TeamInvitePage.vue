@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
@@ -32,13 +35,13 @@ async function load() {
 
 async function accept() {
   await teamsApi.acceptInvite(token.value)
-  toast.success('已加入团队')
+  toast.success(__t('team.teaminvite.alreadyJoinedTheTeam'))
   await router.push(invite.value ? `/teams/${invite.value.teamId}/files` : '/files')
 }
 
 async function reject() {
   await teamsApi.rejectInvite(token.value)
-  toast.success('已拒绝邀请')
+  toast.success(__t('team.teaminvite.invitationDeclined'))
   await load()
 }
 
@@ -49,21 +52,21 @@ onMounted(load)
   <div class="invite-page">
     <div v-if="loading" class="invite-page__loading"><OSpinner /></div>
     <div v-else-if="invite" class="invite-panel">
-      <div class="invite-panel__eyebrow">团队邀请</div>
-      <h1>{{ invite.teamName || '团队' }}</h1>
-      <p>{{ invite.invitedByUsername || '团队管理员' }} 邀请 {{ invite.email }} 以 {{ invite.role }} 身份加入。</p>
+      <div class="invite-panel__eyebrow">{{ __t('team.notifications.teamInvitation') }}</div>
+      <h1>{{ invite.teamName || __t('commonUi.adminteams.team') }}</h1>
+      <p>{{ invite.invitedByUsername || __t('team.teaminvite.teamAdmin') }}{{ __t('team.teaminvite.invite') }}{{ invite.email }}{{ __t('team.teaminvite.by') }}{{ invite.role }}{{ __t('team.teaminvite.joinAsIdentity') }}</p>
       <div class="invite-panel__meta">
-        <span>状态：{{ invite.status }}</span>
-        <span>过期：{{ formatDateFull(invite.expiresAt) }}</span>
+        <span>{{ __t('team.teaminvite.state') }}{{ invite.status }}</span>
+        <span>{{ __t('team.teaminvite.expired') }}{{ formatDateFull(invite.expiresAt) }}</span>
       </div>
       <div v-if="invite.status === 'PENDING'" class="invite-panel__actions">
         <template v-if="loggedIn">
-          <OButton variant="primary" @click="accept">接受邀请</OButton>
-          <OButton variant="ghost" @click="reject">拒绝</OButton>
+          <OButton variant="primary" @click="accept">{{ __t('team.teaminvite.acceptInvitation') }}</OButton>
+          <OButton variant="ghost" @click="reject">{{ __t('team.teaminvite.reject') }}</OButton>
         </template>
         <template v-else>
-          <OButton variant="primary" @click="router.push('/login')">登录后接受</OButton>
-          <OButton variant="ghost" @click="router.push('/register')">注册账号</OButton>
+          <OButton variant="primary" @click="router.push('/login')">{{ __t('team.teaminvite.logInToAccept') }}</OButton>
+          <OButton variant="ghost" @click="router.push('/register')">{{ __t('team.teaminvite.registerAnAccount') }}</OButton>
         </template>
       </div>
     </div>

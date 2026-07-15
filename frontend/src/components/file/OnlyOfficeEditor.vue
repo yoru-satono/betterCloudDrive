@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onBeforeUnmount, ref, watch } from 'vue'
 import type { OnlyOfficeConfigResponse, OnlyOfficeDocEditor, OnlyOfficeWindow } from '@/types/office'
 
@@ -27,7 +30,7 @@ watch(
       })
       queueEditorResize()
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'OnlyOffice 加载失败'
+      error.value = e instanceof Error ? e.message : __t('file.onlyofficeeditor.onlyofficeFailedToLoad')
     }
   },
   { immediate: true },

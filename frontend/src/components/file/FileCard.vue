@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import FileThumbnail from './FileThumbnail.vue'
 import { useFormatters } from '@/composables/useFormatters'
 import type { FileEntity } from '@/types/file'
@@ -29,7 +32,7 @@ const { formatSize, formatDate } = useFormatters()
     <div class="file-card__name truncate">{{ file.fileName }}</div>
     <div class="file-card__meta">
       <span v-if="file.fileType !== 'folder'" class="font-mono">{{ formatSize(file.fileSize) }}</span>
-      <span v-else class="text-muted">文件夹</span>
+      <span v-else class="text-muted">{{ __t('commonUi.desktopfolderupload.folder') }}</span>
       <span class="text-muted">{{ formatDate(file.updatedAt) }}</span>
     </div>
     <div v-if="selected" class="file-card__check">

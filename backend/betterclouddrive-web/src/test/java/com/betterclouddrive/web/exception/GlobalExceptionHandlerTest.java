@@ -30,7 +30,7 @@ class GlobalExceptionHandlerTest {
         BusinessException ex = new BusinessException(ApiCode.FILE_NOT_FOUND);
         ApiResponse<?> response = handler.handleBusinessException(ex);
         assertThat(response.getCode()).isEqualTo(404001);
-        assertThat(response.getMessageKey()).isEqualTo("error.file_not_found");
+        assertThat(response.getMessageKey()).isEqualTo("error.fileNotFound");
     }
 
     @Test
@@ -74,7 +74,7 @@ class GlobalExceptionHandlerTest {
         ApiResponse<?> response = handler.handleTypeMismatch(ex);
 
         assertThat(response.getCode()).isEqualTo(400);
-        assertThat(response.getMessageKey()).isEqualTo("error.invalid_parameter");
+        assertThat(response.getMessageKey()).isEqualTo("error.invalidParameter");
         assertThat(response.getMessageParams()).containsEntry("name", "startAt");
     }
 

@@ -7,7 +7,7 @@ const saveBlobResponse = async (response: { data: Blob; headers: Record<string, 
   const contentType = String(response.headers['content-type'] || '')
   if (contentType.includes('application/json')) {
     const payload = JSON.parse(await response.data.text()) as { messageKey?: string; messageParams?: Record<string, string | number | boolean | null> }
-    throw new Error(resolveMessage(payload.messageKey || 'error.download_failed', payload.messageParams))
+    throw new Error(resolveMessage(payload.messageKey || 'error.downloadFailed', payload.messageParams))
   }
 
   const disposition = String(response.headers['content-disposition'] || '')

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { Settings, Minus, Square, X } from 'lucide-vue-next'
@@ -23,7 +26,7 @@ const webBaseUrl = ref(getWebBaseUrl())
 const settingsPanel = ref<HTMLElement | null>(null)
 const settingsButton = ref<HTMLButtonElement | null>(null)
 const isLoggedIn = computed(() => !!auth.user || !!localStorage.getItem('accessToken'))
-const settingsLabel = computed(() => isLoggedIn.value ? '客户端设置' : '连接设置')
+const settingsLabel = computed(() => isLoggedIn.value ? __t('desktop.desktoptitlebar.clientSettings') : __t('desktop.desktoptitlebar.connectionSettings'))
 
 function getDesktopWindow(): TauriWindow {
   return getCurrentWindow()
@@ -61,7 +64,7 @@ function saveConnectionSettings() {
   setStoredApiBaseUrl(apiBaseUrl.value)
   setStoredWebBaseUrl(webBaseUrl.value)
   closeConnectionSettings()
-  toast.success('连接设置已保存')
+  toast.success(__t('desktop.desktoptitlebar.connectionSettingsSaved'))
 }
 
 function onDocumentPointerDown(event: PointerEvent) {
@@ -112,7 +115,7 @@ onBeforeUnmount(() => {
       </span>
       <span class="desktop-titlebar__title">BetterCloudDrive</span>
     </div>
-    <div class="desktop-titlebar__controls" aria-label="窗口控制">
+    <div class="desktop-titlebar__controls" :aria-label="__t('desktop.desktoptitlebar.windowControl')">
       <div class="desktop-titlebar__settings">
         <button
           ref="settingsButton"
@@ -131,39 +134,39 @@ onBeforeUnmount(() => {
           id="desktop-connection-settings"
           ref="settingsPanel"
           class="connection-settings"
-          aria-label="连接设置"
+          :aria-label="__t('desktop.desktoptitlebar.connectionSettings')"
           @submit.prevent="saveConnectionSettings"
         >
           <div class="connection-settings__head">
-            <strong>连接设置</strong>
-            <span>注册、找回密码、分享链接都会使用这里的地址。</span>
+            <strong>{{ __t('desktop.desktoptitlebar.connectionSettings') }}</strong>
+            <span>{{ __t('desktop.desktoptitlebar.theAddressHereWillBeUsedToRegisterRetrievePasswords') }}</span>
           </div>
           <OInput
             v-model="apiBaseUrl"
-            label="API 地址"
+            :label="__t('desktop.desktoptitlebar.apiAddress')"
             placeholder="http://127.0.0.1:8080/api/v1"
             autocomplete="off"
           />
           <OInput
             v-model="webBaseUrl"
-            label="Web 分享地址"
+            :label="__t('desktop.desktoptitlebar.webSharingAddress')"
             placeholder="http://127.0.0.1:3000"
             autocomplete="off"
           />
           <div class="connection-settings__actions">
-            <OButton type="button" variant="ghost" size="sm" @click="closeConnectionSettings">取消</OButton>
-            <OButton type="submit" variant="primary" size="sm">保存</OButton>
+            <OButton type="button" variant="ghost" size="sm" @click="closeConnectionSettings">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+            <OButton type="submit" variant="primary" size="sm">{{ __t('commonUi.desktopsettings.save') }}</OButton>
           </div>
         </form>
       </div>
-      <button class="desktop-titlebar__button" type="button" aria-label="最小化" title="最小化" @click="minimizeWindow">
+      <button class="desktop-titlebar__button" type="button" :aria-label="__t('desktop.desktoptitlebar.minimize')" :title="__t('desktop.desktoptitlebar.minimize')" @click="minimizeWindow">
         <Minus :size="14" :stroke-width="1.8" aria-hidden="true" />
       </button>
       <button
         class="desktop-titlebar__button"
         type="button"
-        aria-label="最大化或还原"
-        title="最大化或还原"
+        :aria-label="__t('desktop.desktoptitlebar.maximizeOrRestore')"
+        :title="__t('desktop.desktoptitlebar.maximizeOrRestore')"
         @click="toggleMaximizeWindow"
       >
         <Square :size="12" :stroke-width="1.8" aria-hidden="true" />
@@ -171,8 +174,8 @@ onBeforeUnmount(() => {
       <button
         class="desktop-titlebar__button desktop-titlebar__button--close"
         type="button"
-        aria-label="关闭"
-        title="关闭"
+        :aria-label="__t('commonUi.o.closure')"
+        :title="__t('commonUi.o.closure')"
         @click="closeWindow"
       >
         <X :size="14" :stroke-width="1.8" aria-hidden="true" />
@@ -180,7 +183,7 @@ onBeforeUnmount(() => {
     </div>
     <OModal
       id="desktop-client-settings"
-      title="客户端设置"
+      :title="__t('desktop.desktoptitlebar.clientSettings')"
       :open="showClientSettings"
       width="760px"
       @close="showClientSettings = false"

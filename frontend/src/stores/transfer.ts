@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { toast } from 'vue-sonner'
@@ -40,7 +42,7 @@ export const useTransferStore = defineStore('transfer', () => {
       queue.value = normalizeQueue(await restoreDesktopTransfers())
       if (queue.value.tasks.length) isOpen.value = true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '恢复传输队列失败')
+      toast.error(error instanceof Error ? error.message : __t('transferUi.transfer.failedToRestoreTransmissionQueue'))
     }
   }
 
@@ -57,7 +59,7 @@ export const useTransferStore = defineStore('transfer', () => {
       })
     } catch (error) {
       listenersReady = false
-      toast.error(error instanceof Error ? error.message : '初始化传输队列失败')
+      toast.error(error instanceof Error ? error.message : __t('transferUi.transfer.failedToInitializeTransmissionQueue'))
     }
   }
 

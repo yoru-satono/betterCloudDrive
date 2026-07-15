@@ -167,7 +167,7 @@ test.describe('teams', () => {
       const notifications = await listNotifications(request, invitee.accessToken, { unreadOnly: true, type: 'TEAM_INVITE' })
       return notifications.some(notification =>
         notification.teamId === team.id &&
-        notification.titleKey === 'notification.team_invite.title' &&
+        notification.titleKey === 'notification.teamInvite.title' &&
         !!notification.link?.startsWith('/team-invites/'),
       )
     }, { timeout: 30_000 }).toBe(true)
@@ -186,7 +186,7 @@ test.describe('teams', () => {
     await expect.poll(async () => {
       const notifications = await listNotifications(request, invitee.accessToken, { type: 'TEAM_INVITE' })
       return notifications.find(notification =>
-        notification.teamId === team.id && notification.titleKey === 'notification.team_invite.title'
+        notification.teamId === team.id && notification.titleKey === 'notification.teamInvite.title'
       )?.isRead
     }).toBe(true)
 
@@ -204,7 +204,7 @@ test.describe('teams', () => {
       const notifications = await listNotifications(request, invitee.accessToken, { unreadOnly: true, type: 'TEAM_INVITE' })
       return notifications.some(notification =>
         notification.teamId === team.id &&
-        notification.titleKey === 'notification.team_invite.title'
+        notification.titleKey === 'notification.teamInvite.title'
       )
     }, { timeout: 30_000 }).toBe(true)
 

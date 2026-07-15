@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import api from './client'
 import { toast } from 'vue-sonner'
 import { getApiBaseUrl } from '@/config/runtime'
@@ -26,7 +28,7 @@ export const saveBlobResponse = async (response: { data: Blob; headers?: Record<
   const contentType = responseHeader(response.headers, 'content-type')
   if (contentType.includes('application/json')) {
     const payload = JSON.parse(await response.data.text()) as { messageKey?: string; messageParams?: Record<string, string | number | boolean | null> }
-    throw new Error(resolveMessage(payload.messageKey || 'error.download_failed', payload.messageParams))
+    throw new Error(resolveMessage(payload.messageKey || 'error.downloadFailed', payload.messageParams))
   }
 
   const url = URL.createObjectURL(response.data)
@@ -53,14 +55,14 @@ export const downloadFile = async (fileId: number, fileName: string) => {
   try {
     if (isDesktopDownloadRuntime()) {
       const saved = await startQueuedDesktopFileDownload({ id: fileId, fileName, fileSize: 0 })
-      if (saved) toast.success('已加入传输队列')
+      if (saved) toast.success(__t('transferUi.download.addedToTransmissionQueue'))
       return
     }
 
     const { data } = await api.post<{ code: number; data: { url: string } }>(`/download/${fileId}/ticket`, undefined, { suppressToast: true })
     triggerBrowserDownload(data.data.url, fileName)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : '下载失败'
+    const msg = e instanceof Error ? e.message : __t('transferUi.download.downloadFailed')
     toast.error(msg)
   }
 }
@@ -69,14 +71,14 @@ export const downloadTeamFile = async (teamId: number, fileId: number, fileName:
   try {
     if (isDesktopDownloadRuntime()) {
       const saved = await startQueuedDesktopFileDownload({ id: fileId, fileName, fileSize: 0 }, { teamId })
-      if (saved) toast.success('已加入传输队列')
+      if (saved) toast.success(__t('transferUi.download.addedToTransmissionQueue'))
       return
     }
 
     const { data } = await api.post<{ code: number; data: { url: string } }>(`/teams/${teamId}/download/${fileId}/ticket`, undefined, { suppressToast: true })
     triggerBrowserDownload(data.data.url, fileName)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : '下载失败'
+    const msg = e instanceof Error ? e.message : __t('transferUi.download.downloadFailed')
     toast.error(msg)
   }
 }
@@ -85,14 +87,14 @@ export const downloadFolderZip = async (fileId: number, folderName: string) => {
   try {
     if (isDesktopDownloadRuntime()) {
       const saved = await startQueuedDesktopFolderDownload({ id: fileId, fileName: folderName, fileSize: 0 })
-      if (saved) toast.success('已加入传输队列')
+      if (saved) toast.success(__t('transferUi.download.addedToTransmissionQueue'))
       return
     }
 
     const { data } = await api.post<{ code: number; data: { url: string } }>(`/download/folders/${fileId}/zip/ticket`, undefined, { suppressToast: true })
     triggerBrowserDownload(data.data.url, `${folderName}.zip`)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : '下载失败'
+    const msg = e instanceof Error ? e.message : __t('transferUi.download.downloadFailed')
     toast.error(msg)
   }
 }
@@ -101,14 +103,14 @@ export const downloadTeamFolderZip = async (teamId: number, fileId: number, fold
   try {
     if (isDesktopDownloadRuntime()) {
       const saved = await startQueuedDesktopFolderDownload({ id: fileId, fileName: folderName, fileSize: 0 }, { teamId })
-      if (saved) toast.success('已加入传输队列')
+      if (saved) toast.success(__t('transferUi.download.addedToTransmissionQueue'))
       return
     }
 
     await api.post(`/teams/${teamId}/download/folders/${fileId}/zip/tasks`, undefined, { suppressToast: true })
-    toast.success('ZIP 任务已提交，可在团队设置的任务中心下载')
+    toast.success(__t('transferUi.download.theZipTaskHasBeenSubmittedAndCanBeDownloaded'))
   } catch (e) {
-    const msg = e instanceof Error ? e.message : '下载失败'
+    const msg = e instanceof Error ? e.message : __t('transferUi.download.downloadFailed')
     toast.error(msg)
   }
 }
@@ -130,7 +132,7 @@ export const downloadSharedFile = async (shareCode: string, fileId: number, file
     )
     await saveBlobResponse(res, fileName)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : '下载失败'
+    const msg = e instanceof Error ? e.message : __t('transferUi.download.downloadFailed')
     toast.error(msg)
   }
 }
@@ -144,7 +146,7 @@ export const downloadSharedFolderZip = async (shareCode: string, fileId: number,
     )
     await saveBlobResponse(res, `${folderName}.zip`)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : '下载失败'
+    const msg = e instanceof Error ? e.message : __t('transferUi.download.downloadFailed')
     toast.error(msg)
   }
 }

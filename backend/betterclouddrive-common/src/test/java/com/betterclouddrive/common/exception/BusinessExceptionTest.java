@@ -22,7 +22,7 @@ class BusinessExceptionTest {
 
         assertThat(ex.getCode()).isEqualTo(404001);
         assertThat(ex.getMessage()).isEqualTo("file not found");
-        assertThat(ex.getMessageKey()).isEqualTo("error.file_not_found");
+        assertThat(ex.getMessageKey()).isEqualTo("error.fileNotFound");
     }
 
     @Test

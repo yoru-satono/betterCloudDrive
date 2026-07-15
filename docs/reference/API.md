@@ -294,7 +294,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 400,
-  "messageKey": "error.bad_request",
+  "messageKey": "error.badRequest",
   "messageParams": {}
 }
 ```
@@ -402,7 +402,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 404001,
-  "messageKey": "error.file_not_found",
+  "messageKey": "error.fileNotFound",
   "messageParams": {}
 }
 ```
@@ -444,7 +444,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 409001,
-  "messageKey": "error.file_name_conflict",
+  "messageKey": "error.fileNameConflict",
   "messageParams": {}
 }
 ```
@@ -608,7 +608,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 419001,
-  "messageKey": "error.storage_quota_exceeded",
+  "messageKey": "error.storageQuotaExceeded",
   "messageParams": {}
 }
 ```
@@ -716,7 +716,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 419006,
-  "messageKey": "error.chunk_upload_invalid",
+  "messageKey": "error.chunkUploadInvalid",
   "messageParams": {}
 }
 ```
@@ -779,7 +779,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 419001,
-  "messageKey": "error.storage_quota_exceeded",
+  "messageKey": "error.storageQuotaExceeded",
   "messageParams": {}
 }
 ```
@@ -788,7 +788,7 @@ Authorization: Bearer <accessToken>
 ```json
 {
   "code": 419010,
-  "messageKey": "error.instant_upload_not_found",
+  "messageKey": "error.instantUploadNotFound",
   "messageParams": {}
 }
 ```
@@ -2116,7 +2116,7 @@ Authorization: Bearer <accessToken>
       "canShare": true,
       "canDelete": true,
       "canManage": false,
-      "descriptionKey": "permission.base_role",
+      "descriptionKey": "permission.baseRole",
       "descriptionParams": { "role": "EDITOR" }
     },
     {
@@ -2132,7 +2132,7 @@ Authorization: Bearer <accessToken>
       "canShare": false,
       "canDelete": false,
       "canManage": false,
-      "descriptionKey": "permission.inherited_override",
+      "descriptionKey": "permission.inheritedOverride",
       "descriptionParams": { "fileName": "项目资料" }
     }
   ]
@@ -2257,8 +2257,8 @@ Authorization: Bearer <accessToken>
   "userId": 126,
   "teamId": 42,
   "type": "TEAM_INVITE_ACCEPT",
-  "titleKey": "notification.team_invite_accept.title",
-  "contentKey": "notification.team_invite_accept.content",
+  "titleKey": "notification.teamInviteAccept.title",
+  "contentKey": "notification.teamInviteAccept.content",
   "messageParams": {
     "teamName": "产品组",
     "userName": "zhangsan"

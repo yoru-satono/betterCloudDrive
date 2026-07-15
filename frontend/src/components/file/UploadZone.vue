@@ -5,13 +5,16 @@
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
         </svg>
-        <span>松开鼠标上传文件</span>
+        <span>{{ __t('transferUi.uploadzone.releaseTheMouseToUploadTheFile') }}</span>
       </div>
     </div>
   </Transition>
 </template>
 
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 defineProps<{ isDragging: boolean }>()
 </script>
 

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onBeforeUnmount, watch } from 'vue'
 
 defineOptions({ inheritAttrs: false })
@@ -34,7 +37,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         >
           <div v-if="title" class="o-modal__header">
             <span class="o-modal__title">{{ title }}</span>
-            <button class="o-modal__close" type="button" aria-label="关闭" @click="emit('close')">
+            <button class="o-modal__close" type="button" :aria-label="__t('commonUi.o.closure')" @click="emit('close')">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>

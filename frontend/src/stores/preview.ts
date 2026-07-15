@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { FileEntity } from '@/types/file'
@@ -34,7 +36,7 @@ export const usePreviewStore = defineStore('preview', () => {
         url.value = URL.createObjectURL(res.data)
       }
     } catch {
-      error.value = '此文件暂时无法预览'
+      error.value = __t('file.preview.thisFileCannotBePreviewedAtTheMoment')
     } finally {
       loading.value = false
     }
@@ -49,7 +51,7 @@ export const usePreviewStore = defineStore('preview', () => {
       const res = teamId.value ? await getTeamOfficeConfig(teamId.value, target.value.id) : await getOfficeConfig(target.value.id)
       officeConfig.value = res.data.data
     } catch {
-      error.value = '此文件暂时无法预览'
+      error.value = __t('file.preview.thisFileCannotBePreviewedAtTheMoment')
     } finally {
       loading.value = false
     }

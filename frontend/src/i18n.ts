@@ -16,7 +16,17 @@ function initialLocale(): SupportedLocale {
 
 export type MessageParams = Record<string, string | number | boolean | null>
 export const locale = ref<SupportedLocale>(initialLocale())
-export const i18n = createI18n({ legacy: false, locale: locale.value, fallbackLocale: 'zh-CN', messages: { 'zh-CN': zhCN, 'en-US': enUS } })
+export const i18n = createI18n({
+  legacy: false,
+  locale: locale.value,
+  // Never leak Chinese copy into the English UI. Locale completeness is also
+  // asserted in the i18n tests, while these fallbacks remain language-safe in production.
+  fallbackLocale: { 'zh-CN': ['zh-CN'], 'en-US': ['en-US'], default: ['en-US'] },
+  missingWarn: import.meta.env.DEV,
+  fallbackWarn: import.meta.env.DEV,
+  messages: { 'zh-CN': zhCN, 'en-US': enUS },
+  missing: (currentLocale, key) => currentLocale === 'zh-CN' ? `暂缺文本（${key}）` : `Translation unavailable (${key})`,
+})
 
 export function setLocale(next: SupportedLocale) {
   locale.value = next

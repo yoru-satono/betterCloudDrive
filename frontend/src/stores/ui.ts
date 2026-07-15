@@ -5,6 +5,7 @@ export const useUIStore = defineStore('ui', () => {
   const activeWorkspace = ref<'personal' | 'team'>('personal')
   const sidebarExpanded = ref(true)
   const searchOpen = ref(false)
+  const mobileNavOpen = ref(false)
   const confirmDialog = ref<{
     title: string
     message: string
@@ -21,6 +22,8 @@ export const useUIStore = defineStore('ui', () => {
 
   function openSearch() { searchOpen.value = true }
   function closeSearch() { searchOpen.value = false }
+  function openMobileNav() { sidebarExpanded.value = true; mobileNavOpen.value = true }
+  function closeMobileNav() { mobileNavOpen.value = false }
 
   function confirm(title: string, message: string): Promise<boolean> {
     return new Promise((resolve) => {
@@ -33,5 +36,5 @@ export const useUIStore = defineStore('ui', () => {
     confirmDialog.value = null
   }
 
-  return { activeWorkspace, sidebarExpanded, searchOpen, confirmDialog, setActiveWorkspace, toggleSidebar, openSearch, closeSearch, confirm, resolveConfirm }
+  return { activeWorkspace, sidebarExpanded, searchOpen, mobileNavOpen, confirmDialog, setActiveWorkspace, toggleSidebar, openSearch, closeSearch, openMobileNav, closeMobileNav, confirm, resolveConfirm }
 })

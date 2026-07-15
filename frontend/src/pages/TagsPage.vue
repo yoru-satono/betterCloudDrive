@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import OEmptyState from '@/components/base/OEmptyState.vue'
@@ -52,7 +55,7 @@ async function selectTagFromQuery() {
 async function createTag() {
   if (!newTagName.value.trim()) return
   await tagsApi.createTag(newTagName.value.trim(), newTagColor.value)
-  toast.success('标签已创建')
+  toast.success(__t('tag.tags.labelCreated'))
   newTagName.value = ''
   showCreate.value = false
   load()
@@ -68,7 +71,7 @@ function openEditTag(tag: TagEntity) {
 async function updateTag() {
   if (!editTarget.value || !editTagName.value.trim()) return
   const { data } = await tagsApi.updateTag(editTarget.value.id, editTagName.value.trim(), editTagColor.value)
-  toast.success('标签已更新')
+  toast.success(__t('commonUi.filebrowser.labelUpdated'))
   showEdit.value = false
   if (activeTag.value?.id === editTarget.value.id) {
     activeTag.value = data.data
@@ -78,10 +81,10 @@ async function updateTag() {
 }
 
 async function deleteTag(tag: TagEntity) {
-  const ok = await confirm('删除标签', `删除标签「${tag.tagName}」不会删除文件。`)
+  const ok = await confirm(__t('tag.tags.deleteTag'), __t('tag.tags.deletingTheTagWillNotDeleteTheFile', { p0: tag.tagName }))
   if (!ok) return
   await tagsApi.deleteTag(tag.id)
-  toast.success('标签已删除')
+  toast.success(__t('tag.tags.tagDeleted'))
   if (activeTag.value?.id === tag.id) {
     activeTag.value = null
     searchContext.setActiveTag(null)
@@ -99,7 +102,7 @@ async function selectTag(tag: TagEntity) {
 async function removeFromTag(file: FileEntity) {
   if (!activeTag.value) return
   await tagsApi.removeFileTag(file.id, activeTag.value.id)
-  toast.success('已移除此标签')
+  toast.success(__t('tag.tags.thisLabelHasBeenRemoved'))
   await selectTag(activeTag.value)
   await load()
 }
@@ -113,12 +116,12 @@ onBeforeUnmount(() => searchContext.setActiveTag(null))
   <div class="tags-page page-enter">
     <div class="tags-page__sidebar">
       <div class="tags-page__sidebar-head">
-        <h3>标签</h3>
-        <OButton variant="ghost" size="sm" @click="showCreate = true">+ 新建</OButton>
+        <h3>{{ __t('commonUi.searchoverlay.label') }}</h3>
+        <OButton variant="ghost" size="sm" @click="showCreate = true">{{ __t('tag.tags.new') }}</OButton>
       </div>
 
       <div v-if="loading" class="page-loading"><OSpinner size="sm" /></div>
-      <OEmptyState v-else-if="tags.length === 0" title="暂无标签" />
+      <OEmptyState v-else-if="tags.length === 0" :title="__t('tag.tags.noTagsYet')" />
       <div v-else class="tags-list">
         <div
           v-for="tag in tags"
@@ -130,7 +133,7 @@ onBeforeUnmount(() => searchContext.setActiveTag(null))
           <span class="tag-dot" :style="{ background: tag.color || '#00d4aa' }" />
           <span class="tag-item__name truncate">{{ tag.tagName }}</span>
           <span class="tag-item__count">{{ tag.fileCount }}</span>
-          <button class="tag-item__edit" @click.stop="openEditTag(tag)">编辑</button>
+          <button class="tag-item__edit" @click.stop="openEditTag(tag)">{{ __t('commonUi.shares.edit') }}</button>
           <button class="tag-item__del" @click.stop="deleteTag(tag)">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -146,24 +149,24 @@ onBeforeUnmount(() => searchContext.setActiveTag(null))
           <span class="tag-dot" :style="{ background: activeTag.color || '#00d4aa' }" />
           {{ activeTag.tagName }} ({{ tagFiles.length }})
         </h3>
-        <OEmptyState v-if="tagFiles.length === 0" title="此标签下暂无文件" />
+        <OEmptyState v-if="tagFiles.length === 0" :title="__t('tag.tags.thereAreNoFilesUnderThisTagYet')" />
         <div v-else class="tag-files">
           <div v-for="f in tagFiles" :key="f.id" class="tag-file-row">
             <FileIcon :mime-type="f.mimeType" :file-type="f.fileType" :size="15" />
             <span class="truncate" style="flex:1;font-size:13px">{{ f.fileName }}</span>
-            <span class="font-mono" style="font-size:11px;color:var(--text-secondary)">{{ f.fileType === 'folder' ? '文件夹' : formatSize(f.fileSize) }}</span>
-            <OButton variant="subtle" size="sm" @click="removeFromTag(f)">移除</OButton>
+            <span class="font-mono" style="font-size:11px;color:var(--text-secondary)">{{ f.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(f.fileSize) }}</span>
+            <OButton variant="subtle" size="sm" @click="removeFromTag(f)">{{ __t('commonUi.tags.remove') }}</OButton>
           </div>
         </div>
       </template>
-      <OEmptyState v-else title="选择左侧标签查看文件" />
+      <OEmptyState v-else :title="__t('tag.tags.selectTheTabOnTheLeftToViewTheFile')" />
     </div>
 
-    <OModal title="新建标签" :open="showCreate" @close="showCreate = false">
+    <OModal :title="__t('tag.tags.newLabel')" :open="showCreate" @close="showCreate = false">
       <div style="display:flex;flex-direction:column;gap:14px">
-        <OInput v-model="newTagName" label="标签名称" placeholder="输入标签名" @keyup.enter="createTag" />
+        <OInput v-model="newTagName" :label="__t('team.tags.tagName')" :placeholder="__t('tag.tags.enterTagName')" @keyup.enter="createTag" />
         <div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">颜色</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">{{ __t('tag.tags.color') }}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button
               v-for="c in PRESET_COLORS" :key="c"
@@ -175,16 +178,16 @@ onBeforeUnmount(() => searchContext.setActiveTag(null))
         </div>
       </div>
       <template #footer>
-        <OButton variant="ghost" @click="showCreate = false">取消</OButton>
-        <OButton variant="primary" @click="createTag">创建</OButton>
+        <OButton variant="ghost" @click="showCreate = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="createTag">{{ __t('commonUi.adminuserfiles.create') }}</OButton>
       </template>
     </OModal>
 
-    <OModal title="编辑标签" :open="showEdit" @close="showEdit = false">
+    <OModal :title="__t('tag.tags.editTag')" :open="showEdit" @close="showEdit = false">
       <div style="display:flex;flex-direction:column;gap:14px">
-        <OInput v-model="editTagName" label="标签名称" placeholder="输入标签名" @keyup.enter="updateTag" />
+        <OInput v-model="editTagName" :label="__t('team.tags.tagName')" :placeholder="__t('tag.tags.enterTagName')" @keyup.enter="updateTag" />
         <div>
-          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">颜色</div>
+          <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">{{ __t('tag.tags.color') }}</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button
               v-for="c in PRESET_COLORS" :key="c"
@@ -196,8 +199,8 @@ onBeforeUnmount(() => searchContext.setActiveTag(null))
         </div>
       </div>
       <template #footer>
-        <OButton variant="ghost" @click="showEdit = false">取消</OButton>
-        <OButton variant="primary" @click="updateTag">保存</OButton>
+        <OButton variant="ghost" @click="showEdit = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="updateTag">{{ __t('commonUi.desktopsettings.save') }}</OButton>
       </template>
     </OModal>
   </div>

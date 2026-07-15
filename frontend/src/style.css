@@ -55,6 +55,8 @@
 }
 
 :root {
+  --breakpoint-mobile: 720px;
+  --content-max: 1120px;
   color-scheme: dark;
   /* Backgrounds */
   --bg-base:       #080809;

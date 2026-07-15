@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as filesApi from '@/api/files'
@@ -12,7 +14,7 @@ export const useFilesStore = defineStore('files', () => {
   const searchResults = ref<FileEntity[]>([])
   const searchLoading = ref(false)
   const currentParentId = ref<number | null>(null)
-  const breadcrumb = ref<BreadcrumbItem[]>([{ id: null, name: '全部文件' }])
+  const breadcrumb = ref<BreadcrumbItem[]>([{ id: null, name: __t('file.files.allFiles') }])
   const viewMode = ref<'grid' | 'list'>('grid')
   const sortBy = ref('fileName')
   const order = ref('asc')
@@ -77,7 +79,7 @@ export const useFilesStore = defineStore('files', () => {
 
   async function openDirectory(folderId: number | null, folderHint?: FileEntity) {
     const nextBreadcrumb = folderId === null
-      ? [{ id: null, name: '全部文件' }]
+      ? [{ id: null, name: __t('file.files.allFiles') }]
       : await buildBreadcrumb(folderId, folderHint)
     await fetchFiles(folderId)
     breadcrumb.value = nextBreadcrumb
@@ -101,7 +103,7 @@ export const useFilesStore = defineStore('files', () => {
       current = null
     }
 
-    return [{ id: null, name: '全部文件' }, ...items]
+    return [{ id: null, name: __t('file.files.allFiles') }, ...items]
   }
 
   function enterFolder(folder: FileEntity) {

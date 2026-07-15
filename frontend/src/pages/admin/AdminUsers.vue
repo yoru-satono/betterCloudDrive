@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
@@ -49,7 +52,7 @@ function goPage(nextPage: number) {
 async function toggleActive(user: UserEntity) {
   const nextStatus = user.status === 1 ? 0 : 1
   await adminApi.updateUserStatus(user.id, nextStatus)
-  toast.success(nextStatus === 1 ? '用户已启用' : '用户已禁用')
+  toast.success(nextStatus === 1 ? __t('adminUi.adminusers.userEnabled') : __t('adminUi.adminusers.userDisabled'))
   load()
 }
 
@@ -57,12 +60,12 @@ async function saveQuota(user: UserEntity) {
   if (!editingQuota.value) return
   const quotaGb = Number(editingQuota.value.val)
   if (!Number.isFinite(quotaGb) || quotaGb <= 0) {
-    toast.error('请输入有效的存储配额')
+    toast.error(__t('adminUi.adminusers.pleaseEnterAValidStorageQuota'))
     return
   }
   const bytes = Math.round(quotaGb * 1024 * 1024 * 1024)
   await adminApi.updateUserQuota(user.id, bytes)
-  toast.success('配额已更新')
+  toast.success(__t('adminUi.adminusers.quotaUpdated'))
   editingQuota.value = null
   load()
 }
@@ -73,34 +76,34 @@ onMounted(load)
 <template>
   <div class="page-enter">
     <div class="page-header">
-      <h2>用户管理</h2>
+      <h2>{{ __t('adminUi.adminusers.userManagement') }}</h2>
       <div class="users-toolbar">
-        <OInput v-model="search" placeholder="搜索用户名..." class="users-toolbar__search" @keyup.enter="searchUsers">
+        <OInput v-model="search" :placeholder="__t('adminUi.adminusers.searchForUsername')" class="users-toolbar__search" @keyup.enter="searchUsers">
           <template #icon>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
           </template>
         </OInput>
-        <OButton variant="ghost" size="sm" @click="searchUsers">搜索</OButton>
+        <OButton variant="ghost" size="sm" @click="searchUsers">{{ __t('commonUi.adminteams.search') }}</OButton>
       </div>
     </div>
 
     <div v-if="total > PAGE_SIZE" class="pagination pagination--top">
-      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">上一页</OButton>
-      <span class="pagination__info font-mono">第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 个用户</span>
-      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</OButton>
+      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+      <span class="pagination__info font-mono">{{ __t('commonUi.adminlogs.no') }}{{ page }} / {{ totalPages }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ total }}{{ __t('adminUi.adminusers.users') }}</span>
+      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
     </div>
 
     <div v-if="loading" style="display:flex;justify-content:center;padding:60px"><OSpinner /></div>
     <div v-else class="users-table">
       <div class="users-table__header">
-        <div>用户名</div><div>邮箱</div><div>存储</div><div>角色</div><div>状态</div><div>注册时间</div><div>操作</div>
+        <div>{{ __t('commonUi.desktopsettings.username') }}</div><div>{{ __t('adminUi.adminteams.mail') }}</div><div>{{ __t('adminUi.adminteams.storage') }}</div><div>{{ __t('adminUi.adminteams.role') }}</div><div>{{ __t('commonUi.adminlogs.state') }}</div><div>{{ __t('adminUi.adminusers.registrationTime') }}</div><div>{{ __t('adminUi.adminteams.operate') }}</div>
       </div>
       <div v-for="user in users" :key="user.id" class="users-table__row">
-        <div class="users-table__cell users-table__name" data-label="用户名" :title="user.username">{{ user.username }}</div>
-        <div class="users-table__cell users-table__email font-mono" data-label="邮箱" :title="user.email || '—'">{{ user.email || '—' }}</div>
-        <div class="users-table__cell users-table__storage" data-label="存储">
+        <div class="users-table__cell users-table__name" :data-label="__t('commonUi.desktopsettings.username')" :title="user.username">{{ user.username }}</div>
+        <div class="users-table__cell users-table__email font-mono" :data-label="__t('adminUi.adminteams.mail')" :title="user.email || '—'">{{ user.email || '—' }}</div>
+        <div class="users-table__cell users-table__storage" :data-label="__t('adminUi.adminteams.storage')">
           <template v-if="editingQuota?.id === user.id">
             <div class="quota-editor">
               <input v-model="editingQuota.val" class="quota-editor__input" type="number" min="0.01" step="0.01" @keyup.enter="saveQuota(user)" @keyup.escape="editingQuota=null" />
@@ -112,26 +115,26 @@ onMounted(load)
             {{ formatSize(user.storageUsed) }} / {{ formatSize(user.storageQuota) }}
           </button>
         </div>
-        <div class="users-table__cell" data-label="角色">
+        <div class="users-table__cell" :data-label="__t('adminUi.adminteams.role')">
           <OBadge :variant="user.role === 'ROLE_ADMIN' ? 'accent' : 'default'">
-            {{ user.role === 'ROLE_ADMIN' ? '管理员' : '用户' }}
+            {{ user.role === 'ROLE_ADMIN' ? __t('adminUi.adminusers.administrator') : __t('commonUi.adminlogs.user') }}
           </OBadge>
         </div>
-        <div class="users-table__cell" data-label="状态">
-          <OBadge :variant="user.status === 1 ? 'success' : 'danger'">{{ user.status === 1 ? '正常' : '禁用' }}</OBadge>
+        <div class="users-table__cell" :data-label="__t('commonUi.adminlogs.state')">
+          <OBadge :variant="user.status === 1 ? 'success' : 'danger'">{{ user.status === 1 ? __t('adminUi.adminteams.healthyStatus') : __t('adminUi.adminusers.disable') }}</OBadge>
         </div>
-        <div class="users-table__cell users-table__date" data-label="注册时间" :title="formatDate(user.createdAt)">{{ formatDate(user.createdAt) }}</div>
-        <div class="users-table__cell users-table__actions" data-label="操作">
-          <OButton variant="subtle" size="sm" @click="router.push(`/admin/users/${user.id}/files`)">文件</OButton>
-          <OButton variant="ghost" size="sm" @click="toggleActive(user)">{{ user.status === 1 ? '禁用' : '启用' }}</OButton>
+        <div class="users-table__cell users-table__date" :data-label="__t('adminUi.adminusers.registrationTime')" :title="formatDate(user.createdAt)">{{ formatDate(user.createdAt) }}</div>
+        <div class="users-table__cell users-table__actions" :data-label="__t('adminUi.adminteams.operate')">
+          <OButton variant="subtle" size="sm" @click="router.push(`/admin/users/${user.id}/files`)">{{ __t('commonUi.searchoverlay.document') }}</OButton>
+          <OButton variant="ghost" size="sm" @click="toggleActive(user)">{{ user.status === 1 ? __t('adminUi.adminusers.disable') : __t('adminUi.adminusers.enable') }}</OButton>
         </div>
       </div>
     </div>
 
     <div v-if="!loading && total > PAGE_SIZE" class="pagination pagination--bottom">
-      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">上一页</OButton>
-      <span class="pagination__info font-mono">第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 个用户</span>
-      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</OButton>
+      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+      <span class="pagination__info font-mono">{{ __t('commonUi.adminlogs.no') }}{{ page }} / {{ totalPages }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ total }}{{ __t('adminUi.adminusers.users') }}</span>
+      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
     </div>
   </div>
 </template>

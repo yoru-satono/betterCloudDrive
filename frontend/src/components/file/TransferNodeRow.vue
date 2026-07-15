@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import OButton from '@/components/base/OButton.vue'
 import type { TransferNode, TransferTask } from '@/api/desktopTransfer'
 import { isActive, isFinished, useTransferStore } from '@/stores/transfer'
@@ -53,9 +56,9 @@ const store = useTransferStore()
       </div>
 
       <div class="transfer-node__actions">
-        <OButton v-if="canPause(node)" variant="subtle" size="sm" @click="store.pauseNode(node.id)">暂停</OButton>
-        <OButton v-if="canResume(node)" variant="subtle" size="sm" @click="store.resumeNode(node.id)">继续</OButton>
-        <OButton v-if="!isFinished(node.status)" variant="danger" size="sm" @click="store.cancelNode(node.id)">取消</OButton>
+        <OButton v-if="canPause(node)" variant="subtle" size="sm" @click="store.pauseNode(node.id)">{{ __t('transferUi.transfernoderow.pause') }}</OButton>
+        <OButton v-if="canResume(node)" variant="subtle" size="sm" @click="store.resumeNode(node.id)">{{ __t('transferUi.transfernoderow.continue') }}</OButton>
+        <OButton v-if="!isFinished(node.status)" variant="danger" size="sm" @click="store.cancelNode(node.id)">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
       </div>
     </div>
 

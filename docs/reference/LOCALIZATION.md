@@ -36,9 +36,18 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 
 客户端和测试不得根据翻译后的中文判断业务状态，应使用 `code`、`type`、`status` 或稳定 key。
 
+## Key 命名与兼容性
+
+- 所有协议 key 和前端内部 key 使用 `domain.feature.intent` 形式，每段均为 lowerCamelCase。
+- 禁止哈希、序号、自然语言、`migrated.*` 和 snake_case 作为 key；通用动作、状态和分页文案归入 `common`。
+- 本次语义化改名是破坏性协议升级，不提供旧 key 别名或双读。后端、Web/Tauri 与 Android 必须同步发布。
+- HTTP 路径、响应结构和 `messageParams` 形状不变；只有 `messageKey`、通知、任务、活动和权限描述 key 改名。
+
 ## Web 与 Tauri
 
 - 入口位于 `frontend/src/i18n.ts`，资源位于 `frontend/src/locales/zh-CN.ts` 和 `frontend/src/locales/en-US.ts`。
+- 生产源码中的用户可见文本必须通过 locale key 获取。`pnpm run check:i18n` 检查 Vue 裸文本、用户可见静态属性和 TypeScript 中文字符串；技术名词例外集中登记在 `frontend/i18n-hardcode.config.mjs`，并必须说明原因。
+- `pnpm run test` 和 `pnpm run build` 会自动执行硬编码检查。词典、i18n 最终兜底和测试断言不在门禁范围内。
 - 公开认证页提供全局语言入口，登录后可在个人资料中修改。切换立即生效并更新页面 `lang`；保存账号失败时回滚。
 - `resolveMessage(key, params)` 负责插值和未知键降级。
 - 未知键会写客户端诊断日志；生产界面只显示当前语言的本地通用提示，不显示服务端 key。
@@ -59,4 +68,4 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 
 ## 兼容性与数据库
 
-语言偏好由 `V2__user_preferred_locale.sql` 增量加入，允许现有 V1 数据库原地升级。字段只接受 `zh-CN` 或 `en-US`。
+语言偏好由 `V2__user_preferred_locale.sql` 增量加入，允许现有 V1 数据库原地升级。字段只接受 `zh-CN` 或 `en-US`。`V3__semantic_message_keys.sql` 会原地更新通知、团队任务和 Outbox 中已持久化的旧 snake_case key。

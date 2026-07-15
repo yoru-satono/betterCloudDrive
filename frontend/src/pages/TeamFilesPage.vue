@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
@@ -100,16 +103,16 @@ const permissionMembers = computed(() => members.value.filter(member => member.r
 const permissionConsistencyWarning = computed(() => {
   if (permissionForm.value.canRead) return ''
   return permissionForm.value.canWrite || permissionForm.value.canShare || permissionForm.value.canDelete || permissionForm.value.canManage
-    ? '写入、分享、删除和管理权限必须同时保留读取权限。'
+    ? __t('team.teamfiles.writeShareDeleteAndManagePermissionsMustBeRetainedAlong')
     : ''
 })
 const selfLockWarning = computed(() => {
   if (permissionForm.value.canManage) return ''
   if (permissionSubjectType.value === 'USER' && Number(permissionSubjectUserId.value) === auth.user?.id) {
-    return '这会移除你自己的管理权限，后端会拒绝该操作。'
+    return __t('team.teamfiles.thisWillRemoveYourOwnAdministrativeRightsAndTheBackend')
   }
   if (permissionSubjectType.value === 'ROLE' && permissionSubjectRole.value === store.currentTeam?.role) {
-    return '这会移除当前角色的管理权限，后端会拒绝该操作。'
+    return __t('team.teamfiles.thisWillRemoveAdministrativeRightsFromTheCurrentRoleAnd')
   }
   return ''
 })
@@ -139,7 +142,7 @@ onMounted(async () => {
       onItemUpdated: item => uploadStore.applyDesktopUploadItem(item),
       onBatchCompleted: () => {
         void store.refresh()
-        toast.success('团队文件上传完成')
+        toast.success(__t('team.teamfiles.teamFileUploadCompleted'))
       },
       onError: message => toast.error(message),
     })
@@ -186,9 +189,9 @@ function triggerUpload() {
   if (desktopRuntime) {
     uploadDesktopFiles(store.currentParentId, teamId.value)
       .then(result => {
-        if (result.selected && result.rootName) toast.success(`${result.rootName} 已加入传输队列`)
+        if (result.selected && result.rootName) toast.success(__t('team.useupload.hasBeenAddedToTheTransmissionQueue', { p0: result.rootName }))
       })
-      .catch(error => toast.error(error instanceof Error ? error.message : '上传文件失败'))
+      .catch(error => toast.error(error instanceof Error ? error.message : __t('team.useupload.fileUploadFailed')))
     return
   }
   fileInput.value?.click()
@@ -198,9 +201,9 @@ function triggerFolderUpload() {
   if (!store.canWrite) return
   uploadDesktopFolder(store.currentParentId, teamId.value)
     .then(result => {
-      if (result.selected && result.rootName) toast.success(`${result.rootName} 已加入传输队列`)
+      if (result.selected && result.rootName) toast.success(__t('team.useupload.hasBeenAddedToTheTransmissionQueue', { p0: result.rootName }))
     })
-    .catch(error => toast.error(error instanceof Error ? error.message : '上传文件夹失败'))
+    .catch(error => toast.error(error instanceof Error ? error.message : __t('commonUi.desktopupload.failedToUploadFolder')))
 }
 
 function handleFileInputChange(event: Event) {
@@ -215,34 +218,34 @@ async function openContextMenu(file: FileEntity, event: MouseEvent) {
     .catch(() => store.permissionForFile(file.id))
   const items: ContextMenuItem[] = [
     {
-      label: '下载',
+      label: __t('commonUi.filepreview.download'),
       action: () => file.fileType === 'folder'
         ? downloadTeamFolderZip(teamId.value, file.id, file.fileName)
         : downloadTeamFile(teamId.value, file.id, file.fileName),
     },
   ]
   if (file.fileType !== 'folder') {
-    items.push({ label: isOfficeFile(file) ? '打开文档' : '预览', action: () => preview.openPreview(file, { teamId: teamId.value }) })
-    items.push({ label: '版本管理', action: () => openVersions(file) })
+    items.push({ label: isOfficeFile(file) ? __t('team.filebrowser.openDocument') : __t('team.filebrowser.preview'), action: () => preview.openPreview(file, { teamId: teamId.value }) })
+    items.push({ label: __t('team.filebrowser.versionManagement'), action: () => openVersions(file) })
   }
   if (permission.canShare) {
-    items.push({ label: '分享', action: () => openShareDialog(file) })
+    items.push({ label: __t('team.filebrowser.share'), action: () => openShareDialog(file) })
   }
-  items.push({ label: '收藏', action: () => favoriteFile(file) })
+  items.push({ label: __t('commonUi.searchoverlay.collect'), action: () => favoriteFile(file) })
   if (permission.canWrite) {
-    items.push({ label: '标签', action: () => openTags(file) })
+    items.push({ label: __t('commonUi.searchoverlay.label'), action: () => openTags(file) })
   }
-  items.push({ label: '详情', action: () => openDetail(file) })
+  items.push({ label: __t('commonUi.adminlogs.details'), action: () => openDetail(file) })
   if (permission.canWrite) {
-    items.push({ label: '移动到', action: () => openMove(file) })
-    items.push({ label: '重命名', action: () => startRename(file) })
+    items.push({ label: __t('team.filebrowser.moveTo'), action: () => openMove(file) })
+    items.push({ label: __t('team.filebrowser.rename'), action: () => startRename(file) })
   }
   if (permission.canManage) {
-    items.push({ label: '权限', action: () => openPermissions(file) })
+    items.push({ label: __t('team.teamfiles.permissions'), action: () => openPermissions(file) })
   }
   if (permission.canDelete) {
     items.push({ divider: true, label: '', action: () => {} })
-    items.push({ label: '删除', action: () => deleteSingle(file), danger: true })
+    items.push({ label: __t('commonUi.adminuserfiles.delete'), action: () => deleteSingle(file), danger: true })
   }
   ctx.open(event, items)
 }
@@ -258,7 +261,7 @@ function handleDblclick(file: FileEntity) {
 async function createFolder() {
   if (!store.canWrite || !newFolderName.value.trim()) return
   await teamsApi.createTeamFolder(teamId.value, store.currentParentId, newFolderName.value.trim())
-  toast.success('文件夹已创建')
+  toast.success(__t('team.filebrowser.folderCreated'))
   newFolderName.value = ''
   showNewFolder.value = false
   await store.refresh()
@@ -283,23 +286,23 @@ async function deleteSelected() {
   if (!ids.length) return
   const permissions = await Promise.all(ids.map(id => store.loadFilePermission(teamId.value, id).catch(() => store.permissionForFile(id))))
   if (permissions.some(permission => !permission.canDelete)) {
-    toast.error('所选文件中包含无删除权限的项目')
+    toast.error(__t('team.teamfiles.theSelectedFileContainsItemsThatDoNotHaveDelete'))
     return
   }
-  const ok = await confirm('确认删除', `将 ${ids.length} 个团队文件移入回收站。`)
+  const ok = await confirm(__t('team.filebrowser.confirmDeletion'), __t('team.teamfiles.movedTeamFilesToTheTrash', { p0: ids.length }))
   if (!ok) return
   await teamsApi.deleteTeamFiles(teamId.value, ids)
-  toast.success('已删除')
+  toast.success(__t('adminUi.adminteams.deleted'))
   store.clearSelection()
   await store.refresh()
 }
 
 async function deleteSingle(file: FileEntity) {
   if (!store.permissionForFile(file.id).canDelete) return
-  const ok = await confirm('确认删除', `将「${file.fileName}」移入回收站？`)
+  const ok = await confirm(__t('team.filebrowser.confirmDeletion'), __t('team.filebrowser.moveToTheTrash', { p0: file.fileName }))
   if (!ok) return
   await teamsApi.deleteTeamFiles(teamId.value, [file.id])
-  toast.success('已删除')
+  toast.success(__t('adminUi.adminteams.deleted'))
   await store.refresh()
 }
 
@@ -313,7 +316,7 @@ async function confirmMove(targetParentId: number | null) {
   pickerLoading.value = true
   try {
     await teamsApi.moveTeamFile(teamId.value, pickerTarget.value.id, targetParentId)
-    toast.success('已移动')
+    toast.success(__t('team.filebrowser.moved'))
     pickerOpen.value = false
     pickerTarget.value = null
     await store.refresh()
@@ -330,7 +333,7 @@ async function openDetail(file: FileEntity) {
 
 async function favoriteFile(file: FileEntity) {
   await teamsApi.addTeamFavorite(teamId.value, file.id)
-  toast.success('已加入收藏')
+  toast.success(__t('team.teamfiles.addedToFavorites'))
 }
 
 async function openTags(file: FileEntity) {
@@ -364,7 +367,7 @@ async function saveTags() {
         ? teamsApi.addTeamFileTag(teamId.value, tagTarget.value!.id, tag.id)
         : teamsApi.removeTeamFileTag(teamId.value, tagTarget.value!.id, tag.id)
     }))
-    toast.success('标签已更新')
+    toast.success(__t('commonUi.filebrowser.labelUpdated'))
     tagOpen.value = false
   } finally {
     tagsLoading.value = false
@@ -385,10 +388,10 @@ async function openVersions(file: FileEntity) {
 
 async function deleteVersion(versionNumber: number) {
   if (!store.canWrite || !versionsTarget.value) return
-  const ok = await confirm('删除版本', `确认删除版本 ${versionNumber}？`)
+  const ok = await confirm(__t('team.filebrowser.deleteVersion'), __t('team.filebrowser.confirmToDeleteVersion', { p0: versionNumber }))
   if (!ok) return
   await versionsApi.deleteTeamVersion(teamId.value, versionsTarget.value.id, versionNumber)
-  toast.success('版本已删除')
+  toast.success(__t('team.filebrowser.versionDeleted'))
   await openVersions(versionsTarget.value)
 }
 
@@ -399,10 +402,10 @@ async function downloadVersion(versionNumber: number) {
 
 async function restoreVersion(versionNumber: number) {
   if (!store.canWrite || !versionsTarget.value) return
-  const ok = await confirm('恢复版本', `将版本 ${versionNumber} 恢复为当前文件？当前文件会保留为历史版本。`)
+  const ok = await confirm(__t('team.filepreview.recoveryVersion'), __t('team.filepreview.restoreVersionToCurrentFileTheCurrentFileWillBe', { p0: versionNumber }))
   if (!ok) return
   await versionsApi.restoreTeamVersion(teamId.value, versionsTarget.value.id, versionNumber)
-  toast.success('版本已恢复')
+  toast.success(__t('team.filepreview.versionRestored'))
   await openVersions(versionsTarget.value)
   await store.refresh()
 }
@@ -444,32 +447,32 @@ async function loadPermissions() {
 
 function permissionBits(permission: Pick<TeamEffectivePermission, 'canRead' | 'canWrite' | 'canShare' | 'canDelete' | 'canManage'>) {
   return [
-    permission.canRead ? '读' : '-',
-    permission.canWrite ? '写' : '-',
-    permission.canShare ? '分享' : '-',
-    permission.canDelete ? '删除' : '-',
-    permission.canManage ? '管理' : '-',
+    permission.canRead ? __t('team.teamfiles.read') : '-',
+    permission.canWrite ? __t('team.teamfiles.write') : '-',
+    permission.canShare ? __t('team.filebrowser.share') : '-',
+    permission.canDelete ? __t('commonUi.adminuserfiles.delete') : '-',
+    permission.canManage ? __t('team.teamfiles.manage') : '-',
   ].join(' / ')
 }
 
 function permissionSourceTitle(source: TeamPermissionSource) {
-  if (source.type === 'BASE_ROLE') return `基础角色：${source.subjectRole || '-'}`
+  if (source.type === 'BASE_ROLE') return __t('team.teamfiles.basicRole', { p0: source.subjectRole || '-' })
   return resolveMessage(source.descriptionKey, source.descriptionParams)
 }
 
 function permissionSourceMeta(source: TeamPermissionSource) {
   const subject = source.subjectType === 'USER'
-    ? `用户 ${source.subjectUserId ?? '-'}`
-    : `角色 ${source.subjectRole ?? '-'}`
+    ? __t('team.teamfiles.user', { p0: source.subjectUserId ?? '-' })
+    : __t('team.teamfiles.role', { p0: source.subjectRole ?? '-' })
   if (source.type === 'BASE_ROLE') return subject
-  const scope = source.inherited ? `继承自 ${source.fileName || source.fileId || '-'}` : '当前文件'
+  const scope = source.inherited ? __t('team.teamfiles.inheritedFrom', { p0: source.fileName || source.fileId || '-' }) : __t('team.teamfiles.currentFile')
   return `${scope} · ${subject}`
 }
 
 function permissionSubjectName(permission: TeamFilePermission) {
-  if (permission.subjectType === 'ROLE') return `角色 ${permission.subjectRole}`
+  if (permission.subjectType === 'ROLE') return __t('team.teamfiles.role', { p0: permission.subjectRole })
   const member = members.value.find(item => item.userId === permission.subjectUserId)
-  return member ? `${member.username}（用户 ${member.userId}）` : `用户 ${permission.subjectUserId}`
+  return member ? __t('team.teamfiles.userWithId', { p0: member.username, p1: member.userId }) : __t('team.teamfiles.user', { p0: permission.subjectUserId })
 }
 
 function ensurePermissionUserSelected() {
@@ -499,13 +502,13 @@ async function savePermission() {
   if (permissionSubjectType.value === 'USER') {
     const parsedUserId = Number(permissionSubjectUserId.value)
     if (!Number.isInteger(parsedUserId) || parsedUserId <= 0) {
-      toast.error('请输入有效的用户 ID')
+      toast.error(__t('team.teamfiles.pleaseEnterAValidUserId'))
       return
     }
     subjectUserId = parsedUserId
   }
   if (permissionForm.value.canManage && !permissionForm.value.canRead) {
-    toast.error('管理权限必须同时保留读取权限')
+    toast.error(__t('team.teamfiles.administrativePermissionsMustAlsoRetainReadPermissions'))
     return
   }
   await teamsApi.upsertTeamFilePermission(teamId.value, permissionTarget.value.id, {
@@ -514,7 +517,7 @@ async function savePermission() {
     subjectRole: permissionSubjectType.value === 'ROLE' ? permissionSubjectRole.value : null,
     ...permissionForm.value,
   })
-  toast.success('权限已保存')
+  toast.success(__t('team.teamfiles.permissionsSaved'))
   await store.refresh()
   await loadPermissions()
 }
@@ -522,7 +525,7 @@ async function savePermission() {
 async function deletePermission(permission: TeamFilePermission) {
   if (!permissionTarget.value) return
   await teamsApi.deleteTeamFilePermission(teamId.value, permissionTarget.value.id, permission.id)
-  toast.success('权限已删除')
+  toast.success(__t('team.teamfiles.permissionHasBeenRemoved'))
   await store.refresh()
   await loadPermissions()
 }
@@ -546,7 +549,7 @@ async function submitShare() {
   if (!shareTarget.value) return
   const visits = shareMaxVisits.value.trim() ? Number(shareMaxVisits.value) : undefined
   if (visits !== undefined && (!Number.isInteger(visits) || visits < 1)) {
-    toast.error('访问次数限制必须是正整数')
+    toast.error(__t('commonUi.filebrowser.theNumberOfVisitsLimitMustBeAPositiveInteger'))
     return
   }
   let password: string | undefined
@@ -556,7 +559,7 @@ async function submitShare() {
       : sharePassword.value.trim()
   }
   if (password !== undefined && (password.length < 4 || password.length > 16)) {
-    toast.error('分享密码长度必须为 4-16 位')
+    toast.error(__t('commonUi.filebrowser.sharePasswordLengthMustBe416Characters'))
     return
   }
   const { data } = await teamsApi.createTeamShare(teamId.value, {
@@ -568,7 +571,7 @@ async function submitShare() {
   const shareUrl = buildShareUrl(data.data.shareCode)
   await navigator.clipboard.writeText(shareUrl).catch(() => {})
   showShare.value = false
-  toast.success('团队分享链接已复制到剪贴板')
+  toast.success(__t('team.teamfiles.teamShareLinkCopiedToClipboard'))
 }
 
 async function runSearch() {
@@ -606,23 +609,23 @@ async function addMember() {
   await teamsApi.addMember(teamId.value, addUsername.value.trim(), addRole.value)
   addUsername.value = ''
   addRole.value = 'VIEWER'
-  toast.success('成员已添加')
+  toast.success(__t('team.teamfiles.memberHasBeenAdded'))
   await loadMembers()
 }
 
 async function updateMemberRole(member: TeamMember, role: string) {
   if (!store.canManageMembers || member.role === 'OWNER') return
   await teamsApi.updateMember(teamId.value, member.userId, role as Exclude<TeamRole, 'OWNER'>)
-  toast.success('角色已更新')
+  toast.success(__t('team.teamfiles.roleUpdated'))
   await loadMembers()
 }
 
 async function removeMember(member: TeamMember) {
   if (!store.canManageMembers || member.role === 'OWNER') return
-  const ok = await confirm('移除成员', `确认移除「${member.username}」？`)
+  const ok = await confirm(__t('team.teamfiles.removeMember'), __t('team.teamfiles.areYouSureYouWantToRemove', { p0: member.username }))
   if (!ok) return
   await teamsApi.removeMember(teamId.value, member.userId)
-  toast.success('成员已移除')
+  toast.success(__t('team.teamfiles.memberRemoved'))
   await loadMembers()
 }
 
@@ -644,27 +647,27 @@ function isOfficeFile(file: FileEntity) {
   >
     <div class="team-files__header">
       <div>
-        <h1>{{ store.currentTeam?.name || '团队文件' }}</h1>
+        <h1>{{ store.currentTeam?.name || __t('team.teamfiles.teamDocuments') }}</h1>
         <p>{{ store.currentTeam?.role || '' }} · {{ formatSize(store.currentTeam?.storageUsed || 0) }} / {{ formatSize(store.currentTeam?.storageQuota || 0) }}</p>
       </div>
       <div class="team-files__header-actions">
-        <OButton variant="ghost" size="sm" @click="openMembers">成员</OButton>
-        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamRecycleBin', params: { teamId } })">回收站</OButton>
-        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamSettings', params: { teamId } })">设置</OButton>
+        <OButton variant="ghost" size="sm" @click="openMembers">{{ __t('commonUi.adminteams.member') }}</OButton>
+        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamRecycleBin', params: { teamId } })">{{ __t('commonUi.searchoverlay.recycleBin') }}</OButton>
+        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamSettings', params: { teamId } })">{{ __t('team.teamfiles.setUp') }}</OButton>
       </div>
     </div>
 
     <div class="team-files__toolbar">
       <div class="team-files__toolbar-left">
-        <OButton v-if="store.canWrite" variant="primary" size="sm" @click="triggerUpload">上传文件</OButton>
-        <OButton v-if="store.canWrite && desktopRuntime" variant="ghost" size="sm" @click="triggerFolderUpload">上传文件夹</OButton>
-        <OButton v-if="store.canWrite" variant="ghost" size="sm" @click="showNewFolder = true">新建文件夹</OButton>
-        <OButton v-if="store.canDelete && store.hasSelection" variant="danger" size="sm" @click="deleteSelected">删除 ({{ store.selectedIds.size }})</OButton>
+        <OButton v-if="store.canWrite" variant="primary" size="sm" @click="triggerUpload">{{ __t('team.filetoolbar.uploadFiles') }}</OButton>
+        <OButton v-if="store.canWrite && desktopRuntime" variant="ghost" size="sm" @click="triggerFolderUpload">{{ __t('team.filetoolbar.uploadFolder') }}</OButton>
+        <OButton v-if="store.canWrite" variant="ghost" size="sm" @click="showNewFolder = true">{{ __t('commonUi.filetoolbar.createNewFolder') }}</OButton>
+        <OButton v-if="store.canDelete && store.hasSelection" variant="danger" size="sm" @click="deleteSelected">{{ __t('team.filetoolbar.delete') }}{{ store.selectedIds.size }})</OButton>
       </div>
       <div class="team-files__toolbar-right">
         <div class="team-files__search">
-          <input v-model="searchQuery" placeholder="搜索团队文件..." @keyup.enter="runSearch" />
-          <button type="button" @click="runSearch">搜索</button>
+          <input v-model="searchQuery" :placeholder="__t('adminUi.adminteams.searchTeamFiles')" @keyup.enter="runSearch" />
+          <button type="button" @click="runSearch">{{ __t('commonUi.adminteams.search') }}</button>
         </div>
         <OButton variant="subtle" size="sm" :icon="true" @click="store.refresh">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -672,8 +675,8 @@ function isOfficeFile(file: FileEntity) {
           </svg>
         </OButton>
         <div class="team-files__view-toggle">
-          <button :class="{ 'team-files__view-toggle-active': store.viewMode === 'grid' }" @click="store.viewMode = 'grid'">宫格</button>
-          <button :class="{ 'team-files__view-toggle-active': store.viewMode === 'list' }" @click="store.viewMode = 'list'">列表</button>
+          <button :class="{ 'team-files__view-toggle-active': store.viewMode === 'grid' }" @click="store.viewMode = 'grid'">{{ __t('team.teamfiles.palaceGrid') }}</button>
+          <button :class="{ 'team-files__view-toggle-active': store.viewMode === 'list' }" @click="store.viewMode = 'list'">{{ __t('team.teamfiles.list') }}</button>
         </div>
       </div>
     </div>
@@ -729,27 +732,27 @@ function isOfficeFile(file: FileEntity) {
     />
     <UploadZone :is-dragging="isDragging" />
 
-    <OModal title="新建文件夹" :open="showNewFolder" @close="showNewFolder = false">
-      <OInput v-model="newFolderName" label="文件夹名称" placeholder="输入名称" @keyup.enter="createFolder" />
+    <OModal :title="__t('commonUi.filetoolbar.createNewFolder')" :open="showNewFolder" @close="showNewFolder = false">
+      <OInput v-model="newFolderName" :label="__t('team.filebrowser.folderName')" :placeholder="__t('team.filebrowser.enterName')" @keyup.enter="createFolder" />
       <template #footer>
-        <OButton variant="ghost" @click="showNewFolder = false">取消</OButton>
-        <OButton variant="primary" @click="createFolder">创建</OButton>
+        <OButton variant="ghost" @click="showNewFolder = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="createFolder">{{ __t('commonUi.adminuserfiles.create') }}</OButton>
       </template>
     </OModal>
 
-    <OModal title="重命名" :open="showRename" @close="showRename = false">
-      <OInput v-model="renameName" label="新名称" placeholder="输入新名称" @keyup.enter="submitRename" />
+    <OModal :title="__t('team.filebrowser.rename')" :open="showRename" @close="showRename = false">
+      <OInput v-model="renameName" :label="__t('team.filebrowser.newName')" :placeholder="__t('team.filebrowser.enterNewName')" @keyup.enter="submitRename" />
       <template #footer>
-        <OButton variant="ghost" @click="showRename = false">取消</OButton>
-        <OButton variant="primary" @click="submitRename">确认</OButton>
+        <OButton variant="ghost" @click="showRename = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="submitRename">{{ __t('commonUi.oconfirmdialog.confirm') }}</OButton>
       </template>
     </OModal>
 
     <FolderPickerModal
       :open="pickerOpen"
-      title="移动到"
+      :title="__t('team.filebrowser.moveTo')"
       :target-name="pickerTarget?.fileName"
-      confirm-text="移动到此处"
+      :confirm-text="__t('team.filebrowser.moveHere')"
       :loading="pickerLoading"
       :team-id="teamId"
       :root-name="store.currentTeam?.name"
@@ -758,22 +761,22 @@ function isOfficeFile(file: FileEntity) {
       @confirm="confirmMove"
     />
 
-    <OModal title="文件详情" :open="detailOpen" @close="detailOpen = false">
+    <OModal :title="__t('commonUi.adminuserfiles.documentDetails')" :open="detailOpen" @close="detailOpen = false">
       <div v-if="detailTarget" class="team-files__info">
-        <div><span>名称</span><strong>{{ detailTarget.fileName }}</strong></div>
-        <div><span>类型</span><strong>{{ detailTarget.fileType === 'folder' ? '文件夹' : detailTarget.mimeType || '文件' }}</strong></div>
-        <div><span>大小</span><strong class="font-mono">{{ detailTarget.fileType === 'folder' ? '文件夹' : formatSize(detailTarget.fileSize) }}</strong></div>
-        <div><span>版本数</span><strong class="font-mono">{{ detailTarget.versionCount }}</strong></div>
-        <div><span>创建时间</span><strong>{{ formatDateFull(detailTarget.createdAt) }}</strong></div>
-        <div><span>更新时间</span><strong>{{ formatDateFull(detailTarget.updatedAt) }}</strong></div>
+        <div><span>{{ __t('commonUi.filelist.name') }}</span><strong>{{ detailTarget.fileName }}</strong></div>
+        <div><span>{{ __t('commonUi.adminlogs.type') }}</span><strong>{{ detailTarget.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : detailTarget.mimeType || __t('commonUi.searchoverlay.document') }}</strong></div>
+        <div><span>{{ __t('commonUi.filelist.size') }}</span><strong class="font-mono">{{ detailTarget.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(detailTarget.fileSize) }}</strong></div>
+        <div><span>{{ __t('team.filebrowser.versionNumber') }}</span><strong class="font-mono">{{ detailTarget.versionCount }}</strong></div>
+        <div><span>{{ __t('commonUi.adminteams.creationTime') }}</span><strong>{{ formatDateFull(detailTarget.createdAt) }}</strong></div>
+        <div><span>{{ __t('commonUi.adminteams.updateTime') }}</span><strong>{{ formatDateFull(detailTarget.updatedAt) }}</strong></div>
       </div>
     </OModal>
 
-    <OModal title="团队标签" :open="tagOpen" @close="tagOpen = false">
+    <OModal :title="__t('team.teamfiles.teamTag')" :open="tagOpen" @close="tagOpen = false">
       <div class="tag-manage">
         <div class="tag-manage__target">{{ tagTarget?.fileName }}</div>
         <div v-if="tagsLoading" class="tag-manage__loading"><OSpinner /></div>
-        <div v-else-if="teamTags.length === 0" class="tag-manage__empty">暂无团队标签，请先到团队设置创建标签</div>
+        <div v-else-if="teamTags.length === 0" class="tag-manage__empty">{{ __t('team.teamfiles.thereIsNoTeamLabelYetPleaseGoToThe') }}</div>
         <label v-else v-for="tag in teamTags" :key="tag.id" class="tag-check">
           <input v-model="tagSelection[tag.id]" type="checkbox" />
           <span class="tag-check__swatch" :style="{ background: tag.color || '#00d4aa' }" />
@@ -781,118 +784,108 @@ function isOfficeFile(file: FileEntity) {
         </label>
       </div>
       <template #footer>
-        <OButton variant="ghost" :disabled="tagsLoading" @click="tagOpen = false">取消</OButton>
-        <OButton variant="primary" :loading="tagsLoading" @click="saveTags">保存</OButton>
+        <OButton variant="ghost" :disabled="tagsLoading" @click="tagOpen = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" :loading="tagsLoading" @click="saveTags">{{ __t('commonUi.desktopsettings.save') }}</OButton>
       </template>
     </OModal>
 
-    <OModal title="版本管理" :open="versionsOpen" @close="versionsOpen = false">
+    <OModal :title="__t('team.filebrowser.versionManagement')" :open="versionsOpen" @close="versionsOpen = false">
       <div class="versions-box">
         <div class="versions-box__target">{{ versionsTarget?.fileName }}</div>
         <div v-if="versionsLoading" class="versions-box__loading"><OSpinner /></div>
-        <div v-else-if="versions.length === 0" class="versions-box__empty">暂无历史版本</div>
+        <div v-else-if="versions.length === 0" class="versions-box__empty">{{ __t('commonUi.filepreview.noHistoricalVersionYet') }}</div>
         <div v-else class="versions-list">
           <div v-for="version in versions" :key="version.id" class="version-row">
             <div>
-              <div class="version-row__title">版本 {{ version.versionNumber }}</div>
+              <div class="version-row__title">{{ __t('commonUi.filepreview.version') }}{{ version.versionNumber }}</div>
               <div class="version-row__meta font-mono">{{ formatSize(version.fileSize) }} · {{ formatDateFull(version.createdAt) }}</div>
             </div>
             <div class="version-row__actions">
-              <OButton variant="ghost" size="sm" @click="downloadVersion(version.versionNumber)">下载</OButton>
-              <OButton v-if="store.canWrite" variant="ghost" size="sm" @click="restoreVersion(version.versionNumber)">恢复</OButton>
-              <OButton v-if="store.canDelete" variant="danger" size="sm" @click="deleteVersion(version.versionNumber)">删除</OButton>
+              <OButton variant="ghost" size="sm" @click="downloadVersion(version.versionNumber)">{{ __t('commonUi.filepreview.download') }}</OButton>
+              <OButton v-if="store.canWrite" variant="ghost" size="sm" @click="restoreVersion(version.versionNumber)">{{ __t('commonUi.filepreview.recover') }}</OButton>
+              <OButton v-if="store.canDelete" variant="danger" size="sm" @click="deleteVersion(version.versionNumber)">{{ __t('commonUi.adminuserfiles.delete') }}</OButton>
             </div>
           </div>
         </div>
       </div>
     </OModal>
 
-    <OModal title="创建团队分享" :open="showShare" data-testid="team-share-modal" @close="showShare = false">
+    <OModal :title="__t('team.teamfiles.createATeamShare')" :open="showShare" data-testid="team-share-modal" @close="showShare = false">
       <div class="share-form">
         <div class="share-form__name">{{ shareTarget?.fileName }}</div>
         <OInput
           v-model="shareMaxVisits"
-          label="访问次数限制"
+          :label="__t('commonUi.filebrowser.visitLimit')"
           type="number"
-          placeholder="留空表示不限"
+          :placeholder="__t('commonUi.filebrowser.leaveBlankToIndicateNoLimit')"
           @keyup.enter="submitShare"
         />
         <OInput
           v-model="shareNotifyEmail"
-          label="发送给"
+          :label="__t('team.teamfiles.sendTo')"
           type="email"
-          placeholder="可选，填写邮箱后发送通知"
+          :placeholder="__t('team.teamfiles.optionalSendNotificationAfterFillingInYourEmailAddress')"
           @keyup.enter="submitShare"
         />
         <label class="share-password-toggle">
           <input v-model="sharePasswordEnabled" type="checkbox" />
           <span class="share-password-toggle__box">
             <span />
-          </span>
-          访问密码
-        </label>
+          </span>{{ __t('commonUi.filebrowser.accessPassword') }}</label>
         <div v-if="sharePasswordEnabled" class="share-password">
-          <div class="share-password__segments" aria-label="密码设置方式">
+          <div class="share-password__segments" :aria-label="__t('team.filebrowser.passwordSettingMethod')">
             <button
               type="button"
               :class="{ 'share-password__segment--active': sharePasswordMode === 'manual' }"
               @click="sharePasswordMode = 'manual'"
-            >
-              手动输入
-            </button>
+            >{{ __t('team.filebrowser.manualEntry') }}</button>
             <button
               type="button"
               :class="{ 'share-password__segment--active': sharePasswordMode === 'generated' }"
               @click="sharePasswordMode = 'generated'"
-            >
-              自动生成
-            </button>
+            >{{ __t('team.filebrowser.automaticallyGenerated') }}</button>
           </div>
           <OInput
             v-if="sharePasswordMode === 'manual'"
             v-model="sharePassword"
-            label="访问密码"
+            :label="__t('commonUi.filebrowser.accessPassword')"
             type="text"
-            placeholder="4-16 位"
+            :placeholder="__t('team.filebrowser.fourToSixteenBits')"
             @keyup.enter="submitShare"
           />
           <div v-else class="share-password__generated">
-            <div class="share-password__label">密码长度</div>
-            <div class="share-password__segments" aria-label="密码长度">
+            <div class="share-password__label">{{ __t('team.filebrowser.passwordLength') }}</div>
+            <div class="share-password__segments" :aria-label="__t('team.filebrowser.passwordLength')">
               <button
                 type="button"
                 :class="{ 'share-password__segment--active': generatedPasswordLength === 4 }"
                 @click="generatedPasswordLength = 4"
-              >
-                4 位
-              </button>
+              >{{ __t('team.filebrowser.fourDigits') }}</button>
               <button
                 type="button"
                 :class="{ 'share-password__segment--active': generatedPasswordLength === 8 }"
                 @click="generatedPasswordLength = 8"
-              >
-                8 位
-              </button>
+              >{{ __t('team.filebrowser.eightBits') }}</button>
             </div>
           </div>
         </div>
       </div>
       <template #footer>
-        <OButton variant="ghost" @click="showShare = false">取消</OButton>
-        <OButton variant="primary" @click="submitShare">创建并复制链接</OButton>
+        <OButton variant="ghost" @click="showShare = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="submitShare">{{ __t('team.filebrowser.createAndCopyLink') }}</OButton>
       </template>
     </OModal>
 
-    <OModal title="团队成员" :open="membersOpen" width="620px" @close="membersOpen = false">
+    <OModal :title="__t('team.teamfiles.teamMember')" :open="membersOpen" width="620px" @close="membersOpen = false">
       <div class="team-members">
         <div v-if="store.canManageMembers" class="team-members__add">
-          <input v-model="addUsername" placeholder="用户名" @keyup.enter="addMember" />
+          <input v-model="addUsername" :placeholder="__t('commonUi.desktopsettings.username')" @keyup.enter="addMember" />
           <select v-model="addRole">
-            <option value="VIEWER">Viewer</option>
-            <option value="EDITOR">Editor</option>
-            <option v-if="store.currentTeam?.role === 'OWNER'" value="ADMIN">Admin</option>
+            <option value="VIEWER">{{ __t('role.viewer') }}</option>
+            <option value="EDITOR">{{ __t('role.editor') }}</option>
+            <option v-if="store.currentTeam?.role === 'OWNER'" value="ADMIN">{{ __t('role.admin') }}</option>
           </select>
-          <OButton variant="primary" size="sm" @click="addMember">添加</OButton>
+          <OButton variant="primary" size="sm" @click="addMember">{{ __t('team.teamfiles.addTo') }}</OButton>
         </div>
         <div v-if="membersLoading" class="team-members__loading"><OSpinner /></div>
         <div v-else class="team-members__list">
@@ -906,30 +899,28 @@ function isOfficeFile(file: FileEntity) {
               :disabled="!store.canManageMembers || member.role === 'OWNER'"
               @change="event => updateMemberRole(member, (event.target as HTMLSelectElement).value)"
             >
-              <option value="OWNER" disabled>Owner</option>
-              <option value="ADMIN">Admin</option>
-              <option value="EDITOR">Editor</option>
-              <option value="VIEWER">Viewer</option>
+              <option value="OWNER" disabled>{{ __t('role.owner') }}</option>
+              <option value="ADMIN">{{ __t('role.admin') }}</option>
+              <option value="EDITOR">{{ __t('role.editor') }}</option>
+              <option value="VIEWER">{{ __t('role.viewer') }}</option>
             </select>
             <OButton
               v-if="store.canManageMembers && member.role !== 'OWNER'"
               variant="danger"
               size="sm"
               @click="removeMember(member)"
-            >
-              移除
-            </OButton>
+            >{{ __t('commonUi.tags.remove') }}</OButton>
           </div>
         </div>
       </div>
     </OModal>
 
-    <OModal title="文件权限" :open="permissionOpen" width="680px" @close="permissionOpen = false">
+    <OModal :title="__t('team.teamfiles.filePermissions')" :open="permissionOpen" width="680px" @close="permissionOpen = false">
       <div class="permission-box">
         <div class="permission-box__target">{{ permissionTarget?.fileName }}</div>
         <div v-if="permissionEffective" class="permission-box__effective">
           <div class="permission-box__effective-summary">
-            <span>当前有效权限</span>
+            <span>{{ __t('team.teamfiles.currentEffectivePermissions') }}</span>
             <strong>{{ permissionBits(permissionEffective) }}</strong>
           </div>
           <div v-if="permissionEffective.sourceChain?.length" class="permission-source">
@@ -944,39 +935,39 @@ function isOfficeFile(file: FileEntity) {
         </div>
         <div class="permission-box__form">
           <select v-model="permissionSubjectType">
-            <option value="ROLE">按角色</option>
-            <option value="USER">按用户</option>
+            <option value="ROLE">{{ __t('team.teamfiles.byRole') }}</option>
+            <option value="USER">{{ __t('team.teamfiles.byUser') }}</option>
           </select>
           <select v-if="permissionSubjectType === 'ROLE'" v-model="permissionSubjectRole">
-            <option value="VIEWER">Viewer</option>
-            <option value="EDITOR">Editor</option>
-            <option value="ADMIN">Admin</option>
+            <option value="VIEWER">{{ __t('role.viewer') }}</option>
+            <option value="EDITOR">{{ __t('role.editor') }}</option>
+            <option value="ADMIN">{{ __t('role.admin') }}</option>
           </select>
           <select v-else v-model="permissionSubjectUserId" :disabled="membersLoading || permissionMembers.length === 0">
             <option v-for="member in permissionMembers" :key="member.userId" :value="String(member.userId)">
               {{ member.username }} · {{ member.role }}
             </option>
           </select>
-          <label><input v-model="permissionForm.canRead" type="checkbox" /> 读</label>
-          <label><input v-model="permissionForm.canWrite" type="checkbox" /> 写</label>
-          <label><input v-model="permissionForm.canShare" type="checkbox" /> 分享</label>
-          <label><input v-model="permissionForm.canDelete" type="checkbox" /> 删除</label>
-          <label><input v-model="permissionForm.canManage" type="checkbox" /> 管理</label>
-          <OButton variant="primary" size="sm" @click="savePermission">保存</OButton>
+          <label><input v-model="permissionForm.canRead" type="checkbox" />{{ __t('team.teamfiles.read') }}</label>
+          <label><input v-model="permissionForm.canWrite" type="checkbox" />{{ __t('team.teamfiles.write') }}</label>
+          <label><input v-model="permissionForm.canShare" type="checkbox" />{{ __t('team.filebrowser.share') }}</label>
+          <label><input v-model="permissionForm.canDelete" type="checkbox" />{{ __t('commonUi.adminuserfiles.delete') }}</label>
+          <label><input v-model="permissionForm.canManage" type="checkbox" />{{ __t('team.teamfiles.manage') }}</label>
+          <OButton variant="primary" size="sm" @click="savePermission">{{ __t('commonUi.desktopsettings.save') }}</OButton>
         </div>
         <div v-if="permissionConsistencyWarning || selfLockWarning" class="permission-box__warnings">
           <span v-if="permissionConsistencyWarning">{{ permissionConsistencyWarning }}</span>
           <span v-if="selfLockWarning">{{ selfLockWarning }}</span>
         </div>
         <div v-if="permissionsLoading" class="permission-box__loading"><OSpinner /></div>
-        <div v-else-if="permissions.length === 0" class="permission-box__empty">暂无权限覆盖</div>
+        <div v-else-if="permissions.length === 0" class="permission-box__empty">{{ __t('team.teamfiles.noPermissionToCoverYet') }}</div>
         <div v-else class="permission-list">
           <div v-for="permission in permissions" :key="permission.id" class="permission-row">
             <div>
               <strong>{{ permissionSubjectName(permission) }}</strong>
               <span>{{ permissionBits(permission) }}</span>
             </div>
-            <OButton variant="danger" size="sm" @click="deletePermission(permission)">删除</OButton>
+            <OButton variant="danger" size="sm" @click="deletePermission(permission)">{{ __t('commonUi.adminuserfiles.delete') }}</OButton>
           </div>
         </div>
       </div>

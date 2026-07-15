@@ -19,7 +19,7 @@ import type { TagEntity } from '@/types/tag'
 import type { FileEntity } from '@/types/file'
 import type { ShareLinkEntity } from '@/types/share'
 import type { Team, TeamActivity, TeamInvite, TeamMember, TeamOperationLog, TeamRole, TeamTask } from '@/types/team'
-import { resolveMessage } from '@/i18n'
+import { i18n, resolveMessage } from '@/i18n'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,6 +27,7 @@ const auth = useAuthStore()
 const teamsStore = useTeamsStore()
 const { confirm } = useConfirm()
 const { formatDateFull, formatSize } = useFormatters()
+const t = i18n.global.t
 
 const teamId = computed(() => Number(route.params.teamId))
 const team = ref<Team | null>(null)
@@ -201,7 +202,7 @@ async function exportAuditLogs() {
     targetType: auditTargetType.value.trim() || undefined,
     result: auditResult.value === '' ? undefined : Number(auditResult.value),
   })
-  toast.success('审计导出任务已提交')
+  toast.success(t('teamSettings.toast.auditSubmitted'))
   await loadTeamTasks()
 }
 
@@ -247,7 +248,7 @@ function goTaskPage(nextPage: number) {
 
 async function retryTask(task: TeamTask) {
   await teamsApi.retryTeamTask(teamId.value, task.id)
-  toast.success('任务已重新排队')
+  toast.success(t('teamSettings.toast.taskRequeued'))
   await loadTeamTasks()
 }
 
@@ -347,7 +348,7 @@ async function saveTeamName() {
   team.value = data.data
   teamName.value = data.data.name
   teamsStore.upsertTeam(data.data)
-  toast.success('团队名称已更新')
+  toast.success(t('teamSettings.toast.nameUpdated'))
 }
 
 async function addMember() {
@@ -355,7 +356,7 @@ async function addMember() {
   await teamsApi.addMember(teamId.value, addUsername.value.trim(), addRole.value)
   addUsername.value = ''
   addRole.value = 'VIEWER'
-  toast.success('成员已添加')
+  toast.success(t('teamSettings.toast.memberAdded'))
   await loadMembers()
 }
 
@@ -364,21 +365,21 @@ async function createInvite() {
   await teamsApi.createInvite(teamId.value, inviteEmail.value.trim(), inviteRole.value)
   inviteEmail.value = ''
   inviteRole.value = 'VIEWER'
-  toast.success('邀请已发送')
+  toast.success(t('teamSettings.toast.inviteSent'))
   await loadInvites()
 }
 
 async function resendInvite(invite: TeamInvite) {
   await teamsApi.resendInvite(teamId.value, invite.id)
-  toast.success('邀请已重发')
+  toast.success(t('teamSettings.toast.inviteResent'))
   await loadInvites()
 }
 
 async function cancelInvite(invite: TeamInvite) {
-  const ok = await confirm('取消邀请', `取消发送给 ${invite.email} 的团队邀请？`)
+  const ok = await confirm(t('teamSettings.confirm.cancelInviteTitle'), t('teamSettings.confirm.cancelInvite', { email: invite.email }))
   if (!ok) return
   await teamsApi.cancelInvite(teamId.value, invite.id)
-  toast.success('邀请已取消')
+  toast.success(t('teamSettings.toast.inviteCanceled'))
   await loadInvites()
 }
 
@@ -386,16 +387,16 @@ async function createTeamTag() {
   if (!canManage.value || !newTagName.value.trim()) return
   await teamsApi.createTeamTag(teamId.value, newTagName.value.trim(), newTagColor.value)
   newTagName.value = ''
-  toast.success('团队标签已创建')
+  toast.success(t('teamSettings.toast.tagCreated'))
   await loadTeamTags()
 }
 
 async function deleteTeamTag(tag: TagEntity) {
   if (!canManage.value) return
-  const ok = await confirm('删除团队标签', `确认删除「${tag.tagName}」？`)
+  const ok = await confirm(t('teamSettings.confirm.deleteTagTitle'), t('teamSettings.confirm.deleteTag', { name: tag.tagName }))
   if (!ok) return
   await teamsApi.deleteTeamTag(teamId.value, tag.id)
-  toast.success('团队标签已删除')
+  toast.success(t('teamSettings.toast.tagDeleted'))
   if (selectedTag.value?.id === tag.id) {
     selectedTag.value = null
     tagFiles.value = []
@@ -407,47 +408,47 @@ async function deleteTeamTag(tag: TagEntity) {
 async function updateMemberRole(member: TeamMember, role: string) {
   if (!canManage.value || member.role === 'OWNER') return
   await teamsApi.updateMember(teamId.value, member.userId, role as Exclude<TeamRole, 'OWNER'>)
-  toast.success('角色已更新')
+  toast.success(t('teamSettings.toast.roleUpdated'))
   await loadMembers()
 }
 
 async function removeMember(member: TeamMember) {
   if (!canManage.value || member.role === 'OWNER') return
-  const ok = await confirm('移除成员', `确认移除「${member.username}」？`)
+  const ok = await confirm(t('teamSettings.confirm.removeMemberTitle'), t('teamSettings.confirm.removeMember', { name: member.username }))
   if (!ok) return
   await teamsApi.removeMember(teamId.value, member.userId)
-  toast.success('成员已移除')
+  toast.success(t('teamSettings.toast.memberRemoved'))
   await loadMembers()
 }
 
 async function transferOwner(member: TeamMember) {
   if (!isOwner.value || member.role === 'OWNER') return
-  const ok = await confirm('转让团队', `将「${member.username}」设为团队所有者？转让后你会变为管理员。`)
+  const ok = await confirm(t('teamSettings.confirm.transferTitle'), t('teamSettings.confirm.transfer', { name: member.username }))
   if (!ok) return
   const { data } = await teamsApi.transferTeamOwner(teamId.value, member.userId)
   team.value = data.data
   teamsStore.upsertTeam(data.data)
-  toast.success('团队所有者已转让')
+  toast.success(t('teamSettings.toast.ownerTransferred'))
   await Promise.all([loadMembers(), loadShares(), loadInvites(), loadAuditLogs()])
 }
 
 async function leaveTeam() {
   if (isOwner.value) return
-  const ok = await confirm('退出团队', '退出后将无法访问该团队文件。')
+  const ok = await confirm(t('teamSettings.confirm.leaveTitle'), t('teamSettings.confirm.leave'))
   if (!ok) return
   await teamsApi.leaveTeam(teamId.value)
   teamsStore.removeTeam(teamId.value)
-  toast.success('已退出团队')
+  toast.success(t('teamSettings.toast.left'))
   await router.push({ name: 'Teams' })
 }
 
 async function deleteTeam() {
   if (!isOwner.value || !team.value) return
-  const ok = await confirm('删除团队', `确认删除「${team.value.name}」？团队文件也会被删除。`)
+  const ok = await confirm(t('teamSettings.confirm.deleteTeamTitle'), t('teamSettings.confirm.deleteTeam', { name: team.value.name }))
   if (!ok) return
   await teamsApi.deleteTeam(teamId.value)
   teamsStore.removeTeam(teamId.value)
-  toast.success('团队已删除')
+  toast.success(t('teamSettings.toast.teamDeleted'))
   await router.push({ name: 'Teams' })
 }
 
@@ -461,7 +462,7 @@ function isExpired(share: ShareLinkEntity) {
 
 async function copyLink(share: ShareLinkEntity) {
   await navigator.clipboard.writeText(buildShareUrl(share.shareCode)).catch(() => {})
-  toast.success('链接已复制')
+  toast.success(t('teamSettings.toast.linkCopied'))
 }
 
 async function openDetail(share: ShareLinkEntity) {
@@ -496,12 +497,12 @@ async function submitEdit() {
   if (!editShare.value || !canManageShare(editShare.value)) return
   const maxVisits = editMaxVisits.value.trim() ? Number(editMaxVisits.value) : undefined
   if (maxVisits !== undefined && (!Number.isInteger(maxVisits) || maxVisits < 1)) {
-    toast.error('访问次数限制必须是正整数')
+    toast.error(t('teamSettings.validation.maxVisits'))
     return
   }
   const password = editPassword.value.trim()
   if (!editClearPassword.value && password && (password.length < 4 || password.length > 16)) {
-    toast.error('分享密码长度必须为 4-16 位')
+    toast.error(t('teamSettings.validation.passwordLength'))
     return
   }
   const clearMaxVisits = !editMaxVisits.value.trim()
@@ -515,16 +516,16 @@ async function submitEdit() {
     clearMaxVisits,
   })
   editOpen.value = false
-  toast.success('分享已更新')
+  toast.success(t('teamSettings.toast.shareUpdated'))
   await loadShares()
 }
 
 async function deleteShare(share: ShareLinkEntity) {
   if (!canManageShare(share)) return
-  const ok = await confirm('取消团队分享', '取消后分享链接将立即失效。')
+  const ok = await confirm(t('teamSettings.confirm.cancelShareTitle'), t('teamSettings.confirm.cancelShare'))
   if (!ok) return
   await teamsApi.deleteTeamShare(teamId.value, share.id)
-  toast.success('分享已取消')
+  toast.success(t('teamSettings.toast.shareCanceled'))
   await loadShares()
 }
 
@@ -540,12 +541,12 @@ onMounted(async () => {
   <div class="team-settings page-enter">
     <div class="team-settings__header">
       <div>
-        <h2>团队设置</h2>
-        <p class="text-muted">{{ team?.name || '团队' }} · {{ team?.role || '' }}</p>
+        <h2>{{ t('teamSettings.ui.title') }}</h2>
+        <p class="text-muted">{{ team?.name || t('teamSettings.ui.team') }} · {{ team?.role || '' }}</p>
       </div>
       <div class="team-settings__header-actions">
-        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamFiles', params: { teamId } })">返回文件</OButton>
-        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamRecycleBin', params: { teamId } })">团队回收站</OButton>
+        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamFiles', params: { teamId } })">{{ t('teamSettings.ui.backToFiles') }}</OButton>
+        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamRecycleBin', params: { teamId } })">{{ t('teamSettings.ui.recycleBin') }}</OButton>
       </div>
     </div>
 
@@ -553,50 +554,50 @@ onMounted(async () => {
     <template v-else>
       <section class="team-section">
         <div class="team-section__title">
-          <h3>团队信息</h3>
-          <p>存储 {{ formatSize(team?.storageUsed || 0) }} / {{ formatSize(team?.storageQuota || 0) }} · 配额由系统管理员调整</p>
+          <h3>{{ t('teamSettings.ui.information') }}</h3>
+          <p>{{ t('teamSettings.ui.storageUsage', { used: formatSize(team?.storageUsed || 0), quota: formatSize(team?.storageQuota || 0) }) }}</p>
         </div>
         <div class="team-quota" :class="`team-quota--${quotaState}`">
           <div class="team-quota__bar"><span :style="{ width: `${quotaPercent}%` }" /></div>
           <div class="team-quota__meta">
             <span class="font-mono">{{ quotaPercent }}%</span>
-            <span v-if="quotaState === 'danger'">团队空间已用尽，上传和文档保存可能失败</span>
-            <span v-else-if="quotaState === 'warning'">团队空间接近上限</span>
-            <span v-else-if="quotaState === 'notice'">团队空间已超过 80%</span>
-            <span v-else>团队空间充足</span>
+            <span v-if="quotaState === 'danger'">{{ t('teamSettings.ui.quotaDanger') }}</span>
+            <span v-else-if="quotaState === 'warning'">{{ t('teamSettings.ui.quotaWarning') }}</span>
+            <span v-else-if="quotaState === 'notice'">{{ t('teamSettings.ui.quotaNotice') }}</span>
+            <span v-else>{{ t('teamSettings.ui.quotaHealthy') }}</span>
           </div>
         </div>
         <div class="team-section__body team-section__form">
-          <OInput v-model="teamName" label="团队名称" :disabled="!canManage" @keyup.enter="saveTeamName" />
-          <OButton v-if="canManage" variant="primary" size="sm" @click="saveTeamName">保存</OButton>
+          <OInput v-model="teamName" :label="t('nav.teamName')" :disabled="!canManage" @keyup.enter="saveTeamName" />
+          <OButton v-if="canManage" variant="primary" size="sm" @click="saveTeamName">{{ t('common.save') }}</OButton>
         </div>
       </section>
 
       <section v-if="canManage" class="team-section">
         <div class="team-section__title">
-          <h3>邀请</h3>
-          <p>{{ invites.filter(item => item.status === 'PENDING').length }} 个待处理邀请</p>
+          <h3>{{ t('teamSettings.ui.invitations') }}</h3>
+          <p>{{ t('teamSettings.ui.pendingInvites', { count: invites.filter(item => item.status === 'PENDING').length }) }}</p>
         </div>
         <div class="team-members__add">
-          <input v-model="inviteEmail" type="email" placeholder="邮箱地址" @keyup.enter="createInvite" />
+          <input v-model="inviteEmail" type="email" :placeholder="t('ui.email')" @keyup.enter="createInvite" />
           <select v-model="inviteRole">
-            <option value="VIEWER">Viewer</option>
-            <option value="EDITOR">Editor</option>
-            <option v-if="isOwner" value="ADMIN">Admin</option>
+            <option value="VIEWER">{{ t('role.viewer') }}</option>
+            <option value="EDITOR">{{ t('role.editor') }}</option>
+            <option v-if="isOwner" value="ADMIN">{{ t('role.admin') }}</option>
           </select>
-          <OButton variant="primary" size="sm" @click="createInvite">发送邀请</OButton>
+          <OButton variant="primary" size="sm" @click="createInvite">{{ t('teamSettings.ui.sendInvite') }}</OButton>
         </div>
         <div v-if="invitesLoading" class="team-settings__inline-loading"><OSpinner /></div>
-        <OEmptyState v-else-if="invites.length === 0" title="暂无邀请" />
+        <OEmptyState v-else-if="invites.length === 0" :title="t('teamSettings.ui.noInvites')" />
         <div v-else class="team-list">
           <div v-for="invite in invites" :key="invite.id" class="team-list__row">
             <div>
               <div class="team-members__name">{{ invite.email }}</div>
-              <div class="team-members__email">{{ invite.role }} · {{ invite.status }} · 过期 {{ formatDateFull(invite.expiresAt) }}</div>
+              <div class="team-members__email">{{ invite.role }} · {{ invite.status }} · {{ t('teamSettings.ui.expires', { date: formatDateFull(invite.expiresAt) }) }}</div>
             </div>
             <div class="team-members__actions">
-              <OButton v-if="invite.status === 'PENDING'" variant="ghost" size="sm" @click="resendInvite(invite)">重发</OButton>
-              <OButton v-if="invite.status === 'PENDING'" variant="danger" size="sm" @click="cancelInvite(invite)">取消</OButton>
+              <OButton v-if="invite.status === 'PENDING'" variant="ghost" size="sm" @click="resendInvite(invite)">{{ t('teamSettings.ui.resend') }}</OButton>
+              <OButton v-if="invite.status === 'PENDING'" variant="danger" size="sm" @click="cancelInvite(invite)">{{ t('common.cancel') }}</OButton>
             </div>
           </div>
         </div>
@@ -604,14 +605,14 @@ onMounted(async () => {
 
       <section class="team-section">
         <div class="team-section__title">
-          <h3>活动流</h3>
-          <p>成员可见的团队活动 · 共 {{ activitiesTotal }} 条</p>
+          <h3>{{ t('teamSettings.ui.activity') }}</h3>
+          <p>{{ t('teamSettings.ui.activityCount', { count: activitiesTotal }) }}</p>
         </div>
         <div class="team-collection__toolbar">
-          <OButton variant="ghost" size="sm" @click="loadTeamActivities">刷新</OButton>
+          <OButton variant="ghost" size="sm" @click="loadTeamActivities">{{ t('teamSettings.ui.refresh') }}</OButton>
         </div>
         <div v-if="activitiesLoading" class="team-settings__inline-loading"><OSpinner /></div>
-        <OEmptyState v-else-if="activities.length === 0" title="暂无团队活动" />
+        <OEmptyState v-else-if="activities.length === 0" :title="t('teamSettings.ui.noActivity')" />
         <div v-else class="team-activity">
           <div v-for="activity in activities" :key="activity.id" class="team-activity__row">
             <div class="team-activity__time font-mono">{{ formatDateFull(activity.createdAt) }}</div>
@@ -620,36 +621,36 @@ onMounted(async () => {
               <div class="team-activity__meta">
                 <span class="font-mono">{{ activity.action }}</span>
                 <span v-if="activity.targetType">{{ activity.targetType }} {{ activity.targetId || '' }}</span>
-                <span v-if="activity.actorUserId">用户 {{ activity.actorUserId }}</span>
+                <span v-if="activity.actorUserId">{{ t('teamSettings.ui.userId', { id: activity.actorUserId }) }}</span>
               </div>
             </div>
           </div>
         </div>
         <div v-if="activitiesTotal > TEAM_ACTIVITY_PAGE_SIZE" class="team-collection__pagination">
-          <OButton variant="ghost" size="sm" :disabled="activitiesPage === 1" @click="goActivitiesPage(activitiesPage - 1)">上一页</OButton>
-          <span class="font-mono">第 {{ activitiesPage }} / {{ activitiesTotalPages }} 页 · 共 {{ activitiesTotal }} 条活动</span>
-          <OButton variant="ghost" size="sm" :disabled="activitiesPage >= activitiesTotalPages" @click="goActivitiesPage(activitiesPage + 1)">下一页</OButton>
+          <OButton variant="ghost" size="sm" :disabled="activitiesPage === 1" @click="goActivitiesPage(activitiesPage - 1)">{{ t('teamSettings.ui.previous') }}</OButton>
+          <span class="font-mono">{{ t('teamSettings.ui.activityPage', { page: activitiesPage, pages: activitiesTotalPages, count: activitiesTotal }) }}</span>
+          <OButton variant="ghost" size="sm" :disabled="activitiesPage >= activitiesTotalPages" @click="goActivitiesPage(activitiesPage + 1)">{{ t('teamSettings.ui.next') }}</OButton>
         </div>
       </section>
 
       <section class="team-section">
         <div class="team-section__title">
-          <h3>任务中心</h3>
-          <p>审计导出、ZIP、缩略图、在线文档保存和清理任务 · 共 {{ tasksTotal }} 条</p>
+          <h3>{{ t('team.teamsettings.missionCenter') }}</h3>
+          <p>{{ t('team.teamsettings.auditExportZipThumbnailOnlineDocumentSavingAndCleaningTasks', { p0: tasksTotal }) }}</p>
         </div>
         <div class="team-audit__filters">
           <select v-model="taskStatus" @change="filterTeamTasks">
-            <option value="">全部状态</option>
-            <option value="PENDING">待处理</option>
-            <option value="RUNNING">运行中</option>
-            <option value="SUCCEEDED">成功</option>
-            <option value="FAILED">失败</option>
+            <option value="">{{ t('team.teamsettings.allStatus') }}</option>
+            <option value="PENDING">{{ t('team.teamsettings.pending') }}</option>
+            <option value="RUNNING">{{ t('team.teamsettings.running') }}</option>
+            <option value="SUCCEEDED">{{ t('commonUi.adminlogs.success') }}</option>
+            <option value="FAILED">{{ t('commonUi.transfer.fail') }}</option>
           </select>
-          <OInput v-model="taskType" placeholder="类型，如 AUDIT_EXPORT" @keyup.enter="filterTeamTasks" />
-          <OButton variant="ghost" size="sm" @click="filterTeamTasks">刷新</OButton>
+          <OInput v-model="taskType" :placeholder="t('team.teamsettings.typeSuchAsAuditExport')" @keyup.enter="filterTeamTasks" />
+          <OButton variant="ghost" size="sm" @click="filterTeamTasks">{{ t('team.teamsettings.refresh') }}</OButton>
         </div>
         <div v-if="tasksLoading" class="team-settings__inline-loading"><OSpinner /></div>
-        <OEmptyState v-else-if="teamTasks.length === 0" title="暂无团队任务" />
+        <OEmptyState v-else-if="teamTasks.length === 0" :title="t('team.teamsettings.noTeamTasksYet')" />
         <div v-else class="team-tasks">
           <div v-for="task in teamTasks" :key="task.id" class="team-tasks__row">
             <div class="team-tasks__main">
@@ -670,33 +671,31 @@ onMounted(async () => {
                 variant="ghost"
                 size="sm"
                 @click="downloadTaskResult(task)"
-              >
-                下载
-              </OButton>
-              <OButton v-if="task.status === 'FAILED'" variant="ghost" size="sm" @click="retryTask(task)">重试</OButton>
+              >{{ t('commonUi.filepreview.download') }}</OButton>
+              <OButton v-if="task.status === 'FAILED'" variant="ghost" size="sm" @click="retryTask(task)">{{ t('team.upload.tryAgain') }}</OButton>
             </div>
           </div>
         </div>
         <div v-if="tasksTotal > TEAM_TASK_PAGE_SIZE" class="team-collection__pagination">
-          <OButton variant="ghost" size="sm" :disabled="tasksPage === 1" @click="goTaskPage(tasksPage - 1)">上一页</OButton>
-          <span class="font-mono">第 {{ tasksPage }} / {{ tasksTotalPages }} 页 · 共 {{ tasksTotal }} 条任务</span>
-          <OButton variant="ghost" size="sm" :disabled="tasksPage >= tasksTotalPages" @click="goTaskPage(tasksPage + 1)">下一页</OButton>
+          <OButton variant="ghost" size="sm" :disabled="tasksPage === 1" @click="goTaskPage(tasksPage - 1)">{{ t('commonUi.adminlogs.previousPage') }}</OButton>
+          <span class="font-mono">{{ t('team.teamsettings.pageTotalTasks', { p0: tasksPage, p1: tasksTotalPages, p2: tasksTotal }) }}</span>
+          <OButton variant="ghost" size="sm" :disabled="tasksPage >= tasksTotalPages" @click="goTaskPage(tasksPage + 1)">{{ t('commonUi.adminlogs.nextPage') }}</OButton>
         </div>
       </section>
 
       <section class="team-section">
         <div class="team-section__title">
-          <h3>成员</h3>
-          <p>{{ members.length }} 个成员</p>
+          <h3>{{ t('commonUi.adminteams.member') }}</h3>
+          <p>{{ t('team.teamsettings.members', { p0: members.length }) }}</p>
         </div>
         <div v-if="canManage" class="team-members__add">
-          <input v-model="addUsername" placeholder="用户名" @keyup.enter="addMember" />
+          <input v-model="addUsername" :placeholder="t('commonUi.desktopsettings.username')" @keyup.enter="addMember" />
           <select v-model="addRole">
-            <option value="VIEWER">Viewer</option>
-            <option value="EDITOR">Editor</option>
-            <option v-if="isOwner" value="ADMIN">Admin</option>
+            <option value="VIEWER">{{ t('role.viewer') }}</option>
+            <option value="EDITOR">{{ t('role.editor') }}</option>
+            <option v-if="isOwner" value="ADMIN">{{ t('role.admin') }}</option>
           </select>
-          <OButton variant="primary" size="sm" @click="addMember">添加</OButton>
+          <OButton variant="primary" size="sm" @click="addMember">{{ t('team.teamfiles.addTo') }}</OButton>
         </div>
         <div v-if="membersLoading" class="team-settings__inline-loading"><OSpinner /></div>
         <div v-else class="team-members__list">
@@ -710,14 +709,14 @@ onMounted(async () => {
               :disabled="!canManage || member.role === 'OWNER'"
               @change="event => updateMemberRole(member, (event.target as HTMLSelectElement).value)"
             >
-              <option value="OWNER" disabled>Owner</option>
-              <option v-if="isOwner || member.role === 'ADMIN'" value="ADMIN">Admin</option>
-              <option value="EDITOR">Editor</option>
-              <option value="VIEWER">Viewer</option>
+              <option value="OWNER" disabled>{{ t('role.owner') }}</option>
+              <option v-if="isOwner || member.role === 'ADMIN'" value="ADMIN">{{ t('role.admin') }}</option>
+              <option value="EDITOR">{{ t('role.editor') }}</option>
+              <option value="VIEWER">{{ t('role.viewer') }}</option>
             </select>
             <div class="team-members__actions">
-              <OButton v-if="isOwner && member.role !== 'OWNER'" variant="ghost" size="sm" @click="transferOwner(member)">转让</OButton>
-              <OButton v-if="canManage && member.role !== 'OWNER'" variant="danger" size="sm" @click="removeMember(member)">移除</OButton>
+              <OButton v-if="isOwner && member.role !== 'OWNER'" variant="ghost" size="sm" @click="transferOwner(member)">{{ t('team.teamsettings.transfer') }}</OButton>
+              <OButton v-if="canManage && member.role !== 'OWNER'" variant="danger" size="sm" @click="removeMember(member)">{{ t('commonUi.tags.remove') }}</OButton>
             </div>
           </div>
         </div>
@@ -725,122 +724,116 @@ onMounted(async () => {
 
       <section class="team-section">
         <div class="team-section__title">
-          <h3>团队标签</h3>
-          <p>团队标签对全体成员可见，编辑者可给文件打标签</p>
+          <h3>{{ t('team.teamfiles.teamTag') }}</h3>
+          <p>{{ t('team.teamsettings.teamTagsAreVisibleToAllMembersAndEditorsCan') }}</p>
         </div>
         <div v-if="canManage" class="team-tags__add">
-          <input v-model="newTagName" placeholder="标签名称" @keyup.enter="createTeamTag" />
-          <input v-model="newTagColor" type="color" aria-label="标签颜色" />
-          <OButton variant="primary" size="sm" @click="createTeamTag">新建</OButton>
+          <input v-model="newTagName" :placeholder="t('team.tags.tagName')" @keyup.enter="createTeamTag" />
+          <input v-model="newTagColor" type="color" :aria-label="t('team.teamsettings.labelColor')" />
+          <OButton variant="primary" size="sm" @click="createTeamTag">{{ t('team.teamsettings.new') }}</OButton>
         </div>
         <div v-if="tagsLoading" class="team-settings__inline-loading"><OSpinner /></div>
-        <OEmptyState v-else-if="teamTags.length === 0" title="暂无团队标签" />
+        <OEmptyState v-else-if="teamTags.length === 0" :title="t('team.teamsettings.noTeamTagYet')" />
         <div v-else class="team-tags__list">
           <div v-for="tag in teamTags" :key="tag.id" class="team-tags__item">
             <span class="team-tags__swatch" :style="{ background: tag.color || '#00d4aa' }" />
             <span>{{ tag.tagName }}</span>
-            <OButton class="team-tags__view" variant="ghost" size="sm" @click="openTagFiles(tag)">查看文件</OButton>
-            <OButton v-if="canManage" variant="danger" size="sm" @click="deleteTeamTag(tag)">删除</OButton>
+            <OButton class="team-tags__view" variant="ghost" size="sm" @click="openTagFiles(tag)">{{ t('team.teamsettings.viewFiles') }}</OButton>
+            <OButton v-if="canManage" variant="danger" size="sm" @click="deleteTeamTag(tag)">{{ t('commonUi.adminuserfiles.delete') }}</OButton>
           </div>
         </div>
       </section>
 
       <section v-if="selectedTag" class="team-section">
         <div class="team-section__title">
-          <h3>标签文件：{{ selectedTag.tagName }}</h3>
-          <p>查看已标记为该团队标签的文件</p>
+          <h3>{{ t('team.teamsettings.tagFile', { p0: selectedTag.tagName }) }}</h3>
+          <p>{{ t('team.teamsettings.viewFilesTaggedWithThisTeamTag') }}</p>
         </div>
         <div class="team-collection__toolbar">
-          <OInput v-model="tagFilesQuery" placeholder="搜索此标签下的文件..." @keyup.enter="searchTagFiles" />
-          <OButton variant="ghost" size="sm" @click="searchTagFiles">搜索</OButton>
-          <OButton variant="subtle" size="sm" @click="selectedTag = null">关闭</OButton>
+          <OInput v-model="tagFilesQuery" :placeholder="t('team.teamsettings.searchForFilesUnderThisTag')" @keyup.enter="searchTagFiles" />
+          <OButton variant="ghost" size="sm" @click="searchTagFiles">{{ t('commonUi.adminteams.search') }}</OButton>
+          <OButton variant="subtle" size="sm" @click="selectedTag = null">{{ t('commonUi.o.closure') }}</OButton>
         </div>
         <div v-if="tagFilesLoading" class="team-settings__inline-loading"><OSpinner /></div>
-        <OEmptyState v-else-if="tagFiles.length === 0" title="暂无标签文件" />
+        <OEmptyState v-else-if="tagFiles.length === 0" :title="t('team.teamsettings.noTagFilesYet')" />
         <div v-else class="team-collection">
           <div v-for="file in tagFiles" :key="file.id" class="team-collection__row">
             <div>
               <div class="team-collection__name">{{ file.fileName }}</div>
-              <div class="team-collection__meta">{{ file.fileType === 'folder' ? '文件夹' : formatSize(file.fileSize) }} · {{ formatDateFull(file.updatedAt) }}</div>
+              <div class="team-collection__meta">{{ t('team.teamsettings.value', { p0: t('team.teamsettings.value', { p0: t('team.teamsettings.parameterPair', { p0: file.fileType === 'folder' ? t('commonUi.desktopfolderupload.folder') : formatSize(file.fileSize), p1: formatDateFull(file.updatedAt) }) }) }) }}</div>
             </div>
-            <OButton variant="ghost" size="sm" @click="openTeamFileLocation(file)">
-              打开位置
-            </OButton>
+            <OButton variant="ghost" size="sm" @click="openTeamFileLocation(file)">{{ t('team.teamsettings.openLocation') }}</OButton>
           </div>
         </div>
         <div v-if="tagFilesTotal > TEAM_COLLECTION_PAGE_SIZE" class="team-collection__pagination">
-          <OButton variant="ghost" size="sm" :disabled="tagFilesPage === 1" @click="goTagFilesPage(tagFilesPage - 1)">上一页</OButton>
-          <span class="font-mono">第 {{ tagFilesPage }} / {{ tagFilesTotalPages }} 页 · 共 {{ tagFilesTotal }} 个文件</span>
-          <OButton variant="ghost" size="sm" :disabled="tagFilesPage >= tagFilesTotalPages" @click="goTagFilesPage(tagFilesPage + 1)">下一页</OButton>
+          <OButton variant="ghost" size="sm" :disabled="tagFilesPage === 1" @click="goTagFilesPage(tagFilesPage - 1)">{{ t('commonUi.adminlogs.previousPage') }}</OButton>
+          <span class="font-mono">{{ t('team.teamsettings.pageTotalFiles', { p0: tagFilesPage, p1: tagFilesTotalPages, p2: tagFilesTotal }) }}</span>
+          <OButton variant="ghost" size="sm" :disabled="tagFilesPage >= tagFilesTotalPages" @click="goTagFilesPage(tagFilesPage + 1)">{{ t('commonUi.adminlogs.nextPage') }}</OButton>
         </div>
       </section>
 
       <section class="team-section">
         <div class="team-section__title">
-          <h3>团队收藏</h3>
-          <p>成员收藏的团队文件，按当前登录用户的收藏关系展示</p>
+          <h3>{{ t('team.teamsettings.teamCollection') }}</h3>
+          <p>{{ t('team.teamsettings.teamFilesCollectedByMembersAreDisplayedAccordingToThe') }}</p>
         </div>
         <div class="team-collection__toolbar">
-          <OInput v-model="favoritesQuery" placeholder="搜索收藏的团队文件..." @keyup.enter="searchFavorites" />
-          <OButton variant="ghost" size="sm" @click="searchFavorites">搜索</OButton>
+          <OInput v-model="favoritesQuery" :placeholder="t('team.teamsettings.searchFavoritedTeamFiles')" @keyup.enter="searchFavorites" />
+          <OButton variant="ghost" size="sm" @click="searchFavorites">{{ t('commonUi.adminteams.search') }}</OButton>
         </div>
         <div v-if="favoritesLoading" class="team-settings__inline-loading"><OSpinner /></div>
-        <OEmptyState v-else-if="teamFavorites.length === 0" title="暂无团队收藏" description="在团队文件中右键文件可加入收藏" />
+        <OEmptyState v-else-if="teamFavorites.length === 0" :title="t('team.teamsettings.noTeamFavoritesYet')" :description="t('team.teamsettings.rightClickTheFileInTheTeamFileToAdd')" />
         <div v-else class="team-collection">
           <div v-for="file in teamFavorites" :key="file.id" class="team-collection__row">
             <div>
               <div class="team-collection__name">{{ file.fileName }}</div>
-              <div class="team-collection__meta">{{ file.fileType === 'folder' ? '文件夹' : formatSize(file.fileSize) }} · {{ formatDateFull(file.updatedAt) }}</div>
+              <div class="team-collection__meta">{{ t('team.teamsettings.value', { p0: t('team.teamsettings.value', { p0: t('team.teamsettings.parameterPair', { p0: file.fileType === 'folder' ? t('commonUi.desktopfolderupload.folder') : formatSize(file.fileSize), p1: formatDateFull(file.updatedAt) }) }) }) }}</div>
             </div>
-            <OButton variant="ghost" size="sm" @click="openTeamFileLocation(file)">
-              打开位置
-            </OButton>
+            <OButton variant="ghost" size="sm" @click="openTeamFileLocation(file)">{{ t('team.teamsettings.openLocation') }}</OButton>
           </div>
         </div>
         <div v-if="favoritesTotal > TEAM_COLLECTION_PAGE_SIZE" class="team-collection__pagination">
-          <OButton variant="ghost" size="sm" :disabled="favoritesPage === 1" @click="goFavoritesPage(favoritesPage - 1)">上一页</OButton>
-          <span class="font-mono">第 {{ favoritesPage }} / {{ favoritesTotalPages }} 页 · 共 {{ favoritesTotal }} 个文件</span>
-          <OButton variant="ghost" size="sm" :disabled="favoritesPage >= favoritesTotalPages" @click="goFavoritesPage(favoritesPage + 1)">下一页</OButton>
+          <OButton variant="ghost" size="sm" :disabled="favoritesPage === 1" @click="goFavoritesPage(favoritesPage - 1)">{{ t('commonUi.adminlogs.previousPage') }}</OButton>
+          <span class="font-mono">{{ t('team.teamsettings.pageTotalFiles', { p0: favoritesPage, p1: favoritesTotalPages, p2: favoritesTotal }) }}</span>
+          <OButton variant="ghost" size="sm" :disabled="favoritesPage >= favoritesTotalPages" @click="goFavoritesPage(favoritesPage + 1)">{{ t('commonUi.adminlogs.nextPage') }}</OButton>
         </div>
       </section>
 
       <section class="team-section">
         <div class="team-section__title">
-          <h3>团队分享</h3>
-          <p>{{ shares.length }} 个分享链接</p>
+          <h3>{{ t('team.teamsettings.teamSharing') }}</h3>
+          <p>{{ t('team.teamsettings.sharedLinks', { p0: shares.length }) }}</p>
         </div>
         <div v-if="sharesLoading" class="team-settings__inline-loading"><OSpinner /></div>
-        <OEmptyState v-else-if="shares.length === 0" title="暂无团队分享" description="在团队文件中右键文件可创建分享链接" />
+        <OEmptyState v-else-if="shares.length === 0" :title="t('team.teamsettings.noTeamSharingYet')" :description="t('team.teamsettings.rightClickTheFileInTheTeamFileToCreate')" />
         <div v-else class="team-shares__list">
           <div v-for="share in shares" :key="share.id" class="team-shares__row">
             <div class="team-shares__main">
               <div class="team-shares__url font-mono truncate">{{ buildShareUrl(share.shareCode) }}</div>
               <div class="team-shares__meta">
-                <span v-if="share.expireAt" :style="isExpired(share) ? 'color:var(--danger)' : 'color:var(--text-secondary)'">
-                  {{ isExpired(share) ? '已过期' : `过期：${formatDateFull(share.expireAt)}` }}
-                </span>
-                <span v-else>永不过期</span>
-                <span>访问 {{ share.visitCount }}{{ share.maxVisits ? `/${share.maxVisits}` : '' }}</span>
-                <span>下载 {{ share.downloadCount }}</span>
-                <span v-if="share.hasPassword">有密码</span>
+                <span v-if="share.expireAt" :style="isExpired(share) ? 'color:var(--danger)' : 'color:var(--text-secondary)'">{{ t('team.teamsettings.value', { p0: t('team.teamsettings.value', { p0: t('team.teamsettings.value', { p0: isExpired(share) ? t('commonUi.searchoverlay.expiredStatus') : t('commonUi.searchoverlay.expired', { p0: formatDateFull(share.expireAt) }) }) }) }) }}</span>
+                <span v-else>{{ t('commonUi.searchoverlay.neverExpires') }}</span>
+                <span>{{ t('team.teamsettings.visit', { p0: share.visitCount, p1: share.maxVisits ? `/${share.maxVisits}` : '' }) }}</span>
+                <span>{{ t('team.transfer.download', { p0: share.downloadCount }) }}</span>
+                <span v-if="share.hasPassword">{{ t('commonUi.searchoverlay.havePassword') }}</span>
               </div>
             </div>
             <div class="team-shares__actions">
-              <OButton variant="subtle" size="sm" @click="openDetail(share)">详情</OButton>
+              <OButton variant="subtle" size="sm" @click="openDetail(share)">{{ t('commonUi.adminlogs.details') }}</OButton>
               <OButton
                 v-if="share.hasPassword && canManageShare(share)"
                 variant="ghost"
                 size="sm"
                 icon
                 :loading="loadingPasswordShareId === share.id"
-                aria-label="查看密码"
+                :aria-label="t('team.shares.viewPassword')"
                 @click="loadSharePassword(share)"
               >
                 <Eye :size="14" />
               </OButton>
-              <OButton v-if="canManageShare(share)" variant="ghost" size="sm" @click="openEdit(share)">编辑</OButton>
-              <OButton variant="ghost" size="sm" @click="copyLink(share)">复制</OButton>
-              <OButton v-if="canManageShare(share)" variant="danger" size="sm" @click="deleteShare(share)">取消</OButton>
+              <OButton v-if="canManageShare(share)" variant="ghost" size="sm" @click="openEdit(share)">{{ t('commonUi.shares.edit') }}</OButton>
+              <OButton variant="ghost" size="sm" @click="copyLink(share)">{{ t('team.searchoverlay.copy') }}</OButton>
+              <OButton v-if="canManageShare(share)" variant="danger" size="sm" @click="deleteShare(share)">{{ t('commonUi.oconfirmdialog.cancel') }}</OButton>
             </div>
           </div>
         </div>
@@ -848,22 +841,22 @@ onMounted(async () => {
 
       <section v-if="canManage" class="team-section">
         <div class="team-section__title">
-          <h3>审计日志</h3>
-          <p>记录团队成员、文件、分享、版本、标签和配额操作 · 共 {{ auditTotal }} 条</p>
+          <h3>{{ t('adminUi.adminlogs.auditLog') }}</h3>
+          <p>{{ t('team.teamsettings.recordTeamMembersFilesSharesVersionsTagsAndQuotaOperations', { p0: auditTotal }) }}</p>
         </div>
         <div class="team-audit__filters">
-          <OInput v-model="auditAction" placeholder="动作，如 FILE_DELETE" @keyup.enter="filterAuditLogs" />
-          <OInput v-model="auditTargetType" placeholder="目标，如 FILE" @keyup.enter="filterAuditLogs" />
+          <OInput v-model="auditAction" :placeholder="t('team.teamsettings.actionSuchAsFileDelete')" @keyup.enter="filterAuditLogs" />
+          <OInput v-model="auditTargetType" :placeholder="t('adminUi.adminteams.targetSuchAsFile')" @keyup.enter="filterAuditLogs" />
           <select v-model="auditResult" @change="filterAuditLogs">
-            <option value="">全部结果</option>
-            <option value="1">成功</option>
-            <option value="0">失败</option>
+            <option value="">{{ t('commonUi.adminlogs.allResults') }}</option>
+            <option value="1">{{ t('commonUi.adminlogs.success') }}</option>
+            <option value="0">{{ t('commonUi.transfer.fail') }}</option>
           </select>
-          <OButton variant="ghost" size="sm" @click="filterAuditLogs">筛选</OButton>
-          <OButton variant="ghost" size="sm" @click="exportAuditLogs">导出 CSV</OButton>
+          <OButton variant="ghost" size="sm" @click="filterAuditLogs">{{ t('commonUi.adminlogs.filter') }}</OButton>
+          <OButton variant="ghost" size="sm" @click="exportAuditLogs">{{ t('adminUi.adminteams.exportCsv') }}</OButton>
         </div>
         <div v-if="auditLoading" class="team-settings__inline-loading"><OSpinner /></div>
-        <OEmptyState v-else-if="auditLogs.length === 0" title="暂无审计日志" />
+        <OEmptyState v-else-if="auditLogs.length === 0" :title="t('commonUi.adminlogs.noAuditLogYet')" />
         <div v-else class="team-audit">
           <div v-for="log in auditLogs" :key="log.id" class="team-audit__row">
             <div class="team-audit__time font-mono">{{ formatDateFull(log.createdAt) }}</div>
@@ -873,56 +866,56 @@ onMounted(async () => {
           </div>
         </div>
         <div v-if="auditTotal > TEAM_AUDIT_PAGE_SIZE" class="team-collection__pagination">
-          <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="goAuditPage(auditPage - 1)">上一页</OButton>
-          <span class="font-mono">第 {{ auditPage }} / {{ auditTotalPages }} 页 · 共 {{ auditTotal }} 条日志</span>
-          <OButton variant="ghost" size="sm" :disabled="auditPage >= auditTotalPages" @click="goAuditPage(auditPage + 1)">下一页</OButton>
+          <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="goAuditPage(auditPage - 1)">{{ t('commonUi.adminlogs.previousPage') }}</OButton>
+          <span class="font-mono">{{ t('team.teamsettings.pageTotalLogs', { p0: auditPage, p1: auditTotalPages, p2: auditTotal }) }}</span>
+          <OButton variant="ghost" size="sm" :disabled="auditPage >= auditTotalPages" @click="goAuditPage(auditPage + 1)">{{ t('commonUi.adminlogs.nextPage') }}</OButton>
         </div>
       </section>
 
       <section class="team-section">
         <div class="team-section__title">
-          <h3>危险操作</h3>
-          <p>退出或删除团队前请确认团队文件归属。</p>
+          <h3>{{ t('team.teamsettings.dangerousOperation') }}</h3>
+          <p>{{ t('team.teamsettings.pleaseConfirmTheOwnershipOfTheTeamFilesBeforeQuitting') }}</p>
         </div>
         <div class="team-settings__danger">
-          <OButton v-if="!isOwner" variant="danger" size="sm" @click="leaveTeam">退出团队</OButton>
-          <OButton v-if="isOwner" variant="danger" size="sm" @click="deleteTeam">删除团队</OButton>
+          <OButton v-if="!isOwner" variant="danger" size="sm" @click="leaveTeam">{{ t('team.teamsettings.quitTheTeam') }}</OButton>
+          <OButton v-if="isOwner" variant="danger" size="sm" @click="deleteTeam">{{ t('team.teamsettings.deleteTeam') }}</OButton>
         </div>
       </section>
     </template>
 
-    <OModal title="分享详情" :open="detailOpen" @close="detailOpen = false">
+    <OModal :title="t('team.shares.shareDetails')" :open="detailOpen" @close="detailOpen = false">
       <div v-if="detailShare" class="share-info">
-        <div><span>链接</span><strong class="font-mono">{{ buildShareUrl(detailShare.shareCode) }}</strong></div>
-        <div><span>文件 ID</span><strong class="font-mono">{{ detailShare.fileId }}</strong></div>
-        <div><span>访问</span><strong class="font-mono">{{ detailShare.visitCount }}{{ detailShare.maxVisits ? `/${detailShare.maxVisits}` : '' }}</strong></div>
-        <div><span>下载</span><strong class="font-mono">{{ detailShare.downloadCount }}</strong></div>
-        <div><span>密码</span><strong>{{ detailShare.hasPassword ? (detailPassword || '有密码') : '无密码' }}</strong></div>
-        <div><span>过期</span><strong>{{ detailShare.expireAt ? formatDateFull(detailShare.expireAt) : '永不过期' }}</strong></div>
-        <div><span>状态</span><strong>{{ detailShare.isCanceled ? '已取消' : isExpired(detailShare) ? '已过期' : '有效' }}</strong></div>
+        <div><span>{{ t('team.shares.link') }}</span><strong class="font-mono">{{ buildShareUrl(detailShare.shareCode) }}</strong></div>
+        <div><span>{{ t('team.shares.fileId') }}</span><strong class="font-mono">{{ detailShare.fileId }}</strong></div>
+        <div><span>{{ t('team.shares.access') }}</span><strong class="font-mono">{{ detailShare.visitCount }}{{ detailShare.maxVisits ? `/${detailShare.maxVisits}` : '' }}</strong></div>
+        <div><span>{{ t('commonUi.filepreview.download') }}</span><strong class="font-mono">{{ detailShare.downloadCount }}</strong></div>
+        <div><span>{{ t('commonUi.desktopsettings.password') }}</span><strong>{{ detailShare.hasPassword ? (detailPassword || t('commonUi.searchoverlay.havePassword')) : t('commonUi.searchoverlay.noPassword') }}</strong></div>
+        <div><span>{{ t('team.shares.expired') }}</span><strong>{{ detailShare.expireAt ? formatDateFull(detailShare.expireAt) : t('commonUi.searchoverlay.neverExpires') }}</strong></div>
+        <div><span>{{ t('commonUi.adminlogs.state') }}</span><strong>{{ detailShare.isCanceled ? t('commonUi.transfer.canceled') : isExpired(detailShare) ? t('commonUi.searchoverlay.expiredStatus') : t('team.shares.efficient') }}</strong></div>
       </div>
     </OModal>
 
-    <OModal title="编辑团队分享" :open="editOpen" @close="editOpen = false">
+    <OModal :title="t('team.teamsettings.sharedByTheEditorialTeam')" :open="editOpen" @close="editOpen = false">
       <div class="share-edit">
         <div class="share-edit__field">
-          <OInput v-model="editMaxVisits" label="访问次数限制" type="number" placeholder="留空表示不限" />
-          <OButton variant="ghost" size="sm" @click="editMaxVisits = ''">清空访问次数</OButton>
+          <OInput v-model="editMaxVisits" :label="t('commonUi.filebrowser.visitLimit')" type="number" :placeholder="t('commonUi.filebrowser.leaveBlankToIndicateNoLimit')" />
+          <OButton variant="ghost" size="sm" @click="editMaxVisits = ''">{{ t('team.shares.clearVisits') }}</OButton>
         </div>
         <div class="share-edit__field">
-          <OInput v-model="editExpireAt" label="过期时间" type="datetime-local" />
-          <OButton variant="ghost" size="sm" @click="editExpireAt = ''">清空过期时间</OButton>
+          <OInput v-model="editExpireAt" :label="t('team.shares.expirationTime')" type="datetime-local" />
+          <OButton variant="ghost" size="sm" @click="editExpireAt = ''">{{ t('team.shares.clearExpirationTime') }}</OButton>
         </div>
-        <OInput v-model="editPassword" label="新访问密码" type="text" placeholder="留空表示不修改" />
+        <OInput v-model="editPassword" :label="t('team.shares.newAccessPassword')" type="text" :placeholder="t('team.teamsettings.leaveBlankToIndicateNoChanges')" />
         <label class="share-edit__check">
           <input v-model="editClearPassword" type="checkbox" />
-          <span>移除访问密码</span>
+          <span>{{ t('team.shares.removeAccessCode') }}</span>
         </label>
-        <p>清除访问次数和过期时间会设为无限制；密码留空表示不修改。</p>
+        <p>{{ t('team.shares.theNumberOfClearAccessesAndExpirationTimeWillBe') }}</p>
       </div>
       <template #footer>
-        <OButton variant="ghost" @click="editOpen = false">取消</OButton>
-        <OButton variant="primary" @click="submitEdit">保存</OButton>
+        <OButton variant="ghost" @click="editOpen = false">{{ t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="submitEdit">{{ t('commonUi.desktopsettings.save') }}</OButton>
       </template>
     </OModal>
   </div>

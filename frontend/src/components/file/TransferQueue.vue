@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref } from 'vue'
 import OButton from '@/components/base/OButton.vue'
 import TransferNodeRow from './TransferNodeRow.vue'
@@ -11,21 +14,21 @@ const uploadStore = useUploadStore()
 const expanded = ref<Set<string>>(new Set())
 
 const statusLabel: Record<string, string> = {
-  pending: '等待中',
-  hashing: '计算中',
-  transferring: '传输中',
-  paused: '已暂停',
-  done: '完成',
-  instant: '秒传',
-  error: '失败',
-  canceled: '已取消',
+  pending: __t('transferUi.transfer.waiting'),
+  hashing: __t('transferUi.transfer.calculating'),
+  transferring: __t('transferUi.transfer.transmitting'),
+  paused: __t('transferUi.transfer.suspended'),
+  done: __t('transferUi.transfer.finish'),
+  instant: __t('transferUi.transfer.secondTransfer'),
+  error: __t('commonUi.transfer.fail'),
+  canceled: __t('commonUi.transfer.canceled'),
 }
 
 const title = computed(() => {
   const active = store.activeCount + uploadStore.queue.filter(item => ['pending', 'hashing', 'uploading'].includes(item.status)).length
-  if (active > 0) return `传输中 (${active})`
-  if (store.allDone && uploadStore.queue.every(item => ['done', 'instant', 'error', 'canceled'].includes(item.status))) return '全部完成'
-  return '传输队列'
+  if (active > 0) return __t('transferUi.transfer.activeTransferCount', { p0: active })
+  if (store.allDone && uploadStore.queue.every(item => ['done', 'instant', 'error', 'canceled'].includes(item.status))) return __t('transferUi.transfer.allDone')
+  return __t('transferUi.transfer.transmissionQueue')
 })
 
 const browserUploadItems = computed(() => uploadStore.queue.filter(item => !item.desktop))
@@ -97,7 +100,7 @@ async function clearFinished() {
       <div class="transfer-queue__header">
         <span class="transfer-queue__title">{{ title }}</span>
         <div class="transfer-queue__header-actions">
-          <OButton v-if="store.allDone || uploadStore.queue.some(item => ['done', 'instant', 'error', 'canceled'].includes(item.status))" variant="subtle" size="sm" @click="clearFinished">清除</OButton>
+          <OButton v-if="store.allDone || uploadStore.queue.some(item => ['done', 'instant', 'error', 'canceled'].includes(item.status))" variant="subtle" size="sm" @click="clearFinished">{{ __t('transferUi.transfer.clear') }}</OButton>
           <OButton variant="subtle" size="sm" :icon="true" @click="store.isOpen = false; uploadStore.isOpen = false">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -112,21 +115,17 @@ async function clearFinished() {
           class="transfer-queue__tab"
           :class="{ 'transfer-queue__tab--active': store.activeTab === 'upload' }"
           @click="store.activeTab = 'upload'"
-        >
-          上传 {{ uploadCount }}
-        </button>
+        >{{ __t('transferUi.transfer.upload', { p0: uploadCount }) }}</button>
         <button
           type="button"
           class="transfer-queue__tab"
           :class="{ 'transfer-queue__tab--active': store.activeTab === 'download' }"
           @click="store.activeTab = 'download'"
-        >
-          下载 {{ store.downloadTasks.length }}
-        </button>
+        >{{ __t('team.transfer.download', { p0: store.downloadTasks.length }) }}</button>
       </div>
 
       <div class="transfer-queue__list">
-        <div v-if="store.visibleTasks.length === 0 && (store.activeTab !== 'upload' || browserUploadItems.length === 0)" class="transfer-queue__empty">暂无传输</div>
+        <div v-if="store.visibleTasks.length === 0 && (store.activeTab !== 'upload' || browserUploadItems.length === 0)" class="transfer-queue__empty">{{ __t('transferUi.transfer.noTransmissionYet') }}</div>
         <template v-if="store.activeTab === 'upload'">
           <div
             v-for="item in browserUploadItems"
@@ -146,9 +145,9 @@ async function clearFinished() {
               <p v-if="item.error" class="transfer-upload__error">{{ item.error }}</p>
             </div>
             <div class="transfer-upload__actions">
-              <OButton v-if="['pending', 'hashing', 'uploading'].includes(item.status)" variant="subtle" size="sm" @click="uploadStore.pauseUpload(item.id)">暂停</OButton>
-              <OButton v-if="item.status === 'paused'" variant="subtle" size="sm" @click="uploadStore.resumePausedUpload(item.id)">继续</OButton>
-              <OButton v-if="!['done', 'instant', 'canceled'].includes(item.status)" variant="danger" size="sm" @click="uploadStore.cancelUpload(item.id)">取消</OButton>
+              <OButton v-if="['pending', 'hashing', 'uploading'].includes(item.status)" variant="subtle" size="sm" @click="uploadStore.pauseUpload(item.id)">{{ __t('transferUi.transfernoderow.pause') }}</OButton>
+              <OButton v-if="item.status === 'paused'" variant="subtle" size="sm" @click="uploadStore.resumePausedUpload(item.id)">{{ __t('transferUi.transfernoderow.continue') }}</OButton>
+              <OButton v-if="!['done', 'instant', 'canceled'].includes(item.status)" variant="danger" size="sm" @click="uploadStore.cancelUpload(item.id)">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
             </div>
           </div>
         </template>
@@ -176,7 +175,7 @@ async function clearFinished() {
 <style scoped>
 .transfer-queue {
   position: fixed; bottom: 20px; right: 20px; z-index: 150;
-  width: 420px;
+  width: min(420px, calc(100vw - 24px));
   background: var(--bg-overlay);
   border: 1px solid var(--border-hover);
   border-radius: 12px;

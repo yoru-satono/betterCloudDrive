@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Eye } from 'lucide-vue-next'
@@ -55,14 +58,14 @@ async function openShareFromQuery() {
 
 async function copyLink(share: ShareLinkEntity) {
   await navigator.clipboard.writeText(buildShareUrl(share.shareCode))
-  toast.success('链接已复制')
+  toast.success(__t('share.searchoverlay.linkCopied'))
 }
 
 async function deleteShare(share: ShareLinkEntity) {
-  const ok = await confirm('取消分享', '取消后分享链接将立即失效。')
+  const ok = await confirm(__t('share.shares.unshare'), __t('share.shares.theSharedLinkWillBecomeInvalidImmediatelyAfterCancellation'))
   if (!ok) return
   await sharesApi.deleteShare(share.id)
-  toast.success('分享已取消')
+  toast.success(__t('share.shares.sharingCanceled'))
   load()
 }
 
@@ -98,12 +101,12 @@ async function submitEdit() {
   if (!editShare.value) return
   const maxVisits = editMaxVisits.value.trim() ? Number(editMaxVisits.value) : undefined
   if (maxVisits !== undefined && (!Number.isInteger(maxVisits) || maxVisits < 1)) {
-    toast.error('访问次数限制必须是正整数')
+    toast.error(__t('commonUi.filebrowser.theNumberOfVisitsLimitMustBeAPositiveInteger'))
     return
   }
   const password = editPassword.value.trim()
   if (!editClearPassword.value && password && (password.length < 4 || password.length > 16)) {
-    toast.error('分享密码长度必须为 4-16 位')
+    toast.error(__t('commonUi.filebrowser.sharePasswordLengthMustBe416Characters'))
     return
   }
   const clearMaxVisits = !editMaxVisits.value.trim()
@@ -116,7 +119,7 @@ async function submitEdit() {
     clearExpireAt,
     clearMaxVisits,
   })
-  toast.success('分享已更新')
+  toast.success(__t('share.shares.shareUpdated'))
   editOpen.value = false
   load()
 }
@@ -133,13 +136,13 @@ watch(() => route.query.shareId, () => openShareFromQuery())
   <div class="page-enter">
     <div class="page-header">
       <div>
-        <h2>我的分享</h2>
-        <p class="text-muted" style="font-size:12px;margin-top:2px">{{ shares.length }} 个分享链接</p>
+        <h2>{{ __t('share.shares.myShare') }}</h2>
+        <p class="text-muted" style="font-size:12px;margin-top:2px">{{ shares.length }}{{ __t('share.shares.sharedLinks') }}</p>
       </div>
     </div>
 
     <div v-if="loading" class="page-loading"><OSpinner /></div>
-    <OEmptyState v-else-if="shares.length === 0" title="暂无分享" description="在文件浏览器中右键文件可创建分享链接" />
+    <OEmptyState v-else-if="shares.length === 0" :title="__t('share.shares.noSharingYet')" :description="__t('share.shares.rightClickOnAFileInTheFileBrowserTo')" />
     <div v-else class="shares-list">
       <div v-for="share in shares" :key="share.id" class="share-card">
         <div class="share-card__main">
@@ -147,67 +150,67 @@ watch(() => route.query.shareId, () => openShareFromQuery())
           <div class="share-card__meta">
             <span v-if="share.expireAt">
               <span :style="isExpired(share) ? 'color:var(--danger)' : 'color:var(--text-secondary)'">
-                {{ isExpired(share) ? '已过期' : `过期：${formatDateFull(share.expireAt)}` }}
+                {{ isExpired(share) ? __t('commonUi.searchoverlay.expiredStatus') : __t('commonUi.searchoverlay.expired', { p0: formatDateFull(share.expireAt) }) }}
               </span>
             </span>
-            <span v-else class="text-muted">永不过期</span>
-            <span class="text-muted">· 访问 {{ share.visitCount }}{{ share.maxVisits ? `/${share.maxVisits}` : '' }} 次</span>
-            <span class="text-muted">· 下载 {{ share.downloadCount }} 次</span>
-            <span v-if="share.hasPassword" class="share-card__pw">有密码</span>
+            <span v-else class="text-muted">{{ __t('commonUi.searchoverlay.neverExpires') }}</span>
+            <span class="text-muted">{{ __t('share.shares.visit') }}{{ share.visitCount }}{{ share.maxVisits ? `/${share.maxVisits}` : '' }}{{ __t('share.shares.secondRate') }}</span>
+            <span class="text-muted">{{ __t('share.shares.download') }}{{ share.downloadCount }}{{ __t('share.shares.secondRate') }}</span>
+            <span v-if="share.hasPassword" class="share-card__pw">{{ __t('commonUi.searchoverlay.havePassword') }}</span>
           </div>
         </div>
         <div class="share-card__actions">
-          <OButton variant="subtle" size="sm" @click="openDetail(share)">详情</OButton>
+          <OButton variant="subtle" size="sm" @click="openDetail(share)">{{ __t('commonUi.adminlogs.details') }}</OButton>
           <OButton
             v-if="share.hasPassword"
             variant="ghost"
             size="sm"
             icon
             :loading="loadingPasswordShareId === share.id"
-            aria-label="查看密码"
+            :aria-label="__t('team.shares.viewPassword')"
             @click="loadSharePassword(share)"
           >
             <Eye :size="14" />
           </OButton>
-          <OButton variant="ghost" size="sm" @click="openEdit(share)">编辑</OButton>
-          <OButton variant="ghost" size="sm" @click="copyLink(share)">复制链接</OButton>
-          <OButton variant="danger" size="sm" @click="deleteShare(share)">取消分享</OButton>
+          <OButton variant="ghost" size="sm" @click="openEdit(share)">{{ __t('commonUi.shares.edit') }}</OButton>
+          <OButton variant="ghost" size="sm" @click="copyLink(share)">{{ __t('share.shares.copyLink') }}</OButton>
+          <OButton variant="danger" size="sm" @click="deleteShare(share)">{{ __t('share.shares.unshare') }}</OButton>
         </div>
       </div>
     </div>
 
-    <OModal title="分享详情" :open="detailOpen" @close="detailOpen = false">
+    <OModal :title="__t('team.shares.shareDetails')" :open="detailOpen" @close="detailOpen = false">
       <div v-if="detailShare" class="share-info">
-        <div><span>链接</span><strong class="font-mono">{{ buildShareUrl(detailShare.shareCode) }}</strong></div>
-        <div><span>文件 ID</span><strong class="font-mono">{{ detailShare.fileId }}</strong></div>
-        <div><span>访问</span><strong class="font-mono">{{ detailShare.visitCount }}{{ detailShare.maxVisits ? `/${detailShare.maxVisits}` : '' }}</strong></div>
-        <div><span>下载</span><strong class="font-mono">{{ detailShare.downloadCount }}</strong></div>
-        <div><span>密码</span><strong>{{ detailShare.hasPassword ? (detailPassword || '有密码') : '无密码' }}</strong></div>
-        <div><span>过期</span><strong>{{ detailShare.expireAt ? formatDateFull(detailShare.expireAt) : '永不过期' }}</strong></div>
-        <div><span>状态</span><strong>{{ detailShare.isCanceled ? '已取消' : isExpired(detailShare) ? '已过期' : '有效' }}</strong></div>
+        <div><span>{{ __t('team.shares.link') }}</span><strong class="font-mono">{{ buildShareUrl(detailShare.shareCode) }}</strong></div>
+        <div><span>{{ __t('team.shares.fileId') }}</span><strong class="font-mono">{{ detailShare.fileId }}</strong></div>
+        <div><span>{{ __t('team.shares.access') }}</span><strong class="font-mono">{{ detailShare.visitCount }}{{ detailShare.maxVisits ? `/${detailShare.maxVisits}` : '' }}</strong></div>
+        <div><span>{{ __t('commonUi.filepreview.download') }}</span><strong class="font-mono">{{ detailShare.downloadCount }}</strong></div>
+        <div><span>{{ __t('commonUi.desktopsettings.password') }}</span><strong>{{ detailShare.hasPassword ? (detailPassword || __t('commonUi.searchoverlay.havePassword')) : __t('commonUi.searchoverlay.noPassword') }}</strong></div>
+        <div><span>{{ __t('team.shares.expired') }}</span><strong>{{ detailShare.expireAt ? formatDateFull(detailShare.expireAt) : __t('commonUi.searchoverlay.neverExpires') }}</strong></div>
+        <div><span>{{ __t('commonUi.adminlogs.state') }}</span><strong>{{ detailShare.isCanceled ? __t('commonUi.transfer.canceled') : isExpired(detailShare) ? __t('commonUi.searchoverlay.expiredStatus') : __t('team.shares.efficient') }}</strong></div>
       </div>
     </OModal>
 
-    <OModal title="编辑分享" :open="editOpen" @close="editOpen = false">
+    <OModal :title="__t('share.shares.editorShare')" :open="editOpen" @close="editOpen = false">
       <div class="share-edit">
         <div class="share-edit__field">
-          <OInput v-model="editMaxVisits" label="访问次数限制" type="number" placeholder="留空表示不限" />
-          <OButton variant="ghost" size="sm" @click="editMaxVisits = ''">清空访问次数</OButton>
+          <OInput v-model="editMaxVisits" :label="__t('commonUi.filebrowser.visitLimit')" type="number" :placeholder="__t('commonUi.filebrowser.leaveBlankToIndicateNoLimit')" />
+          <OButton variant="ghost" size="sm" @click="editMaxVisits = ''">{{ __t('team.shares.clearVisits') }}</OButton>
         </div>
         <div class="share-edit__field">
-          <OInput v-model="editExpireAt" label="过期时间" type="datetime-local" />
-          <OButton variant="ghost" size="sm" @click="editExpireAt = ''">清空过期时间</OButton>
+          <OInput v-model="editExpireAt" :label="__t('team.shares.expirationTime')" type="datetime-local" />
+          <OButton variant="ghost" size="sm" @click="editExpireAt = ''">{{ __t('team.shares.clearExpirationTime') }}</OButton>
         </div>
-        <OInput v-model="editPassword" label="新访问密码" type="text" placeholder="留空表示不修改，输入空格不可用" />
+        <OInput v-model="editPassword" :label="__t('team.shares.newAccessPassword')" type="text" :placeholder="__t('share.shares.leaveBlankToIndicateNoModificationEnteringSpacesIsNot')" />
         <label class="share-edit__check">
           <input v-model="editClearPassword" type="checkbox" />
-          <span>移除访问密码</span>
+          <span>{{ __t('team.shares.removeAccessCode') }}</span>
         </label>
-        <p class="share-edit__hint">清除访问次数和过期时间会设为无限制；密码留空表示不修改。</p>
+        <p class="share-edit__hint">{{ __t('team.shares.theNumberOfClearAccessesAndExpirationTimeWillBe') }}</p>
       </div>
       <template #footer>
-        <OButton variant="ghost" @click="editOpen = false">取消</OButton>
-        <OButton variant="primary" @click="submitEdit">保存</OButton>
+        <OButton variant="ghost" @click="editOpen = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="submitEdit">{{ __t('commonUi.desktopsettings.save') }}</OButton>
       </template>
     </OModal>
   </div>

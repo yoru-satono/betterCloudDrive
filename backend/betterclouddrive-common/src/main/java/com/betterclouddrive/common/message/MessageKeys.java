@@ -5,19 +5,19 @@ public final class MessageKeys {
     public static final String SUCCESS = "common.success";
     public static final String INTERNAL_ERROR = "error.internal";
     public static final String VALIDATION_FAILED = "error.validation";
-    public static final String METHOD_NOT_ALLOWED = "error.method_not_allowed";
-    public static final String MALFORMED_BODY = "error.malformed_body";
-    public static final String MISSING_PARAMETER = "error.missing_parameter";
-    public static final String INVALID_PARAMETER = "error.invalid_parameter";
+    public static final String METHOD_NOT_ALLOWED = "error.methodNotAllowed";
+    public static final String MALFORMED_BODY = "error.malformedBody";
+    public static final String MISSING_PARAMETER = "error.missingParameter";
+    public static final String INVALID_PARAMETER = "error.invalidParameter";
     public static final String TASK_FAILED = "task.failed";
     public static final String TASK_SUCCEEDED = "task.succeeded";
-    public static final String TASK_RESULT_EXPIRED = "task.result_expired";
+    public static final String TASK_RESULT_EXPIRED = "task.resultExpired";
 
     private MessageKeys() {
     }
 
     public static String api(String enumName) {
-        return "error." + enumName.toLowerCase(java.util.Locale.ROOT);
+        return "error." + normalize(enumName);
     }
 
     public static String notificationTitle(String type) {
@@ -37,6 +37,16 @@ public final class MessageKeys {
     }
 
     private static String normalize(String value) {
-        return value == null ? "unknown" : value.trim().toLowerCase(java.util.Locale.ROOT);
+        if (value == null || value.isBlank()) {
+            return "unknown";
+        }
+        String[] words = value.trim().toLowerCase(java.util.Locale.ROOT).split("_+");
+        StringBuilder result = new StringBuilder(words[0]);
+        for (int i = 1; i < words.length; i++) {
+            if (!words[i].isEmpty()) {
+                result.append(Character.toUpperCase(words[i].charAt(0))).append(words[i].substring(1));
+            }
+        }
+        return result.toString();
     }
 }

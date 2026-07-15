@@ -16,8 +16,8 @@ async function change(event: Event) {
   <label class="locale-switcher">
     <span class="sr-only">{{ t('ui.language') }}</span>
     <select :value="locale" :aria-label="t('ui.language')" data-testid="locale-switcher" @change="change">
-      <option value="zh-CN">简体中文</option>
-      <option value="en-US">English</option>
+      <option value="zh-CN">{{ t('commonUi.localeswitcher.simplifiedChinese') }}</option>
+      <option value="en-US">{{ t('ui.english') }}</option>
     </select>
   </label>
 </template>

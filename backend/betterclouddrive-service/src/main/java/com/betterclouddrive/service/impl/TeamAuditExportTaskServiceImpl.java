@@ -98,7 +98,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
             if (teamTaskResultStorageService.delete(task)) {
                 cleaned++;
             }
-            teamTaskService.clearResult(task.getId(), "task.result_expired");
+            teamTaskService.clearResult(task.getId(), "task.resultExpired");
         }
         return cleaned;
     }

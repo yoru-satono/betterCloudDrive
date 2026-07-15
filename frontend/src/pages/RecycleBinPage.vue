@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onMounted, ref } from 'vue'
 import OButton from '@/components/base/OButton.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
@@ -28,26 +31,26 @@ async function load() {
 async function restore() {
   const ids = [...selected.value]
   await recycleApi.restoreFiles(ids)
-  toast.success('已恢复')
+  toast.success(__t('team.recyclebin.restored'))
   selected.value.clear()
   load()
 }
 
 async function permanentDelete() {
   const ids = [...selected.value]
-  const ok = await confirm('永久删除', `将永久删除 ${ids.length} 个文件，无法恢复。`)
+  const ok = await confirm(__t('team.recyclebin.deletePermanently'), __t('recycle.recyclebin.filesWillBePermanentlyDeletedAndCannotBeRecovered', { p0: ids.length }))
   if (!ok) return
   await recycleApi.permanentDelete(ids)
-  toast.success('已永久删除')
+  toast.success(__t('team.recyclebin.permanentlyDeleted'))
   selected.value.clear()
   load()
 }
 
 async function emptyBin() {
-  const ok = await confirm('清空回收站', '将永久删除回收站所有文件，无法恢复。')
+  const ok = await confirm(__t('team.recyclebin.emptyRecycleBin'), __t('recycle.recyclebin.allFilesInTheRecycleBinWillBePermanentlyDeleted'))
   if (!ok) return
   await recycleApi.emptyRecycleBin()
-  toast.success('回收站已清空')
+  toast.success(__t('recycle.recyclebin.recycleBinEmptied'))
   load()
 }
 
@@ -63,21 +66,21 @@ onMounted(load)
   <div class="page-enter">
     <div class="page-header">
       <div>
-        <h2>回收站</h2>
-        <p class="text-muted" style="font-size:12px;margin-top:2px">文件保留 30 天后自动删除</p>
+        <h2>{{ __t('commonUi.searchoverlay.recycleBin') }}</h2>
+        <p class="text-muted" style="font-size:12px;margin-top:2px">{{ __t('recycle.recyclebin.filesAreAutomaticallyDeletedAfter30Days') }}</p>
       </div>
       <div style="display:flex;gap:8px">
-        <OButton v-if="selected.size > 0" variant="ghost" size="sm" @click="restore">恢复 ({{ selected.size }})</OButton>
-        <OButton v-if="selected.size > 0" variant="danger" size="sm" @click="permanentDelete">永久删除 ({{ selected.size }})</OButton>
-        <OButton v-if="files.length > 0" variant="danger" size="sm" @click="emptyBin">清空回收站</OButton>
+        <OButton v-if="selected.size > 0" variant="ghost" size="sm" @click="restore">{{ __t('team.recyclebin.recover') }}{{ selected.size }})</OButton>
+        <OButton v-if="selected.size > 0" variant="danger" size="sm" @click="permanentDelete">{{ __t('team.recyclebin.deletePermanentlyCountPrefix') }}{{ selected.size }})</OButton>
+        <OButton v-if="files.length > 0" variant="danger" size="sm" @click="emptyBin">{{ __t('team.recyclebin.emptyRecycleBin') }}</OButton>
       </div>
     </div>
 
     <div v-if="loading" class="page-loading"><OSpinner /></div>
-    <OEmptyState v-else-if="files.length === 0" title="回收站是空的" description="删除的文件会在这里显示" />
+    <OEmptyState v-else-if="files.length === 0" :title="__t('recycle.recyclebin.recycleBinIsEmpty')" :description="__t('recycle.recyclebin.deletedFilesWillBeDisplayedHere')" />
     <div v-else class="file-table">
       <div class="file-table__header">
-        <div></div><div>名称</div><div>大小</div><div>删除时间</div>
+        <div></div><div>{{ __t('commonUi.filelist.name') }}</div><div>{{ __t('commonUi.filelist.size') }}</div><div>{{ __t('team.recyclebin.deleteTime') }}</div>
       </div>
       <div
         v-for="file in files" :key="file.id"

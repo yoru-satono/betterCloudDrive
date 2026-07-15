@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import FileRow from './FileRow.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
 import type { FileEntity } from '@/types/file'
@@ -20,15 +23,15 @@ const emit = defineEmits<{
     <div class="file-list__header">
       <div></div>
       <div></div>
-      <div>名称</div>
-      <div>大小</div>
-      <div>修改时间</div>
+      <div>{{ __t('commonUi.filelist.name') }}</div>
+      <div>{{ __t('commonUi.filelist.size') }}</div>
+      <div>{{ __t('file.filelist.modificationTime') }}</div>
     </div>
     <template v-if="loading">
       <div v-for="n in 8" :key="n" class="file-list__skeleton" />
     </template>
     <template v-else-if="files.length === 0">
-      <OEmptyState title="此处没有文件" />
+      <OEmptyState :title="__t('file.filegrid.noFilesHere')" />
     </template>
     <template v-else>
       <FileRow

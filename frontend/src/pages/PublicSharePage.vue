@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
@@ -46,9 +49,9 @@ async function load(pw?: string) {
   } catch (e: unknown) {
     const code = (e as { response?: { data?: { code?: number } } }).response?.data?.code
     if (code === 419003) { needPassword.value = true }
-    else if (code === 419002 || code === 419004) { error.value = '分享链接不存在或已过期' }
-    else if (code === 419005) { error.value = '访问次数已达上限' }
-    else { error.value = '加载失败' }
+    else if (code === 419002 || code === 419004) { error.value = __t('share.publicshare.theSharingLinkDoesNotExistOrHasExpired') }
+    else if (code === 419005) { error.value = __t('share.publicshare.theNumberOfVisitsHasReachedTheLimit') }
+    else { error.value = __t('share.publicshare.loadingFailed') }
   } finally { loading.value = false }
 }
 
@@ -82,10 +85,10 @@ function closeFolderPicker() {
 
 function saveErrorMessage(e: unknown) {
   const response = (e as { response?: { data?: { code?: number; messageKey?: string; messageParams?: Record<string, string | number | boolean | null> } } }).response
-  if (response?.data?.code === 409001) return '目标文件夹已存在同名项目'
-  if (response?.data?.code === 419001) return '网盘空间不足'
-  if (response?.data?.code === 419005) return '分享访问次数已达上限'
-  return '保存失败'
+  if (response?.data?.code === 409001) return __t('share.publicshare.aProjectWithTheSameNameAlreadyExistsInThe')
+  if (response?.data?.code === 419001) return __t('share.publicshare.insufficientNetworkDiskSpace')
+  if (response?.data?.code === 419005) return __t('share.publicshare.theNumberOfSharingVisitsHasReachedTheLimit')
+  return __t('share.publicshare.saveFailed')
 }
 
 async function confirmSave(targetParentId: number | null) {
@@ -97,7 +100,7 @@ async function confirmSave(targetParentId: number | null) {
       targetParentId,
       password: accessPassword.value,
     })
-    toast.success('已保存到我的网盘')
+    toast.success(__t('share.publicshare.savedToMyNetworkDisk'))
     folderPickerOpen.value = false
     saveTarget.value = null
   } catch (e) {
@@ -126,14 +129,14 @@ onMounted(() => load())
 
       <div v-else-if="error" class="share-page__error">
         <p>{{ error }}</p>
-        <RouterLink to="/login">登录云盘</RouterLink>
+        <RouterLink to="/login">{{ __t('share.publicshare.logInToCloudDisk') }}</RouterLink>
       </div>
 
       <template v-else-if="needPassword">
-        <div class="share-page__title">此分享需要密码</div>
+        <div class="share-page__title">{{ __t('share.publicshare.thisShareRequiresAPassword') }}</div>
         <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
-          <OInput v-model="password" label="访问密码" type="password" placeholder="输入密码" @keyup.enter="submitPassword" />
-          <OButton variant="primary" :loading="loading" style="justify-content:center" @click="submitPassword">确认</OButton>
+          <OInput v-model="password" :label="__t('commonUi.filebrowser.accessPassword')" type="password" :placeholder="__t('share.publicshare.enterPassword')" @keyup.enter="submitPassword" />
+          <OButton variant="primary" :loading="loading" style="justify-content:center" @click="submitPassword">{{ __t('commonUi.oconfirmdialog.confirm') }}</OButton>
         </div>
       </template>
 
@@ -144,7 +147,7 @@ onMounted(() => load())
           </div>
           <div class="share-page__file-name">{{ file.fileName }}</div>
           <div class="share-page__file-meta">
-            <span class="font-mono">{{ file.fileType === 'folder' ? '文件夹' : formatSize(file.fileSize) }}</span>
+            <span class="font-mono">{{ file.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(file.fileSize) }}</span>
           </div>
           <div class="share-page__main-actions">
             <OButton
@@ -152,36 +155,32 @@ onMounted(() => load())
               size="sm"
               @click="download(file.fileId, file.fileName, file.fileType)"
             >
-              {{ file.fileType === 'folder' ? '下载文件夹' : '下载文件' }}
+              {{ file.fileType === 'folder' ? __t('share.publicshare.downloadFolder') : __t('share.publicshare.downloadFile') }}
             </OButton>
             <OButton
               variant="ghost"
               size="sm"
               @click="openFolderPicker({ fileName: file.fileName })"
-            >
-              保存
-            </OButton>
+            >{{ __t('commonUi.desktopsettings.save') }}</OButton>
           </div>
           <div v-if="sharedFiles.length" class="share-page__files">
             <div v-for="item in sharedFiles" :key="item.id" class="share-page__file-row">
               <FileIcon :mime-type="item.mimeType" :file-type="item.fileType" :size="15" />
               <span class="truncate">{{ item.fileName }}</span>
-              <span class="share-page__row-meta font-mono">{{ item.fileType === 'folder' ? '文件夹' : formatSize(item.fileSize) }}</span>
+              <span class="share-page__row-meta font-mono">{{ item.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(item.fileSize) }}</span>
               <span class="share-page__row-date">{{ formatDate(item.updatedAt) }}</span>
               <div class="share-page__row-actions">
                 <OButton
                   variant="subtle"
                   size="sm"
                   @click="openFolderPicker({ fileId: item.id, fileName: item.fileName })"
-                >
-                  保存
-                </OButton>
+                >{{ __t('commonUi.desktopsettings.save') }}</OButton>
                 <OButton
                   variant="subtle"
                   size="sm"
                   @click="download(item.id, item.fileName, item.fileType)"
                 >
-                  {{ item.fileType === 'folder' ? '下载文件夹' : '下载' }}
+                  {{ item.fileType === 'folder' ? __t('share.publicshare.downloadFolder') : __t('commonUi.filepreview.download') }}
                 </OButton>
               </div>
             </div>
@@ -192,9 +191,9 @@ onMounted(() => load())
 
     <FolderPickerModal
       :open="folderPickerOpen"
-      title="保存到我的网盘"
+      :title="__t('share.publicshare.saveToMyNetworkDisk')"
       :target-name="saveTarget?.fileName"
-      confirm-text="保存到此处"
+      :confirm-text="__t('share.publicshare.saveHere')"
       :loading="saving"
       @close="closeFolderPicker"
       @confirm="confirmSave"

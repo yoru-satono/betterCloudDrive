@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref } from 'vue'
 import OSpinner from '@/components/base/OSpinner.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
@@ -162,8 +165,8 @@ function levelColor(level: string | null | undefined) {
 }
 
 function resultText(result: number | null | undefined) {
-  if (result === 1) return '成功'
-  if (result === 0) return '失败'
+  if (result === 1) return __t('commonUi.adminlogs.success')
+  if (result === 0) return __t('commonUi.transfer.fail')
   return '-'
 }
 
@@ -201,9 +204,9 @@ function shorten(value: string | null | undefined, head = 10, tail = 6) {
 }
 
 function grafanaHint(log: SystemLogEntry) {
-  if (log.idType === 'traceId') return '默认按 traceId'
-  if (log.idType === 'requestId') return '默认按 requestId'
-  return '按时间范围'
+  if (log.idType === 'traceId') return __t('adminUi.adminlogs.byDefaultTraceid')
+  if (log.idType === 'requestId') return __t('adminUi.adminlogs.defaultByRequestid')
+  return __t('adminUi.adminlogs.byTimeRange')
 }
 
 async function openGrafana(log: SystemLogEntry) {
@@ -218,54 +221,54 @@ onMounted(loadAuditLogs)
   <div class="page-enter">
     <div class="page-header">
       <div>
-        <h2>日志中心</h2>
-        <p class="page-header__meta">审计日志来自数据库，系统日志来自 Loki。</p>
+        <h2>{{ __t('adminUi.adminlogs.logCenter') }}</h2>
+        <p class="page-header__meta">{{ __t('adminUi.adminlogs.auditLogsComeFromTheDatabaseAndSystemLogsCome') }}</p>
       </div>
-      <div class="tabs" role="tablist" aria-label="日志类型">
-        <button type="button" :class="['tab', { 'tab--active': activeTab === 'audit' }]" @click="selectTab('audit')">审计日志</button>
-        <button type="button" :class="['tab', { 'tab--active': activeTab === 'system' }]" @click="selectTab('system')">系统日志</button>
+      <div class="tabs" role="tablist" :aria-label="__t('adminUi.adminlogs.logType')">
+        <button type="button" :class="['tab', { 'tab--active': activeTab === 'audit' }]" @click="selectTab('audit')">{{ __t('adminUi.adminlogs.auditLog') }}</button>
+        <button type="button" :class="['tab', { 'tab--active': activeTab === 'system' }]" @click="selectTab('system')">{{ __t('adminUi.adminlogs.systemLog') }}</button>
       </div>
     </div>
 
     <section v-if="activeTab === 'audit'" class="log-panel">
       <div class="filter-grid">
-        <OInput v-model="auditFilters.userId" placeholder="用户ID" type="number" />
-        <OInput v-model="auditFilters.actionType" placeholder="动作类型" />
+        <OInput v-model="auditFilters.userId" :placeholder="__t('adminUi.adminlogs.userId')" type="number" />
+        <OInput v-model="auditFilters.actionType" :placeholder="__t('adminUi.adminlogs.actionType')" />
         <OInput v-model="auditFilters.requestId" placeholder="Request ID" />
         <OInput v-model="auditFilters.traceId" placeholder="Trace ID" />
-        <OInput v-model="auditFilters.statusCode" placeholder="状态码" type="number" />
+        <OInput v-model="auditFilters.statusCode" :placeholder="__t('adminUi.adminlogs.statusCode')" type="number" />
         <select v-model="auditFilters.result" class="filter-select">
-          <option value="">全部结果</option>
-          <option value="1">成功</option>
-          <option value="0">失败</option>
+          <option value="">{{ __t('commonUi.adminlogs.allResults') }}</option>
+          <option value="1">{{ __t('commonUi.adminlogs.success') }}</option>
+          <option value="0">{{ __t('commonUi.transfer.fail') }}</option>
         </select>
         <OInput v-model="auditFilters.startDate" type="datetime-local" />
         <OInput v-model="auditFilters.endDate" type="datetime-local" />
         <div class="filter-actions">
-          <OButton variant="primary" size="sm" @click="() => { auditPage = 1; loadAuditLogs() }">筛选</OButton>
-          <OButton variant="subtle" size="sm" @click="resetAuditFilters">重置</OButton>
+          <OButton variant="primary" size="sm" @click="() => { auditPage = 1; loadAuditLogs() }">{{ __t('commonUi.adminlogs.filter') }}</OButton>
+          <OButton variant="subtle" size="sm" @click="resetAuditFilters">{{ __t('adminUi.adminlogs.reset') }}</OButton>
         </div>
       </div>
 
       <div v-if="showAuditPagination" class="pagination pagination--top">
-        <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="goAuditPage(auditPage - 1)">上一页</OButton>
-        <span class="pagination__info font-mono">第 {{ auditPage }} / {{ auditPages }} 页 · 共 {{ auditTotal }} 条审计日志</span>
-        <OButton variant="ghost" size="sm" :disabled="auditPage >= auditPages" @click="goAuditPage(auditPage + 1)">下一页</OButton>
+        <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="goAuditPage(auditPage - 1)">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+        <span class="pagination__info font-mono">{{ __t('commonUi.adminlogs.no') }}{{ auditPage }} / {{ auditPages }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ auditTotal }}{{ __t('adminUi.adminlogs.auditLogUnit') }}</span>
+        <OButton variant="ghost" size="sm" :disabled="auditPage >= auditPages" @click="goAuditPage(auditPage + 1)">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
       </div>
 
       <div v-if="auditLoading" class="loading"><OSpinner /></div>
-      <OEmptyState v-else-if="auditLogs.length === 0" title="暂无审计日志" />
+      <OEmptyState v-else-if="auditLogs.length === 0" :title="__t('commonUi.adminlogs.noAuditLogYet')" />
       <div v-else class="log-table">
         <div class="log-table__head audit-grid">
-          <span>时间</span>
-          <span>结果</span>
-          <span>动作</span>
-          <span>用户</span>
-          <span>目标</span>
-          <span>状态</span>
-          <span>耗时</span>
+          <span>{{ __t('adminUi.adminlogs.time') }}</span>
+          <span>{{ __t('adminUi.adminlogs.result') }}</span>
+          <span>{{ __t('adminUi.adminlogs.action') }}</span>
+          <span>{{ __t('commonUi.adminlogs.user') }}</span>
+          <span>{{ __t('adminUi.adminlogs.target') }}</span>
+          <span>{{ __t('commonUi.adminlogs.state') }}</span>
+          <span>{{ __t('adminUi.adminlogs.timeConsuming') }}</span>
           <span>Trace ID</span>
-          <span>详情</span>
+          <span>{{ __t('commonUi.adminlogs.details') }}</span>
         </div>
         <div v-for="log in auditLogs" :key="log.id" class="log-row-wrap">
           <div class="log-row audit-grid">
@@ -280,7 +283,7 @@ onMounted(loadAuditLogs)
               {{ shorten(log.traceId) }}
             </button>
             <OButton variant="ghost" size="sm" @click="toggleAuditDetail(log.id)">
-              {{ auditExpanded.has(log.id) ? '收起' : '展开' }}
+              {{ auditExpanded.has(log.id) ? __t('adminUi.adminlogs.close') : __t('adminUi.adminlogs.expand') }}
             </OButton>
           </div>
           <div v-if="auditExpanded.has(log.id)" class="log-detail">
@@ -289,15 +292,15 @@ onMounted(loadAuditLogs)
               <span>IP: {{ log.ipAddress || '-' }}</span>
               <span>UA: {{ log.userAgent || '-' }}</span>
             </div>
-            <pre>{{ formatDetail(log.detail) || '无详情' }}</pre>
+            <pre>{{ formatDetail(log.detail) || __t('adminUi.adminlogs.noDetails') }}</pre>
           </div>
         </div>
       </div>
 
       <div v-if="showAuditPagination" class="pagination pagination--bottom">
-        <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="goAuditPage(auditPage - 1)">上一页</OButton>
-        <span class="pagination__info font-mono">第 {{ auditPage }} / {{ auditPages }} 页 · 共 {{ auditTotal }} 条审计日志</span>
-        <OButton variant="ghost" size="sm" :disabled="auditPage >= auditPages" @click="goAuditPage(auditPage + 1)">下一页</OButton>
+        <OButton variant="ghost" size="sm" :disabled="auditPage === 1" @click="goAuditPage(auditPage - 1)">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+        <span class="pagination__info font-mono">{{ __t('commonUi.adminlogs.no') }}{{ auditPage }} / {{ auditPages }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ auditTotal }}{{ __t('adminUi.adminlogs.auditLogUnit') }}</span>
+        <OButton variant="ghost" size="sm" :disabled="auditPage >= auditPages" @click="goAuditPage(auditPage + 1)">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
       </div>
     </section>
 
@@ -305,27 +308,27 @@ onMounted(loadAuditLogs)
       <div class="filter-grid system-filter-grid">
         <OInput v-model="systemFilters.traceId" placeholder="Trace ID" />
         <OInput v-model="systemFilters.requestId" placeholder="Request ID" />
-        <OInput v-model="systemFilters.level" placeholder="级别 ERROR/WARN/INFO" />
-        <OInput v-model="systemFilters.keyword" placeholder="关键词" />
+        <OInput v-model="systemFilters.level" :placeholder="__t('adminUi.adminlogs.levelErrorWarnInfo')" />
+        <OInput v-model="systemFilters.keyword" :placeholder="__t('adminUi.adminlogs.keywords')" />
         <OInput v-model="systemFilters.startTime" type="datetime-local" />
         <OInput v-model="systemFilters.endTime" type="datetime-local" />
         <div class="filter-actions">
-          <OButton variant="primary" size="sm" @click="loadSystemLogs">筛选</OButton>
-          <OButton variant="subtle" size="sm" @click="resetSystemFilters">重置</OButton>
+          <OButton variant="primary" size="sm" @click="loadSystemLogs">{{ __t('commonUi.adminlogs.filter') }}</OButton>
+          <OButton variant="subtle" size="sm" @click="resetSystemFilters">{{ __t('adminUi.adminlogs.reset') }}</OButton>
         </div>
       </div>
 
       <div v-if="systemLoading" class="loading"><OSpinner /></div>
-      <OEmptyState v-else-if="systemLogs.length === 0" title="暂无系统日志" />
+      <OEmptyState v-else-if="systemLogs.length === 0" :title="__t('adminUi.adminlogs.noSystemLogsYet')" />
       <div v-else class="log-table">
         <div class="log-table__head system-grid">
-          <span>时间</span>
-          <span>级别</span>
+          <span>{{ __t('adminUi.adminlogs.time') }}</span>
+          <span>{{ __t('adminUi.adminlogs.level') }}</span>
           <span>ID</span>
-          <span>类型</span>
-          <span>路径</span>
+          <span>{{ __t('commonUi.adminlogs.type') }}</span>
+          <span>{{ __t('adminUi.adminlogs.path') }}</span>
           <span>Logger</span>
-          <span>概要</span>
+          <span>{{ __t('adminUi.adminlogs.summary') }}</span>
           <span>Grafana</span>
         </div>
         <div v-for="log in systemLogs" :key="`${log.idType}:${log.id}:${log.timestamp}`" class="log-row system-grid">

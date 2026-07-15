@@ -82,13 +82,13 @@ public class AuthServiceImpl implements AuthService {
     public UserEntity login(String username, String password) {
         UserEntity user = userRepository.findByUsername(username).orElse(null);
         if (user == null || user.getDeletedAt() != null) {
-            throw new BusinessException(ApiCode.UNAUTHORIZED, "Invalid username or password");
+            throw new BusinessException(ApiCode.INVALID_CREDENTIALS);
         }
         if (user.getStatus() != 1) {
-            throw new BusinessException(ApiCode.UNAUTHORIZED, "Account is disabled");
+            throw new BusinessException(ApiCode.ACCOUNT_DISABLED);
         }
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            throw new BusinessException(ApiCode.UNAUTHORIZED, "Invalid username or password");
+            throw new BusinessException(ApiCode.INVALID_CREDENTIALS);
         }
         return user;
     }

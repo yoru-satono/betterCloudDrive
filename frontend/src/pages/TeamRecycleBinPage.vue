@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import OButton from '@/components/base/OButton.vue'
@@ -46,7 +49,7 @@ async function restore() {
   const ids = [...selected.value]
   if (!ids.length) return
   await teamsApi.restoreTeamFiles(teamId.value, ids)
-  toast.success('已恢复')
+  toast.success(__t('team.recyclebin.restored'))
   await load()
 }
 
@@ -54,19 +57,19 @@ async function permanentDelete() {
   if (!canWrite.value) return
   const ids = [...selected.value]
   if (!ids.length) return
-  const ok = await confirm('永久删除', `将永久删除 ${ids.length} 个团队文件，无法恢复。`)
+  const ok = await confirm(__t('team.recyclebin.deletePermanently'), __t('team.teamrecyclebin.teamFilesWillBePermanentlyDeletedAndCannotBeRecovered', { p0: ids.length }))
   if (!ok) return
   await teamsApi.permanentDeleteTeamFiles(teamId.value, ids)
-  toast.success('已永久删除')
+  toast.success(__t('team.recyclebin.permanentlyDeleted'))
   await load()
 }
 
 async function emptyBin() {
   if (!canWrite.value) return
-  const ok = await confirm('清空团队回收站', '将永久删除团队回收站所有文件，无法恢复。')
+  const ok = await confirm(__t('team.teamrecyclebin.emptyTheTeamRecycleBin'), __t('team.teamrecyclebin.allFilesInTheTeamRecycleBinWillBePermanently'))
   if (!ok) return
   await teamsApi.emptyTeamRecycleBin(teamId.value)
-  toast.success('团队回收站已清空')
+  toast.success(__t('team.teamrecyclebin.theTeamRecycleBinHasBeenEmptied'))
   await load()
 }
 
@@ -83,25 +86,25 @@ onMounted(load)
   <div class="team-bin page-enter">
     <div class="team-bin__header">
       <div>
-        <h2>{{ team?.name || '团队' }}回收站</h2>
-        <p class="text-muted">团队删除的文件会在这里保留，恢复后回到原位置。</p>
+        <h2>{{ team?.name || __t('commonUi.adminteams.team') }}{{ __t('commonUi.searchoverlay.recycleBin') }}</h2>
+        <p class="text-muted">{{ __t('team.teamrecyclebin.filesDeletedByTheTeamWillBeRetainedHereAnd') }}</p>
       </div>
       <div class="team-bin__actions">
-        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamFiles', params: { teamId } })">返回文件</OButton>
-        <OButton v-if="canWrite && selected.size > 0" variant="ghost" size="sm" @click="restore">恢复 ({{ selected.size }})</OButton>
-        <OButton v-if="canWrite && selected.size > 0" variant="danger" size="sm" @click="permanentDelete">永久删除 ({{ selected.size }})</OButton>
-        <OButton v-if="canWrite && files.length > 0" variant="danger" size="sm" @click="emptyBin">清空回收站</OButton>
+        <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamFiles', params: { teamId } })">{{ __t('team.teamrecyclebin.returnFile') }}</OButton>
+        <OButton v-if="canWrite && selected.size > 0" variant="ghost" size="sm" @click="restore">{{ __t('team.recyclebin.recover') }}{{ selected.size }})</OButton>
+        <OButton v-if="canWrite && selected.size > 0" variant="danger" size="sm" @click="permanentDelete">{{ __t('team.recyclebin.deletePermanentlyCountPrefix') }}{{ selected.size }})</OButton>
+        <OButton v-if="canWrite && files.length > 0" variant="danger" size="sm" @click="emptyBin">{{ __t('team.recyclebin.emptyRecycleBin') }}</OButton>
       </div>
     </div>
 
     <div v-if="loading" class="team-bin__loading"><OSpinner /></div>
-    <OEmptyState v-else-if="files.length === 0" title="团队回收站是空的" description="删除的团队文件会在这里显示" />
+    <OEmptyState v-else-if="files.length === 0" :title="__t('team.teamrecyclebin.teamRecycleBinIsEmpty')" :description="__t('team.teamrecyclebin.deletedTeamFilesWillBeDisplayedHere')" />
     <div v-else class="team-bin__table">
       <div class="team-bin__table-header">
         <div></div>
-        <div>名称</div>
-        <div>大小</div>
-        <div>删除时间</div>
+        <div>{{ __t('commonUi.filelist.name') }}</div>
+        <div>{{ __t('commonUi.filelist.size') }}</div>
+        <div>{{ __t('team.recyclebin.deleteTime') }}</div>
       </div>
       <div
         v-for="file in files"

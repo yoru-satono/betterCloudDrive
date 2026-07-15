@@ -9,18 +9,19 @@ import OButton from '@/components/base/OButton.vue'
 import { useAuthStore } from '@/stores/auth'
 import * as authApi from '@/api/auth'
 import { toast } from 'vue-sonner'
-import { locale } from '@/i18n'
+import { i18n, locale } from '@/i18n'
 
 const router = useRouter()
 const auth = useAuthStore()
+const t = i18n.global.t
 
-const schema = toTypedSchema(z.object({
-  username: z.string().min(3, '用户名至少 3 个字符').max(20, '用户名最多 20 个字符'),
-  email:    z.string().min(1, '请输入邮箱地址').email('请输入有效的邮箱地址'),
-  verificationCode: z.string().regex(/^\d{6}$/, '请输入 6 位验证码'),
-  password: z.string().min(6, '密码至少 6 个字符'),
+const schema = computed(() => toTypedSchema(z.object({
+  username: z.string().min(3, t('validation.usernameMin')).max(20, t('validation.usernameMax')),
+  email:    z.string().min(1, t('validation.emailRequired')).email(t('validation.emailInvalid')),
+  verificationCode: z.string().regex(/^\d{6}$/, t('validation.codeSixDigits')),
+  password: z.string().min(6, t('validation.passwordMin')),
   confirm:  z.string()
-}).refine(d => d.password === d.confirm, { message: '两次密码不一致', path: ['confirm'] }))
+}).refine(d => d.password === d.confirm, { message: t('validation.passwordMismatch'), path: ['confirm'] })))
 
 const { handleSubmit, isSubmitting } = useForm({ validationSchema: schema })
 const { value: username, errorMessage: usernameError } = useField<string>('username')
@@ -49,13 +50,13 @@ function startCooldown() {
 async function sendCode() {
   const currentEmail = email.value?.trim()
   if (!currentEmail) {
-    toast.error('请先输入邮箱地址')
+    toast.error(t('validation.emailFirst'))
     return
   }
   sendingCode.value = true
   try {
     await authApi.sendRegistrationCode(currentEmail, locale.value)
-    toast.success('验证码已发送')
+    toast.success(t('ui.codeSent'))
     startCooldown()
   } catch { /* client.ts handles toast */ }
   finally {
@@ -70,7 +71,7 @@ onBeforeUnmount(() => {
 const submit = handleSubmit(async (values) => {
   try {
     await auth.register(values.username, values.password, values.email.trim(), values.verificationCode.trim())
-    toast.success('注册成功，请登录')
+    toast.success(t('ui.registrationSuccess'))
     router.push('/login')
   } catch { /* client.ts handles toast */ }
 })
@@ -79,32 +80,32 @@ const submit = handleSubmit(async (values) => {
 <template>
   <div class="reg-page page-enter">
     <div class="reg-page__head">
-      <h1>创建账号</h1>
-      <p>加入 BetterCloudDrive</p>
+      <h1>{{ t('ui.createAccount') }}</h1>
+      <p>{{ t('ui.join') }}</p>
     </div>
     <form class="reg-page__form" @submit.prevent="submit">
-      <OInput v-model="username" label="用户名" placeholder="3-20 个字符" :error="usernameError" />
-      <OInput v-model="email"    label="邮箱地址" placeholder="用于接收验证码和找回密码" type="email" :error="emailError" />
+      <OInput v-model="username" :label="t('ui.username')" :placeholder="t('validation.usernameLength')" :error="usernameError" />
+      <OInput v-model="email" :label="t('ui.email')" :placeholder="t('ui.emailHint')" type="email" :error="emailError" />
       <div class="reg-page__code">
         <OInput
           v-model="verificationCode"
-          label="邮箱验证码"
-          placeholder="6 位验证码"
+          :label="t('ui.verificationCode')"
+          :placeholder="t('ui.sixDigitCode')"
           inputmode="numeric"
           :error="verificationCodeError"
         />
         <OButton type="button" variant="ghost" :loading="sendingCode" :disabled="!canSendCode" @click="sendCode">
-          {{ codeCooldown > 0 ? `${codeCooldown}s` : '发送验证码' }}
+          {{ codeCooldown > 0 ? `${codeCooldown}s` : t('ui.sendCode') }}
         </OButton>
       </div>
-      <OInput v-model="password" label="密码" placeholder="至少 6 个字符" type="password" :error="passwordError" />
-      <OInput v-model="confirm"  label="确认密码" placeholder="再次输入密码" type="password" :error="confirmError" />
+      <OInput v-model="password" :label="t('ui.password')" :placeholder="t('validation.passwordLength')" type="password" :error="passwordError" />
+      <OInput v-model="confirm" :label="t('ui.confirmPassword')" :placeholder="t('ui.enterAgain')" type="password" :error="confirmError" />
       <OButton type="submit" variant="primary" :loading="isSubmitting" style="width:100%;justify-content:center">
-        注册
+        {{ t('ui.register') }}
       </OButton>
     </form>
     <div class="reg-page__links">
-      已有账号？<RouterLink to="/login">立即登录</RouterLink>
+      {{ t('ui.alreadyAccount') }} <RouterLink to="/login">{{ t('ui.signInNow') }}</RouterLink>
     </div>
   </div>
 </template>

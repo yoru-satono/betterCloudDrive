@@ -5,10 +5,11 @@
   "type": "module",
   "packageManager": "pnpm@11.12.0",
   "scripts": {
+    "check:i18n": "node scripts/check-i18n-hardcoding.mjs",
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "pnpm run check:i18n && vue-tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "pnpm run check:i18n && vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:docker": "node scripts/run-playwright-docker.mjs",
@@ -36,6 +37,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@vue/compiler-dom": "^3.5.35",
+    "@vue/compiler-sfc": "^3.5.35",
     "@playwright/test": "^1.60.0",
     "@tauri-apps/cli": "^2.11.2",
     "@types/mocha": "^10.0.10",

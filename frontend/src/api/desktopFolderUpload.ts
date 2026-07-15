@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 export interface FolderUploadFileEntry {
   file: File
   parentId: number | null
@@ -129,7 +131,7 @@ async function collectTreeDirectory(
 }
 
 function buildFolderTree(files: File[]) {
-  const rootName = parseRelativePath(files[0])[0] || '文件夹'
+  const rootName = parseRelativePath(files[0])[0] || __t('commonUi.desktopfolderupload.folder')
   const root: FolderNode = { name: rootName, directories: new Map(), files: [] }
 
   for (const file of files) {

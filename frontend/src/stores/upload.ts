@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import SparkMD5 from 'spark-md5'
@@ -106,7 +108,7 @@ export const useUploadStore = defineStore('upload', () => {
       status: 'resume_required',
       progress: 0,
       chunkProgress: '',
-      error: '请重新选择此文件以继续上传',
+      error: __t('transferUi.upload.pleaseReselectThisFileToContinueUploading'),
       uploadId: record.sessionId,
       fileSize: record.fileSize,
       md5Hash: record.md5Hash,
@@ -118,7 +120,7 @@ export const useUploadStore = defineStore('upload', () => {
       if (item.uploadId) removeResumableUpload(item.uploadId)
       Object.assign(item, {
         status: 'error' as UploadStatus,
-        error: '续传会话已失效，请重新上传',
+        error: __t('transferUi.upload.theResumeSessionHasExpiredPleaseUploadAgain'),
         resumable: false,
       })
     }))
@@ -208,7 +210,7 @@ export const useUploadStore = defineStore('upload', () => {
 
     try {
       if (!item.file) {
-        update({ status: 'resume_required', error: '请重新选择此文件以继续上传' })
+        update({ status: 'resume_required', error: __t('transferUi.upload.pleaseReselectThisFileToContinueUploading') })
         return
       }
       update({ status: 'hashing' })
@@ -218,7 +220,7 @@ export const useUploadStore = defineStore('upload', () => {
       if (item.uploadId && item.md5Hash && item.md5Hash !== md5) {
         update({
           status: 'resume_required',
-          error: '选择的文件与续传任务不匹配',
+          error: __t('transferUi.upload.theSelectedFileDoesNotMatchTheResumeUploadTask'),
           progress: 0,
         })
         return
@@ -253,7 +255,7 @@ export const useUploadStore = defineStore('upload', () => {
       if (instant) {
         removeResumableUpload(resumeRecord?.sessionId || item.uploadId)
         update({ status: 'instant', progress: 100, resumable: false })
-        toast.success(`${label} 秒传成功`)
+        toast.success(__t('transferUi.upload.transmissionSuccessfulInSeconds', { p0: label }))
         refreshFileSpace(item.teamId)
         return
       }
@@ -274,7 +276,7 @@ export const useUploadStore = defineStore('upload', () => {
       if (session.totalChunks === 0) {
         await completeMultipart(session.sessionId, uploadContext)
         update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
-        toast.success(`${label} 上传完成`)
+        toast.success(__t('transferUi.upload.uploadCompleted', { p0: label }))
         refreshFileSpace(item.teamId)
         return
       }
@@ -316,12 +318,12 @@ export const useUploadStore = defineStore('upload', () => {
       await completeMultipart(session.sessionId, uploadContext)
       removeResumableUpload(session.sessionId)
       update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
-      toast.success(`${label} 上传完成`)
+      toast.success(__t('transferUi.upload.uploadCompleted', { p0: label }))
       refreshFileSpace(item.teamId)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '上传失败'
+      const msg = e instanceof Error ? e.message : __t('transferUi.upload.uploadFailed')
       update({ status: 'error', error: msg, resumable: !!item.uploadId })
-      toast.error(`${label} 上传失败`)
+      toast.error(__t('transferUi.upload.namedUploadFailed', { p0: label }))
     } finally {
       const current = queue.value.find(q => q.id === item.id)
       if (current) current.started = false
@@ -388,7 +390,7 @@ export const useUploadStore = defineStore('upload', () => {
     const item = queue.value.find(q => q.id === id)
     if (!item) return
     if (!item.file) {
-      Object.assign(item, { status: 'resume_required' as UploadStatus, error: '请重新选择此文件以继续上传' })
+      Object.assign(item, { status: 'resume_required' as UploadStatus, error: __t('transferUi.upload.pleaseReselectThisFileToContinueUploading') })
       return
     }
     Object.assign(item, { status: 'pending' as UploadStatus, error: null, started: false })

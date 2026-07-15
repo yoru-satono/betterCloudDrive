@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import axios, { AxiosError } from 'axios'
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { toast } from 'vue-sonner'
@@ -67,7 +69,7 @@ export async function refreshAccessToken() {
   const refreshToken = localStorage.getItem('refreshToken')
   if (!refreshToken) {
     redirectToLogin()
-    throw new Error('缺少刷新令牌')
+    throw new Error(__t('file.client.missingRefreshToken'))
   }
 
   isRefreshing = true
@@ -133,7 +135,7 @@ const handleApiError = async (error: AxiosError<ApiEnvelope>) => {
   }
 
   const envelope = error.response?.data
-  const msg = envelope ? resolveMessage(envelope.messageKey, envelope.messageParams) : '网络连接失败，请稍后重试'
+  const msg = envelope ? resolveMessage(envelope.messageKey, envelope.messageParams) : __t('file.client.networkConnectionFailedPleaseTryAgainLater')
   if (error.response?.status !== 401 && !error.config?.suppressToast) toast.error(msg)
   return Promise.reject(error)
 }

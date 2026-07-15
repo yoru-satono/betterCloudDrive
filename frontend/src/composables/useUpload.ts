@@ -1,3 +1,5 @@
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
 import { ref } from 'vue'
 import { useUploadStore } from '@/stores/upload'
 import { useFilesStore } from '@/stores/files'
@@ -48,10 +50,10 @@ export function useUpload() {
     if (isDesktopFolderUploadRuntime()) {
       uploadDesktopFiles(filesStore.currentParentId).then((result) => {
         if (result.selected && result.rootName) {
-          toast.success(`${result.rootName} 已加入传输队列`)
+          toast.success(__t('team.useupload.hasBeenAddedToTheTransmissionQueue', { p0: result.rootName }))
         }
       }).catch((error) => {
-        const message = error instanceof Error ? error.message : '上传文件失败'
+        const message = error instanceof Error ? error.message : __t('team.useupload.fileUploadFailed')
         toast.error(message)
       })
       return
@@ -70,7 +72,7 @@ export function useUpload() {
       if (isDesktopFolderUploadRuntime()) {
         const result = await uploadDesktopFolder(filesStore.currentParentId)
         if (result.selected && result.rootName) {
-          toast.success(`${result.rootName} 已加入传输队列`)
+          toast.success(__t('team.useupload.hasBeenAddedToTheTransmissionQueue', { p0: result.rootName }))
         }
         return
       }
@@ -79,13 +81,13 @@ export function useUpload() {
       if (!plan) return
       const entries = await prepareFolderUploadEntries(plan, filesStore.currentParentId)
       uploadStore.addUploadFiles(entries)
-      toast.success(`${plan.rootName} 已加入上传队列`)
+      toast.success(__t('transferUi.useupload.hasBeenAddedToTheUploadQueue', { p0: plan.rootName }))
       if (plan.directoryCount > 0 && entries.length === 0) {
         await filesStore.refresh()
       }
     } catch (error) {
       if (isFolderPickerCancel(error)) return
-      const message = error instanceof Error ? error.message : '上传文件夹失败'
+      const message = error instanceof Error ? error.message : __t('commonUi.desktopupload.failedToUploadFolder')
       toast.error(message)
     }
   }
@@ -115,14 +117,14 @@ function registerDesktopUploadBridge(uploadStore: ReturnType<typeof useUploadSto
     },
     onBatchCompleted: () => {
       filesStore.refresh()
-      toast.success('文件夹上传完成')
+      toast.success(__t('transferUi.useupload.folderUploadCompleted'))
     },
     onError: (message) => {
       toast.error(message)
     },
   }).catch((error) => {
     desktopUploadListenersReady = false
-    const message = error instanceof Error ? error.message : '初始化客户端上传失败'
+    const message = error instanceof Error ? error.message : __t('transferUi.useupload.initialClientUploadFailed')
     toast.error(message)
   })
 }

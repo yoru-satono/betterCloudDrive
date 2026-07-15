@@ -277,7 +277,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
                 permission.canShare(),
                 permission.canDelete(),
                 permission.canManage(),
-                "permission.base_role",
+                "permission.baseRole",
                 Map.of("role", role));
     }
 
@@ -286,7 +286,7 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
             FileEntity sourceFile,
             boolean inherited) {
         String sourceType = SUBJECT_USER.equals(permission.getSubjectType()) ? "USER_OVERRIDE" : "ROLE_OVERRIDE";
-        String descriptionKey = inherited ? "permission.inherited_override" : "permission.current_override";
+        String descriptionKey = inherited ? "permission.inheritedOverride" : "permission.currentOverride";
         return new TeamEffectivePermission.PermissionSource(
                 sourceType,
                 sourceFile.getId(),

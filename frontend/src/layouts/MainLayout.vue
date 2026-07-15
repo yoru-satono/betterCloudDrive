@@ -5,15 +5,27 @@ import SearchOverlay from '@/components/layout/SearchOverlay.vue'
 import TransferQueue from '@/components/file/TransferQueue.vue'
 import FilePreviewModal from '@/components/file/FilePreviewModal.vue'
 import { useAuthStore } from '@/stores/auth'
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
+import { useUIStore } from '@/stores/ui'
+import { i18n } from '@/i18n'
 
 const auth = useAuthStore()
-onMounted(() => { if (!auth.user) auth.fetchMe() })
+const ui = useUIStore()
+const t = i18n.global.t
+function closeDrawerOnEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') ui.closeMobileNav()
+}
+onMounted(() => {
+  if (!auth.user) auth.fetchMe()
+  window.addEventListener('keydown', closeDrawerOnEscape)
+})
+onUnmounted(() => window.removeEventListener('keydown', closeDrawerOnEscape))
 </script>
 
 <template>
   <div class="main-layout">
-    <AppSidebar />
+    <button v-if="ui.mobileNavOpen" class="main-layout__scrim" :aria-label="t('nav.closeNavigation')" @click="ui.closeMobileNav" />
+    <AppSidebar :class="{ 'sidebar--mobile-open': ui.mobileNavOpen }" />
     <div class="main-layout__right">
       <AppHeader />
       <main class="main-layout__content">
@@ -44,6 +56,20 @@ onMounted(() => { if (!auth.user) auth.fetchMe() })
 }
 .main-layout__page {
   min-height: 100%;
+}
+.main-layout__scrim { display: none; }
+@media (max-width: 719px) {
+  .main-layout__content { padding: 16px; }
+  .main-layout__scrim {
+    display: block; position: fixed; inset: var(--desktop-titlebar-h, 0) 0 0; z-index: 39;
+    border: 0; background: rgba(0, 0, 0, .62); backdrop-filter: blur(2px);
+  }
+  :deep(.sidebar) {
+    position: fixed; left: 0; top: var(--desktop-titlebar-h, 0); bottom: 0; z-index: 40;
+    width: min(82vw, 280px); transform: translateX(-102%); transition: transform var(--base) var(--ease-out);
+  }
+  :deep(.sidebar.sidebar--mobile-open) { transform: translateX(0); }
+  :deep(.sidebar .fade-enter-active), :deep(.sidebar .fade-leave-active) { transition: none; }
 }
 
 .page-enter-active {

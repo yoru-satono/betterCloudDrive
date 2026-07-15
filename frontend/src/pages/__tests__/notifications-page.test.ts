@@ -42,8 +42,8 @@ function notification(patch: Partial<NotificationEntity> = {}): NotificationEnti
     userId: 2,
     teamId: 10,
     type: 'TEAM_INVITE',
-    titleKey: 'notification.team_invite.title',
-    contentKey: 'notification.team_invite.content',
+    titleKey: 'notification.teamInvite.title',
+    contentKey: 'notification.teamInvite.content',
     messageParams: {},
     link: '/teams/10/settings',
     isRead: false,
@@ -135,7 +135,7 @@ describe('NotificationsPage', () => {
     const wrapper = mountPage()
     await flushPromises()
     listNotifications.mockClear()
-    listNotifications.mockResolvedValue(page([notification({ id: 2, titleKey: 'notification.team_delete.title', contentKey: 'notification.team_delete.content' })]))
+    listNotifications.mockResolvedValue(page([notification({ id: 2, titleKey: 'notification.teamDelete.title', contentKey: 'notification.teamDelete.content' })]))
 
     window.dispatchEvent(new CustomEvent('bcd:notifications-changed', { detail: { unreadCount: 1 } }))
     await flushPromises()

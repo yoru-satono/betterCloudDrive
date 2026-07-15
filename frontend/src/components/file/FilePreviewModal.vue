@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, ref } from 'vue'
 import OButton from '@/components/base/OButton.vue'
 import OModal from '@/components/base/OModal.vue'
@@ -45,7 +48,7 @@ async function openTeamVersions() {
     const { data } = await versionsApi.listTeamVersions(preview.teamId, preview.target.id)
     versions.value = data.data
   } catch {
-    versionsError.value = '历史版本加载失败'
+    versionsError.value = __t('file.filepreview.failedToLoadHistoricalVersion')
   } finally {
     versionsLoading.value = false
   }
@@ -58,11 +61,11 @@ async function downloadTeamVersion(versionNumber: number) {
 
 async function restoreTeamVersion(versionNumber: number) {
   if (!preview.teamId || !preview.target || !canRestoreTeamVersion.value) return
-  const ok = await confirm('恢复版本', `将版本 ${versionNumber} 恢复为当前文件？当前文件会保留为历史版本。`)
+  const ok = await confirm(__t('team.filepreview.recoveryVersion'), __t('team.filepreview.restoreVersionToCurrentFileTheCurrentFileWillBe', { p0: versionNumber }))
   if (!ok) return
   const { data } = await versionsApi.restoreTeamVersion(preview.teamId, preview.target.id, versionNumber)
   preview.replaceTarget(data.data)
-  toast.success('版本已恢复')
+  toast.success(__t('team.filepreview.versionRestored'))
   await preview.refreshOfficeConfig()
   await openTeamVersions()
 }
@@ -70,7 +73,7 @@ async function restoreTeamVersion(versionNumber: number) {
 
 <template>
   <OModal
-    title="文件预览"
+    :title="__t('file.filepreview.filePreview')"
     :open="preview.open"
     :width="preview.officeMode ? 'calc(100vw - 32px)' : '720px'"
     :height="preview.officeMode ? 'calc(100vh - 32px)' : undefined"
@@ -83,24 +86,24 @@ async function restoreTeamVersion(versionNumber: number) {
       <OnlyOfficeEditor v-else-if="preview.officeMode" :office-config="preview.officeConfig" />
       <img v-else-if="preview.target?.mimeType?.startsWith('image/')" :src="preview.url" :alt="preview.target.fileName" />
       <iframe v-else-if="preview.target?.mimeType === 'application/pdf' || preview.target?.mimeType?.startsWith('text/')" :src="preview.url" />
-      <div v-else class="preview-box__error">此类型暂不支持内嵌预览</div>
+      <div v-else class="preview-box__error">{{ __t('file.filepreview.thisTypeDoesNotCurrentlySupportInlinePreview') }}</div>
     </div>
     <template #footer>
       <span v-if="preview.officeMode && preview.officeConfig" class="preview-box__mode">
-        {{ preview.officeConfig.editable ? '可编辑' : '只读预览' }}
+        {{ preview.officeConfig.editable ? __t('file.filepreview.editable') : __t('file.filepreview.readOnlyPreview') }}
       </span>
-      <OButton v-if="canShowTeamVersions" variant="ghost" @click="openTeamVersions">历史版本</OButton>
-      <OButton variant="ghost" @click="closePreview">关闭</OButton>
-      <OButton v-if="preview.target" variant="primary" @click="downloadPreviewTarget">下载</OButton>
+      <OButton v-if="canShowTeamVersions" variant="ghost" @click="openTeamVersions">{{ __t('file.filepreview.historicalVersion') }}</OButton>
+      <OButton variant="ghost" @click="closePreview">{{ __t('commonUi.o.closure') }}</OButton>
+      <OButton v-if="preview.target" variant="primary" @click="downloadPreviewTarget">{{ __t('commonUi.filepreview.download') }}</OButton>
     </template>
   </OModal>
 
-  <OModal title="历史版本" :open="versionsOpen" width="560px" @close="versionsOpen = false">
+  <OModal :title="__t('file.filepreview.historicalVersion')" :open="versionsOpen" width="560px" @close="versionsOpen = false">
     <div class="office-versions">
       <div class="office-versions__target">{{ preview.target?.fileName }}</div>
       <div v-if="versionsLoading" class="office-versions__loading"><OSpinner /></div>
       <div v-else-if="versionsError" class="office-versions__empty">{{ versionsError }}</div>
-      <div v-else-if="versions.length === 0" class="office-versions__empty">暂无历史版本</div>
+      <div v-else-if="versions.length === 0" class="office-versions__empty">{{ __t('commonUi.filepreview.noHistoricalVersionYet') }}</div>
       <div v-else class="office-versions__list">
         <div
           v-for="version in versions"
@@ -109,21 +112,21 @@ async function restoreTeamVersion(versionNumber: number) {
           :data-testid="`office-version-row-${version.versionNumber}`"
         >
           <div>
-            <div class="office-version-row__title">版本 {{ version.versionNumber }}</div>
+            <div class="office-version-row__title">{{ __t('commonUi.filepreview.version') }}{{ version.versionNumber }}</div>
             <div class="office-version-row__meta font-mono">
               {{ formatSize(version.fileSize) }} · {{ formatDateFull(version.createdAt) }}
             </div>
           </div>
           <div class="office-version-row__actions">
-            <OButton variant="ghost" size="sm" @click="downloadTeamVersion(version.versionNumber)">下载</OButton>
-            <OButton v-if="canRestoreTeamVersion" variant="ghost" size="sm" @click="restoreTeamVersion(version.versionNumber)">恢复</OButton>
+            <OButton variant="ghost" size="sm" @click="downloadTeamVersion(version.versionNumber)">{{ __t('commonUi.filepreview.download') }}</OButton>
+            <OButton v-if="canRestoreTeamVersion" variant="ghost" size="sm" @click="restoreTeamVersion(version.versionNumber)">{{ __t('commonUi.filepreview.recover') }}</OButton>
           </div>
         </div>
       </div>
     </div>
     <template #footer>
-      <span v-if="!canRestoreTeamVersion" class="office-versions__permission">只读权限仅可下载历史版本</span>
-      <OButton variant="ghost" @click="versionsOpen = false">关闭</OButton>
+      <span v-if="!canRestoreTeamVersion" class="office-versions__permission">{{ __t('file.filepreview.readOnlyPermissionCanOnlyDownloadHistoricalVersions') }}</span>
+      <OButton variant="ghost" @click="versionsOpen = false">{{ __t('commonUi.o.closure') }}</OButton>
     </template>
   </OModal>
 </template>

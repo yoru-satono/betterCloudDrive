@@ -9,6 +9,7 @@ import { useTeamsStore } from '@/stores/teams'
 import { useFormatters } from '@/composables/useFormatters'
 import { useRouter, useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
+import { i18n } from '@/i18n'
 
 const ui = useUIStore()
 const auth = useAuthStore()
@@ -16,20 +17,21 @@ const teams = useTeamsStore()
 const router = useRouter()
 const route = useRoute()
 const { formatSize } = useFormatters()
+const t = i18n.global.t
 const showCreateTeam = ref(false)
 const teamName = ref('')
 const isTeamArea = computed(() => route.meta?.area === 'team' || (route.meta?.area === 'shared' && ui.activeWorkspace === 'team'))
 
 const navItems = [
-  { to: '/files',       label: '全部文件',  icon: 'folder' },
-  { to: '/favorites',   label: '我的收藏',  icon: 'star' },
-  { to: '/shares',      label: '我的分享',  icon: 'share' },
-  { to: '/tags',        label: '标签管理',  icon: 'tag' },
-  { to: '/recycle-bin', label: '回收站',    icon: 'trash' },
+  { to: '/files',       labelKey: 'nav.allFiles',  icon: 'folder' },
+  { to: '/favorites',   labelKey: 'nav.favorites', icon: 'star' },
+  { to: '/shares',      labelKey: 'nav.shares', icon: 'share' },
+  { to: '/tags',        labelKey: 'nav.tags', icon: 'tag' },
+  { to: '/recycle-bin', labelKey: 'nav.recycleBin', icon: 'trash' },
 ]
 
 const adminItems = [
-  { to: '/admin',       label: '管理后台',  icon: 'shield' },
+  { to: '/admin',       labelKey: 'nav.admin', icon: 'shield' },
 ]
 
 const iconPaths: Record<string, string> = {
@@ -49,6 +51,8 @@ watch(isTeamArea, active => {
   if (active && auth.user) void teams.fetchTeams()
 }, { immediate: true })
 
+watch(() => route.fullPath, () => ui.closeMobileNav())
+
 function switchWorkspace() {
   router.push({ name: isTeamArea.value ? 'Files' : 'Teams' })
 }
@@ -59,7 +63,7 @@ async function createTeam() {
   const team = await teams.createTeam(name)
   teamName.value = ''
   showCreateTeam.value = false
-  toast.success('团队已创建')
+  toast.success(t('nav.teamCreated'))
   router.push({ name: 'TeamFiles', params: { teamId: team.id } })
 }
 </script>
@@ -82,7 +86,7 @@ async function createTeam() {
     <button
       type="button"
       class="sidebar__workspace"
-      :aria-label="isTeamArea ? '切换到个人网盘' : '切换到团队空间'"
+      :aria-label="isTeamArea ? t('nav.personalDrive') : t('nav.teamSpace')"
       data-testid="workspace-switcher"
       @click="switchWorkspace"
     >
@@ -90,7 +94,7 @@ async function createTeam() {
         <path :d="iconPaths[isTeamArea ? 'folder' : 'team']" />
       </svg>
       <Transition name="fade">
-        <span v-if="ui.sidebarExpanded">{{ isTeamArea ? '切换到个人网盘' : '切换到团队空间' }}</span>
+        <span v-if="ui.sidebarExpanded">{{ isTeamArea ? t('nav.personalDrive') : t('nav.teamSpace') }}</span>
       </Transition>
     </button>
 
@@ -107,7 +111,7 @@ async function createTeam() {
           <path :d="iconPaths[item.icon]" />
         </svg>
         <Transition name="fade">
-          <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ item.label }}</span>
+          <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ t(item.labelKey) }}</span>
         </Transition>
       </RouterLink>
 
@@ -122,12 +126,12 @@ async function createTeam() {
           <path :d="iconPaths.team" />
         </svg>
         <Transition name="fade">
-          <span v-if="ui.sidebarExpanded" class="sidebar__label">团队首页</span>
+          <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ t('nav.teamHome') }}</span>
         </Transition>
       </RouterLink>
       <div v-if="isTeamArea && ui.sidebarExpanded" class="sidebar__section-head">
-        <span>团队</span>
-        <button type="button" class="sidebar__section-action" @click="showCreateTeam = true">
+        <span>{{ t('nav.teams') }}</span>
+        <button type="button" class="sidebar__section-action" :aria-label="t('nav.createTeam')" @click="showCreateTeam = true">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path :d="iconPaths.plus" />
           </svg>
@@ -167,7 +171,7 @@ async function createTeam() {
           <path :d="iconPaths[item.icon]" />
         </svg>
         <Transition name="fade">
-          <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ item.label }}</span>
+          <span v-if="ui.sidebarExpanded" class="sidebar__label">{{ t(item.labelKey) }}</span>
         </Transition>
       </RouterLink>
     </nav>
@@ -189,16 +193,16 @@ async function createTeam() {
       <Transition name="fade">
         <div v-if="ui.sidebarExpanded" class="sidebar__user-info">
           <span class="sidebar__user-name truncate">{{ auth.user?.username }}</span>
-          <span class="sidebar__user-role">{{ auth.isAdmin ? '管理员' : '普通用户' }}</span>
+          <span class="sidebar__user-role">{{ auth.isAdmin ? t('ui.admin') : t('ui.user') }}</span>
         </div>
       </Transition>
     </RouterLink>
 
-    <OModal title="新建团队" :open="showCreateTeam" @close="showCreateTeam = false">
-      <OInput v-model="teamName" label="团队名称" placeholder="输入团队名称" @keyup.enter="createTeam" />
+    <OModal :title="t('nav.createTeam')" :open="showCreateTeam" @close="showCreateTeam = false">
+      <OInput v-model="teamName" :label="t('nav.teamName')" :placeholder="t('nav.teamNamePlaceholder')" @keyup.enter="createTeam" />
       <template #footer>
-        <OButton variant="ghost" @click="showCreateTeam = false">取消</OButton>
-        <OButton variant="primary" @click="createTeam">创建</OButton>
+        <OButton variant="ghost" @click="showCreateTeam = false">{{ t('common.cancel') }}</OButton>
+        <OButton variant="primary" @click="createTeam">{{ t('common.create') }}</OButton>
       </template>
     </OModal>
   </aside>
@@ -316,4 +320,8 @@ async function createTeam() {
 .sidebar__user-info { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .sidebar__user-name { font-size: 13px; color: var(--text-primary); }
 .sidebar__user-role { font-size: 11px; color: var(--text-muted); }
+@media (max-width: 719px) {
+  .sidebar { width: min(82vw, 280px); }
+  .sidebar :deep(.fade-enter-from), .sidebar :deep(.fade-leave-to) { opacity: 1; }
+}
 </style>

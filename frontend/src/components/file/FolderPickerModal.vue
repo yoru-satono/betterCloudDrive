@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, ref, watch } from 'vue'
 import OButton from '@/components/base/OButton.vue'
 import OModal from '@/components/base/OModal.vue'
@@ -8,7 +11,7 @@ import * as filesApi from '@/api/files'
 import * as teamsApi from '@/api/teams'
 import type { FileEntity } from '@/types/file'
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   open: boolean
   title?: string
   targetName?: string
@@ -17,10 +20,9 @@ const props = withDefaults(defineProps<{
   excludeFolderId?: number
   teamId?: number
   rootName?: string
-}>(), {
-  title: '选择文件夹',
-  confirmText: '选择此处',
-})
+}>()
+const effectiveTitle = computed(() => props.title || __t('file.folderpicker.selectFolder'))
+const effectiveConfirmText = computed(() => props.confirmText || __t('file.folderpicker.selectHere'))
 
 const emit = defineEmits<{
   close: []
@@ -31,12 +33,12 @@ const foldersLoading = ref(false)
 const folders = ref<FileEntity[]>([])
 const error = ref('')
 const currentParentId = ref<number | null>(null)
-const folderStack = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: props.rootName || '我的网盘' }])
+const folderStack = ref<Array<{ id: number | null; name: string }>>([{ id: null, name: props.rootName || __t('file.folderpicker.myNetworkDisk') }])
 const currentFolder = computed(() => folderStack.value[folderStack.value.length - 1])
 
 watch(() => props.open, async open => {
   if (open) {
-    folderStack.value = [{ id: null, name: props.rootName || '我的网盘' }]
+    folderStack.value = [{ id: null, name: props.rootName || __t('file.folderpicker.myNetworkDisk') }]
     await loadFolders(null)
   }
 })
@@ -59,7 +61,7 @@ async function loadFolders(parentId: number | null) {
     } while (page <= pages)
     folders.value = records.filter(item => item.fileType === 'folder' && item.id !== props.excludeFolderId)
   } catch {
-    error.value = '文件夹加载失败'
+    error.value = __t('file.folderpicker.folderLoadingFailed')
   } finally {
     foldersLoading.value = false
   }
@@ -78,18 +80,16 @@ async function goBackFolder() {
 </script>
 
 <template>
-  <OModal :open="open" :title="title" width="460px" @close="emit('close')">
+  <OModal :open="open" :title="effectiveTitle" width="460px" @close="emit('close')">
     <div class="folder-picker">
       <div v-if="targetName" class="folder-picker__target">{{ targetName }}</div>
       <div class="folder-picker__nav">
-        <OButton variant="ghost" size="sm" :disabled="folderStack.length <= 1 || foldersLoading" @click="goBackFolder">
-          返回
-        </OButton>
+        <OButton variant="ghost" size="sm" :disabled="folderStack.length <= 1 || foldersLoading" @click="goBackFolder">{{ __t('file.folderpicker.return') }}</OButton>
         <span class="folder-picker__path">{{ currentFolder.name }}</span>
       </div>
       <div v-if="foldersLoading" class="folder-picker__loading"><OSpinner /></div>
       <div v-else-if="error" class="folder-picker__error">{{ error }}</div>
-      <div v-else-if="folders.length === 0" class="folder-picker__empty">当前目录没有文件夹</div>
+      <div v-else-if="folders.length === 0" class="folder-picker__empty">{{ __t('file.folderpicker.thereIsNoFolderInTheCurrentDirectory') }}</div>
       <div v-else class="folder-picker__list">
         <button
           v-for="folder in folders"
@@ -103,9 +103,9 @@ async function goBackFolder() {
       </div>
     </div>
     <template #footer>
-      <OButton variant="ghost" :disabled="loading" @click="emit('close')">取消</OButton>
+      <OButton variant="ghost" :disabled="loading" @click="emit('close')">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
       <OButton variant="primary" :loading="loading" :disabled="foldersLoading" @click="emit('confirm', currentParentId)">
-        {{ confirmText }}
+        {{ effectiveConfirmText }}
       </OButton>
     </template>
   </OModal>

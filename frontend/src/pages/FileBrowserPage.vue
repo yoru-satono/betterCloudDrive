@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FileToolbar from '@/components/file/FileToolbar.vue'
@@ -97,29 +100,29 @@ function buildMenu(file: FileEntity, options: { includeOpenLocation?: boolean; a
     options.afterAction?.()
   }
   if (options.includeOpenLocation) {
-    items.push({ label: '打开文件所在位置', action: () => openLocation(file, options.afterAction) })
+    items.push({ label: __t('file.searchoverlay.openFileLocation'), action: () => openLocation(file, options.afterAction) })
   }
   items.push({
-    label: '下载',
+    label: __t('commonUi.filepreview.download'),
     action: action(() => file.fileType === 'folder'
       ? downloadFolderZip(file.id, file.fileName)
       : downloadFile(file.id, file.fileName)),
   })
   if (file.fileType !== 'folder') {
-    items.push({ label: isOfficeFile(file) ? '打开文档' : '预览', action: action(() => preview.openPreview(file)) })
-    items.push({ label: '版本管理', action: action(() => openVersions(file)) })
+    items.push({ label: isOfficeFile(file) ? __t('team.filebrowser.openDocument') : __t('team.filebrowser.preview'), action: action(() => preview.openPreview(file)) })
+    items.push({ label: __t('team.filebrowser.versionManagement'), action: action(() => openVersions(file)) })
   }
-  items.push({ label: '详情', action: action(() => openDetail(file)) })
-  items.push({ label: '管理标签', action: action(() => openTagManager(file)) })
-  items.push({ label: '移动到', action: action(() => openFolderAction(file, 'move')) })
+  items.push({ label: __t('commonUi.adminlogs.details'), action: action(() => openDetail(file)) })
+  items.push({ label: __t('file.filebrowser.manageTags'), action: action(() => openTagManager(file)) })
+  items.push({ label: __t('team.filebrowser.moveTo'), action: action(() => openFolderAction(file, 'move')) })
   if (file.fileType !== 'folder') {
-    items.push({ label: '复制到', action: action(() => openFolderAction(file, 'copy')) })
+    items.push({ label: __t('file.filebrowser.copyTo'), action: action(() => openFolderAction(file, 'copy')) })
   }
-  items.push({ label: '重命名', action: action(() => startRename(file)) })
-  items.push({ label: '收藏', action: action(() => toggleFavorite(file)) })
-  items.push({ label: '分享', action: action(() => openShareDialog(file)) })
+  items.push({ label: __t('team.filebrowser.rename'), action: action(() => startRename(file)) })
+  items.push({ label: __t('commonUi.searchoverlay.collect'), action: action(() => toggleFavorite(file)) })
+  items.push({ label: __t('team.filebrowser.share'), action: action(() => openShareDialog(file)) })
   items.push({ divider: true, label: '', action: () => {} })
-  items.push({ label: '删除', action: action(() => deleteSingle(file)), danger: true })
+  items.push({ label: __t('commonUi.adminuserfiles.delete'), action: action(() => deleteSingle(file)), danger: true })
   return items
 }
 
@@ -163,7 +166,7 @@ async function submitRename() {
 async function createFolder() {
   if (!newFolderName.value.trim()) return
   await filesApi.createFolder(store.currentParentId, newFolderName.value.trim())
-  toast.success('文件夹已创建')
+  toast.success(__t('team.filebrowser.folderCreated'))
   newFolderName.value = ''
   showNewFolder.value = false
   store.refresh()
@@ -172,25 +175,25 @@ async function createFolder() {
 async function deleteSelected() {
   const ids = [...store.selectedIds]
   if (!ids.length) return
-  const ok = await confirm('确认删除', `将 ${ids.length} 个文件移入回收站，可稍后恢复。`)
+  const ok = await confirm(__t('team.filebrowser.confirmDeletion'), __t('file.filebrowser.movedFilesToTheTrashSoTheyCanBeRestored', { p0: ids.length }))
   if (!ok) return
   await filesApi.deleteFiles(ids)
-  toast.success('已移入回收站')
+  toast.success(__t('file.filebrowser.movedToTrash'))
   store.clearSelection()
   store.refresh()
 }
 
 async function deleteSingle(file: FileEntity) {
-  const ok = await confirm('确认删除', `将「${file.fileName}」移入回收站？`)
+  const ok = await confirm(__t('team.filebrowser.confirmDeletion'), __t('team.filebrowser.moveToTheTrash', { p0: file.fileName }))
   if (!ok) return
   await filesApi.deleteFiles([file.id])
-  toast.success('已移入回收站')
+  toast.success(__t('file.filebrowser.movedToTrash'))
   store.refresh()
 }
 
 async function toggleFavorite(file: FileEntity) {
   await favApi.addFavorite(file.id)
-  toast.success('已添加到收藏')
+  toast.success(__t('file.filebrowser.addedToFavorites'))
 }
 
 function openShareDialog(file: FileEntity) {
@@ -223,7 +226,7 @@ async function submitShare() {
   if (!shareTarget.value) return
   const visits = shareMaxVisits.value.trim() ? Number(shareMaxVisits.value) : undefined
   if (visits !== undefined && (!Number.isInteger(visits) || visits < 1)) {
-    toast.error('访问次数限制必须是正整数')
+    toast.error(__t('commonUi.filebrowser.theNumberOfVisitsLimitMustBeAPositiveInteger'))
     return
   }
   let password: string | undefined
@@ -233,7 +236,7 @@ async function submitShare() {
       : sharePassword.value.trim()
   }
   if (password !== undefined && (password.length < 4 || password.length > 16)) {
-    toast.error('分享密码长度必须为 4-16 位')
+    toast.error(__t('commonUi.filebrowser.sharePasswordLengthMustBe416Characters'))
     return
   }
   const { data } = await sharesApi.createShare({
@@ -245,7 +248,7 @@ async function submitShare() {
   const shareUrl = buildShareUrl(data.data.shareCode)
   await navigator.clipboard.writeText(shareUrl).catch(() => {})
   showShare.value = false
-  toast.success('分享链接已复制到剪贴板')
+  toast.success(__t('file.filebrowser.sharingLinkCopiedToClipboard'))
 }
 
 function openFolderAction(file: FileEntity, mode: 'move' | 'copy') {
@@ -260,10 +263,10 @@ async function confirmFolderAction(targetParentId: number | null) {
   try {
     if (pickerMode.value === 'move') {
       await filesApi.moveFile(pickerTarget.value.id, targetParentId)
-      toast.success('已移动')
+      toast.success(__t('team.filebrowser.moved'))
     } else {
       await filesApi.copyFile(pickerTarget.value.id, targetParentId)
-      toast.success('已复制')
+      toast.success(__t('file.filebrowser.copied'))
     }
     pickerOpen.value = false
     pickerTarget.value = null
@@ -315,7 +318,7 @@ async function saveTags() {
         ? tagsApi.addFileTag(tagTarget.value!.id, tag.id)
         : tagsApi.removeFileTag(tagTarget.value!.id, tag.id)
     }))
-    toast.success('标签已更新')
+    toast.success(__t('commonUi.filebrowser.labelUpdated'))
     tagOpen.value = false
   } finally {
     tagsLoading.value = false
@@ -336,10 +339,10 @@ async function openVersions(file: FileEntity) {
 
 async function deleteVersion(versionNumber: number) {
   if (!versionsTarget.value) return
-  const ok = await confirm('删除版本', `确认删除版本 ${versionNumber}？`)
+  const ok = await confirm(__t('team.filebrowser.deleteVersion'), __t('team.filebrowser.confirmToDeleteVersion', { p0: versionNumber }))
   if (!ok) return
   await versionsApi.deleteVersion(versionsTarget.value.id, versionNumber)
-  toast.success('版本已删除')
+  toast.success(__t('team.filebrowser.versionDeleted'))
   await openVersions(versionsTarget.value)
 }
 
@@ -440,38 +443,38 @@ function handleFileInputChange(event: Event) {
     <UploadZone :is-dragging="upload.isDragging.value" />
 
     <!-- New folder modal -->
-    <OModal title="新建文件夹" :open="showNewFolder" data-testid="new-folder-modal" @close="showNewFolder = false">
-      <OInput v-model="newFolderName" label="文件夹名称" placeholder="输入名称" @keyup.enter="createFolder" />
+    <OModal :title="__t('commonUi.filetoolbar.createNewFolder')" :open="showNewFolder" data-testid="new-folder-modal" @close="showNewFolder = false">
+      <OInput v-model="newFolderName" :label="__t('team.filebrowser.folderName')" :placeholder="__t('team.filebrowser.enterName')" @keyup.enter="createFolder" />
       <template #footer>
-        <OButton variant="ghost" @click="showNewFolder = false">取消</OButton>
-        <OButton variant="primary" @click="createFolder">创建</OButton>
+        <OButton variant="ghost" @click="showNewFolder = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="createFolder">{{ __t('commonUi.adminuserfiles.create') }}</OButton>
       </template>
     </OModal>
 
     <!-- Rename modal -->
-    <OModal title="重命名" :open="showRename" data-testid="rename-modal" @close="showRename = false">
-      <OInput v-model="renameName" label="新名称" placeholder="输入新名称" @keyup.enter="submitRename" />
+    <OModal :title="__t('team.filebrowser.rename')" :open="showRename" data-testid="rename-modal" @close="showRename = false">
+      <OInput v-model="renameName" :label="__t('team.filebrowser.newName')" :placeholder="__t('team.filebrowser.enterNewName')" @keyup.enter="submitRename" />
       <template #footer>
-        <OButton variant="ghost" @click="showRename = false">取消</OButton>
-        <OButton variant="primary" @click="submitRename">确认</OButton>
+        <OButton variant="ghost" @click="showRename = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="submitRename">{{ __t('commonUi.oconfirmdialog.confirm') }}</OButton>
       </template>
     </OModal>
 
-    <OModal title="创建分享" :open="showShare" data-testid="share-modal" @close="showShare = false">
+    <OModal :title="__t('file.filebrowser.createShare')" :open="showShare" data-testid="share-modal" @close="showShare = false">
       <div class="share-form">
         <div class="share-form__name">{{ shareTarget?.fileName }}</div>
         <OInput
           v-model="shareMaxVisits"
-          label="访问次数限制"
+          :label="__t('commonUi.filebrowser.visitLimit')"
           type="number"
-          placeholder="留空表示不限"
+          :placeholder="__t('commonUi.filebrowser.leaveBlankToIndicateNoLimit')"
           @keyup.enter="submitShare"
         />
         <OInput
           v-model="shareNotifyEmail"
-          label="通知邮箱"
+          :label="__t('file.filebrowser.notificationEmail')"
           type="email"
-          placeholder="留空不发送通知"
+          :placeholder="__t('file.filebrowser.leaveBlankToNotSendNotification')"
           @keyup.enter="submitShare"
         />
         <label class="share-password-toggle">
@@ -479,88 +482,80 @@ function handleFileInputChange(event: Event) {
           <span class="share-password-toggle__box">
             <span />
           </span>
-          <span>设置访问密码</span>
+          <span>{{ __t('file.filebrowser.setAccessPassword') }}</span>
         </label>
         <div v-if="sharePasswordEnabled" class="share-password">
-          <div class="share-password__segments" aria-label="密码设置方式">
+          <div class="share-password__segments" :aria-label="__t('team.filebrowser.passwordSettingMethod')">
             <button
               type="button"
               :class="{ 'share-password__segment--active': sharePasswordMode === 'manual' }"
               @click="sharePasswordMode = 'manual'"
-            >
-              手动输入
-            </button>
+            >{{ __t('team.filebrowser.manualEntry') }}</button>
             <button
               type="button"
               :class="{ 'share-password__segment--active': sharePasswordMode === 'generated' }"
               @click="sharePasswordMode = 'generated'"
-            >
-              自动生成
-            </button>
+            >{{ __t('team.filebrowser.automaticallyGenerated') }}</button>
           </div>
           <OInput
             v-if="sharePasswordMode === 'manual'"
             v-model="sharePassword"
-            label="访问密码"
+            :label="__t('commonUi.filebrowser.accessPassword')"
             type="text"
-            placeholder="4-16 位"
+            :placeholder="__t('team.filebrowser.fourToSixteenBits')"
             @keyup.enter="submitShare"
           />
           <div v-else class="share-password__generated">
-            <div class="share-password__label">密码长度</div>
-            <div class="share-password__segments" aria-label="密码长度">
+            <div class="share-password__label">{{ __t('team.filebrowser.passwordLength') }}</div>
+            <div class="share-password__segments" :aria-label="__t('team.filebrowser.passwordLength')">
               <button
                 type="button"
                 :class="{ 'share-password__segment--active': generatedPasswordLength === 4 }"
                 @click="generatedPasswordLength = 4"
-              >
-                4 位
-              </button>
+              >{{ __t('team.filebrowser.fourDigits') }}</button>
               <button
                 type="button"
                 :class="{ 'share-password__segment--active': generatedPasswordLength === 8 }"
                 @click="generatedPasswordLength = 8"
-              >
-                8 位
-              </button>
+              >{{ __t('team.filebrowser.eightBits') }}</button>
             </div>
           </div>
         </div>
       </div>
       <template #footer>
-        <OButton variant="ghost" @click="showShare = false">取消</OButton>
-        <OButton variant="primary" @click="submitShare">创建并复制链接</OButton>
+        <OButton variant="ghost" @click="showShare = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" @click="submitShare">{{ __t('team.filebrowser.createAndCopyLink') }}</OButton>
       </template>
     </OModal>
 
     <FolderPickerModal
       :open="pickerOpen"
-      :title="pickerMode === 'move' ? '移动到' : '复制到'"
+      :title="pickerMode === 'move' ? __t('team.filebrowser.moveTo') : __t('file.filebrowser.copyTo')"
       :target-name="pickerTarget?.fileName"
-      :confirm-text="pickerMode === 'move' ? '移动到此处' : '复制到此处'"
+      :confirm-text="pickerMode === 'move' ? __t('team.filebrowser.moveHere') : __t('file.filebrowser.copyHere')"
       :loading="pickerLoading"
       :exclude-folder-id="pickerMode === 'move' && pickerTarget?.fileType === 'folder' ? pickerTarget.id : undefined"
       @close="pickerOpen = false"
       @confirm="confirmFolderAction"
     />
 
-    <OModal title="文件详情" :open="detailOpen" @close="detailOpen = false">
+    <OModal :title="__t('commonUi.adminuserfiles.documentDetails')" :open="detailOpen" @close="detailOpen = false">
       <div v-if="detailTarget" class="info-list">
-        <div><span>名称</span><strong>{{ detailTarget.fileName }}</strong></div>
-        <div><span>类型</span><strong>{{ detailTarget.fileType === 'folder' ? '文件夹' : detailTarget.mimeType || '文件' }}</strong></div>
-        <div><span>大小</span><strong class="font-mono">{{ detailTarget.fileType === 'folder' ? '文件夹' : formatSize(detailTarget.fileSize) }}</strong></div>
-        <div><span>版本数</span><strong class="font-mono">{{ detailTarget.versionCount }}</strong></div>
+        <div><span>{{ __t('commonUi.filelist.name') }}</span><strong>{{ detailTarget.fileName }}</strong></div>
+        <div><span>{{ __t('commonUi.adminlogs.type') }}</span><strong>{{ detailTarget.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : detailTarget.mimeType || __t('commonUi.searchoverlay.document') }}</strong></div>
+        <div><span>{{ __t('commonUi.filelist.size') }}</span><strong class="font-mono">{{ detailTarget.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : formatSize(detailTarget.fileSize) }}</strong></div>
+        <div><span>{{ __t('team.filebrowser.versionNumber') }}</span><strong class="font-mono">{{ detailTarget.versionCount }}</strong></div>
         <div><span>MD5</span><strong class="font-mono">{{ detailTarget.md5Hash || '-' }}</strong></div>
-        <div><span>创建时间</span><strong>{{ formatDateFull(detailTarget.createdAt) }}</strong></div>
-        <div><span>更新时间</span><strong>{{ formatDateFull(detailTarget.updatedAt) }}</strong></div>
+        <div><span>{{ __t('commonUi.adminteams.creationTime') }}</span><strong>{{ formatDateFull(detailTarget.createdAt) }}</strong></div>
+        <div><span>{{ __t('commonUi.adminteams.updateTime') }}</span><strong>{{ formatDateFull(detailTarget.updatedAt) }}</strong></div>
       </div>
     </OModal>
 
-    <OModal title="管理标签" :open="tagOpen" @close="tagOpen = false">
+    <OModal :title="__t('file.filebrowser.manageTags')" :open="tagOpen" @close="tagOpen = false">
       <div class="tag-manage">
         <div class="tag-manage__target">{{ tagTarget?.fileName }}</div>
         <div v-if="tagsLoading" class="tag-manage__loading"><OSpinner /></div>
-        <div v-else-if="tags.length === 0" class="tag-manage__empty">暂无标签，请先到标签管理创建标签</div>
+        <div v-else-if="tags.length === 0" class="tag-manage__empty">{{ __t('file.filebrowser.thereIsNoLabelYetPleaseGoToLabelManagement') }}</div>
         <label v-else v-for="tag in tags" :key="tag.id" class="tag-check">
           <input type="checkbox" :checked="selectedTagIds.has(tag.id)" @change="toggleTag(tag.id)" />
           <span class="tag-dot" :style="{ background: tag.color || '#00d4aa' }" />
@@ -568,23 +563,23 @@ function handleFileInputChange(event: Event) {
         </label>
       </div>
       <template #footer>
-        <OButton variant="ghost" :disabled="tagsLoading" @click="tagOpen = false">取消</OButton>
-        <OButton variant="primary" :loading="tagsLoading" @click="saveTags">保存</OButton>
+        <OButton variant="ghost" :disabled="tagsLoading" @click="tagOpen = false">{{ __t('commonUi.oconfirmdialog.cancel') }}</OButton>
+        <OButton variant="primary" :loading="tagsLoading" @click="saveTags">{{ __t('commonUi.desktopsettings.save') }}</OButton>
       </template>
     </OModal>
 
-    <OModal title="版本管理" :open="versionsOpen" @close="versionsOpen = false">
+    <OModal :title="__t('team.filebrowser.versionManagement')" :open="versionsOpen" @close="versionsOpen = false">
       <div class="versions-box">
         <div class="versions-box__target">{{ versionsTarget?.fileName }}</div>
         <div v-if="versionsLoading" class="versions-box__loading"><OSpinner /></div>
-        <div v-else-if="versions.length === 0" class="versions-box__empty">暂无历史版本</div>
+        <div v-else-if="versions.length === 0" class="versions-box__empty">{{ __t('commonUi.filepreview.noHistoricalVersionYet') }}</div>
         <div v-else class="versions-list">
           <div v-for="version in versions" :key="version.id" class="version-row">
             <div>
-              <div class="version-row__title">版本 {{ version.versionNumber }}</div>
+              <div class="version-row__title">{{ __t('commonUi.filepreview.version') }}{{ version.versionNumber }}</div>
               <div class="version-row__meta font-mono">{{ formatSize(version.fileSize) }} · {{ formatDateFull(version.createdAt) }}</div>
             </div>
-            <OButton variant="danger" size="sm" @click="deleteVersion(version.versionNumber)">删除</OButton>
+            <OButton variant="danger" size="sm" @click="deleteVersion(version.versionNumber)">{{ __t('commonUi.adminuserfiles.delete') }}</OButton>
           </div>
         </div>
       </div>

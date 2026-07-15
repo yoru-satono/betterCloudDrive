@@ -231,6 +231,6 @@ class TeamAuditExportTaskServiceImplTest {
         int cleaned = service.cleanupExpiredResults();
 
         assertThat(cleaned).isEqualTo(1);
-        verify(teamTaskService).clearResult(77L, "task.result_expired");
+        verify(teamTaskService).clearResult(77L, "task.resultExpired");
     }
 }

@@ -47,16 +47,16 @@ const apiHttpError = (status: number, data: unknown = {}) => (config: unknown) =
 
 describe('api client', () => {
   it('rejects backend business errors and shows a toast by default', async () => {
-    adapter.mockImplementation(apiResponse({ code: 419001, messageKey: 'error.storage_quota_exceeded', messageParams: {} }))
+    adapter.mockImplementation(apiResponse({ code: 419001, messageKey: 'error.storageQuotaExceeded', messageParams: {} }))
 
     await expect(api.get('/files')).rejects.toMatchObject({
-      response: { data: { code: 419001, messageKey: 'error.storage_quota_exceeded' } },
+      response: { data: { code: 419001, messageKey: 'error.storageQuotaExceeded' } },
     })
     expect(toastError).toHaveBeenCalledWith('存储空间不足')
   })
 
   it('does not show a toast when suppressToast is set', async () => {
-    adapter.mockImplementation(apiResponse({ code: 419010, messageKey: 'error.instant_upload_not_found', messageParams: {} }))
+    adapter.mockImplementation(apiResponse({ code: 419010, messageKey: 'error.instantUploadNotFound', messageParams: {} }))
 
     await expect(api.post('/upload/instant', {}, { suppressToast: true })).rejects.toBeTruthy()
     expect(toastError).not.toHaveBeenCalled()
@@ -66,7 +66,7 @@ describe('api client', () => {
     localStorage.setItem('refreshToken', 'old-refresh')
 
     adapter
-      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.token_expired', messageParams: {} }))
+      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.tokenExpired', messageParams: {} }))
       .mockImplementationOnce(apiResponse({ code: 200, messageKey: 'common.success', messageParams: {}, data: { ok: true } }))
 
     axiosPost.mockResolvedValue({
@@ -90,8 +90,8 @@ describe('api client', () => {
     localStorage.setItem('refreshToken', 'old-refresh')
 
     adapter
-      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.token_expired', messageParams: {} }))
-      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.token_expired', messageParams: {} }))
+      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.tokenExpired', messageParams: {} }))
+      .mockImplementationOnce(apiResponse({ code: 401001, messageKey: 'error.tokenExpired', messageParams: {} }))
       .mockImplementationOnce(apiResponse({ code: 200, messageKey: 'common.success', messageParams: {}, data: { id: 1 } }))
       .mockImplementationOnce(apiResponse({ code: 200, messageKey: 'common.success', messageParams: {}, data: { id: 2 } }))
 

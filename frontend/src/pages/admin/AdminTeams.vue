@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { i18n as __i18n } from '@/i18n'
+const __t = __i18n.global.t
+
 import { computed, onMounted, ref } from 'vue'
 import OButton from '@/components/base/OButton.vue'
 import OInput from '@/components/base/OInput.vue'
@@ -70,11 +73,11 @@ async function saveQuota(team: AdminTeam) {
   if (!editingQuota.value) return
   const quotaGb = Number(editingQuota.value.val)
   if (!Number.isFinite(quotaGb) || quotaGb <= 0) {
-    toast.error('请输入有效的团队配额')
+    toast.error(__t('adminUi.adminteams.pleaseEnterAValidTeamQuota'))
     return
   }
   await adminApi.updateTeamQuota(team.id, Math.round(quotaGb * 1024 * 1024 * 1024))
-  toast.success('团队配额已更新')
+  toast.success(__t('adminUi.adminteams.teamQuotaUpdated'))
   editingQuota.value = null
   await load()
 }
@@ -152,49 +155,49 @@ async function exportAuditLogs() {
     result: teamAuditResult.value === '' ? undefined : Number(teamAuditResult.value),
   })
   await saveBlobResponse(response, `team-${detailTeam.value.id}-audit.csv`)
-  toast.success('审计日志已导出')
+  toast.success(__t('adminUi.adminteams.auditLogExported'))
 }
 
 async function archiveTeam(team: AdminTeam) {
   await adminApi.archiveTeam(team.id)
-  toast.success('团队已归档')
+  toast.success(__t('adminUi.adminteams.teamIsArchived'))
   await load()
   if (detailOpen.value && detailTeam.value?.id === team.id) await refreshDetail()
 }
 
 async function unarchiveTeam(team: AdminTeam) {
   await adminApi.unarchiveTeam(team.id)
-  toast.success('团队已取消归档')
+  toast.success(__t('adminUi.adminteams.teamHasUnarchived'))
   await load()
   if (detailOpen.value && detailTeam.value?.id === team.id) await refreshDetail()
 }
 
 async function restoreTeam(team: AdminTeam) {
   await adminApi.restoreTeam(team.id)
-  toast.success('团队已恢复')
+  toast.success(__t('adminUi.adminteams.theTeamHasBeenRestored'))
   await load()
   if (detailOpen.value && detailTeam.value?.id === team.id) await refreshDetail()
 }
 
 async function purgeTeam(team: AdminTeam) {
-  const purgeText = team.purgeAfter ? `\n计划清理时间：${formatDate(team.purgeAfter)}` : ''
-  if (!confirm(`确认永久清理「${team.name}」？该操作会删除团队文件和数据。${purgeText}`)) return
+  const purgeText = team.purgeAfter ? __t('adminUi.adminteams.plannedCleanupTime', { p0: formatDate(team.purgeAfter) }) : ''
+  if (!confirm(__t('adminUi.adminteams.areYouSureYouWantToPermanentlyCleanThisAction', { p0: team.name, p1: purgeText }))) return
   await adminApi.purgeTeam(team.id)
-  toast.success('团队已清理')
+  toast.success(__t('adminUi.adminteams.teamCleared'))
   if (detailTeam.value?.id === team.id) detailOpen.value = false
   await load()
 }
 
 function teamStatus(team: AdminTeam) {
-  if (team.deletedAt) return '已删除'
-  if (team.archivedAt) return '已归档'
-  return '活跃'
+  if (team.deletedAt) return __t('adminUi.adminteams.deleted')
+  if (team.archivedAt) return __t('adminUi.adminteams.archived')
+  return __t('adminUi.adminteams.active')
 }
 
 function teamStatusDetail(team: AdminTeam) {
-  if (team.deletedAt) return `删除于 ${formatDate(team.deletedAt)}${team.purgeAfter ? ` · 清理 ${formatDate(team.purgeAfter)}` : ''}`
-  if (team.archivedAt) return `归档于 ${formatDate(team.archivedAt)}`
-  return '可正常访问'
+  if (team.deletedAt) return __t('adminUi.adminteams.deletedAt', { p0: formatDate(team.deletedAt), p1: team.purgeAfter ? __t('adminUi.adminteams.cleanup', { p0: formatDate(team.purgeAfter) }) : '' })
+  if (team.archivedAt) return __t('adminUi.adminteams.filedUnder', { p0: formatDate(team.archivedAt) })
+  return __t('adminUi.adminteams.canBeAccessedNormally')
 }
 
 function quotaPercent(team: AdminTeam) {
@@ -237,29 +240,29 @@ onMounted(load)
 <template>
   <div class="page-enter">
     <div class="page-header">
-      <h2>团队管理</h2>
+      <h2>{{ __t('adminUi.adminteams.teamManagement') }}</h2>
       <div class="teams-toolbar">
-        <OInput v-model="search" placeholder="搜索团队..." class="teams-toolbar__search" @keyup.enter="searchTeams" />
+        <OInput v-model="search" :placeholder="__t('adminUi.adminteams.searchTeam')" class="teams-toolbar__search" @keyup.enter="searchTeams" />
         <select v-model="status" class="teams-toolbar__status" @change="searchTeams">
-          <option value="active">活跃</option>
-          <option value="archived">已归档</option>
-          <option value="deleted">已删除</option>
-          <option value="all">全部</option>
+          <option value="active">{{ __t('adminUi.adminteams.active') }}</option>
+          <option value="archived">{{ __t('adminUi.adminteams.archived') }}</option>
+          <option value="deleted">{{ __t('adminUi.adminteams.deleted') }}</option>
+          <option value="all">{{ __t('adminUi.adminteams.all') }}</option>
         </select>
-        <OButton variant="ghost" size="sm" @click="searchTeams">搜索</OButton>
+        <OButton variant="ghost" size="sm" @click="searchTeams">{{ __t('commonUi.adminteams.search') }}</OButton>
       </div>
     </div>
 
     <div v-if="total > PAGE_SIZE" class="pagination pagination--top">
-      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">上一页</OButton>
-      <span class="pagination__info font-mono">第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 个团队</span>
-      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</OButton>
+      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+      <span class="pagination__info font-mono">{{ __t('commonUi.adminlogs.no') }}{{ page }} / {{ totalPages }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ total }}{{ __t('adminUi.adminteams.teams') }}</span>
+      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
     </div>
 
     <div v-if="loading" class="teams-loading"><OSpinner /></div>
     <div v-else class="teams-table">
       <div class="teams-table__header">
-        <div>团队</div><div>Owner ID</div><div>存储</div><div>状态</div><div>创建时间</div><div>操作</div>
+        <div>{{ __t('commonUi.adminteams.team') }}</div><div>{{ __t('admin.ownerId') }}</div><div>{{ __t('adminUi.adminteams.storage') }}</div><div>{{ __t('commonUi.adminlogs.state') }}</div><div>{{ __t('commonUi.adminteams.creationTime') }}</div><div>{{ __t('adminUi.adminteams.operate') }}</div>
       </div>
       <div v-for="team in teams" :key="team.id" class="teams-table__row">
         <div class="teams-table__name">{{ team.name }}</div>
@@ -269,7 +272,7 @@ onMounted(load)
             <div class="quota-editor">
               <input v-model="editingQuota.val" type="number" min="0.01" step="0.01" @keyup.enter="saveQuota(team)" @keyup.escape="editingQuota=null" />
               <span>GB</span>
-              <OButton variant="primary" size="sm" @click="saveQuota(team)">保存</OButton>
+              <OButton variant="primary" size="sm" @click="saveQuota(team)">{{ __t('commonUi.desktopsettings.save') }}</OButton>
             </div>
           </template>
           <button v-else class="quota-btn" @click="editingQuota = { id: team.id, val: (team.storageQuota / 1073741824).toFixed(0) }">
@@ -285,24 +288,24 @@ onMounted(load)
         </div>
         <div class="teams-table__date">{{ formatDate(team.createdAt) }}</div>
         <div class="teams-table__actions">
-          <OButton variant="ghost" size="sm" @click="openDetail(team)">详情</OButton>
-          <OButton variant="subtle" size="sm" @click="editingQuota = { id: team.id, val: (team.storageQuota / 1073741824).toFixed(0) }">配额</OButton>
-          <OButton v-if="!team.deletedAt && !team.archivedAt" variant="ghost" size="sm" @click="archiveTeam(team)">归档</OButton>
-          <OButton v-else-if="team.archivedAt" variant="ghost" size="sm" @click="unarchiveTeam(team)">取消归档</OButton>
-          <OButton v-if="team.deletedAt" variant="ghost" size="sm" @click="restoreTeam(team)">恢复</OButton>
-          <OButton v-if="team.deletedAt" variant="danger" size="sm" @click="purgeTeam(team)">清理</OButton>
+          <OButton variant="ghost" size="sm" @click="openDetail(team)">{{ __t('commonUi.adminlogs.details') }}</OButton>
+          <OButton variant="subtle" size="sm" @click="editingQuota = { id: team.id, val: (team.storageQuota / 1073741824).toFixed(0) }">{{ __t('adminUi.adminteams.quota') }}</OButton>
+          <OButton v-if="!team.deletedAt && !team.archivedAt" variant="ghost" size="sm" @click="archiveTeam(team)">{{ __t('adminUi.adminteams.archive') }}</OButton>
+          <OButton v-else-if="team.archivedAt" variant="ghost" size="sm" @click="unarchiveTeam(team)">{{ __t('adminUi.adminteams.unarchive') }}</OButton>
+          <OButton v-if="team.deletedAt" variant="ghost" size="sm" @click="restoreTeam(team)">{{ __t('commonUi.filepreview.recover') }}</OButton>
+          <OButton v-if="team.deletedAt" variant="danger" size="sm" @click="purgeTeam(team)">{{ __t('adminUi.adminteams.cleanUp') }}</OButton>
         </div>
       </div>
     </div>
 
     <div v-if="!loading && total > PAGE_SIZE" class="pagination pagination--bottom">
-      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">上一页</OButton>
-      <span class="pagination__info font-mono">第 {{ page }} / {{ totalPages }} 页 · 共 {{ total }} 个团队</span>
-      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</OButton>
+      <OButton variant="ghost" size="sm" :disabled="page === 1" @click="goPage(page - 1)">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+      <span class="pagination__info font-mono">{{ __t('commonUi.adminlogs.no') }}{{ page }} / {{ totalPages }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ total }}{{ __t('adminUi.adminteams.teams') }}</span>
+      <OButton variant="ghost" size="sm" :disabled="page >= totalPages" @click="goPage(page + 1)">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
     </div>
 
     <OModal
-      :title="detailTeam ? `团队详情：${detailTeam.name}` : '团队详情'"
+      :title="detailTeam ? __t('adminUi.adminteams.teamDetailsWithName', { p0: detailTeam.name }) : __t('adminUi.adminteams.teamDetails')"
       :open="detailOpen"
       width="920px"
       body-class="o-modal__body--fill"
@@ -311,7 +314,7 @@ onMounted(load)
       <div v-if="detailTeam" class="team-detail">
         <div class="team-detail__summary">
           <span class="font-mono">ID {{ detailTeam.id }}</span>
-          <span>Owner {{ detailTeam.ownerId }}</span>
+          <span>{{ __t('role.owner') }} {{ detailTeam.ownerId }}</span>
           <span>{{ teamStatus(detailTeam) }}</span>
           <span>{{ teamStatusDetail(detailTeam) }}</span>
           <span>{{ formatSize(detailTeam.storageUsed) }} / {{ formatSize(detailTeam.storageQuota) }}</span>
@@ -320,28 +323,28 @@ onMounted(load)
 
         <div v-if="recoveryDetails" class="team-detail__decision">
           <div>
-            <span>删除原因</span>
-            <strong>{{ recoveryDetails.deleteReason || (detailTeam.deletedAt ? '未记录' : '未删除') }}</strong>
+            <span>{{ __t('adminUi.adminteams.reasonForDeletion') }}</span>
+            <strong>{{ recoveryDetails.deleteReason || (detailTeam.deletedAt ? __t('adminUi.adminteams.notRecorded') : __t('adminUi.adminteams.notDeleted')) }}</strong>
           </div>
           <div>
-            <span>删除人</span>
+            <span>{{ __t('adminUi.adminteams.deletePerson') }}</span>
             <strong>{{ recoveryDetails.deletedByUsername || recoveryDetails.deletedBy || '-' }}</strong>
           </div>
           <div>
-            <span>计划清理</span>
+            <span>{{ __t('adminUi.adminteams.planToCleanUp') }}</span>
             <strong>{{ recoveryDetails.purgeAfter ? formatDate(recoveryDetails.purgeAfter) : '-' }}</strong>
           </div>
           <div>
-            <span>成员/文件</span>
-            <strong>{{ recoveryDetails.memberCount }} 人 · {{ recoveryDetails.activeFileCount }} 正常 · {{ recoveryDetails.deletedFileCount }} 回收站</strong>
+            <span>{{ __t('adminUi.adminteams.membersDocuments') }}</span>
+            <strong>{{ recoveryDetails.memberCount }}{{ __t('adminUi.adminteams.people') }}{{ recoveryDetails.activeFileCount }}{{ __t('adminUi.adminteams.normal') }}{{ recoveryDetails.deletedFileCount }}{{ __t('commonUi.searchoverlay.recycleBin') }}</strong>
           </div>
           <div v-if="recoveryDetails.archivedAt">
-            <span>归档人</span>
+            <span>{{ __t('adminUi.adminteams.filer') }}</span>
             <strong>{{ recoveryDetails.archivedByUsername || recoveryDetails.archivedBy || '-' }} · {{ formatDate(recoveryDetails.archivedAt) }}</strong>
           </div>
           <div class="team-detail__recent">
-            <span>最近审计</span>
-            <strong v-if="recoveryDetails.recentAuditLogs.length === 0">暂无</strong>
+            <span>{{ __t('adminUi.adminteams.latestAudit') }}</span>
+            <strong v-if="recoveryDetails.recentAuditLogs.length === 0">{{ __t('adminUi.adminteams.noneYet') }}</strong>
             <ul v-else>
               <li v-for="log in recoveryDetails.recentAuditLogs" :key="log.id">
                 <span class="font-mono">{{ formatDate(log.createdAt) }}</span>
@@ -353,80 +356,80 @@ onMounted(load)
         </div>
 
         <div class="team-detail__tabs">
-          <button :class="{ active: detailTab === 'members' }" @click="detailTab = 'members'">成员</button>
-          <button :class="{ active: detailTab === 'files' }" @click="detailTab = 'files'">文件</button>
-          <button :class="{ active: detailTab === 'audit' }" @click="detailTab = 'audit'">审计</button>
+          <button :class="{ active: detailTab === 'members' }" @click="detailTab = 'members'">{{ __t('commonUi.adminteams.member') }}</button>
+          <button :class="{ active: detailTab === 'files' }" @click="detailTab = 'files'">{{ __t('commonUi.searchoverlay.document') }}</button>
+          <button :class="{ active: detailTab === 'audit' }" @click="detailTab = 'audit'">{{ __t('adminUi.adminteams.audit') }}</button>
         </div>
 
         <div v-if="detailLoading" class="teams-loading"><OSpinner /></div>
 
         <div v-else-if="detailTab === 'members'" class="detail-table detail-table--members">
-          <div class="detail-table__header"><div>用户</div><div>邮箱</div><div>角色</div><div>加入时间</div></div>
+          <div class="detail-table__header"><div>{{ __t('commonUi.adminlogs.user') }}</div><div>{{ __t('adminUi.adminteams.mail') }}</div><div>{{ __t('adminUi.adminteams.role') }}</div><div>{{ __t('adminUi.adminteams.joinTime') }}</div></div>
           <div v-for="member in teamMembers" :key="member.userId" class="detail-table__row">
             <div>{{ member.username || '-' }}</div>
             <div class="truncate">{{ member.email || '-' }}</div>
             <div>{{ member.role }}</div>
             <div>{{ formatDate(member.createdAt) }}</div>
           </div>
-          <div v-if="teamMembers.length === 0" class="detail-empty">暂无成员</div>
+          <div v-if="teamMembers.length === 0" class="detail-empty">{{ __t('adminUi.adminteams.noMembersYet') }}</div>
         </div>
 
         <div v-else-if="detailTab === 'files'" class="team-detail__panel">
           <div class="team-detail__toolbar">
-            <OInput v-model="teamFileKeyword" placeholder="搜索团队文件..." @keyup.enter="searchTeamFiles" />
+            <OInput v-model="teamFileKeyword" :placeholder="__t('adminUi.adminteams.searchTeamFiles')" @keyup.enter="searchTeamFiles" />
             <select v-model="teamFileDeleted" @change="searchTeamFiles">
-              <option value="active">正常文件</option>
-              <option value="deleted">回收站文件</option>
-              <option value="all">全部</option>
+              <option value="active">{{ __t('adminUi.adminteams.normalFile') }}</option>
+              <option value="deleted">{{ __t('adminUi.adminteams.recycleBinFiles') }}</option>
+              <option value="all">{{ __t('adminUi.adminteams.all') }}</option>
             </select>
-            <OButton variant="ghost" size="sm" @click="searchTeamFiles">搜索</OButton>
+            <OButton variant="ghost" size="sm" @click="searchTeamFiles">{{ __t('commonUi.adminteams.search') }}</OButton>
           </div>
           <div class="detail-table detail-table--files">
-            <div class="detail-table__header"><div>名称</div><div>类型</div><div>大小</div><div>状态</div><div>更新时间</div></div>
+            <div class="detail-table__header"><div>{{ __t('commonUi.filelist.name') }}</div><div>{{ __t('commonUi.adminlogs.type') }}</div><div>{{ __t('commonUi.filelist.size') }}</div><div>{{ __t('commonUi.adminlogs.state') }}</div><div>{{ __t('commonUi.adminteams.updateTime') }}</div></div>
             <div v-for="file in teamFiles" :key="file.id" class="detail-table__row">
               <div class="truncate">{{ file.fileName }}</div>
-              <div>{{ file.fileType === 'folder' ? '文件夹' : '文件' }}</div>
+              <div>{{ file.fileType === 'folder' ? __t('commonUi.desktopfolderupload.folder') : __t('commonUi.searchoverlay.document') }}</div>
               <div class="font-mono">{{ formatSize(file.fileSize) }}</div>
-              <div>{{ file.isDeleted ? '已删除' : '正常' }}</div>
+              <div>{{ file.isDeleted ? __t('adminUi.adminteams.deleted') : __t('adminUi.adminteams.healthyStatus') }}</div>
               <div>{{ formatDate(file.updatedAt) }}</div>
             </div>
-            <div v-if="teamFiles.length === 0" class="detail-empty">暂无文件</div>
+            <div v-if="teamFiles.length === 0" class="detail-empty">{{ __t('adminUi.adminteams.noFilesYet') }}</div>
           </div>
           <div class="pagination pagination--compact">
-            <OButton variant="ghost" size="sm" :disabled="teamFilePage === 1" @click="goTeamFilePage(teamFilePage - 1)">上一页</OButton>
-            <span class="pagination__info font-mono">第 {{ teamFilePage }} / {{ teamFileTotalPages }} 页 · 共 {{ teamFileTotal }} 个文件</span>
-            <OButton variant="ghost" size="sm" :disabled="teamFilePage >= teamFileTotalPages" @click="goTeamFilePage(teamFilePage + 1)">下一页</OButton>
+            <OButton variant="ghost" size="sm" :disabled="teamFilePage === 1" @click="goTeamFilePage(teamFilePage - 1)">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+            <span class="pagination__info font-mono">{{ __t('commonUi.adminlogs.no') }}{{ teamFilePage }} / {{ teamFileTotalPages }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ teamFileTotal }}{{ __t('adminUi.searchoverlay.files') }}</span>
+            <OButton variant="ghost" size="sm" :disabled="teamFilePage >= teamFileTotalPages" @click="goTeamFilePage(teamFilePage + 1)">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
           </div>
         </div>
 
         <div v-else class="team-detail__panel">
           <div class="team-detail__toolbar">
-            <OInput v-model="teamAuditAction" placeholder="按动作过滤，如 FILE_DELETE" @keyup.enter="filterTeamAuditLogs" />
-            <OInput v-model="teamAuditTargetType" placeholder="目标，如 FILE" @keyup.enter="filterTeamAuditLogs" />
+            <OInput v-model="teamAuditAction" :placeholder="__t('adminUi.adminteams.filterByActionSuchAsFileDelete')" @keyup.enter="filterTeamAuditLogs" />
+            <OInput v-model="teamAuditTargetType" :placeholder="__t('adminUi.adminteams.targetSuchAsFile')" @keyup.enter="filterTeamAuditLogs" />
             <select v-model="teamAuditResult" @change="filterTeamAuditLogs">
-              <option value="">全部结果</option>
-              <option value="1">成功</option>
-              <option value="0">失败</option>
+              <option value="">{{ __t('commonUi.adminlogs.allResults') }}</option>
+              <option value="1">{{ __t('commonUi.adminlogs.success') }}</option>
+              <option value="0">{{ __t('commonUi.transfer.fail') }}</option>
             </select>
-            <OButton variant="ghost" size="sm" @click="filterTeamAuditLogs">筛选</OButton>
-            <OButton variant="subtle" size="sm" @click="exportAuditLogs">导出 CSV</OButton>
+            <OButton variant="ghost" size="sm" @click="filterTeamAuditLogs">{{ __t('commonUi.adminlogs.filter') }}</OButton>
+            <OButton variant="subtle" size="sm" @click="exportAuditLogs">{{ __t('adminUi.adminteams.exportCsv') }}</OButton>
           </div>
           <div class="detail-table detail-table--audit">
-            <div class="detail-table__header"><div>时间</div><div>动作</div><div>用户</div><div>目标</div><div>结果</div><div>详情</div></div>
+            <div class="detail-table__header"><div>{{ __t('adminUi.adminlogs.time') }}</div><div>{{ __t('adminUi.adminlogs.action') }}</div><div>{{ __t('commonUi.adminlogs.user') }}</div><div>{{ __t('adminUi.adminlogs.target') }}</div><div>{{ __t('adminUi.adminlogs.result') }}</div><div>{{ __t('commonUi.adminlogs.details') }}</div></div>
             <div v-for="log in teamAuditLogs" :key="log.id" class="detail-table__row">
               <div class="font-mono">{{ formatDate(log.createdAt) }}</div>
               <div>{{ log.action }}</div>
               <div class="font-mono">{{ log.actorUserId || '-' }}</div>
               <div>{{ log.targetType || '-' }} {{ log.targetId || '' }}</div>
-              <div>{{ log.result === 1 ? '成功' : '失败' }}</div>
+              <div>{{ log.result === 1 ? __t('commonUi.adminlogs.success') : __t('commonUi.transfer.fail') }}</div>
               <div class="truncate">{{ log.details || '-' }}</div>
             </div>
-            <div v-if="teamAuditLogs.length === 0" class="detail-empty">暂无审计日志</div>
+            <div v-if="teamAuditLogs.length === 0" class="detail-empty">{{ __t('commonUi.adminlogs.noAuditLogYet') }}</div>
           </div>
           <div class="pagination pagination--compact">
-            <OButton variant="ghost" size="sm" :disabled="teamAuditPage === 1" @click="goTeamAuditPage(teamAuditPage - 1)">上一页</OButton>
-            <span class="pagination__info font-mono">第 {{ teamAuditPage }} / {{ teamAuditTotalPages }} 页 · 共 {{ teamAuditTotal }} 条日志</span>
-            <OButton variant="ghost" size="sm" :disabled="teamAuditPage >= teamAuditTotalPages" @click="goTeamAuditPage(teamAuditPage + 1)">下一页</OButton>
+            <OButton variant="ghost" size="sm" :disabled="teamAuditPage === 1" @click="goTeamAuditPage(teamAuditPage - 1)">{{ __t('commonUi.adminlogs.previousPage') }}</OButton>
+            <span class="pagination__info font-mono">{{ __t('commonUi.adminlogs.no') }}{{ teamAuditPage }} / {{ teamAuditTotalPages }}{{ __t('commonUi.adminlogs.pagesTotal') }}{{ teamAuditTotal }}{{ __t('adminUi.adminteams.logs') }}</span>
+            <OButton variant="ghost" size="sm" :disabled="teamAuditPage >= teamAuditTotalPages" @click="goTeamAuditPage(teamAuditPage + 1)">{{ __t('commonUi.adminlogs.nextPage') }}</OButton>
           </div>
         </div>
       </div>

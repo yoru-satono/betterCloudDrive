@@ -44,7 +44,7 @@ class UploadRepository @Inject constructor(
             if (response.code == 200) NetworkResult.Success(response.data!!)
             else NetworkResult.Error(response.code, response.messageKey, response.messageParams)
         } catch (e: Exception) {
-            NetworkResult.Error(-1, "error.upload_failed")
+            NetworkResult.Error(-1, "error.uploadFailed")
         }
     }
 
