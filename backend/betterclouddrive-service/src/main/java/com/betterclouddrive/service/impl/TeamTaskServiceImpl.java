@@ -4,9 +4,13 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
+import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
 import com.betterclouddrive.service.TeamTaskService;
+import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.TeamService;
+import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.service.dto.TeamTaskResult;
 import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import jakarta.persistence.criteria.Predicate;
@@ -24,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import com.betterclouddrive.common.message.MessageKeys;
 
 @Service
@@ -33,9 +38,12 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     private final TeamTaskRepository teamTaskRepository;
     private final OnlyOfficeCallbackRepository onlyOfficeCallbackRepository;
     private final OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
+    private final TeamService teamService;
+    private final TeamPermissionService teamPermissionService;
 
     @Override
-    public PageResult<TeamTaskEntity> listTasks(Long teamId, String status, String taskType, int page, int size) {
+    public PageResult<TeamTaskEntity> listTasks(Long requesterUserId, Long teamId, String status, String taskType, int page, int size) {
+        TeamMemberEntity member = teamService.requireRead(requesterUserId, teamId);
         Specification<TeamTaskEntity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("teamId"), teamId));
@@ -47,6 +55,18 @@ public class TeamTaskServiceImpl implements TeamTaskService {
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
+        if (!isManager(member)) {
+            List<TeamTaskEntity> visible = teamTaskRepository.findAll(
+                            spec.and((root, query, cb) -> cb.equal(root.get("actorUserId"), requesterUserId)),
+                            Sort.by(Sort.Direction.DESC, "createdAt"))
+                    .stream()
+                    .filter(task -> canViewMemberTask(requesterUserId, teamId, task))
+                    .toList();
+            int safePage = Math.max(page, 1);
+            int from = Math.min((safePage - 1) * size, visible.size());
+            int to = Math.min(from + size, visible.size());
+            return PageResult.of(visible.subList(from, to), visible.size(), safePage, size);
+        }
         Page<TeamTaskEntity> result = teamTaskRepository.findAll(
                 spec,
                 PageRequest.of(Math.max(page - 1, 0), size, Sort.by(Sort.Direction.DESC, "createdAt")));
@@ -75,6 +95,17 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     public TeamTaskEntity getTask(Long teamId, Long taskId) {
         return teamTaskRepository.findByIdAndTeamId(taskId, teamId)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team task not found"));
+    }
+
+    @Override
+    public TeamTaskEntity getTaskForUser(Long requesterUserId, Long teamId, Long taskId) {
+        TeamMemberEntity member = teamService.requireRead(requesterUserId, teamId);
+        TeamTaskEntity task = getTask(teamId, taskId);
+        if (!isManager(member)
+                && (!requesterUserId.equals(task.getActorUserId()) || !canViewMemberTask(requesterUserId, teamId, task))) {
+            throw taskNotFound();
+        }
+        return task;
     }
 
     @Override
@@ -187,11 +218,15 @@ public class TeamTaskServiceImpl implements TeamTaskService {
 
     @Override
     @Transactional
-    public TeamTaskEntity retryTask(Long teamId, Long taskId) {
+    public TeamTaskEntity retryTask(Long requesterUserId, Long teamId, Long taskId) {
+        TeamMemberEntity member = teamService.requireRead(requesterUserId, teamId);
         TeamTaskEntity task = teamTaskRepository.findById(taskId)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team task not found"));
         if (!teamId.equals(task.getTeamId())) {
-            throw new BusinessException(ApiCode.NOT_FOUND, "Team task not found");
+            throw taskNotFound();
+        }
+        if (!isManager(member) && !canRetryMemberTask(requesterUserId, teamId, task)) {
+            throw taskNotFound();
         }
         if (!TeamTaskEntity.STATUS_FAILED.equals(task.getStatus())) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "Only failed tasks can be retried");
@@ -259,5 +294,33 @@ public class TeamTaskServiceImpl implements TeamTaskService {
 
     private Map<String, Object> taskTypeParams(TeamTaskEntity task) {
         return task.getTaskType() == null ? Map.of() : Map.of("taskType", task.getTaskType());
+    }
+
+    private boolean isManager(TeamMemberEntity member) {
+        return Set.of(TeamService.ROLE_OWNER, TeamService.ROLE_ADMIN).contains(member.getRole());
+    }
+
+    private boolean canViewMemberTask(Long userId, Long teamId, TeamTaskEntity task) {
+        if (!Set.of("FOLDER_ZIP", "ONLYOFFICE_SAVE").contains(task.getTaskType())
+                || !"FILE".equals(task.getTargetType())
+                || task.getTargetId() == null) {
+            return false;
+        }
+        TeamEffectivePermission permission = teamPermissionService.effectivePermissions(userId, teamId, task.getTargetId());
+        return permission.canRead();
+    }
+
+    private boolean canRetryMemberTask(Long userId, Long teamId, TeamTaskEntity task) {
+        if (!userId.equals(task.getActorUserId()) || !canViewMemberTask(userId, teamId, task)) {
+            return false;
+        }
+        if ("ONLYOFFICE_SAVE".equals(task.getTaskType())) {
+            return teamPermissionService.effectivePermissions(userId, teamId, task.getTargetId()).canWrite();
+        }
+        return "FOLDER_ZIP".equals(task.getTaskType());
+    }
+
+    private BusinessException taskNotFound() {
+        return new BusinessException(ApiCode.NOT_FOUND, "Team task not found");
     }
 }

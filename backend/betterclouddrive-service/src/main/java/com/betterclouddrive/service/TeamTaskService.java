@@ -9,7 +9,7 @@ import java.util.List;
 
 public interface TeamTaskService {
 
-    PageResult<TeamTaskEntity> listTasks(Long teamId, String status, String taskType, int page, int size);
+    PageResult<TeamTaskEntity> listTasks(Long requesterUserId, Long teamId, String status, String taskType, int page, int size);
 
     TeamTaskEntity startTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title);
 
@@ -18,6 +18,8 @@ public interface TeamTaskService {
     TeamTaskEntity queueTask(Long teamId, Long actorUserId, String taskType, String targetType, Long targetId, String title, String payload);
 
     TeamTaskEntity getTask(Long teamId, Long taskId);
+
+    TeamTaskEntity getTaskForUser(Long requesterUserId, Long teamId, Long taskId);
 
     List<TeamTaskEntity> listPendingTasks(String taskType, int limit);
 
@@ -33,5 +35,5 @@ public interface TeamTaskService {
 
     List<TeamTaskEntity> listExpiredResults(LocalDateTime now);
 
-    TeamTaskEntity retryTask(Long teamId, Long taskId);
+    TeamTaskEntity retryTask(Long requesterUserId, Long teamId, Long taskId);
 }

@@ -278,8 +278,7 @@ public class TeamController {
             @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
-        teamService.requireRead(user.getUserId(), teamId);
-        return ApiResponse.success(teamTaskService.listTasks(teamId, status, type, page, size));
+        return ApiResponse.success(teamTaskService.listTasks(user.getUserId(), teamId, status, type, page, size));
     }
 
     @PostMapping("/{teamId}/tasks/{taskId}/retry")
@@ -287,8 +286,7 @@ public class TeamController {
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long taskId) {
-        teamService.requireRead(user.getUserId(), teamId);
-        return ApiResponse.success(teamTaskService.retryTask(teamId, taskId));
+        return ApiResponse.success(teamTaskService.retryTask(user.getUserId(), teamId, taskId));
     }
 
     @GetMapping("/{teamId}/tasks/{taskId}/download")
@@ -296,8 +294,7 @@ public class TeamController {
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long taskId) {
-        teamService.requireRead(user.getUserId(), teamId);
-        TeamTaskEntity task = teamTaskService.getTask(teamId, taskId);
+        TeamTaskEntity task = teamTaskService.getTaskForUser(user.getUserId(), teamId, taskId);
         TeamTaskDownload download;
         if ("AUDIT_EXPORT".equals(task.getTaskType())) {
             download = teamAuditExportTaskService.downloadExportResult(user.getUserId(), teamId, taskId);

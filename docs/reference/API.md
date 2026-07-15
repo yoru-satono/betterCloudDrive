@@ -2200,13 +2200,13 @@ GET /api/v1/teams/{teamId}/tasks/{taskId}/download
 Authorization: Bearer <accessToken>
 ```
 
-团队成员可查看团队长任务状态。任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理；OnlyOffice 保存、缩略图生成和团队文件夹 ZIP 任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。团队文件夹 ZIP 任务成功后会把 ZIP 对象 key 写入任务结果，任务中心通过 `GET /tasks/{taskId}/download` 下载。
+任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理。OWNER/ADMIN 可查看和重试全部团队任务；普通成员仅能看到自己发起且当前仍有目标文件读取权限的文件夹 ZIP 和 OnlyOffice 保存任务。OnlyOffice 保存、缩略图生成和团队文件夹 ZIP 任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。
 
 | 端点 | 权限 | 说明 |
 |------|------|------|
-| `GET /tasks` | 团队成员 | 分页返回团队任务，可按 `status` 和 `type` 过滤 |
-| `POST /tasks/{taskId}/retry` | 团队成员 | 仅允许重试 `FAILED` 任务，状态重置为 `PENDING`，清空失败原因并递增 `retryCount` |
-| `GET /tasks/{taskId}/download` | 按任务类型 | 审计导出要求 OWNER/ADMIN；文件夹 ZIP 要求对目标文件夹可读；响应为任务结果文件二进制流 |
+| `GET /tasks` | 按任务可见性 | OWNER/ADMIN 返回全部任务；普通成员只返回本人任务，并按当前目标文件读取权限过滤 |
+| `POST /tasks/{taskId}/retry` | 按任务类型 | OWNER/ADMIN 可重试全部失败任务；文件夹 ZIP 发起人需仍可读；OnlyOffice 发起人需仍可写；系统任务不允许普通成员重试 |
+| `GET /tasks/{taskId}/download` | 按任务类型 | 审计导出要求 OWNER/ADMIN；文件夹 ZIP 要求发起人身份及当前目标文件夹读取权限；响应为任务结果文件二进制流 |
 
 **TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`titleKey`、`titleParams`、`progress`、`resultMessageKey`、`resultMessageParams`、`errorMessageKey`、`errorMessageParams`、`retryCount`、`payload`、`resultPath`、`resultFileName`、`resultContentType`、`resultSizeBytes`、`resultExpiresAt`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。文案 key 必须由客户端解析，任务状态仍以 `status` 为准。
 

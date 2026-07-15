@@ -11,9 +11,13 @@ import static org.mockito.Mockito.when;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
+import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.repository.OnlyOfficeCallbackRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
 import com.betterclouddrive.service.dto.TeamTaskResult;
+import com.betterclouddrive.service.dto.TeamEffectivePermission;
+import com.betterclouddrive.service.TeamPermissionService;
+import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDateTime;
@@ -40,6 +45,12 @@ class TeamTaskServiceImplTest {
 
     @Mock
     private OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
+
+    @Mock
+    private TeamService teamService;
+
+    @Mock
+    private TeamPermissionService teamPermissionService;
 
     @InjectMocks
     private TeamTaskServiceImpl teamTaskService;
@@ -167,7 +178,8 @@ class TeamTaskServiceImplTest {
         when(teamTaskRepository.findAll(any(Specification.class), any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(task), PageRequest.of(1, 10), 11));
 
-        PageResult<TeamTaskEntity> result = teamTaskService.listTasks(10L, " failed ", " audit_export ", 2, 10);
+        when(teamService.requireRead(2L, 10L)).thenReturn(manager());
+        PageResult<TeamTaskEntity> result = teamTaskService.listTasks(2L, 10L, " failed ", " audit_export ", 2, 10);
 
         assertThat(result.getRecords()).containsExactly(task);
         assertThat(result.getTotal()).isEqualTo(11);
@@ -177,6 +189,60 @@ class TeamTaskServiceImplTest {
                 pageable.getPageNumber() == 1
                         && pageable.getPageSize() == 10
                         && pageable.getSort().getOrderFor("createdAt") != null));
+    }
+
+    @Test
+    void listTasks_shouldOnlyReturnOwnedTasksWithCurrentReadPermissionForMembers() {
+        TeamTaskEntity readable = memberTask(1L, 2L, "FOLDER_ZIP");
+        TeamTaskEntity revoked = memberTask(2L, 2L, "FOLDER_ZIP");
+        TeamTaskEntity audit = memberTask(3L, 2L, "AUDIT_EXPORT");
+        when(teamService.requireRead(2L, 10L)).thenReturn(member(TeamService.ROLE_VIEWER));
+        when(teamTaskRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(readable, revoked, audit));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 1L)).thenReturn(TeamEffectivePermission.viewer());
+        when(teamPermissionService.effectivePermissions(2L, 10L, 2L))
+                .thenReturn(new TeamEffectivePermission(false, false, false, false, false));
+
+        PageResult<TeamTaskEntity> result = teamTaskService.listTasks(2L, 10L, null, null, 1, 20);
+
+        assertThat(result.getRecords()).containsExactly(readable);
+        assertThat(result.getTotal()).isEqualTo(1);
+    }
+
+    @Test
+    void getTaskForUser_shouldHideCrossUserAndManagerOnlyTaskTypes() {
+        TeamTaskEntity task = memberTask(7L, 3L, "AUDIT_EXPORT");
+        when(teamService.requireRead(2L, 10L)).thenReturn(member(TeamService.ROLE_EDITOR));
+        when(teamTaskRepository.findByIdAndTeamId(7L, 10L)).thenReturn(Optional.of(task));
+
+        assertThatThrownBy(() -> teamTaskService.getTaskForUser(2L, 10L, 7L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404));
+    }
+
+    @Test
+    void retryTask_shouldAllowOwnedFolderZipWithCurrentReadPermission() {
+        TeamTaskEntity task = memberTask(7L, 2L, "FOLDER_ZIP");
+        task.setStatus(TeamTaskEntity.STATUS_FAILED);
+        when(teamService.requireRead(2L, 10L)).thenReturn(member(TeamService.ROLE_VIEWER));
+        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 7L)).thenReturn(TeamEffectivePermission.viewer());
+        when(teamTaskRepository.save(task)).thenReturn(task);
+
+        assertThat(teamTaskService.retryTask(2L, 10L, 7L).getStatus()).isEqualTo(TeamTaskEntity.STATUS_PENDING);
+    }
+
+    @Test
+    void retryTask_shouldRejectOnlyOfficeRetryWithoutCurrentWritePermission() {
+        TeamTaskEntity task = memberTask(7L, 2L, "ONLYOFFICE_SAVE");
+        task.setStatus(TeamTaskEntity.STATUS_FAILED);
+        when(teamService.requireRead(2L, 10L)).thenReturn(member(TeamService.ROLE_EDITOR));
+        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 7L)).thenReturn(TeamEffectivePermission.viewer());
+
+        assertThatThrownBy(() -> teamTaskService.retryTask(2L, 10L, 7L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404));
     }
 
     @Test
@@ -192,7 +258,8 @@ class TeamTaskServiceImplTest {
         when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
         when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TeamTaskEntity retried = teamTaskService.retryTask(10L, 7L);
+        when(teamService.requireRead(2L, 10L)).thenReturn(manager());
+        TeamTaskEntity retried = teamTaskService.retryTask(2L, 10L, 7L);
 
         assertThat(retried.getStatus()).isEqualTo(TeamTaskEntity.STATUS_PENDING);
         assertThat(retried.getProgress()).isZero();
@@ -217,7 +284,8 @@ class TeamTaskServiceImplTest {
         when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
         when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        teamTaskService.retryTask(10L, 7L);
+        when(teamService.requireRead(2L, 10L)).thenReturn(manager());
+        teamTaskService.retryTask(2L, 10L, 7L);
 
         verify(onlyOfficeCallbackRepository).resetFailedByTaskId(eq(7L), any());
         verify(onlyOfficeSaveMetrics).recordRetry();
@@ -232,7 +300,8 @@ class TeamTaskServiceImplTest {
                 .build();
         when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
 
-        assertThatThrownBy(() -> teamTaskService.retryTask(10L, 7L))
+        when(teamService.requireRead(2L, 10L)).thenReturn(manager());
+        assertThatThrownBy(() -> teamTaskService.retryTask(2L, 10L, 7L))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
     }
@@ -246,7 +315,8 @@ class TeamTaskServiceImplTest {
                 .build();
         when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
 
-        assertThatThrownBy(() -> teamTaskService.retryTask(10L, 7L))
+        when(teamService.requireRead(2L, 10L)).thenReturn(manager());
+        assertThatThrownBy(() -> teamTaskService.retryTask(2L, 10L, 7L))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404));
     }
@@ -283,5 +353,26 @@ class TeamTaskServiceImplTest {
                 .thenReturn(List.of(task));
 
         assertThat(teamTaskService.listExpiredResults(now)).containsExactly(task);
+    }
+
+    private TeamMemberEntity manager() {
+        return member(TeamService.ROLE_ADMIN);
+    }
+
+    private TeamMemberEntity member(String role) {
+        return TeamMemberEntity.builder().teamId(10L).userId(2L).role(role).status(1).build();
+    }
+
+    private TeamTaskEntity memberTask(Long id, Long actorUserId, String taskType) {
+        return TeamTaskEntity.builder()
+                .id(id)
+                .teamId(10L)
+                .actorUserId(actorUserId)
+                .taskType(taskType)
+                .targetType("FILE")
+                .targetId(id)
+                .status(TeamTaskEntity.STATUS_FAILED)
+                .retryCount(0)
+                .build();
     }
 }

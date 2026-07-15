@@ -31,6 +31,8 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
+import com.betterclouddrive.common.dto.PageResult;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -62,6 +64,27 @@ class TeamControllerTaskTest {
     @InjectMocks private TeamController controller;
 
     @Test
+    void listTasks_shouldDelegateUserAwareAuthorizationToService() {
+        PageResult<TeamTaskEntity> tasks = PageResult.of(List.of(), 0, 1, 20);
+        when(teamTaskService.listTasks(2L, 10L, "FAILED", "FOLDER_ZIP", 1, 20)).thenReturn(tasks);
+
+        var response = controller.listTasks(user(), 10L, "FAILED", "FOLDER_ZIP", 1, 20);
+
+        assertThat(response.getData()).isSameAs(tasks);
+        verify(teamTaskService).listTasks(2L, 10L, "FAILED", "FOLDER_ZIP", 1, 20);
+    }
+
+    @Test
+    void retryTask_shouldDelegateUserAwareAuthorizationToService() {
+        TeamTaskEntity task = TeamTaskEntity.builder().id(88L).build();
+        when(teamTaskService.retryTask(2L, 10L, 88L)).thenReturn(task);
+
+        var response = controller.retryTask(user(), 10L, 88L);
+
+        assertThat(response.getData()).isSameAs(task);
+    }
+
+    @Test
     void queueAuditExport_shouldCreatePendingTask() {
         LocalDateTime startAt = LocalDateTime.of(2026, 7, 9, 12, 0);
         LocalDateTime endAt = startAt.plusHours(1);
@@ -76,7 +99,7 @@ class TeamControllerTaskTest {
 
     @Test
     void downloadTaskResult_shouldStreamResultFile() {
-        when(teamTaskService.getTask(10L, 88L)).thenReturn(TeamTaskEntity.builder()
+        when(teamTaskService.getTaskForUser(2L, 10L, 88L)).thenReturn(TeamTaskEntity.builder()
                 .id(88L)
                 .teamId(10L)
                 .taskType("AUDIT_EXPORT")
@@ -93,7 +116,7 @@ class TeamControllerTaskTest {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getHeaders().getFirst("Content-Disposition")).contains("team-10-audit.csv");
         assertThat(response.getHeaders().getContentLength()).isEqualTo(3L);
-        verify(teamService).requireRead(2L, 10L);
+        verify(teamTaskService).getTaskForUser(2L, 10L, 88L);
     }
 
     @Test
@@ -108,7 +131,7 @@ class TeamControllerTaskTest {
 
     @Test
     void downloadTaskResult_shouldRouteFolderZipResults() {
-        when(teamTaskService.getTask(10L, 99L)).thenReturn(TeamTaskEntity.builder()
+        when(teamTaskService.getTaskForUser(2L, 10L, 99L)).thenReturn(TeamTaskEntity.builder()
                 .id(99L)
                 .teamId(10L)
                 .taskType("FOLDER_ZIP")
