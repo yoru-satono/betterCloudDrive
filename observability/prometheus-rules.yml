@@ -18,15 +18,19 @@ groups:
 
       - record: bcd:sli:queue_processing_success:ratio_15m
         expr: |
-          sum(rate(bcd_queue_processing_results_total{outcome="success"}[15m]))
-          /
-          clamp_min(sum(rate(bcd_queue_processing_results_total[15m])), 0.001)
+          1 - (
+            sum(rate(bcd_queue_processing_results_total{outcome="failure"}[15m]))
+            /
+            clamp_min(sum(rate(bcd_queue_processing_results_total[15m])), 0.001)
+          )
 
       - record: bcd:sli:onlyoffice_save_success:ratio_1h
         expr: |
-          sum(increase(bcd_onlyoffice_save_results_total{outcome="success"}[1h]))
-          /
-          clamp_min(sum(increase(bcd_onlyoffice_save_results_total[1h])), 1)
+          1 - (
+            sum(increase(bcd_onlyoffice_save_results_total{outcome="failure"}[1h]))
+            /
+            clamp_min(sum(increase(bcd_onlyoffice_save_results_total[1h])), 1)
+          )
 
   - name: better-cloud-drive-availability
     rules:
