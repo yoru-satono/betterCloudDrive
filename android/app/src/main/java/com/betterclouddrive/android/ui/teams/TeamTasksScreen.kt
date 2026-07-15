@@ -146,7 +146,7 @@ fun TeamTasksContent(
 }
 
 @Composable private fun FilterRow(label: String, kind: String, values: List<String?>, selected: String?, onSelect: (String?) -> Unit) {
-    LazyRow(Modifier.fillMaxWidth().height(52.dp), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+    LazyRow(Modifier.fillMaxWidth().height(52.dp).testTag("team-tasks-filter-$kind"), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         item { Text(label) }
         items(values) { value -> FilterChip(
             selected = selected == value,

@@ -37,6 +37,8 @@ class TeamTasksContentTest {
             }
         }
 
+        composeRule.onNodeWithTag("team-tasks-filter-status")
+            .performScrollToNode(hasTestTag("team-tasks-filter-status-FAILED"))
         composeRule.onNodeWithTag("team-tasks-filter-status-FAILED").performClick()
         assertEquals("FAILED", selectedStatus)
         composeRule.onNodeWithTag("team-task-download-1").performClick()
