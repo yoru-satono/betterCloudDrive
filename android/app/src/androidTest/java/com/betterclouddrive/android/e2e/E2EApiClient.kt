@@ -250,7 +250,9 @@ class E2EApiClient(
             .get()
             .header("Authorization", "Bearer $token")
             .build()
-        val records = expectApiSuccess(client.newCall(request).execute()).getJSONArray("data")
+        val records = expectApiSuccess(client.newCall(request).execute())
+            .getJSONObject("data")
+            .getJSONArray("records")
         return (0 until records.length()).map { index -> parseTeamInvite(records.getJSONObject(index)) }
     }
 
