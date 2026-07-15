@@ -7,6 +7,7 @@ import com.betterclouddrive.android.data.repository.AuthRepository
 import com.betterclouddrive.android.domain.model.User
 import com.betterclouddrive.android.util.NetworkResult
 import com.betterclouddrive.android.util.UiEvent
+import com.betterclouddrive.android.util.LocaleController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -56,7 +57,7 @@ class AuthViewModel @Inject constructor(
     fun register(username: String, password: String, email: String, verificationCode: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            when (val result = authRepository.register(username, password, email, verificationCode)) {
+            when (val result = authRepository.register(username, password, email, verificationCode, LocaleController.current())) {
                 is NetworkResult.Success -> {
                     _events.emit(UiEvent.ShowSnackbar("注册成功，请登录"))
                     _events.emit(UiEvent.NavigateBack)
@@ -154,6 +155,7 @@ class AuthViewModel @Inject constructor(
                     isLoggedIn = true,
                     user = result.data,
                 )
+                LocaleController.set(result.data.preferredLocale)
             }
             is NetworkResult.Error -> {
                 _uiState.value = _uiState.value.copy(isLoading = false, error = null)
@@ -164,5 +166,20 @@ class AuthViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
+    }
+
+    fun updateLocale(locale: String) {
+        val previous = LocaleController.current()
+        LocaleController.set(locale)
+        viewModelScope.launch {
+            when (val result = authRepository.updateLocale(locale)) {
+                is NetworkResult.Success -> _uiState.value = _uiState.value.copy(user = result.data)
+                is NetworkResult.Error -> {
+                    LocaleController.set(previous)
+                    _events.emit(UiEvent.ShowSnackbar(result.message, true))
+                }
+                is NetworkResult.Loading -> Unit
+            }
+        }
     }
 }

@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.betterclouddrive.android.util.UiEvent
+import com.betterclouddrive.android.ui.components.LocaleSelector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +57,7 @@ fun RegisterScreen(
                         Icon(Icons.Default.ArrowBack, "返回")
                     }
                 },
+                actions = { LocaleSelector() },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),

@@ -13,6 +13,7 @@ public class UserProfileResponse {
     private String username;
     private String email;
     private Boolean emailVerified;
+    private String preferredLocale;
     private String nickname;
     private String avatarUrl;
     private String role;
@@ -30,6 +31,7 @@ public class UserProfileResponse {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .emailVerified(user.getEmailVerified())
+                .preferredLocale(user.getPreferredLocale())
                 .nickname(user.getNickname())
                 .avatarUrl(user.getAvatarUrl())
                 .role(user.getRole())

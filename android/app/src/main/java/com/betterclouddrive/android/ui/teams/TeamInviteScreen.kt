@@ -49,6 +49,7 @@ import com.betterclouddrive.android.data.repository.TeamRepository
 import com.betterclouddrive.android.domain.model.TeamInvite
 import com.betterclouddrive.android.util.NetworkResult
 import com.betterclouddrive.android.util.UiEvent
+import com.betterclouddrive.android.ui.components.LocaleSelector
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -169,6 +170,7 @@ fun TeamInviteScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") }
                 },
+                actions = { LocaleSelector() },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },

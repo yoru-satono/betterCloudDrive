@@ -30,6 +30,14 @@ class OnlyOfficeServiceTest {
         properties.setAppInternalApiBaseUrl("http://backend:8080/api/v1/");
     }
 
+    @Test
+    void buildPersonalConfig_shouldUseRequestedEditorLocale() {
+        OfficeConfigResponse response = service.buildPersonalConfig(1L, officeFile("document.docx"), "en-US");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> editorConfig = (Map<String, Object>) response.getConfig().get("editorConfig");
+        assertThat(editorConfig.get("lang")).isEqualTo("en-US");
+    }
+
     @ParameterizedTest
     @CsvSource({
             "report.docx,word",

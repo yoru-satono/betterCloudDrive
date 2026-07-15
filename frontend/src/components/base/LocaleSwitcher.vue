@@ -1,0 +1,31 @@
+<script setup lang="ts">
+import { i18n, locale, setLocale, type SupportedLocale } from '@/i18n'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+const t = i18n.global.t
+
+async function change(event: Event) {
+  const next = (event.target as HTMLSelectElement).value as SupportedLocale
+  if (auth.isLoggedIn) await auth.updateLocale(next)
+  else setLocale(next)
+}
+</script>
+
+<template>
+  <label class="locale-switcher">
+    <span class="sr-only">{{ t('ui.language') }}</span>
+    <select :value="locale" :aria-label="t('ui.language')" data-testid="locale-switcher" @change="change">
+      <option value="zh-CN">简体中文</option>
+      <option value="en-US">English</option>
+    </select>
+  </label>
+</template>
+
+<style scoped>
+.locale-switcher select {
+  min-height: 34px; padding: 0 28px 0 10px; border: 1px solid var(--border); border-radius: 7px;
+  color: var(--text-secondary); background: var(--bg-elevated); font: inherit; cursor: pointer;
+}
+.locale-switcher select:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 1px; }
+</style>

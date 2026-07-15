@@ -8,13 +8,15 @@ import OInput from '@/components/base/OInput.vue'
 import OButton from '@/components/base/OButton.vue'
 import { useAuthStore } from '@/stores/auth'
 import { toast } from 'vue-sonner'
+import { i18n } from '@/i18n'
 
 const router = useRouter()
 const auth = useAuthStore()
+const t = i18n.global.t
 
 const schema = toTypedSchema(z.object({
-  username: z.string().min(1, '请输入用户名'),
-  password: z.string().min(1, '请输入密码'),
+  username: z.string().min(1, t('ui.requiredUsername')),
+  password: z.string().min(1, t('ui.requiredPassword')),
 }))
 
 const { handleSubmit, isSubmitting } = useForm({ validationSchema: schema })
@@ -25,7 +27,7 @@ const showPassword = ref(false)
 const submit = handleSubmit(async (values) => {
   try {
     await auth.login(values.username, values.password)
-    toast.success('登录成功')
+    toast.success(t('ui.loginSuccess'))
     router.push('/files')
   } catch { /* client.ts handles toast */ }
 })
@@ -40,23 +42,23 @@ const submit = handleSubmit(async (values) => {
           <polyline points="9 22 9 12 15 12 15 22"/>
         </svg>
       </div>
-      <h1 class="login-page__title">欢迎回来</h1>
-      <p class="login-page__sub">登录到 BetterCloudDrive</p>
+      <h1 class="login-page__title">{{ t('ui.welcomeBack') }}</h1>
+      <p class="login-page__sub">{{ t('ui.signInSubtitle') }}</p>
     </div>
 
     <form class="login-page__form" @submit.prevent="submit">
       <OInput
         v-model="username"
-        label="用户名"
-        placeholder="输入用户名"
+        :label="t('ui.username')"
+        :placeholder="t('ui.enterUsername')"
         :error="usernameError"
         autocomplete="username"
       />
       <OInput
         v-model="password"
-        label="密码"
+        :label="t('ui.password')"
         :type="showPassword ? 'text' : 'password'"
-        placeholder="输入密码"
+        :placeholder="t('ui.enterPassword')"
         :error="passwordError"
         autocomplete="current-password"
       >
@@ -71,14 +73,14 @@ const submit = handleSubmit(async (values) => {
       </OInput>
 
       <OButton type="submit" variant="primary" :loading="isSubmitting" style="width:100%;justify-content:center">
-        登录
+        {{ t('ui.signIn') }}
       </OButton>
     </form>
 
     <div class="login-page__links">
-      <RouterLink to="/forgot-password">忘记密码？</RouterLink>
+      <RouterLink to="/forgot-password">{{ t('ui.forgotPassword') }}</RouterLink>
       <span>·</span>
-      <RouterLink to="/register">注册账号</RouterLink>
+      <RouterLink to="/register">{{ t('ui.registerAccount') }}</RouterLink>
     </div>
   </div>
 </template>

@@ -26,6 +26,7 @@ import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
 import com.betterclouddrive.android.domain.model.ThemeMode
 import com.betterclouddrive.android.ui.theme.ThemeViewModel
 import com.betterclouddrive.android.R
+import com.betterclouddrive.android.ui.components.LocaleSelector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,6 +122,19 @@ fun ProfileScreen(
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(stringResource(R.string.theme_device_local_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(stringResource(R.string.language), style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LocaleSelector(onChange = authViewModel::updateLocale)
+                    Text(stringResource(R.string.language_sync_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(modifier = Modifier.height(12.dp))

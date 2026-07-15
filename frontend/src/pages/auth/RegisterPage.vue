@@ -9,6 +9,7 @@ import OButton from '@/components/base/OButton.vue'
 import { useAuthStore } from '@/stores/auth'
 import * as authApi from '@/api/auth'
 import { toast } from 'vue-sonner'
+import { locale } from '@/i18n'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -53,7 +54,7 @@ async function sendCode() {
   }
   sendingCode.value = true
   try {
-    await authApi.sendRegistrationCode(currentEmail)
+    await authApi.sendRegistrationCode(currentEmail, locale.value)
     toast.success('验证码已发送')
     startCooldown()
   } catch { /* client.ts handles toast */ }

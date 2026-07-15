@@ -2,7 +2,6 @@ package com.betterclouddrive.android
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
@@ -11,9 +10,10 @@ import androidx.compose.runtime.setValue
 import com.betterclouddrive.android.ui.BCDApp
 import com.betterclouddrive.android.util.DeepLinkParser
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.appcompat.app.AppCompatActivity
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private var teamInviteToken by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {

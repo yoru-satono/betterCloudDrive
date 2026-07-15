@@ -259,6 +259,8 @@ services:
       - ./config/env-files/mail.env
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      MAIL_FROM: ${MAIL_FROM:-noreply@betterclouddrive.local}
     ports:
       - "${HOST_BACKEND_PORT:-8080}:8080"
     volumes:

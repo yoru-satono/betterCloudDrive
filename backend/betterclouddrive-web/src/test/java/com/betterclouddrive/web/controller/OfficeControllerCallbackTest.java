@@ -2,6 +2,7 @@ package com.betterclouddrive.web.controller;
 
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.service.FileService;
+import com.betterclouddrive.service.AuthService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamTaskService;
@@ -38,6 +39,9 @@ class OfficeControllerCallbackTest {
     private FileService fileService;
 
     @Mock
+    private AuthService authService;
+
+    @Mock
     private TeamPermissionService teamPermissionService;
 
     @Mock
@@ -62,6 +66,7 @@ class OfficeControllerCallbackTest {
     void setUp() {
         controller = new OfficeController(
                 fileService,
+                authService,
                 storageService,
                 onlyOfficeService,
                 onlyOfficeCallbackService,

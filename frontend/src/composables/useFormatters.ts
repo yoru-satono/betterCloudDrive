@@ -1,3 +1,5 @@
+import { i18n, locale } from '@/i18n'
+
 export function useFormatters() {
   function formatSize(bytes: number | null | undefined): string {
     if (bytes == null || bytes === 0) return '0 B'
@@ -12,16 +14,16 @@ export function useFormatters() {
     const d = new Date(dateStr)
     const now = new Date()
     const diff = (now.getTime() - d.getTime()) / 1000
-    if (diff < 60) return '刚刚'
-    if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-    if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-    if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`
-    return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+    if (diff < 60) return i18n.global.t('ui.justNow') as string
+    if (diff < 3600) return i18n.global.t('ui.minutesAgo', { count: Math.floor(diff / 60) }) as string
+    if (diff < 86400) return i18n.global.t('ui.hoursAgo', { count: Math.floor(diff / 3600) }) as string
+    if (diff < 604800) return i18n.global.t('ui.daysAgo', { count: Math.floor(diff / 86400) }) as string
+    return d.toLocaleDateString(locale.value, { year: 'numeric', month: 'short', day: 'numeric' })
   }
 
   function formatDateFull(dateStr: string | null | undefined): string {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString('zh-CN')
+    return new Date(dateStr).toLocaleString(locale.value)
   }
 
   function formatPercent(used: number, total: number): string {

@@ -35,6 +35,10 @@ describe('API endpoint contracts', () => {
   it('uses registration code and verified registration routes', async () => {
     await authApi.sendRegistrationCode('user@test.local')
     expect(apiMock.post).toHaveBeenCalledWith('/auth/register-code/send', { email: 'user@test.local' })
+    await authApi.sendRegistrationCode('english@test.local', 'en-US')
+    expect(apiMock.post).toHaveBeenCalledWith('/auth/register-code/send', {
+      email: 'english@test.local', preferredLocale: 'en-US'
+    })
 
     await authApi.register('user', 'TestPass123!', 'user@test.local', '123456')
     expect(apiMock.post).toHaveBeenCalledWith('/auth/register', {

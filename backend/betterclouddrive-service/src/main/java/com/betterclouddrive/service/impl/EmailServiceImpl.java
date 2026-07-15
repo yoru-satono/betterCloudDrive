@@ -1,14 +1,22 @@
 package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.service.EmailService;
+import com.betterclouddrive.service.mail.MailTemplateRenderer;
+import com.betterclouddrive.service.mail.RenderedEmail;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.SimpleMailMessage;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Slf4j
@@ -16,107 +24,107 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class EmailServiceImpl implements EmailService {
 
+    private static final DateTimeFormatter EXPIRY_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final JavaMailSender mailSender;
+    private final MailTemplateRenderer renderer;
 
-    private static final String FROM = "noreply@betterclouddrive.local";
-    private static final String APP_NAME = "BetterCloudDrive";
+    @Value("${drive.mail.from:noreply@betterclouddrive.local}")
+    private String from;
+
+    @Value("${drive.app-public-url:http://localhost:3000}")
+    private String appPublicUrl;
 
     @Override
     @Async("emailExecutor")
-    public void sendVerificationCode(String toEmail, String code) {
-        if (toEmail == null || toEmail.isBlank()) {
-            log.warn("Cannot send verification code: email is empty");
-            return;
-        }
-        SimpleMailMessage msg = new SimpleMailMessage();
-        msg.setFrom(FROM);
-        msg.setTo(toEmail);
-        msg.setSubject(APP_NAME + " - Email Verification");
-        msg.setText("Your verification code: " + code + "\n\n"
-                + "This code is valid for 10 minutes.\n\n"
-                + "If you did not request this, please ignore this email.");
-        mailSender.send(msg);
-        log.info("Verification code sent to: {}", toEmail);
+    public void sendVerificationCode(String toEmail, String code, String locale) {
+        send(toEmail, renderer.render("verification", locale, Map.of("code", code)), "verification code");
     }
 
     @Override
     @Async("emailExecutor")
-    public void sendPasswordResetCode(String toEmail, String code) {
-        if (toEmail == null || toEmail.isBlank()) {
-            log.warn("Cannot send password reset code: email is empty");
-            return;
-        }
-        SimpleMailMessage msg = new SimpleMailMessage();
-        msg.setFrom(FROM);
-        msg.setTo(toEmail);
-        msg.setSubject(APP_NAME + " - Password Reset");
-        msg.setText("Your password reset code: " + code + "\n\n"
-                + "This code is valid for 10 minutes.\n\n"
-                + "If you did not request a password reset, please ignore this email.");
-        mailSender.send(msg);
-        log.info("Password reset code sent to: {}", toEmail);
+    public void sendPasswordResetCode(String toEmail, String code, String locale) {
+        send(toEmail, renderer.render("password_reset", locale, Map.of("code", code)), "password reset code");
     }
 
     @Override
     @Async("emailExecutor")
-    public void sendShareNotification(String toEmail, String shareCode, String fileName, String sharedBy) {
-        if (toEmail == null || toEmail.isBlank()) {
-            log.warn("Cannot send share notification: email is empty");
-            return;
-        }
-        SimpleMailMessage msg = new SimpleMailMessage();
-        msg.setFrom(FROM);
-        msg.setTo(toEmail);
-        msg.setSubject(APP_NAME + " - File Shared With You");
-        msg.setText(sharedBy + " shared a file with you on " + APP_NAME + ".\n\n"
-                + "File: " + fileName + "\n"
-                + "Share Code: " + shareCode + "\n\n"
-                + "Use this code to access the shared file.");
-        mailSender.send(msg);
-        log.info("Share notification sent to: {} for file: {}", toEmail, fileName);
+    public void sendShareNotification(String toEmail, String shareCode, String fileName, String sharedBy, String locale) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("sharedBy", safe(sharedBy));
+        values.put("fileName", safe(fileName));
+        values.put("shareCode", safe(shareCode));
+        values.put("link", publicUrl("/s/" + safePath(shareCode)));
+        values.put("details", Map.of("fileName", safe(fileName), "shareCode", safe(shareCode)));
+        send(toEmail, renderer.render("share", locale, values), "share notification");
     }
 
     @Override
     @Async("emailExecutor")
-    public void sendTeamInvite(String toEmail, String teamName, String role, String inviteLink, LocalDateTime expiresAt) {
-        if (toEmail == null || toEmail.isBlank()) {
-            log.warn("Cannot send team invite: email is empty");
-            return;
-        }
-        SimpleMailMessage msg = new SimpleMailMessage();
-        msg.setFrom(FROM);
-        msg.setTo(toEmail);
-        msg.setSubject(APP_NAME + " - Team Invitation");
-        msg.setText("You have been invited to join team \"" + teamName + "\" as " + role + ".\n\n"
-                + "Open this link to accept the invitation:\n" + inviteLink + "\n\n"
-                + "This invitation expires at " + expiresAt + ".\n\n"
-                + "If you did not expect this invitation, you can ignore this email.");
-        mailSender.send(msg);
-        log.info("Team invite sent to: {} for team: {}", toEmail, teamName);
+    public void sendTeamInvite(String toEmail, String teamName, String role, String inviteLink,
+                               LocalDateTime expiresAt, String locale) {
+        String expiry = expiresAt == null ? "-" : EXPIRY_FORMAT.format(expiresAt);
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("teamName", safe(teamName));
+        values.put("role", safe(role));
+        values.put("expiresAt", expiry);
+        values.put("link", absoluteUrl(inviteLink));
+        values.put("details", Map.of("teamName", safe(teamName), "role", safe(role), "expiresAt", expiry));
+        send(toEmail, renderer.render("team_invite", locale, values), "team invite");
     }
 
     @Override
     @Async("emailExecutor")
-    public void sendNotification(String toEmail, String eventType, Map<String, Object> params, String link) {
-        if (toEmail == null || toEmail.isBlank()) {
-            log.warn("Cannot send notification email: email is empty");
-            return;
-        }
-        SimpleMailMessage msg = new SimpleMailMessage();
-        msg.setFrom(FROM);
-        msg.setTo(toEmail);
-        String safeType = eventType == null ? "Notification" : eventType.replace('_', ' ');
-        msg.setSubject(APP_NAME + " - " + safeType);
-        msg.setText("A " + safeType.toLowerCase(java.util.Locale.ROOT) + " event occurred."
-                + formatParams(params) + (link != null && !link.isBlank() ? "\n\n" + link : ""));
-        mailSender.send(msg);
-        log.info("Notification email sent to: {}", toEmail);
+    public void sendNotification(String toEmail, String eventType, Map<String, Object> params,
+                                 String link, String locale) {
+        Map<String, Object> values = sanitizedParams(params);
+        values.put("link", absoluteUrl(link));
+        send(toEmail, renderer.render(renderer.notificationKey(eventType), locale, values), "notification");
     }
 
-    private String formatParams(Map<String, Object> params) {
-        if (params == null || params.isEmpty()) return "";
-        StringBuilder result = new StringBuilder("\n\nDetails:\n");
-        params.forEach((key, value) -> result.append(key).append(": ").append(String.valueOf(value).replace("\r", " ").replace("\n", " ")).append('\n'));
-        return result.toString();
+    private void send(String toEmail, RenderedEmail email, String kind) {
+        if (toEmail == null || toEmail.isBlank()) {
+            log.warn("Cannot send {}: email is empty", kind);
+            return;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
+            helper.setFrom(from);
+            helper.setTo(toEmail.trim());
+            helper.setSubject(email.subject());
+            helper.setText(email.plainText(), email.html());
+            mailSender.send(message);
+            log.info("{} sent to: {}", kind, toEmail);
+        } catch (MessagingException exception) {
+            throw new IllegalStateException("Failed to create " + kind + " email", exception);
+        }
+    }
+
+    private Map<String, Object> sanitizedParams(Map<String, Object> params) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        if (params != null) params.forEach((key, value) -> {
+            String safeValue = safe(value);
+            values.put(key, safeValue);
+        });
+        values.put("details", Map.of());
+        return values;
+    }
+
+    private String absoluteUrl(String link) {
+        if (link == null || link.isBlank()) return "";
+        if (link.startsWith("https://") || link.startsWith("http://")) return link;
+        return publicUrl(link.startsWith("/") ? link : "/" + link);
+    }
+
+    private String publicUrl(String path) {
+        return appPublicUrl.replaceAll("/+$", "") + path;
+    }
+
+    private String safePath(Object value) {
+        return String.valueOf(value == null ? "" : value).replaceAll("[^A-Za-z0-9_-]", "");
+    }
+
+    private String safe(Object value) {
+        return String.valueOf(value == null ? "" : value).replace('\r', ' ').replace('\n', ' ');
     }
 }

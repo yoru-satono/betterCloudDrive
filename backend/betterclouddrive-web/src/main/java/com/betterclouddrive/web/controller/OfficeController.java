@@ -6,6 +6,7 @@ import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.service.FileService;
+import com.betterclouddrive.service.AuthService;
 import com.betterclouddrive.service.OnlyOfficeCallbackService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamTaskService;
@@ -36,6 +37,7 @@ public class OfficeController {
     private static final Set<Integer> SAVE_STATUSES = Set.of(2, 6);
 
     private final FileService fileService;
+    private final AuthService authService;
     private final StorageService storageService;
     private final OnlyOfficeService onlyOfficeService;
     private final OnlyOfficeCallbackService onlyOfficeCallbackService;
@@ -49,7 +51,8 @@ public class OfficeController {
             @PathVariable Long fileId) {
         FileEntity file = fileService.getFile(user.getUserId(), fileId);
         validateOfficeFile(file);
-        return ApiResponse.success(onlyOfficeService.buildPersonalConfig(user.getUserId(), file));
+        String locale = authService.getCurrentUser(user.getUserId()).getPreferredLocale();
+        return ApiResponse.success(onlyOfficeService.buildPersonalConfig(user.getUserId(), file, locale));
     }
 
     @GetMapping("/api/v1/teams/{teamId}/office/files/{fileId}/config")
@@ -61,7 +64,8 @@ public class OfficeController {
         FileEntity file = fileService.getTeamFile(teamId, fileId);
         validateOfficeFile(file);
         boolean editable = teamPermissionService.effectivePermissions(user.getUserId(), teamId, fileId).canWrite();
-        return ApiResponse.success(onlyOfficeService.buildTeamConfig(user.getUserId(), teamId, file, editable));
+        String locale = authService.getCurrentUser(user.getUserId()).getPreferredLocale();
+        return ApiResponse.success(onlyOfficeService.buildTeamConfig(user.getUserId(), teamId, file, editable, locale));
     }
 
     @GetMapping("/api/v1/office/files/{fileId}/content")

@@ -13,12 +13,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import com.betterclouddrive.android.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.betterclouddrive.android.util.UiEvent
+import com.betterclouddrive.android.ui.components.LocaleSelector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,11 +64,12 @@ fun LoginScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
+                LocaleSelector()
                 IconButton(
                     onClick = { showServerSettings = true },
                     modifier = Modifier.testTag("login-settings"),
                 ) {
-                    Icon(Icons.Default.Settings, contentDescription = "服务器设置")
+                    Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.server_settings))
                 }
             }
         },
@@ -93,7 +97,7 @@ fun LoginScreen(
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = "安全、快速的云存储",
+                text = stringResource(R.string.cloud_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -104,7 +108,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it; viewModel.clearError() },
-                label = { Text("用户名") },
+                label = { Text(stringResource(R.string.username)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("login-username"),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
@@ -118,7 +122,7 @@ fun LoginScreen(
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it; viewModel.clearError() },
-                label = { Text("密码") },
+                label = { Text(stringResource(R.string.password)) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth().testTag("login-password"),
@@ -150,7 +154,7 @@ fun LoginScreen(
                         strokeWidth = 2.dp,
                     )
                 } else {
-                    Text("登 录", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(R.string.sign_in), style = MaterialTheme.typography.labelLarge)
                 }
             }
 
@@ -162,10 +166,10 @@ fun LoginScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 TextButton(onClick = onNavigateRegister) {
-                    Text("注册账号", color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.register_account), color = MaterialTheme.colorScheme.primary)
                 }
                 TextButton(onClick = onNavigateForgotPassword) {
-                    Text("忘记密码", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.forgot_password), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -193,12 +197,12 @@ private fun ServerSettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("服务器设置") },
+        title = { Text(stringResource(R.string.server_settings)) },
         text = {
             OutlinedTextField(
                 value = serverUrl,
                 onValueChange = { serverUrl = it },
-                label = { Text("服务器地址") },
+                label = { Text(stringResource(R.string.server_address)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("server-url-input"),
             )
@@ -209,7 +213,7 @@ private fun ServerSettingsDialog(
                 enabled = serverUrl.isNotBlank(),
                 modifier = Modifier.testTag("server-url-save"),
             ) {
-                Text("保存")
+                Text(stringResource(R.string.save))
             }
         },
         dismissButton = {
@@ -217,7 +221,7 @@ private fun ServerSettingsDialog(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("server-url-cancel"),
             ) {
-                Text("取消")
+                Text(stringResource(R.string.cancel))
             }
         },
     )

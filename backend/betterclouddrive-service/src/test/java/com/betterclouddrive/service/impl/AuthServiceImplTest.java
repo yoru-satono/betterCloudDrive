@@ -300,7 +300,17 @@ class AuthServiceImplTest {
 
         authService.sendRegistrationCode("U@Test.com ");
 
-        verify(emailService).sendVerificationCode(eq("u@test.com"), anyString());
+        verify(emailService).sendVerificationCode(eq("u@test.com"), anyString(), eq("zh-CN"));
         verify(valueOps).set(eq("email:register:u@test.com"), anyString(), eq(10L), eq(TimeUnit.MINUTES));
+    }
+
+    @Test
+    void sendRegistrationCode_shouldForwardRequestedLocale() {
+        when(userRepository.existsByEmail("en@test.com")).thenReturn(false);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+        authService.sendRegistrationCode("en@test.com", "en-US");
+
+        verify(emailService).sendVerificationCode(eq("en@test.com"), anyString(), eq("en-US"));
     }
 }

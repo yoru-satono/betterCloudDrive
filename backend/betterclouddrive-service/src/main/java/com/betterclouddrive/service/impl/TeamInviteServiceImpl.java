@@ -259,7 +259,12 @@ public class TeamInviteServiceImpl implements TeamInviteService {
 
     private void sendInvite(TeamEntity team, TeamInviteEntity invite) {
         String link = appPublicUrl.replaceAll("/+$", "") + "/team-invites/" + invite.getToken();
-        emailService.sendTeamInvite(invite.getEmail(), team.getName(), invite.getRole(), link, invite.getExpiresAt());
+        UserEntity recipient = userRepository.findByEmail(invite.getEmail()).orElse(null);
+        UserEntity inviter = userRepository.findById(invite.getInvitedByUserId()).orElse(null);
+        String locale = recipient != null ? recipient.getPreferredLocale()
+                : inviter != null ? inviter.getPreferredLocale() : "zh-CN";
+        emailService.sendTeamInvite(invite.getEmail(), team.getName(), invite.getRole(), link,
+                invite.getExpiresAt(), locale);
     }
 
     private String normalizeEmail(String email) {

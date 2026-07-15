@@ -43,6 +43,10 @@ public class UserEntity {
     @Builder.Default
     private Boolean emailVerified = false;
 
+    @Column(name = "preferred_locale")
+    @Builder.Default
+    private String preferredLocale = "zh-CN";
+
     @Column(name = "nickname")
     private String nickname;
 

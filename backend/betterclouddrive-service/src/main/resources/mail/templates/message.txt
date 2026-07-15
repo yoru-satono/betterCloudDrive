@@ -1,0 +1,10 @@
+[(${heading})]
+
+[(${body})]
+[(${code != null and !#strings.isEmpty(code) ? '\n' + codeLabel + ': ' + code : ''})]
+[(${details != null and !details.isEmpty() ? '\n' + detailsLabel + ':' : ''})]
+[# th:each="detail : ${details}"]- [(${detail.key})]: [(${detail.value})]
+[/]
+[(${link != null and !#strings.isEmpty(link) ? '\n' + buttonLabel + ': ' + link : ''})]
+
+[(${footer})]

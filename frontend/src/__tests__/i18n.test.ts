@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resolveMessage } from '@/i18n'
+import { resolveMessage, setLocale } from '@/i18n'
 
 describe('semantic message resolver', () => {
   it('renders stable keys with structured interpolation values', () => {
@@ -12,5 +12,13 @@ describe('semantic message resolver', () => {
     expect(resolveMessage('server.secret.diagnostic')).toContain('操作失败')
     expect(warning).toHaveBeenCalledWith('[i18n] Unknown server message key', 'server.secret.diagnostic')
     warning.mockRestore()
+  })
+
+  it('switches semantic messages, persistence, and document language to English', () => {
+    setLocale('en-US')
+    expect(resolveMessage('error.unauthorized')).toBe('Please sign in first')
+    expect(localStorage.getItem('preferredLocale')).toBe('en-US')
+    expect(document.documentElement.lang).toBe('en-US')
+    setLocale('zh-CN')
   })
 })

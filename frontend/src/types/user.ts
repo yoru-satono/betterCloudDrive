@@ -3,6 +3,7 @@ export interface UserEntity {
   username: string
   email: string | null
   emailVerified?: boolean
+  preferredLocale?: 'zh-CN' | 'en-US'
   nickname?: string | null
   avatarUrl?: string | null
   role: 'ROLE_USER' | 'ROLE_ADMIN'

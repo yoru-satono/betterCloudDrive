@@ -3,14 +3,19 @@ package com.betterclouddrive.service;
 import com.betterclouddrive.dal.entity.UserEntity;
 
 public interface AuthService {
-    UserEntity register(String username, String password, String email, String verificationCode);
+    default UserEntity register(String username, String password, String email, String verificationCode) {
+        return register(username, password, email, verificationCode, "zh-CN");
+    }
+    UserEntity register(String username, String password, String email, String verificationCode, String preferredLocale);
     UserEntity login(String username, String password);
     void logout(String jti);
     UserEntity getCurrentUser(Long userId);
     UserEntity updateWebDavSettings(Long userId, boolean enabled, String password);
+    UserEntity updatePreferredLocale(Long userId, String preferredLocale);
 
     /** Send 6-digit verification code before account registration */
-    void sendRegistrationCode(String email);
+    default void sendRegistrationCode(String email) { sendRegistrationCode(email, "zh-CN"); }
+    void sendRegistrationCode(String email, String preferredLocale);
 
     /** Send password reset code to email. Silently succeeds even if email not found. */
     void sendPasswordResetCode(String email);
@@ -23,4 +28,5 @@ public interface AuthService {
 
     /** Send share notification email */
     void sendShareNotification(String toEmail, String shareCode, String fileName, String sharedBy);
+    void sendShareNotification(Long actorUserId, String toEmail, String shareCode, String fileName, String sharedBy);
 }

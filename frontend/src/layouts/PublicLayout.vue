@@ -1,10 +1,16 @@
+<script setup lang="ts">
+import LocaleSwitcher from '@/components/base/LocaleSwitcher.vue'
+import { i18n } from '@/i18n'
+const t = i18n.global.t
+</script>
+
 <template>
   <div class="public-layout">
     <!-- Left decorative panel -->
     <div class="public-layout__left" aria-hidden="true">
       <div class="pub-deco">
         <div class="pub-deco__title">BetterCloudDrive</div>
-        <div class="pub-deco__sub">安全 · 高效 · 可靠</div>
+        <div class="pub-deco__sub">{{ t('ui.publicSubtitle') }}</div>
         <div class="pub-deco__grid">
           <div v-for="n in 16" :key="n" class="pub-deco__cell" :style="{ animationDelay: `${n * 120}ms` }" />
         </div>
@@ -12,6 +18,7 @@
     </div>
     <!-- Right form panel -->
     <div class="public-layout__right">
+      <div class="public-layout__locale"><LocaleSwitcher /></div>
       <RouterView />
     </div>
   </div>
@@ -32,8 +39,9 @@
   width: 440px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   padding: 40px 20px;
-  background: var(--bg-base);
+  background: var(--bg-base); position: relative;
 }
+.public-layout__locale { position: absolute; top: 20px; right: 20px; }
 @media (max-width: 768px) {
   .public-layout__left { display: none; }
   .public-layout__right { width: 100%; }

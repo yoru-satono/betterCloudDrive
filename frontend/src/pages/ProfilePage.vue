@@ -8,8 +8,11 @@ import * as notificationsApi from '@/api/notifications'
 import type { NotificationPreferenceMap, NotificationTypeFilter } from '@/api/notifications'
 import { toast } from 'vue-sonner'
 import { setThemeMode, themeMode, type ThemeMode } from '@/theme'
+import LocaleSwitcher from '@/components/base/LocaleSwitcher.vue'
+import { i18n } from '@/i18n'
 
 const auth = useAuthStore()
+const t = i18n.global.t
 const { formatSize } = useFormatters()
 
 const storagePercent = computed(() => auth.storagePercent)
@@ -35,11 +38,11 @@ const notificationPreferenceOptions: Array<{ type: NotificationTypeFilter; label
   { type: 'TEAM_OWNER_TRANSFER', label: '所有权转让' },
   { type: 'TEAM_OFFICE_SAVE_FAILED', label: '文档保存失败' },
 ]
-const themeOptions: Array<{ value: ThemeMode; label: string }> = [
-  { value: 'system', label: '跟随系统' },
-  { value: 'light', label: '浅色' },
-  { value: 'dark', label: '深色' },
-]
+const themeOptions = computed<Array<{ value: ThemeMode; label: string }>>(() => [
+  { value: 'system', label: t('ui.system') },
+  { value: 'light', label: t('ui.light') },
+  { value: 'dark', label: t('ui.dark') },
+])
 
 async function saveWebDavSettings(enabled: boolean) {
   if (enabled && !webdavPassword.value.trim()) {
@@ -91,21 +94,21 @@ onMounted(loadNotificationPreferences)
 
 <template>
   <div class="profile-page page-enter">
-    <h2 style="margin-bottom:24px">个人资料</h2>
+    <h2 style="margin-bottom:24px">{{ t('ui.profile') }}</h2>
 
     <!-- User info card -->
     <div class="profile-card">
       <div class="profile-card__avatar">{{ auth.user?.username?.[0]?.toUpperCase() }}</div>
       <div class="profile-card__info">
         <div class="profile-card__name">{{ auth.user?.username }}</div>
-        <div class="profile-card__role">{{ auth.isAdmin ? '管理员' : '普通用户' }}</div>
-        <div class="profile-card__email">{{ auth.user?.email || '未绑定邮箱' }}</div>
+        <div class="profile-card__role">{{ auth.isAdmin ? t('ui.admin') : t('ui.user') }}</div>
+        <div class="profile-card__email">{{ auth.user?.email || t('ui.unboundEmail') }}</div>
       </div>
     </div>
 
     <div class="section">
-      <h3 class="section__title">外观</h3>
-      <div class="theme-picker" role="group" aria-label="主题模式">
+      <h3 class="section__title">{{ t('ui.appearance') }}</h3>
+      <div class="theme-picker" role="group" :aria-label="t('ui.themeMode')">
         <button
           v-for="option in themeOptions"
           :key="option.value"
@@ -119,12 +122,18 @@ onMounted(loadNotificationPreferences)
           {{ option.label }}
         </button>
       </div>
-      <p class="section__hint theme-picker__hint">主题偏好仅保存在当前设备。</p>
+      <p class="section__hint theme-picker__hint">{{ t('ui.themeLocal') }}</p>
+    </div>
+
+    <div class="section">
+      <h3 class="section__title">{{ t('ui.language') }}</h3>
+      <LocaleSwitcher />
+      <p class="section__hint theme-picker__hint">{{ t('ui.languageSynced') }}</p>
     </div>
 
     <!-- Storage usage -->
     <div class="section">
-      <h3 class="section__title">存储空间</h3>
+      <h3 class="section__title">{{ t('ui.storage') }}</h3>
       <div class="storage-bar">
         <div class="storage-bar__fill" :style="{ width: `${storagePercent}%`, background: storageColor }" />
       </div>

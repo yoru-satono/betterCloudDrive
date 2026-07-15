@@ -18,12 +18,13 @@ class AuthRepository @Inject constructor(
         password: String,
         email: String,
         verificationCode: String,
+        preferredLocale: String = "zh-CN",
     ): NetworkResult<RegisterResult> = apiCall {
-        api.register(RegisterRequest(username, password, email, verificationCode))
+        api.register(RegisterRequest(username, password, email, verificationCode, preferredLocale))
     }
 
     suspend fun sendRegisterCode(email: String): NetworkResult<Unit> = apiCall {
-        api.sendRegisterCode(RegisterCodeRequest(email))
+        api.sendRegisterCode(RegisterCodeRequest(email, com.betterclouddrive.android.util.LocaleController.current()))
     }
 
     suspend fun login(username: String, password: String): NetworkResult<AuthTokens> = apiCall {
@@ -38,6 +39,10 @@ class AuthRepository @Inject constructor(
     suspend fun logout(): NetworkResult<Unit> = apiCall { api.logout() }
 
     suspend fun getMe(): NetworkResult<User> = apiCall { api.getMe() }
+
+    suspend fun updateLocale(preferredLocale: String): NetworkResult<User> = apiCall {
+        api.updateLocale(UpdateLocaleRequest(preferredLocale))
+    }
 
     suspend fun forgotPassword(email: String): NetworkResult<Unit> = apiCall { api.forgotPassword(ForgotPasswordRequest(email)) }
 

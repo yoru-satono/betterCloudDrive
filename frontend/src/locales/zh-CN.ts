@@ -1,5 +1,14 @@
 export default {
   common: { success: '操作成功' },
+  ui: {
+    language: '语言', chinese: '简体中文', english: 'English', languageSaved: '语言已更新', languageSaveFailed: '语言更新失败',
+    publicSubtitle: '安全 · 高效 · 可靠', profile: '个人资料', appearance: '外观', storage: '存储空间', admin: '管理员', user: '普通用户', unboundEmail: '未绑定邮箱',
+    themeMode: '主题模式', system: '跟随系统', light: '浅色', dark: '深色', themeLocal: '主题偏好仅保存在当前设备。', languageSynced: '语言偏好会同步到你的其他设备。',
+    welcomeBack: '欢迎回来', signInSubtitle: '登录到 BetterCloudDrive', username: '用户名', enterUsername: '输入用户名', password: '密码', enterPassword: '输入密码', signIn: '登录', forgotPassword: '忘记密码？', registerAccount: '注册账号', loginSuccess: '登录成功', requiredUsername: '请输入用户名', requiredPassword: '请输入密码',
+    createAccount: '创建账号', join: '加入 BetterCloudDrive', email: '邮箱地址', emailHint: '用于接收验证码和找回密码', verificationCode: '邮箱验证码', sixDigitCode: '6 位验证码', sendCode: '发送验证码', confirmPassword: '确认密码', enterAgain: '再次输入密码', register: '注册', alreadyAccount: '已有账号？', signInNow: '立即登录', codeSent: '验证码已发送', registrationSuccess: '注册成功，请登录',
+    recoverPassword: '找回密码', recoverHint: '输入注册邮箱接收验证码', codeSentTo: '验证码已发送到 {email}', registeredEmail: '邮箱地址', enterRegisteredEmail: '输入注册邮箱', code: '验证码', enterEmailCode: '输入邮件中的验证码', newPassword: '新密码', resetPassword: '重置密码', resend: '重新发送', backToLogin: '返回登录', resetSuccess: '密码重置成功，请登录',
+    justNow: '刚刚', minutesAgo: '{count} 分钟前', hoursAgo: '{count} 小时前', daysAgo: '{count} 天前'
+  },
   error: {
     internal: '服务暂时不可用，请稍后重试', validation: '提交的信息有误：{fields}', method_not_allowed: '不支持此操作',
     malformed_body: '提交的数据格式有误', missing_parameter: '缺少必要参数：{name}', invalid_parameter: '参数格式有误：{name}',

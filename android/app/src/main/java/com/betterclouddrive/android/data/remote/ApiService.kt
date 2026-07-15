@@ -40,6 +40,9 @@ interface ApiService {
     @GET("auth/me")
     suspend fun getMe(): ApiResponse<User>
 
+    @PUT("auth/preferences/locale")
+    suspend fun updateLocale(@Body request: UpdateLocaleRequest): ApiResponse<User>
+
     @POST("auth/forgot-password")
     suspend fun forgotPassword(@Body request: ForgotPasswordRequest): ApiResponse<Unit>
 

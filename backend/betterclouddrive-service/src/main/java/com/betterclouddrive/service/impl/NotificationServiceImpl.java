@@ -209,7 +209,8 @@ public class NotificationServiceImpl implements NotificationService {
         publishNotificationsChangedAfterCommit(userId);
         if (email) {
             try {
-                emailService.sendNotification(user.getEmail(), normalizedType, messageParams, link);
+                emailService.sendNotification(user.getEmail(), normalizedType, messageParams, link,
+                        user.getPreferredLocale());
             } catch (Exception e) {
                 if ("TEAM_QUOTA_ALERT".equals(normalizedType)) {
                     teamQuotaMetrics.recordNotificationFailure("email");

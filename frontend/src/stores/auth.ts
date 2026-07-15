@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as authApi from '@/api/auth'
 import type { UserEntity } from '@/types/user'
+import { locale, setLocale, type SupportedLocale } from '@/i18n'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserEntity | null>(null)
@@ -23,13 +24,14 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function register(username: string, password: string, email: string, verificationCode: string) {
-    return authApi.register(username, password, email, verificationCode)
+    return authApi.register(username, password, email, verificationCode, locale.value)
   }
 
   async function fetchMe() {
     try {
       const { data } = await authApi.getMe()
       user.value = data.data
+      setLocale(data.data.preferredLocale || 'zh-CN')
     } catch {
       user.value = null
     }
@@ -48,8 +50,21 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
+  async function updateLocale(next: SupportedLocale) {
+    const previous = locale.value
+    setLocale(next)
+    try {
+      const { data } = await authApi.updateLocale(next)
+      user.value = data.data
+      return data
+    } catch (error) {
+      setLocale(previous)
+      throw error
+    }
+  }
+
   return {
     user, loading, isLoggedIn, isAdmin, storagePercent,
-    login, register, fetchMe, logout, updateWebDavSettings
+    login, register, fetchMe, logout, updateWebDavSettings, updateLocale
   }
 })

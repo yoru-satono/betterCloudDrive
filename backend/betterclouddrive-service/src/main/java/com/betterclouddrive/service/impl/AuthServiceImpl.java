@@ -40,7 +40,8 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public UserEntity register(String username, String password, String email, String verificationCode) {
+    public UserEntity register(String username, String password, String email, String verificationCode,
+                               String preferredLocale) {
         if (userRepository.existsByUsername(username)) {
             throw new BusinessException(ApiCode.CONFLICT, "Username already exists");
         }
@@ -64,6 +65,7 @@ public class AuthServiceImpl implements AuthService {
                 .passwordHash(passwordEncoder.encode(password))
                 .email(normalizedEmail)
                 .emailVerified(true)
+                .preferredLocale(normalizeLocale(preferredLocale))
                 .webdavEnabled(false)
                 .status(1)
                 .storageQuota(defaultQuotaBytes)
@@ -135,7 +137,25 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public void sendRegistrationCode(String email) {
+    @Transactional
+    public UserEntity updatePreferredLocale(Long userId, String preferredLocale) {
+        UserEntity user = getCurrentUser(userId);
+        user.setPreferredLocale(normalizeLocale(preferredLocale));
+        return userRepository.save(user);
+    }
+
+    private String normalizeLocale(String preferredLocale) {
+        if (!StringUtils.hasText(preferredLocale)) {
+            return "zh-CN";
+        }
+        if (!"zh-CN".equals(preferredLocale) && !"en-US".equals(preferredLocale)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Unsupported locale");
+        }
+        return preferredLocale;
+    }
+
+    @Override
+    public void sendRegistrationCode(String email, String preferredLocale) {
         String normalizedEmail = normalizeEmail(email);
         if (!StringUtils.hasText(normalizedEmail)) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "Email is required");
@@ -145,7 +165,7 @@ public class AuthServiceImpl implements AuthService {
         }
         String code = generateCode();
         redisTemplate.opsForValue().set(EMAIL_REGISTER_PREFIX + normalizedEmail, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
-        emailService.sendVerificationCode(normalizedEmail, code);
+        emailService.sendVerificationCode(normalizedEmail, code, normalizeLocale(preferredLocale));
     }
 
     @Override
@@ -159,7 +179,7 @@ public class AuthServiceImpl implements AuthService {
         }
         String code = generateCode();
         redisTemplate.opsForValue().set(PWD_RESET_PREFIX + email, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
-        emailService.sendPasswordResetCode(email, code);
+        emailService.sendPasswordResetCode(email, code, normalizeLocale(user.getPreferredLocale()));
     }
 
     @Override
@@ -195,6 +215,15 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void sendShareNotification(String toEmail, String shareCode, String fileName, String sharedBy) {
         emailService.sendShareNotification(toEmail, shareCode, fileName, sharedBy);
+    }
+
+    @Override
+    public void sendShareNotification(Long actorUserId, String toEmail, String shareCode, String fileName, String sharedBy) {
+        UserEntity recipient = userRepository.findByEmail(normalizeEmail(toEmail)).orElse(null);
+        UserEntity actor = actorUserId == null ? null : userRepository.findById(actorUserId).orElse(null);
+        String locale = recipient != null ? recipient.getPreferredLocale()
+                : actor != null ? actor.getPreferredLocale() : "zh-CN";
+        emailService.sendShareNotification(toEmail, shareCode, fileName, sharedBy, normalizeLocale(locale));
     }
 
     private String generateCode() {

@@ -12,6 +12,7 @@ import com.betterclouddrive.web.dto.request.RefreshTokenRequest;
 import com.betterclouddrive.web.dto.request.RegisterRequest;
 import com.betterclouddrive.web.dto.request.ResetPasswordRequest;
 import com.betterclouddrive.web.dto.request.UpdateWebDavSettingsRequest;
+import com.betterclouddrive.web.dto.request.UpdateLocaleRequest;
 import com.betterclouddrive.web.dto.response.UserProfileResponse;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.JwtTokenProvider;
@@ -40,13 +41,14 @@ public class AuthController {
     @PostMapping("/register")
     public ApiResponse<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request) {
         UserEntity user = authService.register(
-                request.getUsername(), request.getPassword(), request.getEmail(), request.getVerificationCode());
+                request.getUsername(), request.getPassword(), request.getEmail(), request.getVerificationCode(),
+                request.getPreferredLocale());
         return ApiResponse.success(Map.of("userId", user.getId(), "username", user.getUsername()));
     }
 
     @PostMapping("/register-code/send")
     public ApiResponse<Void> sendRegisterCode(@Valid @RequestBody RegisterCodeRequest request) {
-        authService.sendRegistrationCode(request.getEmail());
+        authService.sendRegistrationCode(request.getEmail(), request.getPreferredLocale());
         return ApiResponse.success();
     }
 
@@ -139,6 +141,14 @@ public class AuthController {
             @Valid @RequestBody UpdateWebDavSettingsRequest request) {
         boolean enabled = Boolean.TRUE.equals(request.getEnabled());
         UserEntity updated = authService.updateWebDavSettings(user.getUserId(), enabled, request.getPassword());
+        return ApiResponse.success(UserProfileResponse.from(updated));
+    }
+
+    @PutMapping("/preferences/locale")
+    public ApiResponse<UserProfileResponse> updatePreferredLocale(
+            @CurrentUser UserPrincipal user,
+            @Valid @RequestBody UpdateLocaleRequest request) {
+        UserEntity updated = authService.updatePreferredLocale(user.getUserId(), request.getPreferredLocale());
         return ApiResponse.success(UserProfileResponse.from(updated));
     }
 

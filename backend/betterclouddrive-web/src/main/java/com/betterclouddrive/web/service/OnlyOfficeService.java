@@ -35,11 +35,20 @@ public class OnlyOfficeService {
     private final RestClient.Builder restClientBuilder;
 
     public OfficeConfigResponse buildPersonalConfig(Long userId, FileEntity file) {
-        return buildConfig(userId, null, file, false);
+        return buildPersonalConfig(userId, file, "zh-CN");
+    }
+
+    public OfficeConfigResponse buildPersonalConfig(Long userId, FileEntity file, String locale) {
+        return buildConfig(userId, null, file, false, locale);
     }
 
     public OfficeConfigResponse buildTeamConfig(Long userId, Long teamId, FileEntity file, boolean editable) {
-        return buildConfig(userId, teamId, file, editable);
+        return buildTeamConfig(userId, teamId, file, editable, "zh-CN");
+    }
+
+    public OfficeConfigResponse buildTeamConfig(Long userId, Long teamId, FileEntity file, boolean editable,
+                                                String locale) {
+        return buildConfig(userId, teamId, file, editable, locale);
     }
 
     public boolean isOfficeFile(FileEntity file) {
@@ -112,7 +121,8 @@ public class OnlyOfficeService {
         return trimmedUrl;
     }
 
-    private OfficeConfigResponse buildConfig(Long userId, Long teamId, FileEntity file, boolean editable) {
+    private OfficeConfigResponse buildConfig(Long userId, Long teamId, FileEntity file, boolean editable,
+                                             String locale) {
         String documentType = documentType(file);
         String documentKey = documentKey(file);
         String contentToken = createResourceToken("content", userId, file.getId(), teamId, documentKey);
@@ -138,7 +148,7 @@ public class OnlyOfficeService {
 
         Map<String, Object> editorConfig = new LinkedHashMap<>();
         editorConfig.put("mode", editable ? "edit" : "view");
-        editorConfig.put("lang", "zh-CN");
+        editorConfig.put("lang", "en-US".equals(locale) ? "en-US" : "zh-CN");
         editorConfig.put("user", Map.of(
                 "id", String.valueOf(userId),
                 "name", "user-" + userId

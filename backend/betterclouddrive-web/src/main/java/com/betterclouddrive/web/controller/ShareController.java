@@ -54,7 +54,7 @@ public class ShareController {
         // Send share notification email if requested
         if (request.getNotifyEmail() != null && !request.getNotifyEmail().isBlank()) {
             FileEntity file = fileService.getFile(user.getUserId(), request.getFileId());
-            authService.sendShareNotification(request.getNotifyEmail(), share.getShareCode(),
+            authService.sendShareNotification(user.getUserId(), request.getNotifyEmail(), share.getShareCode(),
                     file.getFileName(), user.getUsername());
         }
 
