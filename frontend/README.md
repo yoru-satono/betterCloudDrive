@@ -19,7 +19,7 @@ user-facing fallback message. Web and Tauri resolve those keys through
 `src/i18n.ts` and `src/locales/zh-CN.ts`. Unknown keys are logged for diagnosis
 and resolve to a local generic Chinese message; production UI must not render a
 raw server key. Notification, task, activity, and permission objects follow the
-same key/params convention. See [`docs/LOCALIZATION.md`](../docs/LOCALIZATION.md).
+same key/params convention. See [`docs/reference/LOCALIZATION.md`](../docs/reference/LOCALIZATION.md).
 
 ## Appearance
 

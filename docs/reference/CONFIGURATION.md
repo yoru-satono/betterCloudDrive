@@ -571,7 +571,7 @@ Redis 配置文件位于 `config/redis/redis.conf`，Docker Compose 挂载到容
 
 ## 数据和备份
 
-完整的停写备份、空环境恢复和演练验收步骤见 [团队数据备份与恢复](BACKUP_RESTORE.md)。OnlyOffice 地址矩阵、JWT、保存链路和常见错误见 [OnlyOffice Document Server 部署与排障](ONLYOFFICE_DEPLOYMENT.md)。
+完整的停写备份、空环境恢复和演练验收步骤见 [团队数据备份与恢复](../operations/BACKUP_RESTORE.md)。OnlyOffice 地址矩阵、JWT、保存链路和常见错误见 [OnlyOffice Document Server 部署与排障](../operations/ONLYOFFICE_DEPLOYMENT.md)。
 
 Docker Compose 使用这些 volume：
 

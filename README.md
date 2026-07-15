@@ -49,8 +49,8 @@ betterCloudDrive/
 ├── android/                 # Kotlin Android 应用
 ├── backend-test/            # Python 黑盒 API 测试
 ├── observability/           # Loki/Promtail/Tempo/OTel/Grafana 配置
-├── docs/API.md              # API 文档
-├── docs/CONFIGURATION.md    # 配置与部署文档
+├── docs/                    # 文档索引、参考资料、运维手册和决策记录
+│   └── README.md            # 文档入口
 ├── config/redis/redis.conf  # Redis 配置
 └── docker-compose.yml       # 服务编排
 ```
@@ -98,7 +98,7 @@ docker compose up -d --build
 - SeaweedFS S3：`http://localhost:8333`
 - Grafana：通过管理后台日志中心的 Grafana 链接访问，同域路径为 `/grafana/`，仅系统管理员可进入。
 
-部署细节见 [OnlyOffice 部署与排障](docs/ONLYOFFICE_DEPLOYMENT.md) 和 [团队数据备份与恢复](docs/BACKUP_RESTORE.md)。
+部署细节见 [OnlyOffice 部署与排障](docs/operations/ONLYOFFICE_DEPLOYMENT.md) 和 [团队数据备份与恢复](docs/operations/BACKUP_RESTORE.md)。
 
 前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Tauri 默认地址可用 `VITE_DESKTOP_API_BASE_URL`、`VITE_DESKTOP_WEB_BASE_URL` 覆盖；Android 默认服务器地址可用 `ANDROID_DEFAULT_SERVER_BASE_URL` 覆盖，Android E2E 可用 `ANDROID_E2E_SERVER_BASE_URL`、`ANDROID_E2E_MAILPIT_BASE_URL` 覆盖，用户仍可在登录页设置自己的服务器地址。
 
@@ -153,15 +153,16 @@ APK 输出在 `android/app/build/outputs/apk/debug/`。
 
 ## API 文档
 
-完整 API 文档见 [docs/API.md](docs/API.md)，涵盖认证、文件管理、上传下载、回收站、分享、收藏、标签、版本管理、团队协作、通知、OnlyOffice、注册验证码、密码重置、管理员面板。
+完整 API 文档见 [API 文档](docs/reference/API.md)，涵盖认证、文件管理、上传下载、回收站、分享、收藏、标签、版本管理、团队协作、通知、OnlyOffice、注册验证码、密码重置、管理员面板。
 
-客户端展示文案采用后端语义 key + 结构化参数协议，详见 [客户端本地化与语义文案协议](docs/LOCALIZATION.md)。此协议不包含自然语言兜底字段，旧客户端不能与当前后端混用。
+客户端展示文案采用后端语义 key + 结构化参数协议，详见 [客户端本地化与语义文案协议](docs/reference/LOCALIZATION.md)。此协议不包含自然语言兜底字段，旧客户端不能与当前后端混用。
 
 Web、Tauri 与 Android 支持“跟随系统、浅色、深色”三种主题模式。首次启动默认跟随系统，用户可在个人设置的“外观”区域选择固定主题；偏好仅保存在当前设备并跨登录状态保留。
 
 ## 配置文档
 
-- [配置与部署文档](docs/CONFIGURATION.md)
+- [文档索引](docs/README.md)
+- [配置与部署文档](docs/reference/CONFIGURATION.md)
 
 ### 公开端点
 
