@@ -81,6 +81,9 @@ public class TeamEventOutboxQueuePublisher {
         if (isNotification(event)) {
             return queueProperties.getRedis().getStreams().getNotifications();
         }
+        if (TeamTaskOutboxWriter.AGGREGATE_TEAM_TASK.equalsIgnoreCase(event.getAggregateType())) {
+            return queueProperties.getRedis().getStreams().getTeamTasks();
+        }
         return queueProperties.getRedis().getStreams().getTeamEvents();
     }
 

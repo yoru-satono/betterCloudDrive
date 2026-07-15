@@ -126,6 +126,7 @@ queue:
     outbox-publish-batch-size: ${QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE:50}
     outbox-publish-interval-ms: ${QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS:5000}
     notification-dispatch-interval-ms: ${QUEUE_REDIS_NOTIFICATION_DISPATCH_INTERVAL_MS:2000}
+    team-task-dispatch-interval-ms: ${QUEUE_REDIS_TEAM_TASK_DISPATCH_INTERVAL_MS:1000}
     backlog-warn-threshold: ${QUEUE_REDIS_BACKLOG_WARN_THRESHOLD:100}
     dead-letter-warn-threshold: ${QUEUE_REDIS_DEAD_LETTER_WARN_THRESHOLD:1}
     streams:
@@ -161,11 +162,11 @@ drive:
     result-directory: ${TEAM_TASK_RESULT_DIRECTORY:./data/team-task-results}
     result-retention-hours: ${TEAM_TASK_RESULT_RETENTION_HOURS:24}
     audit-export-batch-size: ${TEAM_AUDIT_EXPORT_BATCH_SIZE:10}
-    audit-export-interval-ms: ${TEAM_AUDIT_EXPORT_INTERVAL_MS:5000}
+    audit-export-interval-ms: ${TEAM_AUDIT_EXPORT_INTERVAL_MS:60000}
     thumbnail-batch-size: ${THUMBNAIL_TASK_BATCH_SIZE:10}
-    thumbnail-interval-ms: ${THUMBNAIL_TASK_INTERVAL_MS:5000}
+    thumbnail-interval-ms: ${THUMBNAIL_TASK_INTERVAL_MS:60000}
     folder-zip-batch-size: ${FOLDER_ZIP_TASK_BATCH_SIZE:5}
-    folder-zip-interval-ms: ${FOLDER_ZIP_TASK_INTERVAL_MS:5000}
+    folder-zip-interval-ms: ${FOLDER_ZIP_TASK_INTERVAL_MS:60000}
     result-cleanup-interval-ms: ${TEAM_TASK_RESULT_CLEANUP_INTERVAL_MS:3600000}
     running-timeout-seconds: ${TEAM_TASK_RUNNING_TIMEOUT_SECONDS:1800}
   rate-limit:

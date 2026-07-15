@@ -14,6 +14,8 @@ import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.service.dto.TeamTaskResult;
 import com.betterclouddrive.service.config.TeamTaskProperties;
 import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
+import com.betterclouddrive.service.metrics.QueueMetrics;
+import com.betterclouddrive.service.queue.TeamTaskOutboxWriter;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -42,6 +44,8 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     private final TeamService teamService;
     private final TeamPermissionService teamPermissionService;
     private final TeamTaskProperties teamTaskProperties;
+    private final TeamTaskOutboxWriter teamTaskOutboxWriter;
+    private final QueueMetrics queueMetrics;
 
     @Override
     public PageResult<TeamTaskEntity> listTasks(Long requesterUserId, Long teamId, String status, String taskType, int page, int size) {
@@ -115,10 +119,12 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     public List<TeamTaskEntity> claimTasks(String taskType, int limit) {
         LocalDateTime now = LocalDateTime.now();
         long timeoutSeconds = Math.max(teamTaskProperties.getRunningTimeoutSeconds(), 1);
-        teamTaskRepository.recoverTimedOutTasks(now.minusSeconds(timeoutSeconds), now);
-        return teamTaskRepository.claimPendingTasks(
-                normalizeRequired(taskType, "Task type is required"),
-                Math.max(limit, 1));
+        int recovered = teamTaskRepository.recoverTimedOutTasks(now.minusSeconds(timeoutSeconds), now);
+        String normalizedType = normalizeRequired(taskType, "Task type is required");
+        List<TeamTaskEntity> claimed = teamTaskRepository.claimPendingTasks(normalizedType, Math.max(limit, 1));
+        queueMetrics.recordTimedOutTaskRecovery(recovered);
+        queueMetrics.recordTaskClaim(normalizedType, claimed.size());
+        return claimed;
     }
 
     private TeamTaskEntity createTask(
@@ -131,7 +137,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
             String payload,
             String status) {
         LocalDateTime now = LocalDateTime.now();
-        return teamTaskRepository.save(TeamTaskEntity.builder()
+        TeamTaskEntity task = teamTaskRepository.save(TeamTaskEntity.builder()
                 .teamId(teamId)
                 .actorUserId(actorUserId)
                 .taskType(normalizeRequired(taskType, "Task type is required"))
@@ -147,6 +153,10 @@ public class TeamTaskServiceImpl implements TeamTaskService {
                 .updatedAt(now)
                 .startedAt(TeamTaskEntity.STATUS_RUNNING.equals(status) ? now : null)
                 .build());
+        if (TeamTaskEntity.STATUS_PENDING.equals(status)) {
+            teamTaskOutboxWriter.enqueue(task);
+        }
+        return task;
     }
 
     @Override
@@ -245,6 +255,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         task.setCompletedAt(null);
         task.setUpdatedAt(LocalDateTime.now());
         TeamTaskEntity saved = teamTaskRepository.save(task);
+        teamTaskOutboxWriter.enqueue(saved);
         if ("ONLYOFFICE_SAVE".equals(task.getTaskType())) {
             onlyOfficeCallbackRepository.resetFailedByTaskId(taskId, LocalDateTime.now());
             onlyOfficeSaveMetrics.recordRetry();

@@ -19,7 +19,9 @@ import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.TeamService;
 import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
+import com.betterclouddrive.service.metrics.QueueMetrics;
 import com.betterclouddrive.service.config.TeamTaskProperties;
+import com.betterclouddrive.service.queue.TeamTaskOutboxWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -55,6 +57,12 @@ class TeamTaskServiceImplTest {
 
     @Mock
     private TeamTaskProperties teamTaskProperties;
+
+    @Mock
+    private TeamTaskOutboxWriter teamTaskOutboxWriter;
+
+    @Mock
+    private QueueMetrics queueMetrics;
 
     @InjectMocks
     private TeamTaskServiceImpl teamTaskService;
@@ -92,6 +100,7 @@ class TeamTaskServiceImplTest {
         TeamTaskEntity task = teamTaskService.queueTask(10L, 2L, "onlyoffice_save", "file", 7L, "保存文档", "{\"id\":7}");
 
         assertThat(task.getStatus()).isEqualTo(TeamTaskEntity.STATUS_PENDING);
+        verify(teamTaskOutboxWriter).enqueue(task);
         assertThat(task.getPayload()).isEqualTo("{\"id\":7}");
         assertThat(task.getStartedAt()).isNull();
         assertThat(task.getCreatedAt()).isNotNull();

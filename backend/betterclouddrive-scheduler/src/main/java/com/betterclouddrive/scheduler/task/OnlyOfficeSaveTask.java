@@ -17,7 +17,7 @@ public class OnlyOfficeSaveTask {
     @Value("${onlyoffice.save-worker-batch-size:20}")
     private int batchSize;
 
-    @Scheduled(fixedDelayString = "${onlyoffice.save-worker-interval-ms:5000}")
+    @Scheduled(fixedDelayString = "${onlyoffice.save-worker-interval-ms:60000}")
     public void processPendingSaves() {
         int processed = onlyOfficeSaveService.processPendingSaves(batchSize);
         if (processed > 0) {

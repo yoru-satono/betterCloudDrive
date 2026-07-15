@@ -19,10 +19,10 @@ Redis 已经是 BetterCloudDrive 的必需组件，用于验证码、上传分�
 | 工作负载 | 当前状态 | 队列化收益 | 第一阶段策略 |
 | --- | --- | --- | --- |
 | 团队通知 | 成员、邀请、权限、配额、删除等主流程已写 `NOTIFICATION` dispatch outbox，并由 `bcd:stream:notifications` worker 异步生成通知 | 降低团队成员、邀请、权限、配额、删除等主请求延迟；通知失败可重试 | 已队列化 |
-| 审计导出 | 已通过 `team_tasks` 和 Spring scheduler worker 后台生成 CSV 结果 | 大导出不阻塞 HTTP 请求；结果可下载、可过期清理 | 已任务化；后续可接入 `bcd:stream:team-tasks` 统一唤醒 |
-| 缩略图 | 已通过 `team_tasks` 和 Spring scheduler worker 后台生成 | 上传后先返回列表，后台生成缩略图，失败可重试 | 已任务化；后续可接入 `bcd:stream:team-tasks` 统一唤醒 |
-| OnlyOffice 保存 | callback 已入任务，后台 worker 保存 | Redis Stream 可替代轮询，提高失败重试和积压观测 | 第二批队列化 |
-| 文件夹 ZIP | 团队 ZIP 已通过 `team_tasks` 和 Spring scheduler worker 后台生成 | 大目录打包不占用请求线程，任务成功后从任务中心下载临时包 | 已任务化；后续可接入 `bcd:stream:team-tasks` 统一唤醒 |
+| 审计导出 | `team_tasks` 作为事实表，Redis Stream 唤醒 worker 生成 CSV | 大导出不阻塞 HTTP 请求；结果可下载、可过期清理 | 已队列化，保留数据库扫描兜底 |
+| 缩略图 | `team_tasks` 作为事实表，Redis Stream 唤醒 worker 生成 | 上传后先返回列表，后台生成缩略图，失败可重试 | 已队列化，保留数据库扫描兜底 |
+| OnlyOffice 保存 | callback 写入 `team_tasks` 和 Outbox，由 Stream 唤醒保存 worker | 降低轮询延迟并提供积压观测 | 已队列化，保留数据库扫描兜底 |
+| 文件夹 ZIP | `team_tasks` 作为事实表，Redis Stream 唤醒打包 worker | 大目录打包不占用请求线程，任务成功后从任务中心下载临时包 | 已队列化，保留数据库扫描兜底 |
 | 团队清理 | 已有删除、归档、purge 和定时清理 | 避免大团队清理阻塞定时任务或 admin 请求 | 第三批队列化 |
 
 ## 设计边界
@@ -37,10 +37,11 @@ Redis 已经是 BetterCloudDrive 的必需组件，用于验证码、上传分�
    - worker 处理前按数据库状态做幂等判断。
    - 成功后更新数据库状态并 `XACK`。
 
-3. 失败可重试且可定位。
-   - 使用 consumer group pending entries 记录未确认消息。
-   - 超过空闲时间后由 worker `XAUTOCLAIM` 接管。
-   - 超过最大投递次数后写入 dead-letter stream，并把 outbox/task 标记失败。
+3. 失败可恢复且可定位。
+   - 使用 consumer group pending entries 记录未确认消息，并通过指标暴露积压。
+   - Outbox 发布失败会延迟重投，超过最大次数后标记失败。
+   - 团队任务仍由低频数据库扫描兜底；Redis 恢复后迟到或重复唤醒会因原子 claim 为空而安全 ACK。
+   - 无法识别的消息写入 dead-letter stream。
 
 4. 队列不是用户可见状态源。
    - 用户看到的任务状态仍来自 `team_tasks`。
@@ -82,12 +83,9 @@ Redis 已经是 BetterCloudDrive 的必需组件，用于验证码、上传分�
 - 主接口只依赖领域事件写入成功，不依赖通知写入、邮件发送或 SSE 推送成功。
 - 消费失败会回写 outbox 为 `PENDING` 并延迟重投；超过最大投递次数后标记 `FAILED` 并写入 dead-letter stream。
 
-## 后续批次
+## 后续批次完成情况
 
-1. `PERF-04` 审计导出异步化已完成：导出请求创建为 `team_tasks`，当前由 Spring scheduler 扫描 `PENDING` 任务生成 CSV 并提供下载结果；后续可把任务唤醒接入 `bcd:stream:team-tasks`。
-2. `PERF-05` 缩略图异步化已完成：上传后创建 `THUMBNAIL` 任务，当前由 Spring scheduler 扫描 `PENDING` 任务生成缩略图并更新文件记录；后续可把任务唤醒接入 `bcd:stream:team-tasks`。
-3. `PERF-06` ZIP 任务化已完成：团队文件夹下载先创建 `FOLDER_ZIP` 任务，当前由 Spring scheduler 扫描 `PENDING` 任务生成缓存 ZIP；后续可把任务唤醒接入 `bcd:stream:team-tasks`。
-4. `OBS-03` 队列积压指标：补 pending、retry、dead-letter、处理耗时和 stream 长度指标。
+审计导出、缩略图、团队文件夹 ZIP 和 OnlyOffice 保存均已接入 `bcd:stream:team-tasks` 唤醒；任务创建事务同时写事实表和 Outbox。consumer 只选择任务类型并调用数据库原子 claim，重复消息不会重复取得同一任务。原 scheduler 扫描降频保留，Redis 短暂不可用或消息遗漏时仍能完成数据库中的待处理任务。
 
 ## 暂不做
 

@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class QueueMetrics {
 
     private static final String METRIC_PREFIX = "bcd.queue.";
-    private static final List<String> PROCESSING_OPERATIONS = List.of("outbox-publish", "notification-dispatch");
+    private static final List<String> PROCESSING_OPERATIONS = List.of("outbox-publish", "notification-dispatch", "team-task-dispatch");
     private static final List<String> OUTCOMES = List.of("success", "failure");
 
     private final MeterRegistry meterRegistry;
@@ -83,6 +83,18 @@ public class QueueMetrics {
         meterRegistry.counter(
                 METRIC_PREFIX + "deadlettered",
                 "stream", streamLabel(sourceStream)).increment();
+    }
+
+    public void recordTaskClaim(String taskType, int claimed) {
+        meterRegistry.counter(METRIC_PREFIX + "team_tasks.claimed", "type", taskType).increment(Math.max(claimed, 0));
+    }
+
+    public void recordDuplicateTaskWakeup(String taskType) {
+        meterRegistry.counter(METRIC_PREFIX + "team_tasks.duplicate_wakeups", "type", taskType).increment();
+    }
+
+    public void recordTimedOutTaskRecovery(int recovered) {
+        meterRegistry.counter(METRIC_PREFIX + "team_tasks.timeout_recovered").increment(Math.max(recovered, 0));
     }
 
     private void registerGauges() {

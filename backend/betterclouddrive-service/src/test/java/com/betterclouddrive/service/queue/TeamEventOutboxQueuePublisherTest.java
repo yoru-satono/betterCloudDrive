@@ -100,6 +100,20 @@ class TeamEventOutboxQueuePublisherTest {
 
     @Test
     @SuppressWarnings("unchecked")
+    void publishPending_shouldRouteTeamTaskWakeupToTaskStream() {
+        TeamEventOutboxEntity event = event(TeamTaskOutboxWriter.AGGREGATE_TEAM_TASK, TeamTaskOutboxWriter.EVENT_TASK_READY);
+        when(teamEventOutboxRepository.findByStatusAndAvailableAtLessThanEqualOrderByIdAsc(
+                eq(TeamEventOutboxEntity.STATUS_PENDING), any(LocalDateTime.class), any(Pageable.class)))
+                .thenReturn(List.of(event));
+        when(redisStreamQueueService.publish(eq("bcd:stream:team-tasks"), any(Map.class))).thenReturn("2-0");
+
+        assertThat(publisher.publishPending(10)).isEqualTo(1);
+        verify(redisStreamQueueService).publish(eq("bcd:stream:team-tasks"), any(Map.class));
+        assertThat(event.getStatus()).isEqualTo(TeamEventOutboxEntity.STATUS_PROCESSED);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
     void publishPending_shouldMarkFailedAfterMaxDeliveries() {
         TeamEventOutboxEntity event = event("TEAM", "TEAM_DELETED");
         event.setRetryCount(4);
