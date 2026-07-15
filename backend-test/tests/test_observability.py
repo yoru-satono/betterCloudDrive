@@ -2,6 +2,7 @@
 
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -94,3 +95,31 @@ def test_prometheus_metrics_rules_and_observability_targets():
 
     alertmanager = httpx.get("http://localhost:9093/-/ready", timeout=5)
     assert alertmanager.status_code == 200
+
+
+def test_alertmanager_delivers_a_development_notification_to_mailpit():
+    alert_name = f"ObservabilityAcceptance{uuid.uuid4().hex}"
+    starts_at = datetime.now(timezone.utc)
+    payload = [{
+        "labels": {"alertname": alert_name, "severity": "warning"},
+        "annotations": {"summary": "BetterCloudDrive observability acceptance alert"},
+        "startsAt": starts_at.isoformat(),
+        "endsAt": (starts_at + timedelta(minutes=2)).isoformat(),
+    }]
+    posted = httpx.post("http://localhost:9093/api/v2/alerts", json=payload, timeout=5)
+    assert posted.status_code == 200, posted.text
+
+    deadline = time.time() + 30
+    delivered = False
+    while time.time() < deadline:
+        messages = httpx.get("http://localhost:8025/api/v1/messages", timeout=5)
+        assert messages.status_code == 200, messages.text
+        items = messages.json().get("messages", [])
+        if any(alert_name in (item.get("Subject") or "") for item in items):
+            delivered = True
+            break
+        time.sleep(1)
+    assert delivered, f"Alertmanager did not deliver {alert_name} to Mailpit"
+
+    resolved = [{**payload[0], "endsAt": datetime.now(timezone.utc).isoformat()}]
+    assert httpx.post("http://localhost:9093/api/v2/alerts", json=resolved, timeout=5).status_code == 200

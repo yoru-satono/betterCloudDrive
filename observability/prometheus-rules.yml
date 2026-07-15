@@ -1,4 +1,33 @@
 groups:
+  - name: better-cloud-drive-sli
+    interval: 30s
+    rules:
+      - record: bcd:sli:http_availability:ratio_5m
+        expr: |
+          1 - (
+            sum(rate(http_server_requests_seconds_count{job="better-cloud-drive",status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_server_requests_seconds_count{job="better-cloud-drive"}[5m])), 0.001)
+          )
+
+      - record: bcd:sli:http_latency_p95:seconds_5m
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{job="better-cloud-drive"}[5m]))
+          )
+
+      - record: bcd:sli:queue_processing_success:ratio_15m
+        expr: |
+          sum(rate(bcd_queue_processing_results_total{outcome="success"}[15m]))
+          /
+          clamp_min(sum(rate(bcd_queue_processing_results_total[15m])), 0.001)
+
+      - record: bcd:sli:onlyoffice_save_success:ratio_1h
+        expr: |
+          sum(increase(bcd_onlyoffice_save_results_total{outcome="success"}[1h]))
+          /
+          clamp_min(sum(increase(bcd_onlyoffice_save_results_total[1h])), 1)
+
   - name: better-cloud-drive-availability
     rules:
       - alert: BetterCloudDriveBackendDown
@@ -114,3 +143,25 @@ groups:
         annotations:
           summary: Backend database pool is close to saturation
           description: More than 85% of the backend database connections have been active for 10 minutes.
+
+  - name: better-cloud-drive-slo
+    rules:
+      - alert: BetterCloudDriveAvailabilitySLOBreach
+        expr: bcd:sli:http_availability:ratio_5m < 0.99
+        for: 15m
+        labels:
+          severity: critical
+          slo: http-availability
+        annotations:
+          summary: HTTP availability is below the 99% objective
+          description: The rolling HTTP availability SLI has remained below 99% for 15 minutes.
+
+      - alert: BetterCloudDriveQueueSuccessSLOBreach
+        expr: bcd:sli:queue_processing_success:ratio_15m < 0.99
+        for: 15m
+        labels:
+          severity: warning
+          slo: queue-processing
+        annotations:
+          summary: Queue processing success is below the 99% objective
+          description: Background queue processing success has remained below 99% for 15 minutes.

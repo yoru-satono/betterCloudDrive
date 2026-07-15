@@ -23,6 +23,8 @@ Loki 数据源会把 JSON 日志中的 `trace_id` 链接到 Tempo；Tempo 也能
 
 Prometheus 默认保留 30 天数据，配置位于 `observability/prometheus.yml`，规则位于 `observability/prometheus-rules.yml`。首批规则覆盖：后端不可用、5xx 比例、P95 延迟、JVM 堆压力、连接池饱和、队列积压、DLQ、OnlyOffice 保存失败及观测/基础设施指标源不可用。
 
+同时提供四个低基数 SLI 记录规则：HTTP 可用率、HTTP P95 延迟、队列处理成功率和 OnlyOffice 保存成功率。当前初始目标为 HTTP/队列成功率 99%；这些数值是项目默认基线，生产上线前应根据实际流量、依赖 SLA 和错误预算重新评审。
+
 开发环境 Alertmanager 把告警发给 Mailpit 中的 `admin@betterclouddrive.local`。生产部署前必须修改 `observability/alertmanager.yml` 的 SMTP 和接收人，或改为受控的 Webhook/企业通知渠道。告警均使用持续时间窗口，避免瞬时尖峰造成告警风暴。
 
 检查采集目标和告警规则：
