@@ -49,11 +49,28 @@ public class AuditSanitizer {
     private String sanitizeJson(String raw) {
         try {
             JsonNode root = objectMapper.readTree(raw);
+            if (root == null || (!root.isObject() && !root.isArray())) {
+                return REDACTED;
+            }
             redactNode(root, sensitiveFields());
             return objectMapper.writeValueAsString(root);
         } catch (Exception ignored) {
-            return raw;
+            return REDACTED;
         }
+    }
+
+    public String sanitizeQuery(String query) {
+        if (query == null || query.isBlank()) {
+            return query;
+        }
+        Set<String> sensitive = sensitiveFields();
+        return java.util.Arrays.stream(query.split("&", -1))
+                .map(part -> {
+                    int separator = part.indexOf('=');
+                    String key = separator >= 0 ? part.substring(0, separator) : part;
+                    return isSensitive(key, sensitive) ? key + "=" + REDACTED : part;
+                })
+                .collect(Collectors.joining("&"));
     }
 
     private void redactNode(JsonNode node, Set<String> sensitive) {

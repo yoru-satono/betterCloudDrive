@@ -5,6 +5,11 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization'
     id 'com.google.dagger.hilt.android'
     id 'com.google.devtools.ksp'
+    id 'jacoco'
+}
+
+jacoco {
+    toolVersion = '0.8.13'
 }
 
 def workspaceRoot = file('../..')
@@ -58,6 +63,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            enableUnitTestCoverage true
+            enableAndroidTestCoverage true
+        }
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
@@ -74,8 +83,14 @@ android {
     }
 
     testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.returnDefaultValues = true
         unitTests.all {
             jvmArgs '-Dnet.bytebuddy.experimental=true'
+            jacoco {
+                includeNoLocationClasses = true
+                excludes = ['jdk.internal.*']
+            }
         }
     }
 
@@ -132,6 +147,9 @@ dependencies {
     testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0'
     testImplementation 'org.mockito.kotlin:mockito-kotlin:5.4.0'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+    testImplementation 'androidx.test:core:1.6.1'
+    testImplementation 'app.cash.turbine:turbine:1.2.0'
 
     androidTestImplementation composeBom
     androidTestImplementation 'androidx.test:runner:1.6.2'
@@ -140,4 +158,59 @@ dependencies {
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
     androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.3.0'
     androidTestImplementation 'com.squareup.okhttp3:okhttp:4.12.0'
+}
+
+def coverageIncludes = [
+        '**/data/repository/**',
+        '**/data/remote/interceptor/**',
+        '**/data/local/**',
+        '**/util/**',
+        '**/ui/**/*ViewModel*',
+]
+def coverageExcludes = [
+        '**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*',
+        '**/*_Factory.*', '**/*_HiltModules*.*', '**/Hilt_*.*', '**/*ComposableSingletons*.*',
+        '**/*$serializer.*', '**/*$Companion.*', '**/*$DefaultImpls.*',
+        '**/*$special$$inlined$*.*', '**/*$$inlined$*.*',
+        // Kotlin emits coroutine/lambda state-machine classes for suspend and Compose code.
+        // Their executable source lines remain attributed to the owning business class.
+        '**/*$*.*',
+]
+def debugCoverageClasses = files(
+        fileTree(dir: layout.buildDirectory.dir('tmp/kotlin-classes/debug'), includes: coverageIncludes, excludes: coverageExcludes),
+        fileTree(dir: layout.buildDirectory.dir('intermediates/javac/debug/classes'), includes: coverageIncludes, excludes: coverageExcludes),
+)
+
+tasks.register('jacocoDebugUnitTestReport', JacocoReport) {
+    dependsOn 'testDebugUnitTest'
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
+        xml.outputLocation = file("$rootDir/../test-results/coverage/android/jacoco.xml")
+        html.outputLocation = file("$rootDir/../test-results/coverage/android/html")
+    }
+    classDirectories.setFrom(debugCoverageClasses)
+    sourceDirectories.setFrom(files('src/main/java', 'src/main/kotlin'))
+    executionData.setFrom(fileTree(layout.buildDirectory) {
+        include 'jacoco/testDebugUnitTest.exec'
+    })
+}
+
+tasks.register('jacocoDebugUnitTestCoverageVerification', JacocoCoverageVerification) {
+    dependsOn 'jacocoDebugUnitTestReport'
+    classDirectories.setFrom(debugCoverageClasses)
+    sourceDirectories.setFrom(files('src/main/java', 'src/main/kotlin'))
+    executionData.setFrom(fileTree(layout.buildDirectory) {
+        include 'jacoco/testDebugUnitTest.exec'
+    })
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.80
+            }
+        }
+    }
 }

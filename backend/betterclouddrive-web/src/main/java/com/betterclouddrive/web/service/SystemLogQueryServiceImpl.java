@@ -67,6 +67,7 @@ public class SystemLogQueryServiceImpl implements SystemLogQueryService {
                 .toUri();
 
         List<SystemLogEntryResponse> entries = new ArrayList<>();
+        boolean lokiUnavailable = false;
         try {
             String responseBody = restClientBuilder.build()
                     .get()
@@ -77,9 +78,10 @@ public class SystemLogQueryServiceImpl implements SystemLogQueryService {
             JsonNode response = parseLokiResponseBody(responseBody);
             entries = parseLokiResponse(response, normalizedLogType, level, sanitizedLimit);
         } catch (Exception e) {
+            lokiUnavailable = true;
             log.warn("Failed to query Loki system logs: {}", e.getMessage());
         }
-        if (entries.isEmpty()) {
+        if (lokiUnavailable) {
             entries = readLocalLogFallback(normalizedLogType, traceId, requestId, level, keyword, start, end, sanitizedLimit);
         }
         entries.sort(Comparator.comparing(SystemLogEntryResponse::getTimestamp,

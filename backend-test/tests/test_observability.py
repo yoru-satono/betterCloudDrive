@@ -69,7 +69,7 @@ def test_prometheus_metrics_rules_and_observability_targets():
         time.sleep(1)
     assert targets is not None
     health_by_job = {target["labels"].get("job"): target["health"] for target in targets}
-    for job in ("better-cloud-drive", "prometheus", "loki", "tempo", "otel-collector", "promtail"):
+    for job in ("better-cloud-drive", "prometheus", "loki", "tempo", "otel-collector", "alloy"):
         assert health_by_job.get(job) == "up", f"Prometheus target {job} is not up: {health_by_job}"
 
     metrics = httpx.get("http://localhost:9090/api/v1/query", params={
@@ -77,6 +77,14 @@ def test_prometheus_metrics_rules_and_observability_targets():
     }, timeout=5)
     assert metrics.status_code == 200
     assert metrics.json()["data"]["result"], metrics.text
+
+    availability = httpx.get("http://localhost:9090/api/v1/query", params={
+        "query": 'bcd:sli:http_availability:ratio_5m',
+    }, timeout=5)
+    assert availability.status_code == 200
+    samples = availability.json()["data"]["result"]
+    assert samples, availability.text
+    assert 0 <= float(samples[0]["value"][1]) <= 1
 
     rules = httpx.get("http://localhost:9090/api/v1/rules", params={"type": "alert"}, timeout=5)
     assert rules.status_code == 200

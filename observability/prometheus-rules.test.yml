@@ -1,0 +1,29 @@
+rule_files:
+  - /etc/prometheus/rules/better-cloud-drive.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="better-cloud-drive",status="200"}'
+        values: '0+60x10'
+    promql_expr_test:
+      - expr: bcd:sli:http_availability:ratio_5m
+        eval_time: 10m
+        exp_samples:
+          - labels: '{__name__="bcd:sli:http_availability:ratio_5m"}'
+            value: 1
+
+  - interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="better-cloud-drive",status="200"}'
+        values: '0+99x10'
+      - series: 'http_server_requests_seconds_count{job="better-cloud-drive",status="500"}'
+        values: '0+1x10'
+    promql_expr_test:
+      - expr: bcd:sli:http_availability:ratio_5m
+        eval_time: 10m
+        exp_samples:
+          - labels: '{__name__="bcd:sli:http_availability:ratio_5m"}'
+            value: 0.99

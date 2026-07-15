@@ -16,7 +16,7 @@
 | `seaweedfs` | S3 兼容对象存储，当前 Docker Compose 使用 SeaweedFS |
 | `mailpit` | 本地开发邮件服务 |
 | `loki` | 系统日志存储 |
-| `promtail` | 后端日志采集器 |
+| `alloy` | 后端日志采集器，持久保存读取位置 |
 | `tempo` | Trace 存储 |
 | `otel-collector` | OpenTelemetry Collector |
 | `grafana` | 日志和 Trace 查询界面，通过前端 Nginx 同域代理并由后端管理员身份鉴权 |
@@ -39,7 +39,7 @@
 | `backend/betterclouddrive-start/src/main/resources/application.yml` | 后端默认配置 |
 | `backend/betterclouddrive-start/src/main/resources/application-prod.yml` | 后端生产 profile 配置 |
 | `frontend/nginx.conf` | 前端容器 Nginx 模板 |
-| `observability/*.yml` | Loki、Tempo、Promtail、OTel Collector、Grafana provisioning 配置 |
+| `observability/*` | Loki、Tempo、Alloy、OTel Collector、Grafana provisioning 配置 |
 
 `docker-compose.yml` 会自动读取根目录 `.env` 进行变量替换。服务运行时变量通过各服务的 `env_file` 注入。
 
@@ -161,7 +161,7 @@ docker compose up -d --build
 | 缓存 | Redis | 使用独立 Redis，建议开启持久化或托管服务 |
 | 消息队列 | RabbitMQ | 使用持久化队列、Publisher Confirm 和 DLQ |
 | 对象存储 | S3 兼容存储 | 可用 SeaweedFS、MinIO、AWS S3、阿里云 OSS S3 兼容网关等 |
-| 日志 | Loki / 其他日志平台 | Promtail 或替代采集器采集后端 JSON 日志 |
+| 日志 | Loki / 其他日志平台 | Grafana Alloy 采集后端 JSON 日志 |
 | Trace | Tempo / 其他 OTLP 后端 | 后端通过 OTLP HTTP 上报 |
 | 看板 | Grafana | 推荐仍通过前端同域路径和后端管理员鉴权访问 |
 
@@ -477,11 +477,13 @@ Web 前端地址解析顺序：
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | 通用 OTLP endpoint |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | 后端 trace OTLP HTTP endpoint |
 | `OTEL_COLLECTOR_TEMPO_ENDPOINT` | Collector 转发到 Tempo 的 gRPC 地址 |
-| `PROMTAIL_LOKI_PUSH_URL` | Promtail 推送 Loki 的地址 |
+| `ALLOY_LOKI_PUSH_URL` | Alloy 推送 Loki 的地址 |
 | `SYSTEM_LOG_DEFAULT_LIMIT` | 管理后台系统日志默认返回条数 |
 | `SYSTEM_LOG_MAX_LIMIT` | 管理后台系统日志最大返回条数 |
 | `AUDIT_LOG_ENABLED` | 是否启用审计日志 |
-| `AUDIT_FULL_EVENT_ENABLED` | 是否记录完整审计事件 |
+| `AUDIT_EVENT_ENABLED` | 是否写入完整审计事件；兼容旧变量 `AUDIT_FULL_EVENT_ENABLED` |
+| `AUDIT_CAPTURE_BODY` | 是否采集限长且脱敏的 JSON 请求正文，默认关闭 |
+| `OBSERVABILITY_TRUSTED_PROXY_CIDRS` | 允许提供客户端转发地址的代理 CIDR 列表 |
 | `AUDIT_MAX_BODY_BYTES` | 审计日志最多记录的请求体字节数 |
 
 ## 后端配置项
@@ -650,7 +652,7 @@ Docker Compose 使用这些 volume：
 
 | 参数 | 说明 |
 |------|------|
-| `-Module <name[]>` | 按模块运行，支持 `all`、`backend`、`blackbox`、`web`、`tauri`、`android`、`office`、`webdav`、`observability`、`resilience`，默认 `all` |
+| `-Module <name[]>` | 按模块运行，支持 `all`、`backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`android-unit`、`android`、`office`、`webdav`、`observability`、`resilience`，默认 `all` |
 | `-SkipDockerBuild` | 启动 Docker 栈但不重新 build 镜像 |
 | `-SkipTauri` | 跳过 Tauri 构建和 E2E |
 | `-SkipAndroid` | 跳过 Android 单元测试和 Android E2E |

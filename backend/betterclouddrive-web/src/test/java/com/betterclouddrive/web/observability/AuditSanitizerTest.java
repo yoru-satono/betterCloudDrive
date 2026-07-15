@@ -38,6 +38,14 @@ class AuditSanitizerTest {
 
         String body = sanitizer.sanitizeBody("123456789".getBytes(StandardCharsets.UTF_8));
 
-        assertThat(body).isEqualTo("12345...[truncated]");
+        assertThat(body).isEqualTo("***REDACTED***...[truncated]");
+    }
+
+    @Test
+    void shouldNeverReturnUnparseableBodyAndShouldSanitizeQuery() {
+        assertThat(sanitizer.sanitizeBody("password=secret".getBytes(StandardCharsets.UTF_8)))
+                .isEqualTo("***REDACTED***");
+        assertThat(sanitizer.sanitizeQuery("page=1&accessToken=secret&name=alice"))
+                .isEqualTo("page=1&accessToken=***REDACTED***&name=alice");
     }
 }

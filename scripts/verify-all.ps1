@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "backend", "blackbox", "web", "tauri", "android", "office", "webdav", "observability", "resilience")]
+    [ValidateSet("all", "backend", "integration", "blackbox", "security", "web", "tauri", "android-unit", "android", "office", "webdav", "observability", "resilience")]
     [string[]]$Module = @("all"),
     [switch]$SkipDockerBuild,
     [switch]$SkipTauri,
@@ -27,16 +27,19 @@ foreach ($name in $Module) {
 }
 $RunAll = $SelectedModules.Contains("all")
 $RunBackend = $RunAll -or $SelectedModules.Contains("backend")
+$RunIntegration = $RunAll -or $SelectedModules.Contains("integration")
 $RunBlackbox = $RunAll -or $SelectedModules.Contains("blackbox")
+$RunSecurity = $RunAll -or $SelectedModules.Contains("security")
 $RunWeb = $RunAll -or $SelectedModules.Contains("web")
 $RunTauri = ($RunAll -or $SelectedModules.Contains("tauri")) -and -not $SkipTauri
 $RunAndroid = ($RunAll -or $SelectedModules.Contains("android")) -and -not $SkipAndroid
+$RunAndroidUnit = $RunAndroid -or $SelectedModules.Contains("android-unit")
 $RunOffice = -not $RunAll -and $SelectedModules.Contains("office") -and -not $SkipOnlyOffice
 $RunWebDav = $RunAll -or $SelectedModules.Contains("webdav")
 $RunObservability = $RunAll -or $SelectedModules.Contains("observability")
 $RunResilience = $RunAll -or $SelectedModules.Contains("resilience")
 $RunOfficeInWebE2E = $RunAll
-$NeedsBackendHttp = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience
+$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience
 $NeedsFrontendHttp = $RunWeb -or $RunTauri -or $RunOffice
 $NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice
 $NeedsOnlyOffice = $RunOffice -or $RunOfficeInWebE2E
@@ -208,7 +211,7 @@ try {
     Write-Host "Selected modules: $($SelectedModules -join ', ')"
     Write-Host "Test run ID: $RunId"
     New-Item -ItemType Directory -Force -Path $ResultRoot | Out-Null
-    @("backend", "blackbox", "web", "tauri", "android", "office", "webdav", "observability", "resilience") |
+    @("backend", "integration", "blackbox", "security", "web", "tauri", "android", "office", "webdav", "observability", "resilience", "coverage") |
         ForEach-Object { New-Item -ItemType Directory -Force -Path (Join-Path $ResultRoot $_) | Out-Null }
 
     if ($RunAll -and ($SkipTauri -or $SkipAndroid -or $SkipOnlyOffice)) {
@@ -228,16 +231,16 @@ try {
 
     if ($NeedsDocker) { Invoke-Step "Start Docker stack" {
         if ($SkipDockerBuild) {
-            Invoke-External "docker" @("compose", "up", "-d")
+            Invoke-External "docker" @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml", "up", "-d")
         } else {
-            Invoke-External "docker" @("compose", "up", "-d", "--build")
+            Invoke-External "docker" @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml", "up", "-d", "--build")
         }
         $script:StackStarted = $true
     } }
 
     if ($NeedsDocker) { Invoke-Step "Wait for services" {
         if ($NeedsBackendHttp) {
-            Wait-Http "Backend" "http://127.0.0.1:8080/actuator/health"
+            Wait-Http "Backend management" "http://127.0.0.1:8081/actuator/health"
         }
         if ($NeedsFrontendHttp) {
             Wait-Http "Frontend" "http://127.0.0.1:3000"
@@ -258,27 +261,45 @@ try {
         }
     }
 
+    if ($RunIntegration) {
+        Invoke-Step "Backend Testcontainers integration tests" {
+            Invoke-InDirectory "backend" {
+                Invoke-External "mvn" @("verify", "-Pintegration", "-DskipUnitTests", "-pl", "betterclouddrive-dal,betterclouddrive-storage", "-am")
+            }
+        }
+    }
+
     if ($RunBlackbox) {
         Invoke-Step "Backend black-box tests" {
             Invoke-InDirectory "backend-test" {
                 $pytest = Join-Path (Get-Location) ".venv/Scripts/pytest.exe"
                 if (Test-Path $pytest) {
-                        Invoke-External $pytest @("-v", "-m", "not webdav and not office and not observability and not resilience", "--junitxml=../test-results/blackbox/junit.xml")
+                        Invoke-External $pytest @("-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
                 } elseif (Get-Command "uv" -ErrorAction SilentlyContinue) {
                     Invoke-WithEnv @{ UV_CACHE_DIR = "../.uv-cache" } {
-                        Invoke-External "uv" @("run", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience", "--junitxml=../test-results/blackbox/junit.xml")
+                        Invoke-External "uv" @("run", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
                     }
                 } else {
-                    Invoke-External "python" @("-m", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience", "--junitxml=../test-results/blackbox/junit.xml")
+                    Invoke-External "python" @("-m", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
+                }
+            }
+        }
+    }
+
+    if ($RunSecurity) {
+        Invoke-Step "Security acceptance tests" {
+            Invoke-InDirectory "backend-test" {
+                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
+                    Invoke-External "uv" @("run", "pytest", "-v", "-m", "security", "--junitxml=../test-results/security/junit.xml")
                 }
             }
         }
     }
 
     if ($RunWeb) {
-        Invoke-Step "Frontend unit tests" {
+        Invoke-Step "Frontend unit tests and coverage" {
             Invoke-InDirectory "frontend" {
-                Invoke-External "pnpm" @("run", "test")
+                Invoke-External "pnpm" @("run", "test:coverage")
             }
         }
     }
@@ -318,6 +339,11 @@ try {
     }
 
     if ($RunTauri) {
+        Invoke-Step "Tauri Rust unit tests" {
+            Invoke-InDirectory "frontend/src-tauri" {
+                Invoke-External "cargo" @("test", "--locked")
+            }
+        }
         Invoke-Step "Tauri E2E build" {
             Invoke-InDirectory "frontend" {
                 Invoke-External "pnpm" @("run", "tauri:e2e:build")
@@ -342,6 +368,9 @@ try {
     }
 
     if ($RunObservability) {
+        Invoke-Step "Prometheus rule tests" {
+            Invoke-External "docker" @("compose", "exec", "-T", "prometheus", "promtool", "test", "rules", "/etc/prometheus/tests/better-cloud-drive.test.yml")
+        }
         Invoke-Step "Observability acceptance" {
             Invoke-InDirectory "backend-test" {
                 Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
@@ -361,20 +390,26 @@ try {
         }
     }
 
-    if ($RunAndroid) {
+    if ($RunAndroidUnit) {
         Invoke-Step "Android unit tests" {
             Invoke-InDirectory "android" {
                 Invoke-External ".\gradlew.bat" @("testDebugUnitTest")
             }
         }
-
+        Invoke-Step "Android unit coverage and 80% gate" {
+            Invoke-InDirectory "android" {
+                Invoke-External ".\gradlew.bat" @("jacocoDebugUnitTestCoverageVerification")
+            }
+        }
+    }
+    if ($RunAndroid) {
         Invoke-Step "Android E2E tests" {
             Invoke-InDirectory "android" {
                 if ($AndroidSerial -match ":") {
                     Invoke-External "adb" @("connect", $AndroidSerial)
                 }
                 Invoke-WithEnv @{ ANDROID_SERIAL = $AndroidSerial } {
-                    Invoke-External ".\gradlew.bat" @("connectedDebugAndroidTest")
+                    Invoke-External ".\gradlew.bat" @("createDebugAndroidTestCoverageReport")
                 }
             }
         }

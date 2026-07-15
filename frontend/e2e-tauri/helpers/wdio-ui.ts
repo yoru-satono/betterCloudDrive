@@ -96,7 +96,15 @@ export async function createShareFromContextMenu(fileName: string) {
 }
 
 export async function openSidebarLink(text: string) {
-  await (await linkByText(text)).click()
+  let link = await $(`//a[normalize-space(.)="${text}"]`)
+  if (!(await link.isDisplayed().catch(() => false))) {
+    const switchToTeams = await $('//button[normalize-space(.)="切换到团队空间"]')
+    if (await switchToTeams.isDisplayed().catch(() => false)) {
+      await switchToTeams.click()
+    }
+    link = await linkByText(text)
+  }
+  await link.click()
   await expectTextVisible(text)
 }
 

@@ -18,7 +18,7 @@ storage:
 
 compactor:
   compaction:
-    block_retention: 24h
+    block_retention: ${TEMPO_RETENTION_PERIOD}
 
 querier:
   frontend_worker:

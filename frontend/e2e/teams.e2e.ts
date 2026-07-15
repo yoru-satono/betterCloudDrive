@@ -103,15 +103,15 @@ test.describe('teams', () => {
     await page.getByTestId(`file-card-${versionFile.fileName}`).click({ button: 'right' })
     await page.getByRole('menu').getByRole('menuitem', { name: '版本管理' }).click()
     const versionDialog = page.getByRole('dialog', { name: '版本管理' })
-    await expect(versionDialog.getByText('版本 2')).toBeVisible()
-    const versionOne = versionDialog.locator('.version-row').filter({ hasText: '版本 1' })
+    await expect(versionDialog.getByText('版本2')).toBeVisible()
+    const versionOne = versionDialog.locator('.version-row').filter({ hasText: '版本1' })
     const download = page.waitForEvent('download')
     await versionOne.getByRole('button', { name: '下载' }).click()
     await expect((await download).suggestedFilename()).toContain(versionFile.fileName)
     await versionOne.getByRole('button', { name: '恢复' }).click()
     await page.getByRole('dialog', { name: '恢复版本' }).getByRole('button', { name: '确认' }).click()
     await expect(page.getByText('版本已恢复')).toBeVisible()
-    await expect(versionDialog.getByText('版本 3')).toBeVisible()
+    await expect(versionDialog.getByText('版本3')).toBeVisible()
     await versionDialog.getByRole('button', { name: '关闭' }).click()
 
     await page.goto(`/teams/${team.id}/settings`)
@@ -239,7 +239,8 @@ test.describe('teams', () => {
     await expect(page.getByRole('button', { name: '退出团队' })).toBeVisible()
     await page.getByRole('button', { name: '退出团队' }).click()
     await page.getByRole('dialog', { name: '退出团队' }).getByRole('button', { name: '确认' }).click()
-    await expect(page).toHaveURL(/\/files$/)
+    await expect(page).toHaveURL(/\/teams$/)
+    await expect(page.getByRole('heading', { name: '团队空间' })).toBeVisible()
   })
 
   test('viewer can browse team files without write actions', async ({ page, request, e2eUser }) => {

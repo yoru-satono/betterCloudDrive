@@ -28,7 +28,7 @@ test.describe('admin E2E', () => {
     await expect(page.getByRole('dialog', { name: `团队详情：${team.name}` })).toBeVisible()
     await expect(page.getByText(`ID ${team.id}`)).toBeVisible()
     await page.getByRole('button', { name: '文件' }).click()
-    await expect(page.getByText(/共 .* 个文件/)).toBeVisible()
+    await expect(page.getByText(/共\s*\d+\s*个文件/)).toBeVisible()
     await page.getByRole('button', { name: '审计' }).click()
     await expect(page.getByPlaceholder('按动作过滤，如 FILE_DELETE')).toBeVisible()
   })

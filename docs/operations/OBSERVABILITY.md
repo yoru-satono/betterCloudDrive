@@ -3,7 +3,7 @@
 默认数据流：
 
 ```text
-runtime/audit.log -> Promtail -> Loki ----+
+runtime/audit.log -> Alloy -> Loki -------+
                                            +-> Grafana
 Spring OpenTelemetry -> Collector -> Tempo-+
                                            |
@@ -27,7 +27,7 @@ Prometheus 默认保留 30 天数据，配置位于 `observability/prometheus.ym
 
 开发环境 Alertmanager 把告警发给 Mailpit 中的 `admin@betterclouddrive.local`。生产部署前必须修改 `observability/alertmanager.yml` 的 SMTP 和接收人，或改为受控的 Webhook/企业通知渠道。告警均使用持续时间窗口，避免瞬时尖峰造成告警风暴。
 
-检查采集目标和告警规则：
+诊断端口默认不发布；先使用 `docker-compose.diagnostics.yml` overlay 启动，再检查采集目标和告警规则：
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:9090/api/v1/targets
@@ -35,12 +35,12 @@ Invoke-RestMethod 'http://127.0.0.1:9090/api/v1/rules?type=alert'
 Invoke-RestMethod http://127.0.0.1:9093/-/ready
 ```
 
-生产环境如果不需要从宿主机诊断 Prometheus/Alertmanager，应移除 Compose 中相应的 `ports`，仅保留内部网络访问。
+主 Compose 只保留容器网络访问。诊断 overlay 也仅绑定 `127.0.0.1`，不要在生产公网入口代理这些端口。
 
-后端通过 Spring Boot Actuator 暴露 Prometheus 格式的 Micrometer 指标：
+生产 profile 在内部管理端口 `8081` 暴露 Actuator，业务 API 端口不提供 metrics。诊断 overlay 可从宿主机检查：
 
 ```powershell
-Invoke-WebRequest http://127.0.0.1:8080/actuator/prometheus
+Invoke-WebRequest http://127.0.0.1:8081/actuator/prometheus
 ```
 
 ## 团队配额
@@ -98,3 +98,11 @@ Invoke-RestMethod "http://127.0.0.1:3200/api/traces/$traceId"
 刷新任务默认每 15 秒读取 RabbitMQ 队列和 PostgreSQL 事实表。ready、pending 或 retry 达到 `QUEUE_RABBITMQ_BACKLOG_WARN_THRESHOLD`，或 DLQ 达到 `QUEUE_RABBITMQ_DEAD_LETTER_WARN_THRESHOLD` 时，仅在跨越阈值时写入结构化告警；恢复到阈值以下会记录恢复日志。
 
 实际消费异常优先查看 `messages.ready`、`consumer.inflight`、数据库 `records.pending/retry`、DLQ 和 processing failure/duration。
+
+## 安全与保留策略
+
+- Loki、Tempo、Prometheus、Alertmanager、OTLP 和 Alloy 默认不发布宿主机端口。
+- 审计事件默认写入数据库和 `audit.log`，但请求正文默认不采集；设置 `AUDIT_CAPTURE_BODY=true` 后也仅采集限长、可解析并脱敏的 JSON。
+- 只有来自 `OBSERVABILITY_TRUSTED_PROXY_CIDRS` 的请求才会采用 `X-Forwarded-For` / `X-Real-IP`。
+- 默认保留期为 Loki 30 天、Tempo 7 天、Prometheus 30 天。指标、日志和 trace 可按保留期淘汰，持久审计事实以 PostgreSQL 为准。
+- 生产告警配置从 `alertmanager-production.yml.example` 复制并通过 `ALERTMANAGER_CONFIG_FILE` 挂载；warning 发邮件，critical 同时发邮件和 Webhook。

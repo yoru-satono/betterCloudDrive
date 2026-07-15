@@ -67,6 +67,13 @@ export default defineConfig(({ mode }) => {
       clearMocks: true,
       reporters: process.env.CI ? ['default', 'junit'] : ['default'],
       outputFile: process.env.CI ? { junit: '../test-results/web/unit-junit.xml' } : undefined,
+      coverage: {
+        provider: 'v8',
+        reportsDirectory: '../test-results/coverage/web',
+        reporter: ['text', 'html', 'json-summary', 'lcov'],
+        include: ['src/**/*.{ts,vue}'],
+        exclude: ['src/**/*.test.ts', 'src/**/__tests__/**', 'src/test/**'],
+      },
     }
   }
 })

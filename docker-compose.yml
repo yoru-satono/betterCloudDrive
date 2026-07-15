@@ -128,9 +128,9 @@ services:
     restart: unless-stopped
     env_file:
       - ./config/env-files/observability.env
-    command: -config.file=/etc/loki/config.yml
-    ports:
-      - "${HOST_LOKI_PORT:-3100}:3100"
+    environment:
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-30d}
+    command: -config.file=/etc/loki/config.yml -config.expand-env=true
     volumes:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
       - lokidata:/loki
@@ -148,11 +148,9 @@ services:
     restart: unless-stopped
     env_file:
       - ./config/env-files/observability.env
-    command: ["-config.file=/etc/tempo/config.yml"]
-    ports:
-      - "${HOST_TEMPO_PORT:-3200}:3200"
-      - "${HOST_OTEL_GRPC_PORT:-4317}:4317"
-      - "${HOST_OTEL_HTTP_PORT:-4318}:4318"
+    environment:
+      TEMPO_RETENTION_PERIOD: ${TEMPO_RETENTION_PERIOD:-168h}
+    command: ["-config.file=/etc/tempo/config.yml", "-config.expand-env=true"]
     volumes:
       - ./observability/tempo-config.yml:/etc/tempo/config.yml:ro
       - tempodata:/var/tempo
@@ -183,25 +181,32 @@ services:
     networks:
       - bcd-network
 
-  promtail:
-    image: grafana/promtail:2.9.8
-    container_name: bcd-promtail
+  alloy:
+    image: grafana/alloy:v1.17.0
+    container_name: bcd-alloy
     restart: unless-stopped
     env_file:
       - ./config/env-files/observability.env
-    command: -config.file=/etc/promtail/config.yml -config.expand-env=true
+    environment:
+      ALLOY_LOKI_PUSH_URL: ${ALLOY_LOKI_PUSH_URL:-http://loki:3100/loki/api/v1/push}
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - --disable-reporting
+      - /etc/alloy/config.alloy
     volumes:
-      - ./observability/promtail-config.yml:/etc/promtail/config.yml:ro
+      - ./observability/alloy-config.alloy:/etc/alloy/config.alloy:ro
       - backendlogs:/var/log/cloud-drive:ro
+      - alloydata:/var/lib/alloy/data
     depends_on:
       loki:
         condition: service_started
       backend:
         condition: service_healthy
     healthcheck:
-      # The upstream Promtail image has no HTTP client; Prometheus separately
-      # scrapes :9080, while this check verifies the process remains alive.
-      test: ["CMD-SHELL", "pidof promtail >/dev/null"]
+      # The Alloy image has no HTTP client; Prometheus separately scrapes :12345.
+      test: ["CMD-SHELL", "pidof alloy >/dev/null"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -219,11 +224,10 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-30d}
       - --web.enable-lifecycle
-    ports:
-      - "${HOST_PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus-rules.yml:/etc/prometheus/rules/better-cloud-drive.yml:ro
+      - ./observability/prometheus-rules.test.yml:/etc/prometheus/tests/better-cloud-drive.test.yml:ro
       - prometheusdata:/prometheus
     depends_on:
       backend:
@@ -243,10 +247,8 @@ services:
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
-    ports:
-      - "${HOST_ALERTMANAGER_PORT:-9093}:9093"
     volumes:
-      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ${ALERTMANAGER_CONFIG_FILE:-./observability/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
       - alertmanagerdata:/alertmanager
     depends_on:
       mailpit:
@@ -370,12 +372,13 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
       MAIL_FROM: ${MAIL_FROM:-noreply@betterclouddrive.local}
+      GRAFANA_AUTH_COOKIE_SECURE: ${GRAFANA_AUTH_COOKIE_SECURE:-false}
     ports:
       - "${HOST_BACKEND_PORT:-8080}:8080"
     volumes:
       - backendlogs:/var/log/cloud-drive
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/actuator/health"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -434,6 +437,8 @@ volumes:
   prometheusdata:
     driver: local
   alertmanagerdata:
+    driver: local
+  alloydata:
     driver: local
   onlyofficedata:
     driver: local

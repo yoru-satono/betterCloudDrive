@@ -20,6 +20,7 @@ markers = [
     "office: OnlyOffice integration acceptance tests",
     "observability: audit, logs, traces, and Grafana authorization acceptance tests",
     "resilience: isolated queue/outbox recovery acceptance tests",
+    "security: authentication, authorization, and input-boundary acceptance tests",
     "smoke: basic health check tests",
     "public: tests for public endpoints (no auth required)",
     "admin: tests requiring admin role",

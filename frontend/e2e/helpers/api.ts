@@ -152,6 +152,7 @@ export async function refreshUserLogin(request: APIRequestContext, user: E2EUser
 
 export async function createAuthenticatedContext(browser: Browser, user: E2EUser): Promise<BrowserContext> {
   return browser.newContext({
+    locale: 'zh-CN',
     storageState: {
       cookies: [],
       origins: [
@@ -160,6 +161,7 @@ export async function createAuthenticatedContext(browser: Browser, user: E2EUser
           localStorage: [
             { name: 'accessToken', value: user.accessToken },
             { name: 'refreshToken', value: user.refreshToken },
+            { name: 'preferredLocale', value: 'zh-CN' },
           ],
         },
       ],
@@ -422,7 +424,7 @@ export async function listTeamMembers(request: APIRequestContext, token: string,
   await expect(res, await res.text()).toBeOK()
   const body = await res.json()
   expect(body.code).toBe(200)
-  return body.data as E2ETeamMember[]
+  return body.data.records as E2ETeamMember[]
 }
 
 export async function createTeamInvite(
@@ -449,7 +451,7 @@ export async function listTeamInvites(request: APIRequestContext, token: string,
   await expect(res, await res.text()).toBeOK()
   const body = await res.json()
   expect(body.code).toBe(200)
-  return body.data as E2ETeamInvite[]
+  return body.data.records as E2ETeamInvite[]
 }
 
 export async function resendTeamInvite(request: APIRequestContext, token: string, teamId: number, inviteId: number) {

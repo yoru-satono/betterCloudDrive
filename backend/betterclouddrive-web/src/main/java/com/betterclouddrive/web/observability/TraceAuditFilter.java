@@ -21,6 +21,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.util.matcher.IpAddressMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -143,7 +144,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
                 status,
                 null);
 
-        if (properties.getAudit().isFullEventEnabled()) {
+        if (properties.getAudit().isEventEnabled()) {
             writeFullAuditEvent(event);
         }
     }
@@ -163,7 +164,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
         event.put("target_type", targetType);
         event.put("method", request.getMethod());
         event.put("path", request.getRequestURI());
-        event.put("query", request.getQueryString());
+        event.put("query", auditSanitizer.sanitizeQuery(request.getQueryString()));
         event.put("status", response.getStatus());
         event.put("result", failure == null && response.getStatus() < 400 ? "success" : "failure");
         event.put("duration_ms", durationMs);
@@ -173,7 +174,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
         event.put("request_body", requestBody(request));
         if (failure != null) {
             event.put("error_type", failure.getClass().getName());
-            event.put("error_message", failure.getMessage());
+            event.put("error_message", "***REDACTED***");
         }
         return event;
     }
@@ -200,7 +201,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
     }
 
     private boolean shouldCaptureBody(HttpServletRequest request) {
-        if (!properties.getAudit().isFullEventEnabled()) {
+        if (!properties.getAudit().isCaptureBody()) {
             return false;
         }
         String path = request.getRequestURI();
@@ -332,6 +333,9 @@ public class TraceAuditFilter extends OncePerRequestFilter {
     }
 
     private String clientIp(HttpServletRequest request) {
+        if (!isTrustedProxy(request.getRemoteAddr())) {
+            return request.getRemoteAddr();
+        }
         String forwarded = request.getHeader("X-Forwarded-For");
         if (StringUtils.hasText(forwarded)) {
             return forwarded.split(",")[0].trim();
@@ -341,6 +345,21 @@ public class TraceAuditFilter extends OncePerRequestFilter {
             return realIp;
         }
         return request.getRemoteAddr();
+    }
+
+    private boolean isTrustedProxy(String remoteAddress) {
+        if (!StringUtils.hasText(remoteAddress)) {
+            return false;
+        }
+        return properties.getAudit().getTrustedProxyCidrs().stream()
+                .filter(StringUtils::hasText)
+                .anyMatch(cidr -> {
+                    try {
+                        return new IpAddressMatcher(cidr.trim()).matches(remoteAddress);
+                    } catch (IllegalArgumentException ignored) {
+                        return false;
+                    }
+                });
     }
 
     private void putMdc(String key, String value) {

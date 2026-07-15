@@ -10,6 +10,7 @@
 
 - [API 文档](reference/API.md)：认证、文件、分享、团队、通知、OnlyOffice 和管理员接口。
 - [配置与部署](reference/CONFIGURATION.md)：Docker Compose、环境变量、反向代理、Redis、RabbitMQ、安全和完整验证。
+- [测试策略](reference/TESTING.md)：测试分层、模块命令、Testcontainers、安全验收和覆盖率报告。
 - [本地化协议](reference/LOCALIZATION.md)：后端语义 key 与 Web、Tauri、Android 客户端文案约定。
 
 ## 运维手册

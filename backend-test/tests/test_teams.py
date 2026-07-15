@@ -254,7 +254,7 @@ class TestTeamLifecycle:
         team = create_team(client, auth_headers)
         team_id = team["id"]
 
-        listed = assert_api_ok(client.get("/api/v1/teams", headers=auth_headers))
+        listed = assert_paginated(client.get("/api/v1/teams", headers=auth_headers))["records"]
         assert any(item["id"] == team_id for item in listed)
 
         detail = assert_api_ok(client.get(f"/api/v1/teams/{team_id}", headers=auth_headers))
@@ -269,7 +269,9 @@ class TestTeamLifecycle:
         assert renamed["id"] == team_id
         assert renamed["name"].startswith("renamed_")
 
-        members = assert_api_ok(client.get(f"/api/v1/teams/{team_id}/members", headers=auth_headers))
+        members = assert_paginated(
+            client.get(f"/api/v1/teams/{team_id}/members", headers=auth_headers),
+        )["records"]
         assert any(member["username"] == test_user["username"] and member["role"] == "OWNER" for member in members)
 
         assert_team_audit_action(client, auth_headers, team_id, "TEAM_CREATE")
@@ -277,7 +279,7 @@ class TestTeamLifecycle:
 
         assert_api_ok(client.delete(f"/api/v1/teams/{team_id}", headers=auth_headers))
 
-        after_delete = assert_api_ok(client.get("/api/v1/teams", headers=auth_headers))
+        after_delete = assert_paginated(client.get("/api/v1/teams", headers=auth_headers))["records"]
         assert all(item["id"] != team_id for item in after_delete)
         assert_api_error_in(client.get(f"/api/v1/teams/{team_id}", headers=auth_headers), {404})
         assert_api_error_in(client.get(f"/api/v1/teams/{team_id}/files", headers=auth_headers), {404})

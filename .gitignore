@@ -29,6 +29,7 @@ $RECYCLE.BIN/
 
 # Environment and local secrets
 .env
+observability/alertmanager-production.yml
 .env.*
 !.env.example
 config/env-files/*.env

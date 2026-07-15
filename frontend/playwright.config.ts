@@ -19,6 +19,9 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    // E2E copy assertions are authored against the Chinese UI. Lock the
+    // browser locale instead of inheriting the developer machine locale.
+    locale: 'zh-CN',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

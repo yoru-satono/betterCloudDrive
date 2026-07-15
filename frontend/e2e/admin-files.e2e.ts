@@ -25,7 +25,7 @@ test('admin browses, inspects, and deletes files for a user', async ({ page, req
   await expect(row).toBeVisible()
   await row.getByRole('button', { name: '文件' }).click()
 
-  await expect(page.getByText(`用户 ${owner.userId} 的文件`)).toBeVisible()
+  await expect(page.getByRole('heading', { name: `用户${owner.userId}的文件` })).toBeVisible()
   await page.getByRole('button', { name: folder.fileName }).click()
   await expect(page.getByText(file.fileName)).toBeVisible()
 

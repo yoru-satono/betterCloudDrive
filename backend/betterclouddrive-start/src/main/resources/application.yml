@@ -243,7 +243,10 @@ observability:
   grafana-auth:
     secret: ${GRAFANA_AUTH_PROXY_SECRET:}
     ttl-seconds: ${GRAFANA_AUTH_PROXY_TTL_SECONDS:300}
+    cookie-secure: ${GRAFANA_AUTH_COOKIE_SECURE:false}
   audit:
     enabled: ${AUDIT_LOG_ENABLED:true}
-    full-event-enabled: ${AUDIT_FULL_EVENT_ENABLED:true}
+    event-enabled: ${AUDIT_EVENT_ENABLED:${AUDIT_FULL_EVENT_ENABLED:true}}
+    capture-body: ${AUDIT_CAPTURE_BODY:false}
     max-body-bytes: ${AUDIT_MAX_BODY_BYTES:8192}
+    trusted-proxy-cidrs: ${OBSERVABILITY_TRUSTED_PROXY_CIDRS:}

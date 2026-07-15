@@ -49,7 +49,7 @@ public class GrafanaAuthService {
 
         ResponseCookie cookie = ResponseCookie.from(cookieName(), token)
                 .httpOnly(true)
-                .secure(false)
+                .secure(properties.getGrafanaAuth().isCookieSecure())
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(Duration.ofSeconds(properties.getGrafanaAuth().getTtlSeconds()))

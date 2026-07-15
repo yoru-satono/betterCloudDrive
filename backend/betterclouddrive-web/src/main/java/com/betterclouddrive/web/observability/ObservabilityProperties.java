@@ -19,8 +19,10 @@ public class ObservabilityProperties {
     @Data
     public static class Audit {
         private boolean enabled = true;
-        private boolean fullEventEnabled = true;
+        private boolean eventEnabled = true;
+        private boolean captureBody = false;
         private int maxBodyBytes = 8192;
+        private List<String> trustedProxyCidrs = new ArrayList<>();
         private List<String> sensitiveFields = new ArrayList<>(List.of(
                 "password", "newPassword", "oldPassword", "token", "accessToken", "refreshToken",
                 "authorization", "cookie", "secret", "key", "sharePassword", "passwordCiphertext"
@@ -47,5 +49,6 @@ public class ObservabilityProperties {
         private String cookieName = "BCD_GRAFANA_SESSION";
         private String secret = "";
         private long ttlSeconds = 300;
+        private boolean cookieSecure = false;
     }
 }

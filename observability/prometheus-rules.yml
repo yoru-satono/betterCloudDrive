@@ -5,7 +5,7 @@ groups:
       - record: bcd:sli:http_availability:ratio_5m
         expr: |
           1 - (
-            sum(rate(http_server_requests_seconds_count{job="better-cloud-drive",status=~"5.."}[5m]))
+            (sum(rate(http_server_requests_seconds_count{job="better-cloud-drive",status=~"5.."}[5m])) or vector(0))
             /
             clamp_min(sum(rate(http_server_requests_seconds_count{job="better-cloud-drive"}[5m])), 0.001)
           )
@@ -45,7 +45,7 @@ groups:
 
       - alert: BetterCloudDriveHighServerErrorRate
         expr: |
-          sum(rate(http_server_requests_seconds_count{job="better-cloud-drive",status=~"5.."}[5m]))
+          (sum(rate(http_server_requests_seconds_count{job="better-cloud-drive",status=~"5.."}[5m])) or vector(0))
           /
           clamp_min(sum(rate(http_server_requests_seconds_count{job="better-cloud-drive"}[5m])), 0.001)
           > 0.02
@@ -122,7 +122,7 @@ groups:
   - name: better-cloud-drive-observability
     rules:
       - alert: BetterCloudDriveObservabilityTargetDown
-        expr: up{job=~"loki|tempo|otel-collector|promtail|prometheus|alertmanager"} == 0
+        expr: up{job=~"loki|tempo|otel-collector|alloy|prometheus|alertmanager"} == 0
         for: 5m
         labels:
           severity: warning
@@ -148,8 +148,82 @@ groups:
           summary: Backend database pool is close to saturation
           description: More than 85% of the backend database connections have been active for 10 minutes.
 
+      - alert: BetterCloudDriveRedisMemoryPressure
+        expr: redis_memory_max_bytes > 0 and redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Redis memory usage is above 85%
+          description: Redis is approaching its configured memory limit.
+
+      - alert: BetterCloudDriveRedisEvictions
+        expr: increase(redis_evicted_keys_total[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Redis is evicting keys
+          description: Redis evicted one or more keys in the last 15 minutes.
+
+      - alert: BetterCloudDrivePostgresDeadlocks
+        expr: increase(pg_stat_database_deadlocks[15m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: PostgreSQL deadlocks detected
+          description: PostgreSQL reported one or more deadlocks in the last 15 minutes.
+
+      - alert: BetterCloudDriveRabbitMqResourceAlarm
+        expr: rabbitmq_alarms_free_disk_space_watermark > 0 or rabbitmq_alarms_memory_used_watermark > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: RabbitMQ resource alarm is active
+          description: RabbitMQ has raised a disk or memory watermark alarm.
+
+      - alert: BetterCloudDrivePrometheusStorageFailure
+        expr: increase(prometheus_tsdb_wal_writes_failed_total[10m]) > 0 or increase(prometheus_tsdb_compactions_failed_total[10m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Prometheus storage operation failed
+          description: Prometheus reported a WAL write or TSDB compaction failure.
+
+      - alert: BetterCloudDriveLokiIngestionFailure
+        expr: increase(loki_write_dropped_entries_total[10m]) > 0 or increase(loki_ingester_wal_disk_full_failures_total[10m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Loki dropped log entries
+          description: Loki dropped entries or could not write its WAL because storage was full.
+
+      - alert: BetterCloudDriveTempoFlushFailure
+        expr: increase(tempo_ingester_failed_flushes_total[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Tempo trace flush failed
+          description: Tempo failed to flush trace blocks during the last 10 minutes.
+
   - name: better-cloud-drive-slo
     rules:
+      - alert: BetterCloudDriveAvailabilityFastBurn
+        expr: bcd:sli:http_availability:ratio_5m < 0.95
+        for: 5m
+        labels:
+          severity: critical
+          slo: http-availability
+          window: fast
+        annotations:
+          summary: HTTP availability is rapidly consuming the error budget
+          description: Five-minute HTTP availability has remained below 95% for 5 minutes.
+
       - alert: BetterCloudDriveAvailabilitySLOBreach
         expr: bcd:sli:http_availability:ratio_5m < 0.99
         for: 15m
@@ -159,6 +233,17 @@ groups:
         annotations:
           summary: HTTP availability is below the 99% objective
           description: The rolling HTTP availability SLI has remained below 99% for 15 minutes.
+
+      - alert: BetterCloudDriveQueueSuccessFastBurn
+        expr: bcd:sli:queue_processing_success:ratio_15m < 0.90
+        for: 5m
+        labels:
+          severity: critical
+          slo: queue-processing
+          window: fast
+        annotations:
+          summary: Queue processing failures are rapidly consuming the error budget
+          description: Queue processing success has remained below 90% for 5 minutes.
 
       - alert: BetterCloudDriveQueueSuccessSLOBreach
         expr: bcd:sli:queue_processing_success:ratio_15m < 0.99

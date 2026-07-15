@@ -24,6 +24,14 @@ logging:
       add:
         env: prod
 
+management:
+  server:
+    port: ${MANAGEMENT_SERVER_PORT:8081}
+
+observability:
+  grafana-auth:
+    cookie-secure: ${GRAFANA_AUTH_COOKIE_SECURE:true}
+
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl

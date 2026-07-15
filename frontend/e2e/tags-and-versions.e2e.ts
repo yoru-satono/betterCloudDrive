@@ -65,13 +65,13 @@ test.describe('tags and versions', () => {
     await page.getByRole('menu').getByRole('menuitem', { name: '版本管理' }).click()
 
     const dialog = page.getByRole('dialog', { name: '版本管理' })
-    await expect(dialog.getByText('版本 2')).toBeVisible()
-    await expect(dialog.getByText('版本 1')).toBeVisible()
-    await dialog.locator('.version-row').filter({ hasText: '版本 1' }).getByRole('button', { name: '删除' }).click()
+    await expect(dialog.getByText('版本2')).toBeVisible()
+    await expect(dialog.getByText('版本1')).toBeVisible()
+    await dialog.locator('.version-row').filter({ hasText: '版本1' }).getByRole('button', { name: '删除' }).click()
     await page.getByRole('button', { name: '确认' }).click()
     await expect(page.getByText('版本已删除')).toBeVisible()
-    await expect(dialog.getByText('版本 1')).toHaveCount(0)
-    await expect(dialog.getByText('版本 2')).toBeVisible()
+    await expect(dialog.getByText('版本1')).toHaveCount(0)
+    await expect(dialog.getByText('版本2')).toBeVisible()
   })
 
   test('can still display pre-associated tags in the file tag manager', async ({ page, request, e2eUser }) => {

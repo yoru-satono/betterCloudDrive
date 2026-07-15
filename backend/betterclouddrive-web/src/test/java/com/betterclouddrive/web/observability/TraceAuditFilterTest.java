@@ -35,6 +35,7 @@ class TraceAuditFilterTest {
     @Test
     void shouldBindRequestIdAndWriteAudit() throws Exception {
         ObservabilityProperties properties = new ObservabilityProperties();
+        properties.getAudit().setCaptureBody(true);
         ObjectMapper objectMapper = new ObjectMapper();
         TraceAuditFilter filter = new TraceAuditFilter(
                 properties,
@@ -88,6 +89,7 @@ class TraceAuditFilterTest {
     @Test
     void shouldSkipBodyCaptureForUploadPaths() throws Exception {
         ObservabilityProperties properties = new ObservabilityProperties();
+        properties.getAudit().setCaptureBody(true);
         ObjectMapper objectMapper = new ObjectMapper();
         TraceAuditFilter filter = new TraceAuditFilter(
                 properties,
@@ -169,5 +171,27 @@ class TraceAuditFilterTest {
         verify(operationLogService).logRequestAudit(
                 isNull(), eq("READ"), eq("FILE"), isNull(), anyString(), any(), isNull(),
                 eq(1), anyInt(), anyString(), eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), eq(200), isNull());
+    }
+
+    @Test
+    void shouldTrustForwardedAddressOnlyFromConfiguredProxy() throws Exception {
+        ObservabilityProperties properties = new ObservabilityProperties();
+        TraceAuditFilter filter = new TraceAuditFilter(
+                properties, new AuditSanitizer(properties), operationLogService, null);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/files");
+        request.setRemoteAddr("203.0.113.5");
+        request.addHeader("X-Forwarded-For", "198.51.100.7");
+
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> { });
+        verify(operationLogService).logRequestAudit(
+                isNull(), eq("READ"), eq("FILE"), isNull(), anyString(), eq("203.0.113.5"), isNull(),
+                eq(1), anyInt(), anyString(), anyString(), eq(200), isNull());
+
+        reset(operationLogService);
+        properties.getAudit().setTrustedProxyCidrs(java.util.List.of("203.0.113.0/24"));
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> { });
+        verify(operationLogService).logRequestAudit(
+                isNull(), eq("READ"), eq("FILE"), isNull(), anyString(), eq("198.51.100.7"), isNull(),
+                eq(1), anyInt(), anyString(), anyString(), eq(200), isNull());
     }
 }

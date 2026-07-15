@@ -104,13 +104,13 @@ class TestLogin:
         r = client.post("/api/v1/auth/login", json={
             "username": test_user["username"], "password": "WrongPass1"
         })
-        assert_api_error(r, 401)
+        assert_api_error(r, 401003)
 
     def test_login_nonexistent_user(self, client):
         r = client.post("/api/v1/auth/login", json={
             "username": "no_such_user_42", "password": "Test123!"
         })
-        assert_api_error(r, 401)
+        assert_api_error(r, 401003)
 
     def test_login_missing_password(self, client):
         r = client.post("/api/v1/auth/login", json={"username": "someone"})

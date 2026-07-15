@@ -1,0 +1,61 @@
+local.file_match "runtime_logs" {
+  path_targets = [{
+    "__path__" = "/var/log/cloud-drive/runtime.log",
+    "job"       = "better-cloud-drive",
+    "service"   = "backend",
+    "log_type"  = "runtime",
+  }]
+}
+
+loki.source.file "runtime_logs" {
+  targets    = local.file_match.runtime_logs.targets
+  forward_to = [loki.process.runtime_logs.receiver]
+}
+
+loki.process "runtime_logs" {
+  stage.json {
+    expressions = {
+      level = "level",
+    }
+  }
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+local.file_match "audit_logs" {
+  path_targets = [{
+    "__path__" = "/var/log/cloud-drive/audit.log",
+    "job"       = "better-cloud-drive",
+    "service"   = "backend",
+    "log_type"  = "audit",
+  }]
+}
+
+loki.source.file "audit_logs" {
+  targets    = local.file_match.audit_logs.targets
+  forward_to = [loki.process.audit_logs.receiver]
+}
+
+loki.process "audit_logs" {
+  stage.json {
+    expressions = {
+      result = "result",
+    }
+  }
+  stage.labels {
+    values = {
+      result = "",
+    }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = sys.env("ALLOY_LOKI_PUSH_URL")
+  }
+}

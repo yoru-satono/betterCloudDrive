@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.client.RestClient;
 
 import java.nio.file.Files;
@@ -17,6 +18,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class SystemLogQueryServiceImplTest {
 
@@ -128,7 +130,7 @@ class SystemLogQueryServiceImplTest {
     }
 
     @Test
-    void shouldFallbackToLocalRuntimeLogWhenLokiReturnsNoEntries() throws Exception {
+    void shouldNotFallbackWhenLokiSuccessfullyReturnsNoEntries() throws Exception {
         ReflectionTestUtils.setField(service, "logDirectory", tempDir.toString());
         Files.writeString(tempDir.resolve("runtime.log"), """
                 {"@timestamp":"2026-06-17T04:20:00.123Z","level":"INFO","logger_name":"com.example.Local","message":"local runtime log","traceId":"local-trace","requestId":"local-request","path":"/api/v1/admin/system-logs","method":"GET"}
@@ -152,11 +154,25 @@ class SystemLogQueryServiceImplTest {
                 Instant.parse("2026-06-17T05:00:00Z"),
                 20);
 
+        assertThat(logs).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void shouldFallbackToLocalRuntimeLogWhenLokiIsUnavailable() throws Exception {
+        ReflectionTestUtils.setField(service, "logDirectory", tempDir.toString());
+        Files.writeString(tempDir.resolve("runtime.log"), """
+                {"@timestamp":"2026-06-17T04:21:00.123Z","level":"WARN","logger_name":"com.example.Local","message":"matching local log","traceId":"local-trace-2","requestId":"local-request-2"}
+                """);
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("http://loki.test/loki/api/v1/query_range?")))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        List<SystemLogEntryResponse> logs = service.listSystemLogs(
+                null, null, "WARN", null, "matching",
+                Instant.parse("2026-06-17T04:00:00Z"), Instant.parse("2026-06-17T05:00:00Z"), 20);
+
         assertThat(logs).hasSize(1);
         assertThat(logs.getFirst().getId()).isEqualTo("local-trace-2");
-        assertThat(logs.getFirst().getLevel()).isEqualTo("WARN");
-        assertThat(logs.getFirst().getLogger()).isEqualTo("com.example.Local");
-        assertThat(logs.getFirst().getMessage()).isEqualTo("matching local log");
         server.verify();
     }
 }

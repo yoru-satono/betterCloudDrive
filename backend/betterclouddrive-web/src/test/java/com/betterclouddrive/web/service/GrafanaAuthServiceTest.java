@@ -93,6 +93,18 @@ class GrafanaAuthServiceTest {
                 .isInstanceOf(AccessDeniedException.class);
     }
 
+    @Test
+    void secureCookieIsConfigurable() {
+        properties.getGrafanaAuth().setCookieSecure(true);
+        UserEntity admin = user(1L, "admin", "admin@test.local", "ROLE_ADMIN", 1);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        service.issueSession(authentication(1L, "admin", "ROLE_ADMIN"), response);
+
+        assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).contains("Secure");
+    }
+
     private UsernamePasswordAuthenticationToken authentication(Long userId, String username, String role) {
         return new UsernamePasswordAuthenticationToken(
                 new UserPrincipal(userId, username, "jti", role),

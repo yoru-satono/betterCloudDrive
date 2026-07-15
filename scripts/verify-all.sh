@@ -8,8 +8,8 @@ Usage: scripts/verify-all.sh [options]
 
 Options:
   -m, --module NAME          Module to run; repeatable (default: all)
-                            all, backend, blackbox, web, tauri, android,
-                            office, webdav, observability, resilience
+                            all, backend, blackbox, web, tauri, android-unit, android,
+                            integration, security, office, webdav, observability, resilience
       --skip-docker-build   Start Compose without rebuilding images
       --skip-tauri          Skip Tauri (not allowed with --module all)
       --skip-android        Skip Android (not allowed with --module all)
@@ -61,8 +61,8 @@ done
 ((${#modules[@]})) || modules=(all)
 
 declare -A valid_modules=(
-  [all]=1 [backend]=1 [blackbox]=1 [web]=1 [tauri]=1 [android]=1
-  [office]=1 [webdav]=1 [observability]=1 [resilience]=1
+  [all]=1 [backend]=1 [blackbox]=1 [web]=1 [tauri]=1 [android-unit]=1 [android]=1
+  [integration]=1 [security]=1 [office]=1 [webdav]=1 [observability]=1 [resilience]=1
 )
 declare -A selected=()
 for module in "${modules[@]}"; do
@@ -74,16 +74,19 @@ has_module() { [[ ${selected[$1]+yes} ]]; }
 
 run_all=0; has_module all && run_all=1
 run_backend=0; { ((run_all)) || has_module backend; } && run_backend=1
+run_integration=0; { ((run_all)) || has_module integration; } && run_integration=1
 run_blackbox=0; { ((run_all)) || has_module blackbox; } && run_blackbox=1
+run_security=0; { ((run_all)) || has_module security; } && run_security=1
 run_web=0; { ((run_all)) || has_module web; } && run_web=1
 run_tauri=0; { ((run_all)) || has_module tauri; } && ((!skip_tauri)) && run_tauri=1
 run_android=0; { ((run_all)) || has_module android; } && ((!skip_android)) && run_android=1
+run_android_unit=$run_android; has_module android-unit && run_android_unit=1
 run_office=0; { ((run_all)) || has_module office; } && ((!skip_onlyoffice)) && run_office=1
 run_webdav=0; { ((run_all)) || has_module webdav; } && run_webdav=1
 run_observability=0; { ((run_all)) || has_module observability; } && run_observability=1
 run_resilience=0; { ((run_all)) || has_module resilience; } && run_resilience=1
 
-needs_backend_http=$((run_blackbox || run_web || run_tauri || run_android || run_office || run_webdav || run_observability || run_resilience))
+needs_backend_http=$((run_blackbox || run_security || run_web || run_tauri || run_android || run_office || run_webdav || run_observability || run_resilience))
 needs_frontend_http=$((run_web || run_tauri || run_office))
 needs_mailpit=$((run_blackbox || run_web || run_tauri || run_android || run_office))
 needs_onlyoffice=$run_office
@@ -97,7 +100,7 @@ cd "$repo_root" || exit 2
 run_id="${BCD_TEST_RUN_ID:-bcd_$(date +%Y%m%d_%H%M%S)_$$}"
 export BCD_TEST_RUN_ID="$run_id"
 result_root="$repo_root/test-results"
-mkdir -p "$result_root"/{backend,blackbox,web,tauri,android,office,webdav,observability,resilience}
+mkdir -p "$result_root"/{backend,integration,blackbox,security,web,tauri,android,office,webdav,observability,resilience,coverage}
 
 if ((run_all && (skip_tauri || skip_android || skip_onlyoffice))); then
   die "module 'all' is a complete acceptance run; skip flags for Tauri, Android, and OnlyOffice are not allowed"
@@ -157,9 +160,9 @@ prepare_env() {
 
 start_stack() {
   if ((skip_docker_build)); then
-    docker compose up -d
+    docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d
   else
-    docker compose up -d --build
+    docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d --build
   fi
   stack_started=1
 }
@@ -198,8 +201,10 @@ run_pytest() {
 }
 
 backend_tests() { (cd backend && mvn test -Dsurefire.reportNameSuffix=backend); }
-blackbox_tests() { run_pytest 'not webdav and not office and not observability and not resilience' ../test-results/blackbox/junit.xml; }
-web_unit_tests() { (cd frontend && pnpm run test); }
+integration_tests() { (cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage -am); }
+blackbox_tests() { run_pytest 'not webdav and not office and not observability and not resilience and not security' ../test-results/blackbox/junit.xml; }
+security_tests() { run_pytest security ../test-results/security/junit.xml; }
+web_unit_tests() { (cd frontend && pnpm run test:coverage); }
 web_e2e_tests() {
   (cd frontend && E2E_USE_DOCKER=1 E2E_BASE_URL=http://127.0.0.1:3000 \
     E2E_BACKEND_URL=http://127.0.0.1:8080 E2E_ONLYOFFICE=0 pnpm exec playwright test --project=core)
@@ -209,14 +214,17 @@ office_tests() {
     E2E_BACKEND_URL=http://127.0.0.1:8080 E2E_ONLYOFFICE=1 pnpm exec playwright test --project=office)
 }
 tauri_build() { (cd frontend && pnpm run tauri:e2e:build); }
+tauri_unit_tests() { (cd frontend/src-tauri && cargo test --locked); }
 tauri_tests() { (cd frontend && pnpm run test:e2e:tauri); }
 webdav_tests() { run_pytest webdav ../test-results/webdav/junit.xml; }
 observability_tests() { run_pytest observability ../test-results/observability/junit.xml; }
+prometheus_rule_tests() { docker compose exec -T prometheus promtool test rules /etc/prometheus/tests/better-cloud-drive.test.yml; }
 resilience_tests() { run_pytest resilience ../test-results/resilience/junit.xml; }
 android_unit_tests() { (cd android && ./gradlew testDebugUnitTest); }
+android_coverage() { (cd android && ./gradlew jacocoDebugUnitTestCoverageVerification); }
 android_e2e_tests() {
   if [[ $android_serial == *:* ]]; then adb connect "$android_serial" || return; fi
-  (cd android && ANDROID_SERIAL="$android_serial" ./gradlew connectedDebugAndroidTest)
+  (cd android && ANDROID_SERIAL="$android_serial" ./gradlew createDebugAndroidTestCoverageReport)
 }
 
 cleanup_e2e() {
@@ -259,14 +267,19 @@ run_step "Prepare env files" prepare_env || exit $?
 ((needs_docker == 0)) || run_step "Start Docker stack" start_stack || exit $?
 ((needs_docker == 0)) || run_step "Wait for services" wait_services || exit $?
 ((run_backend == 0)) || run_step "Backend unit tests" backend_tests || exit $?
+((run_integration == 0)) || run_step "Backend Testcontainers integration tests" integration_tests || exit $?
 ((run_blackbox == 0)) || run_step "Backend black-box tests" blackbox_tests || exit $?
-((run_web == 0)) || run_step "Frontend unit tests" web_unit_tests || exit $?
+((run_security == 0)) || run_step "Security acceptance tests" security_tests || exit $?
+((run_web == 0)) || run_step "Frontend unit tests and coverage" web_unit_tests || exit $?
 ((run_web == 0)) || run_step "Web E2E tests" web_e2e_tests || exit $?
 ((run_office == 0)) || run_step "OnlyOffice E2E tests" office_tests || exit $?
+((run_tauri == 0)) || run_step "Tauri Rust unit tests" tauri_unit_tests || exit $?
 ((run_tauri == 0)) || run_step "Tauri E2E build" tauri_build || exit $?
 ((run_tauri == 0)) || run_step "Tauri E2E tests" tauri_tests || exit $?
 ((run_webdav == 0)) || run_step "WebDAV protocol and rclone acceptance" webdav_tests || exit $?
+((run_observability == 0)) || run_step "Prometheus rule tests" prometheus_rule_tests || exit $?
 ((run_observability == 0)) || run_step "Observability acceptance" observability_tests || exit $?
 ((run_resilience == 0)) || run_step "Resilience acceptance" resilience_tests || exit $?
-((run_android == 0)) || run_step "Android unit tests" android_unit_tests || exit $?
+((run_android_unit == 0)) || run_step "Android unit tests" android_unit_tests || exit $?
+((run_android_unit == 0)) || run_step "Android unit coverage and 80% gate" android_coverage || exit $?
 ((run_android == 0)) || run_step "Android E2E tests" android_e2e_tests || exit $?

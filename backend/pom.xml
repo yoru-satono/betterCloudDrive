@@ -34,6 +34,9 @@
         <minio-sdk.version>8.5.12</minio-sdk.version>
         <jjwt.version>0.12.6</jjwt.version>
         <hutool.version>5.8.27</hutool.version>
+        <jacoco.version>0.8.13</jacoco.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
+        <skipUnitTests>false</skipUnitTests>
     </properties>
 
     <dependencyManagement>
@@ -108,8 +111,33 @@
     </dependencyManagement>
 
     <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.version}</version>
+                <executions>
+                    <execution>
+                        <goals><goal>prepare-agent</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals><goal>report</goal></goals>
+                        <configuration>
+                            <outputDirectory>${maven.multiModuleProjectDirectory}/../test-results/coverage/java/${project.artifactId}</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration><skipTests>${skipUnitTests}</skipTests></configuration>
+                </plugin>
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>

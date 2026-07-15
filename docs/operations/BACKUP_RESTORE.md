@@ -23,7 +23,7 @@
 ```powershell
 $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $BackupDir = (New-Item -ItemType Directory -Path "backups/$Stamp").FullName
-docker compose stop frontend promtail onlyoffice-documentserver backend
+docker compose stop frontend alloy onlyoffice-documentserver backend
 ```
 
 备份 PostgreSQL：
