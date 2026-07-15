@@ -66,6 +66,7 @@ public class RabbitQueueConfig {
     RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
         template.setMandatory(true);
+        template.setObservationEnabled(true);
         return template;
     }
 
@@ -79,6 +80,7 @@ public class RabbitQueueConfig {
         factory.setConcurrentConsumers(properties.getRabbitmq().getConcurrency());
         factory.setMaxConcurrentConsumers(properties.getRabbitmq().getMaxConcurrency());
         factory.setDefaultRequeueRejected(false);
+        factory.setObservationEnabled(true);
         return factory;
     }
 

@@ -1,13 +1,27 @@
 apiVersion: 1
 
 datasources:
+  - name: Prometheus
+    uid: bcd-prometheus
+    type: prometheus
+    access: proxy
+    url: ${GRAFANA_DS_PROMETHEUS_URL}
+    isDefault: true
+    editable: false
+
   - name: Loki
     uid: bcd-loki
     type: loki
     access: proxy
     url: ${GRAFANA_DS_LOKI_URL}
     isDefault: false
-    editable: true
+    editable: false
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id":"([0-9a-f]{32})"'
+          datasourceUid: bcd-tempo
+          url: '$${__value.raw}'
 
   - name: Tempo
     uid: bcd-tempo
@@ -15,4 +29,21 @@ datasources:
     access: proxy
     url: ${GRAFANA_DS_TEMPO_URL}
     isDefault: false
-    editable: true
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: bcd-loki
+        spanStartTimeShift: -2m
+        spanEndTimeShift: 2m
+        filterByTraceID: true
+        filterBySpanID: false
+
+  - name: Alertmanager
+    uid: bcd-alertmanager
+    type: alertmanager
+    access: proxy
+    url: ${GRAFANA_DS_ALERTMANAGER_URL}
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false

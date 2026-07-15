@@ -14,20 +14,18 @@ import static org.mockito.Mockito.when;
 class TeamQuotaMetricsTest {
 
     @Test
-    void recordUsage_shouldExposeTeamQuotaGauges() {
+    void recordUsage_shouldExposeBoundedAggregateTeamQuotaGauges() {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         TeamQuotaMetrics metrics = new TeamQuotaMetrics(registry, mock(TeamRepository.class));
 
         metrics.recordUsage(10L, 850L, 1000L, 80);
 
-        assertThat(registry.get("bcd.team.quota.used.bytes").tag("team.id", "10").gauge().value())
+        assertThat(registry.get("bcd.team.quota.used.bytes").gauge().value())
                 .isEqualTo(850.0);
-        assertThat(registry.get("bcd.team.quota.limit.bytes").tag("team.id", "10").gauge().value())
+        assertThat(registry.get("bcd.team.quota.limit.bytes").gauge().value())
                 .isEqualTo(1000.0);
-        assertThat(registry.get("bcd.team.quota.usage.ratio").tag("team.id", "10").gauge().value())
-                .isEqualTo(0.85);
-        assertThat(registry.get("bcd.team.quota.threshold.percent").tag("team.id", "10").gauge().value())
-                .isEqualTo(80.0);
+        assertThat(registry.get("bcd.team.quota.teams").tag("usage", "80_90").gauge().value())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -57,7 +55,7 @@ class TeamQuotaMetricsTest {
         int refreshed = metrics.refreshAllTeams();
 
         assertThat(refreshed).isEqualTo(1);
-        assertThat(registry.get("bcd.team.quota.threshold.percent").tag("team.id", "10").gauge().value())
-                .isEqualTo(90.0);
+        assertThat(registry.get("bcd.team.quota.teams").tag("usage", "90_100").gauge().value())
+                .isEqualTo(1.0);
     }
 }

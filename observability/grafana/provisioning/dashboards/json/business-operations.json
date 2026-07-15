@@ -1,0 +1,68 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "bcd_queue_messages_ready", "legendFormat": "Rabbit ready / {{queue}}", "refId": "A"}, {"expr": "bcd_queue_records_pending", "legendFormat": "DB pending / {{source}}", "refId": "B"}, {"expr": "bcd_queue_records_retry", "legendFormat": "DB retry / {{source}}", "refId": "C"}],
+      "title": "Queue backlog",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "sum by (operation, outcome) (rate(bcd_queue_processing_results_total[5m]))", "legendFormat": "{{operation}} / {{outcome}}", "refId": "A"}],
+      "title": "Queue processing rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 8},
+      "id": 3,
+      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto", "wideLayout": true},
+      "targets": [{"expr": "bcd_queue_messages_ready{queue=\"dead-letter\"}", "refId": "A"}],
+      "title": "Dead-letter messages",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 8},
+      "id": 4,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "increase(bcd_onlyoffice_save_results_total[1h])", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "title": "OnlyOffice save results (1h)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 8},
+      "id": 5,
+      "options": {"legend": {"calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
+      "targets": [{"expr": "rate(bcd_onlyoffice_save_duration_seconds_sum[5m]) / clamp_min(rate(bcd_onlyoffice_save_duration_seconds_count[5m]), 0.001)", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "title": "OnlyOffice mean save duration",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["betterclouddrive", "business"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "BetterCloudDrive / Business Operations",
+  "uid": "bcd-business-operations",
+  "version": 1
+}

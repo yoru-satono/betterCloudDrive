@@ -1,24 +1,69 @@
-# 应用指标与排障
+# 可观测性运行与排障
 
-后端通过 Spring Boot Actuator 暴露 Micrometer 指标。查看指标名和单项明细：
+默认数据流：
+
+```text
+runtime/audit.log -> Promtail -> Loki ----+
+                                           +-> Grafana
+Spring OpenTelemetry -> Collector -> Tempo-+
+                                           |
+Actuator/exporters -> Prometheus ----------+
+                         |
+                         +-> Alertmanager -> Mailpit（开发环境）
+```
+
+Grafana 的 `BetterCloudDrive` 目录预置以下 Dashboard：
+
+- `Application Overview`：可用性、吞吐、错误率、HTTP 延迟、JVM、连接池及观测组件健康度。
+- `Business Operations`：RabbitMQ/事实表积压、DLQ、队列消费和 OnlyOffice 保存。
+
+Loki 数据源会把 JSON 日志中的 `trace_id` 链接到 Tempo；Tempo 也能按 trace ID 回查 Loki。`trace_id`、`request_id` 不作为 Loki 标签，避免高基数索引。
+
+## Prometheus 和告警
+
+Prometheus 默认保留 30 天数据，配置位于 `observability/prometheus.yml`，规则位于 `observability/prometheus-rules.yml`。首批规则覆盖：后端不可用、5xx 比例、P95 延迟、JVM 堆压力、连接池饱和、队列积压、DLQ、OnlyOffice 保存失败及观测/基础设施指标源不可用。
+
+开发环境 Alertmanager 把告警发给 Mailpit 中的 `admin@betterclouddrive.local`。生产部署前必须修改 `observability/alertmanager.yml` 的 SMTP 和接收人，或改为受控的 Webhook/企业通知渠道。告警均使用持续时间窗口，避免瞬时尖峰造成告警风暴。
+
+检查采集目标和告警规则：
 
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8080/actuator/metrics
-Invoke-RestMethod http://127.0.0.1:8080/actuator/metrics/bcd.team.quota.usage.ratio
+Invoke-RestMethod http://127.0.0.1:9090/api/v1/targets
+Invoke-RestMethod 'http://127.0.0.1:9090/api/v1/rules?type=alert'
+Invoke-RestMethod http://127.0.0.1:9093/-/ready
+```
+
+生产环境如果不需要从宿主机诊断 Prometheus/Alertmanager，应移除 Compose 中相应的 `ports`，仅保留内部网络访问。
+
+后端通过 Spring Boot Actuator 暴露 Prometheus 格式的 Micrometer 指标：
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8080/actuator/prometheus
 ```
 
 ## 团队配额
 
 | 指标 | 类型 | 标签 | 说明 |
 |------|------|------|------|
-| `bcd.team.quota.used.bytes` | Gauge | `team.id` | 当前使用字节数 |
-| `bcd.team.quota.limit.bytes` | Gauge | `team.id` | 配额字节数 |
-| `bcd.team.quota.usage.ratio` | Gauge | `team.id` | 使用率，`0-1` |
-| `bcd.team.quota.threshold.percent` | Gauge | `team.id` | 当前达到的 `0/80/90/100` 阈值 |
+| `bcd.team.quota.used.bytes` | Gauge | 无 | 所有有效团队当前使用字节数 |
+| `bcd.team.quota.limit.bytes` | Gauge | 无 | 所有有效团队配额总字节数 |
+| `bcd.team.quota.teams` | Gauge | `usage` | 按 `<80/80-90/90-100/>=100%` 分桶的团队数 |
 | `bcd.team.quota.alerts` | Counter | `threshold` | 去重后实际触发的告警次数 |
 | `bcd.team.quota.notification.failures` | Counter | `channel` | `queue/direct/email` 通知失败次数 |
 
-告警触发和通知失败同时写入结构化运行日志。Loki 中可搜索 `Team quota alert triggered` 或 `Failed to dispatch team quota alert`，日志包含 `teamId`、`userId`、阈值和通知通道；指标不使用用户 ID 标签，避免无界基数。
+告警触发和通知失败同时写入结构化运行日志。单团队明细保留在业务数据库和管理后台；Prometheus 仅存总量与固定分桶，不使用团队或用户 ID 标签，避免无界基数。
+
+## Trace 关联
+
+Spring 的 OpenTelemetry/Micrometer Observation 是 trace context 的唯一事实来源。HTTP 审计从当前真实 Span 读取 `trace_id/span_id`，RabbitTemplate 和监听容器启用 Observation，自动通过消息头传播 W3C context。生产环境建议将 `TRACING_SAMPLING_PROBABILITY` 调低到 `0.01-0.2`；开发和验收环境可保持 `1.0`。
+
+按响应头检查 trace：
+
+```powershell
+$response = Invoke-WebRequest http://127.0.0.1:8080/actuator/health
+$traceId = $response.Headers['X-Trace-ID']
+Invoke-RestMethod "http://127.0.0.1:3200/api/traces/$traceId"
+```
 
 ## OnlyOffice 保存
 

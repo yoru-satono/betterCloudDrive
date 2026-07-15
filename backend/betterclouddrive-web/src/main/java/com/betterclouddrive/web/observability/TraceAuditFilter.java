@@ -9,6 +9,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
@@ -35,7 +37,9 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+// Run after Spring's server observation filter so Tracer.currentSpan() is the
+// authoritative context exported to Tempo.
+@Order(Ordered.HIGHEST_PRECEDENCE + 20)
 @RequiredArgsConstructor
 public class TraceAuditFilter extends OncePerRequestFilter {
 
@@ -47,6 +51,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
     private final AuditSanitizer auditSanitizer;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final OperationLogService operationLogService;
+    private final Tracer tracer;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -230,6 +235,15 @@ public class TraceAuditFilter extends OncePerRequestFilter {
     }
 
     private TraceIds resolveTraceIds(HttpServletRequest request) {
+        Span currentSpan = tracer != null ? tracer.currentSpan() : null;
+        if (currentSpan != null && currentSpan.context() != null) {
+            String traceId = currentSpan.context().traceId();
+            String spanId = currentSpan.context().spanId();
+            if (isTraceId(traceId) && isSpanId(spanId)) {
+                return new TraceIds(traceId.toLowerCase(Locale.ROOT), spanId.toLowerCase(Locale.ROOT), true);
+            }
+        }
+
         String traceparent = request.getHeader("traceparent");
         if (StringUtils.hasText(traceparent)) {
             String[] parts = traceparent.split("-");

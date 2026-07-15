@@ -48,6 +48,12 @@
             <artifactId>aspectjweaver</artifactId>
         </dependency>
 
+        <!-- Read the active OpenTelemetry-backed trace context for audit correlation. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing</artifactId>
+        </dependency>
+
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

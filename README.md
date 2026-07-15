@@ -12,7 +12,7 @@
 | **消息队列** | RabbitMQ 4（团队通知、后台任务、死信队列） |
 | **存储** | SeaweedFS（S3 兼容对象存储） |
 | **邮件** | Mailpit（开发环境邮件模拟） |
-| **可观测性** | Spring Boot Actuator + OpenTelemetry + Loki + Promtail + Tempo + Grafana |
+| **可观测性** | Actuator/Micrometer + Prometheus + Alertmanager + OpenTelemetry + Loki + Promtail + Tempo + Grafana |
 | **Web 前端** | Vue 3 + Vite + Pinia + Vue Router 4 |
 | **Android** | Kotlin + Jetpack Compose + Material 3 + Hilt + Retrofit |
 | **测试** | JUnit 5 + Mockito（后端）、pytest + httpx（黑盒）、Vitest + Playwright（前端） |
@@ -98,6 +98,8 @@ docker compose up -d --build
 - Mailpit：`http://localhost:8025`
 - OnlyOffice Document Server：`http://localhost:8082`
 - SeaweedFS S3：`http://localhost:8333`
+- Prometheus：`http://localhost:9090`（诊断接口，不面向最终用户）
+- Alertmanager：`http://localhost:9093`（诊断接口，不面向最终用户）
 - Grafana：通过管理后台日志中心的 Grafana 链接访问，同域路径为 `/grafana/`，仅系统管理员可进入。
 
 部署细节见 [OnlyOffice 部署与排障](docs/operations/ONLYOFFICE_DEPLOYMENT.md) 和 [团队数据备份与恢复](docs/operations/BACKUP_RESTORE.md)。
@@ -112,7 +114,7 @@ docker compose up -d --build
 - `audit.log`：独立审计 JSON 行日志，记录认证用户、请求路径、状态码、耗时、脱敏请求头和受控大小的请求体。
 - 本地审计表 `operation_logs` 保留完整脱敏审计记录，并新增 `request_id`、`trace_id`、`status_code`、`error_code` 字段，便于和外部日志/trace 关联。
 
-Docker Compose 默认启动 Loki、Promtail、Tempo、OpenTelemetry Collector 和 Grafana。Promtail 从后端日志 volume 采集 runtime/audit 两类日志，应用通过 OTLP HTTP 发送 traces 到 Collector，再转发到 Tempo。相关地址由 `config/env-files/observability.env` 中的 `LOKI_BASE_URL`、`PROMTAIL_LOKI_PUSH_URL`、`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`、`OTEL_COLLECTOR_TEMPO_ENDPOINT`、`GRAFANA_DS_LOKI_URL` 和 `GRAFANA_DS_TEMPO_URL` 控制。OTLP metrics 默认关闭，可通过 `METRICS_EXPORT_OTLP_ENABLED=true` 开启并为 Collector 增加 metrics pipeline。响应头会返回 `X-Request-ID` 和 `X-Trace-ID`，客户端排查问题时可直接用这两个 ID 检索日志。
+Docker Compose 默认启动 Prometheus、Alertmanager、Loki、Promtail、Tempo、OpenTelemetry Collector 和 Grafana。Prometheus 采集应用、观测组件以及 PostgreSQL/Redis/RabbitMQ 指标；Alertmanager 在开发环境将告警邮件发送到 Mailpit。Promtail 从后端日志 volume 采集 runtime/audit 两类日志，应用通过 OTLP HTTP 发送 traces 到 Collector，再转发到 Tempo。Grafana 已预置应用总览和业务运维 Dashboard，并支持日志与 trace 双向跳转。OTLP metrics 默认关闭，避免与 Prometheus scrape 重复采集。响应头会返回 `X-Request-ID` 和来自真实 OpenTelemetry Span 的 `X-Trace-ID`，客户端可用这两个 ID 关联审计、日志和 trace。
 
 Grafana 通过 Nginx `auth_request` 接入 BetterCloudDrive 管理员身份。前端点击 Grafana 前会向后端换取短期 HttpOnly cookie，后端确认当前用户仍是 `ROLE_ADMIN` 后，Nginx 才会把请求代理到 Grafana Auth Proxy。`GRAFANA_AUTH_PROXY_SECRET` 用于签名该短期 cookie，生产环境必须替换为随机密钥；`GF_SERVER_ROOT_URL` 控制 Grafana 自身生成的外部访问地址，默认同域挂载在 `/grafana/`。
 

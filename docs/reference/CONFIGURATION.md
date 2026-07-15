@@ -462,6 +462,9 @@ Web 前端地址解析顺序：
 | `GRAFANA_LOKI_DATASOURCE` | 后端生成 Explore 链接使用的 Loki 数据源名称 |
 | `GRAFANA_DS_LOKI_URL` | Grafana provisioning 中 Loki 数据源地址 |
 | `GRAFANA_DS_TEMPO_URL` | Grafana provisioning 中 Tempo 数据源地址 |
+| `GRAFANA_DS_PROMETHEUS_URL` | Grafana provisioning 中 Prometheus 数据源地址 |
+| `GRAFANA_DS_ALERTMANAGER_URL` | Grafana provisioning 中 Alertmanager 数据源地址 |
+| `PROMETHEUS_RETENTION_TIME` | Prometheus 本地时序数据保留时间 |
 | `LOKI_PORT` | Loki 容器端口标记 |
 | `LOKI_BASE_URL` | 后端查询 Loki 的 HTTP 地址 |
 | `TEMPO_PORT` | Tempo HTTP 端口标记 |

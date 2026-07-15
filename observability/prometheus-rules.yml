@@ -1,0 +1,116 @@
+groups:
+  - name: better-cloud-drive-availability
+    rules:
+      - alert: BetterCloudDriveBackendDown
+        expr: up{job="better-cloud-drive"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: BetterCloudDrive backend is unavailable
+          description: Prometheus has failed to scrape the backend for more than 2 minutes.
+
+      - alert: BetterCloudDriveHighServerErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{job="better-cloud-drive",status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_server_requests_seconds_count{job="better-cloud-drive"}[5m])), 0.001)
+          > 0.02
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Backend 5xx error rate is above 2%
+          description: More than 2% of backend requests have returned 5xx responses for 5 minutes.
+
+      - alert: BetterCloudDriveHighP95Latency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{job="better-cloud-drive"}[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Backend p95 latency is above 2 seconds
+          description: The backend p95 HTTP latency has exceeded 2 seconds for 10 minutes.
+
+      - alert: BetterCloudDriveJvmHeapPressure
+        expr: |
+          sum(jvm_memory_used_bytes{job="better-cloud-drive",area="heap"})
+          /
+          clamp_min(sum(jvm_memory_max_bytes{job="better-cloud-drive",area="heap"}), 1)
+          > 0.85
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Backend JVM heap pressure is high
+          description: JVM heap usage has remained above 85% for 15 minutes.
+
+  - name: better-cloud-drive-business
+    rules:
+      - alert: BetterCloudDriveQueueBacklog
+        expr: bcd_queue_messages_ready > 100 or bcd_queue_records_pending > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: BetterCloudDrive queue backlog is growing
+          description: A RabbitMQ queue or durable database queue has exceeded 100 pending records for 10 minutes.
+
+      - alert: BetterCloudDriveDeadLettersPresent
+        expr: bcd_queue_messages_ready{queue="dead-letter"} > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: BetterCloudDrive dead-letter queue is not empty
+          description: Messages have remained in the dead-letter queue for more than 2 minutes.
+
+      - alert: BetterCloudDriveQueueObservationUnavailable
+        expr: bcd_queue_observation_available == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Queue metrics source is unavailable
+          description: BetterCloudDrive cannot observe RabbitMQ or the durable queue tables.
+
+      - alert: BetterCloudDriveOnlyOfficeSaveFailures
+        expr: increase(bcd_onlyoffice_save_results_total{outcome="failure"}[10m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: OnlyOffice saves are repeatedly failing
+          description: More than two OnlyOffice save failures occurred within ten minutes.
+
+  - name: better-cloud-drive-observability
+    rules:
+      - alert: BetterCloudDriveObservabilityTargetDown
+        expr: up{job=~"loki|tempo|otel-collector|promtail|prometheus|alertmanager"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An observability component is unavailable
+          description: Prometheus cannot scrape {{ $labels.job }} at {{ $labels.instance }}.
+
+      - alert: BetterCloudDriveInfrastructureExporterDown
+        expr: up{job=~"postgres|redis|rabbitmq"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An infrastructure metrics target is unavailable
+          description: Prometheus cannot scrape {{ $labels.job }} metrics at {{ $labels.instance }}.
+
+      - alert: BetterCloudDriveDatabasePoolSaturation
+        expr: hikaricp_connections_active / clamp_min(hikaricp_connections_max, 1) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Backend database pool is close to saturation
+          description: More than 85% of the backend database connections have been active for 10 minutes.

@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -22,9 +23,24 @@ public class TeamQuotaMetrics {
     public TeamQuotaMetrics(MeterRegistry meterRegistry, TeamRepository teamRepository) {
         this.meterRegistry = meterRegistry;
         this.teamRepository = teamRepository;
+        Gauge.builder(METRIC_PREFIX + "used.bytes", snapshots, values -> total(values, true))
+                .description("Total storage used by active teams")
+                .baseUnit("bytes")
+                .register(meterRegistry);
+        Gauge.builder(METRIC_PREFIX + "limit.bytes", snapshots, values -> total(values, false))
+                .description("Total storage quota configured for active teams")
+                .baseUnit("bytes")
+                .register(meterRegistry);
+        for (String bucket : new String[]{"under_80", "80_90", "90_100", "at_or_over_100"}) {
+            Gauge.builder(METRIC_PREFIX + "teams", snapshots, values -> countBucket(values, bucket))
+                    .description("Number of active teams grouped by quota usage")
+                    .tag("usage", bucket)
+                    .register(meterRegistry);
+        }
     }
 
-    public int refreshAllTeams() {
+    public synchronized int refreshAllTeams() {
+        ConcurrentMap<Long, QuotaSnapshot> refreshedSnapshots = new ConcurrentHashMap<>();
         int refreshed = 0;
         for (TeamEntity team : teamRepository.findByDeletedAtIsNull()) {
             if (team.getId() == null || team.getStorageQuota() == null || team.getStorageQuota() <= 0) {
@@ -33,9 +49,11 @@ public class TeamQuotaMetrics {
             long used = team.getStorageUsed() != null ? team.getStorageUsed() : 0L;
             int ratioPercent = (int) Math.floor(used * 100.0 / team.getStorageQuota());
             int threshold = ratioPercent >= 100 ? 100 : ratioPercent >= 90 ? 90 : ratioPercent >= 80 ? 80 : 0;
-            recordUsage(team.getId(), used, team.getStorageQuota(), threshold);
+            refreshedSnapshots.put(team.getId(), new QuotaSnapshot(used, team.getStorageQuota(), threshold));
             refreshed++;
         }
+        snapshots.clear();
+        snapshots.putAll(refreshedSnapshots);
         return refreshed;
     }
 
@@ -43,7 +61,7 @@ public class TeamQuotaMetrics {
         if (teamId == null) {
             return;
         }
-        QuotaSnapshot snapshot = snapshots.computeIfAbsent(teamId, this::registerSnapshot);
+        QuotaSnapshot snapshot = snapshots.computeIfAbsent(teamId, ignored -> new QuotaSnapshot());
         snapshot.update(usedBytes, quotaBytes, thresholdPercent);
     }
 
@@ -59,29 +77,14 @@ public class TeamQuotaMetrics {
                 "channel", normalizeChannel(channel)).increment();
     }
 
-    private QuotaSnapshot registerSnapshot(Long teamId) {
-        String teamTag = String.valueOf(teamId);
-        QuotaSnapshot snapshot = new QuotaSnapshot();
-        Gauge.builder(METRIC_PREFIX + "used.bytes", snapshot, value -> value.usedBytes.get())
-                .description("Current team storage usage")
-                .baseUnit("bytes")
-                .tag("team.id", teamTag)
-                .register(meterRegistry);
-        Gauge.builder(METRIC_PREFIX + "limit.bytes", snapshot, value -> value.quotaBytes.get())
-                .description("Configured team storage quota")
-                .baseUnit("bytes")
-                .tag("team.id", teamTag)
-                .register(meterRegistry);
-        Gauge.builder(METRIC_PREFIX + "usage.ratio", snapshot, QuotaSnapshot::usageRatio)
-                .description("Team storage usage ratio from 0 to 1")
-                .tag("team.id", teamTag)
-                .register(meterRegistry);
-        Gauge.builder(METRIC_PREFIX + "threshold.percent", snapshot, value -> value.thresholdPercent.get())
-                .description("Current reached team quota alert threshold")
-                .baseUnit("percent")
-                .tag("team.id", teamTag)
-                .register(meterRegistry);
-        return snapshot;
+    private static double total(Map<Long, QuotaSnapshot> values, boolean used) {
+        return values.values().stream()
+                .mapToLong(value -> used ? value.usedBytes.get() : value.quotaBytes.get())
+                .sum();
+    }
+
+    private static double countBucket(Map<Long, QuotaSnapshot> values, String bucket) {
+        return values.values().stream().filter(value -> bucket.equals(value.usageBucket())).count();
     }
 
     private String normalizeChannel(String channel) {
@@ -94,15 +97,26 @@ public class TeamQuotaMetrics {
         private final AtomicLong quotaBytes = new AtomicLong();
         private final AtomicLong thresholdPercent = new AtomicLong();
 
+        private QuotaSnapshot() {
+        }
+
+        private QuotaSnapshot(long used, long quota, int threshold) {
+            update(used, quota, threshold);
+        }
+
         private void update(long used, long quota, int threshold) {
             usedBytes.set(Math.max(used, 0L));
             quotaBytes.set(Math.max(quota, 0L));
             thresholdPercent.set(Math.max(threshold, 0));
         }
 
-        private double usageRatio() {
+        private String usageBucket() {
             long quota = quotaBytes.get();
-            return quota > 0 ? usedBytes.get() / (double) quota : 0.0;
+            double ratio = quota > 0 ? usedBytes.get() / (double) quota : 0.0;
+            if (ratio >= 1.0) return "at_or_over_100";
+            if (ratio >= 0.9) return "90_100";
+            if (ratio >= 0.8) return "80_90";
+            return "under_80";
         }
     }
 }

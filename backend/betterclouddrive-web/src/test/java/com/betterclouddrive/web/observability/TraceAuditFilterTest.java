@@ -11,6 +11,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -36,7 +39,7 @@ class TraceAuditFilterTest {
         TraceAuditFilter filter = new TraceAuditFilter(
                 properties,
                 new AuditSanitizer(properties),
-                operationLogService);
+                operationLogService, null);
 
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/files");
         request.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -89,7 +92,7 @@ class TraceAuditFilterTest {
         TraceAuditFilter filter = new TraceAuditFilter(
                 properties,
                 new AuditSanitizer(properties),
-                operationLogService);
+                operationLogService, null);
 
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/upload/session-1/chunk");
         request.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -121,7 +124,7 @@ class TraceAuditFilterTest {
         TraceAuditFilter filter = new TraceAuditFilter(
                 properties,
                 new AuditSanitizer(properties),
-                operationLogService);
+                operationLogService, null);
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/files");
         request.addHeader(RequestTraceContext.HEADER_TRACE_ID, "4bf92f3577b34da6a3ce929d0e0e4736");
@@ -137,5 +140,34 @@ class TraceAuditFilterTest {
         });
 
         assertThat(traceparent.get()).matches("00-4bf92f3577b34da6a3ce929d0e0e4736-[0-9a-f]{16}-01");
+    }
+
+    @Test
+    void shouldPreferTheExporterBackedCurrentSpan() throws Exception {
+        ObservabilityProperties properties = new ObservabilityProperties();
+        Tracer tracer = mock(Tracer.class);
+        Span span = mock(Span.class);
+        TraceContext context = mock(TraceContext.class);
+        when(tracer.currentSpan()).thenReturn(span);
+        when(span.context()).thenReturn(context);
+        when(context.traceId()).thenReturn("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        when(context.spanId()).thenReturn("bbbbbbbbbbbbbbbb");
+        TraceAuditFilter filter = new TraceAuditFilter(
+                properties,
+                new AuditSanitizer(properties),
+                operationLogService,
+                tracer);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/files");
+        request.addHeader("traceparent", "00-11111111111111111111111111111111-2222222222222222-01");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, (req, res) -> res.getWriter().write("ok"));
+
+        assertThat(response.getHeader(RequestTraceContext.HEADER_TRACE_ID))
+                .isEqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        verify(operationLogService).logRequestAudit(
+                isNull(), eq("READ"), eq("FILE"), isNull(), anyString(), any(), isNull(),
+                eq(1), anyInt(), anyString(), eq("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), eq(200), isNull());
     }
 }
