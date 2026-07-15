@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import OButton from '@/components/base/OButton.vue'
 import OInput from '@/components/base/OInput.vue'
 import OModal from '@/components/base/OModal.vue'
@@ -18,6 +18,7 @@ const route = useRoute()
 const { formatSize } = useFormatters()
 const showCreateTeam = ref(false)
 const teamName = ref('')
+const isTeamArea = computed(() => route.meta?.area === 'team')
 
 const navItems = [
   { to: '/files',       label: '全部文件',  icon: 'folder' },
@@ -42,11 +43,9 @@ const iconPaths: Record<string, string> = {
   plus:   'M12 5v14M5 12h14',
 }
 
-onMounted(() => {
-  if (auth.user) {
-    void teams.fetchTeams()
-  }
-})
+watch(isTeamArea, active => {
+  if (active && auth.user) void teams.fetchTeams()
+}, { immediate: true })
 
 async function createTeam() {
   const name = teamName.value.trim()
@@ -77,7 +76,7 @@ async function createTeam() {
     <!-- Navigation -->
     <nav class="sidebar__nav">
       <RouterLink
-        v-for="item in navItems"
+        v-for="item in isTeamArea ? [] : navItems"
         :key="item.to"
         :to="item.to"
         class="sidebar__item"
@@ -91,8 +90,21 @@ async function createTeam() {
         </Transition>
       </RouterLink>
 
-      <div class="sidebar__divider" />
-      <div v-if="ui.sidebarExpanded" class="sidebar__section-head">
+      <div v-if="isTeamArea" class="sidebar__divider" />
+      <RouterLink
+        v-if="isTeamArea"
+        to="/teams"
+        class="sidebar__item"
+        :class="{ 'sidebar__item--active': route.path === '/teams' }"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path :d="iconPaths.team" />
+        </svg>
+        <Transition name="fade">
+          <span v-if="ui.sidebarExpanded" class="sidebar__label">团队首页</span>
+        </Transition>
+      </RouterLink>
+      <div v-if="isTeamArea && ui.sidebarExpanded" class="sidebar__section-head">
         <span>团队</span>
         <button type="button" class="sidebar__section-action" @click="showCreateTeam = true">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -100,14 +112,14 @@ async function createTeam() {
           </svg>
         </button>
       </div>
-      <button v-else type="button" class="sidebar__item sidebar__item--button" @click="showCreateTeam = true">
+      <button v-else-if="isTeamArea" type="button" class="sidebar__item sidebar__item--button" @click="showCreateTeam = true">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
           <path :d="iconPaths.plus" />
         </svg>
       </button>
 
       <RouterLink
-        v-for="team in teams.teams"
+        v-for="team in isTeamArea ? teams.teams : []"
         :key="team.id"
         :to="{ name: 'TeamFiles', params: { teamId: team.id } }"
         class="sidebar__item"
@@ -121,10 +133,10 @@ async function createTeam() {
         </Transition>
       </RouterLink>
 
-      <div v-if="auth.isAdmin" class="sidebar__divider" />
+      <div v-if="auth.isAdmin && !isTeamArea" class="sidebar__divider" />
 
       <RouterLink
-        v-for="item in auth.isAdmin ? adminItems : []"
+        v-for="item in auth.isAdmin && !isTeamArea ? adminItems : []"
         :key="item.to"
         :to="item.to"
         class="sidebar__item"
@@ -140,7 +152,7 @@ async function createTeam() {
     </nav>
 
     <!-- Storage quota -->
-    <div v-if="ui.sidebarExpanded && auth.user" class="sidebar__quota">
+    <div v-if="ui.sidebarExpanded && auth.user && !isTeamArea" class="sidebar__quota">
       <div class="sidebar__quota-bar">
         <div class="sidebar__quota-fill" :style="{ width: `${auth.storagePercent}%` }" />
       </div>

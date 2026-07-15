@@ -21,6 +21,22 @@ import {
 } from './helpers/api'
 
 test.describe('teams', () => {
+  test('switches between isolated personal and team home pages', async ({ page, request, e2eUser }) => {
+    const team = await createTeam(request, e2eUser.accessToken, uniqueName('navigation_team'))
+    await loginViaUi(page, e2eUser)
+
+    await expect(page.getByRole('link', { name: '团队首页' })).toHaveCount(0)
+    await page.getByRole('button', { name: '进入团队空间' }).click()
+    await expect(page).toHaveURL(/\/teams$/)
+    await expect(page.getByRole('heading', { name: '团队空间' })).toBeVisible()
+    await expect(page.getByRole('button', { name: team.name })).toBeVisible()
+    await expect(page.getByRole('link', { name: '全部文件' })).toHaveCount(0)
+
+    await page.getByRole('button', { name: '返回个人网盘' }).click()
+    await expect(page).toHaveURL(/\/files$/)
+    await expect(page.getByRole('link', { name: '全部文件' })).toBeVisible()
+  })
+
   test('owner manages team files, shares, versions, and recycle bin', async ({ page, request, e2eUser }) => {
     const team = await createTeam(request, e2eUser.accessToken, uniqueName('web_team'))
     const folder = await createTeamFolder(request, e2eUser.accessToken, team.id, uniqueName('team_folder'))

@@ -122,6 +122,7 @@ fun BCDNavHost(
                 onNavigateToVersions = { fileId -> navController.navigate(Screen.versions(fileId)) },
                 onNavigateToProfile = { navController.navigateTopLevel(Screen.PROFILE) },
                 onNavigateToTransfers = { navController.navigateTopLevel(Screen.TRANSFERS) },
+                onNavigateToTeams = { navController.navigateTopLevel(Screen.TEAMS) },
                 onNavigateMain = { route -> navController.navigateTopLevel(route) },
             )
         }
@@ -140,6 +141,7 @@ fun BCDNavHost(
                 onNavigateToVersions = { fileId -> navController.navigate(Screen.versions(fileId)) },
                 onNavigateToProfile = { navController.navigateTopLevel(Screen.PROFILE) },
                 onNavigateToTransfers = { navController.navigateTopLevel(Screen.TRANSFERS) },
+                onNavigateToTeams = { navController.navigateTopLevel(Screen.TEAMS) },
                 onNavigateMain = { route -> navController.navigateTopLevel(route) },
             )
         }
@@ -175,7 +177,7 @@ fun BCDNavHost(
         composable(Screen.TEAMS) {
             TeamsScreen(
                 onOpenTeam = { teamId -> navController.navigate(Screen.teamFiles(teamId)) },
-                onNavigateMain = { route -> navController.navigateTopLevel(route) },
+                onOpenPersonalDrive = { navController.navigateTopLevel(Screen.FILES) },
             )
         }
         composable(

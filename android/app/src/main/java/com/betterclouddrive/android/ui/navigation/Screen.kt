@@ -63,7 +63,6 @@ data class BottomNavItem(
 
 val bottomNavItems = listOf(
     BottomNavItem(Screen.files(null), "files", "文件", Icons.Filled.Folder, Icons.Outlined.Folder),
-    BottomNavItem(Screen.TEAMS, Screen.TEAMS, "团队", Icons.Filled.Groups, Icons.Outlined.Groups),
     BottomNavItem(Screen.SHARES, Screen.SHARES, "分享", Icons.Filled.Share, Icons.Outlined.Share),
     BottomNavItem(Screen.FAVORITES, Screen.FAVORITES, "收藏", Icons.Filled.Star, Icons.Outlined.Star),
     BottomNavItem(Screen.TAGS, Screen.TAGS, "标签", Icons.Filled.Label, Icons.Outlined.Label),
@@ -72,7 +71,6 @@ val bottomNavItems = listOf(
 
 val railNavItems = listOf(
     BottomNavItem(Screen.files(null), "files", "文件", Icons.Filled.Folder, Icons.Outlined.Folder),
-    BottomNavItem(Screen.TEAMS, Screen.TEAMS, "团队", Icons.Filled.Groups, Icons.Outlined.Groups),
     BottomNavItem(Screen.SHARES, Screen.SHARES, "分享", Icons.Filled.Share, Icons.Outlined.Share),
     BottomNavItem(Screen.FAVORITES, Screen.FAVORITES, "收藏", Icons.Filled.Star, Icons.Outlined.Star),
     BottomNavItem(Screen.TAGS, Screen.TAGS, "标签", Icons.Filled.Label, Icons.Outlined.Label),

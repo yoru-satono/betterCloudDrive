@@ -54,6 +54,15 @@ class AndroidAuthAndNavigationE2ETest {
     }
 
     @Test
+    fun personalAndTeamHomesUseDedicatedSwitchButtons() {
+        composeRule.loginViaUi(user)
+
+        composeRule.waitForTag("files-open-teams").performClick()
+        composeRule.waitForTag("teams-open-personal-drive").assertIsDisplayed().performClick()
+        composeRule.waitForTag("files-content").assertIsDisplayed()
+    }
+
+    @Test
     fun themeCanBeSelectedFromProfileSettings() {
         composeRule.loginViaUi(user)
         composeRule.waitForTag("nav-profile").performClick()

@@ -438,7 +438,7 @@ async function leaveTeam() {
   await teamsApi.leaveTeam(teamId.value)
   teamsStore.removeTeam(teamId.value)
   toast.success('已退出团队')
-  await router.push({ name: 'Files' })
+  await router.push({ name: 'Teams' })
 }
 
 async function deleteTeam() {
@@ -448,7 +448,7 @@ async function deleteTeam() {
   await teamsApi.deleteTeam(teamId.value)
   teamsStore.removeTeam(teamId.value)
   toast.success('团队已删除')
-  await router.push({ name: 'Files' })
+  await router.push({ name: 'Teams' })
 }
 
 function canManageShare(share: ShareLinkEntity) {
