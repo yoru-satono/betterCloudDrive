@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -71,9 +72,9 @@ class NotificationsViewModel @Inject constructor(
     private val _events = MutableSharedFlow<UiEvent>()
     val events = _events.asSharedFlow()
 
-    fun load() {
+    fun load(showLoading: Boolean = true) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            if (showLoading) _uiState.value = _uiState.value.copy(isLoading = true)
             when (val result = repository.listNotifications(unreadOnly = _uiState.value.unreadOnly)) {
                 is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
                     notifications = result.data.records,
@@ -144,7 +145,13 @@ fun NotificationsScreen(
     val events by viewModel.events.collectAsState(initial = null)
     val snackbarHostState = androidx.compose.runtime.remember { SnackbarHostState() }
 
-    LaunchedEffect(Unit) { viewModel.load() }
+    LaunchedEffect(Unit) {
+        viewModel.load()
+        while (true) {
+            delay(30_000)
+            viewModel.load(showLoading = false)
+        }
+    }
     LaunchedEffect(events) {
         if (events is UiEvent.ShowSnackbar) {
             snackbarHostState.showSnackbar((events as UiEvent.ShowSnackbar).message)

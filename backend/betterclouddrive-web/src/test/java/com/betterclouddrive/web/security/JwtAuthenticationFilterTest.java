@@ -100,7 +100,7 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void notificationStreamAcceptsAccessTokenQueryParameter() throws Exception {
+    void notificationStreamRejectsAccessTokenQueryAuthentication() throws Exception {
         JwtTokenProvider tokenProvider = new JwtTokenProvider();
         String accessKey = Base64.getEncoder().encodeToString(
                 "this-is-a-32-byte-secret-key-for-acc!".getBytes());
@@ -120,8 +120,6 @@ class JwtAuthenticationFilterTest {
 
         assertThat(chainCalled).isTrue();
         assertThat(response.getStatus()).isEqualTo(200);
-        UserPrincipal principal = (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        assertThat(principal.getUserId()).isEqualTo(9L);
-        assertThat(principal.getUsername()).isEqualTo("chain");
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
     }
 }

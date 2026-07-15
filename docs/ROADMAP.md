@@ -8,16 +8,6 @@
 
 ## P1 客户端能力一致性
 
-### NOTIFY-01 改造实时通知认证
-
-- 状态：待完成。
-- 目标：SSE URL 不再携带完整 access token，并为 Android 实时刷新提供安全接口基础。
-- 实现要求：
-  - 新增 Bearer Token 保护的 stream ticket 接口，签发短期、用户绑定、一次性票据。
-  - EventSource 只携带 stream ticket；后端停止接受 `accessToken` 查询参数。
-  - Web/Tauri 完成切换后，再为 Android 接入 SSE 或等价的前台实时刷新机制。
-- 验收：访问日志和 EventSource URL 中不出现 access token；票据过期、重复使用和跨用户使用均被拒绝。
-
 ## P1 异步架构演进
 
 ### QUEUE-01 团队后台任务接入 Redis Streams
@@ -45,6 +35,6 @@
 
 ## 执行顺序
 
-`NOTIFY-01` → `QUEUE-01`
+`QUEUE-01`
 
 P2 项目不阻塞上述任务，按真实产品和部署需求独立排期。

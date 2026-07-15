@@ -110,12 +110,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }
-        if ("GET".equals(request.getMethod()) && pathMatcher.match("/api/v1/notifications/stream", requestPath(request))) {
-            String accessToken = request.getParameter("accessToken");
-            if (StringUtils.hasText(accessToken)) {
-                return accessToken;
-            }
-        }
         return null;
     }
 

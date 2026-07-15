@@ -45,9 +45,13 @@ function handleRealtimeNotification(event: Event) {
   }
 }
 
-function openNotificationStream() {
+async function openNotificationStream() {
   closeNotificationStream()
-  notificationStream = notificationsApi.createNotificationEventSource()
+  try {
+    notificationStream = await notificationsApi.createNotificationEventSource()
+  } catch {
+    notificationStream = null
+  }
   if (!notificationStream) return
   notificationStream.addEventListener('connected', handleRealtimeNotification)
   notificationStream.addEventListener('notifications-changed', handleRealtimeNotification)

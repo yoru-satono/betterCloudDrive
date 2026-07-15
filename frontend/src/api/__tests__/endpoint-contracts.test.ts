@@ -371,7 +371,7 @@ describe('API endpoint contracts', () => {
     expect(apiMock.post).toHaveBeenCalledWith('/notifications/read-all')
   })
 
-  it('creates notification stream with current access token', () => {
+  it('creates notification stream with a short-lived ticket', async () => {
     const instances: string[] = []
     class MockEventSource {
       constructor(url: string) {
@@ -380,12 +380,13 @@ describe('API endpoint contracts', () => {
       close() {}
     }
     vi.stubGlobal('EventSource', MockEventSource)
-    localStorage.setItem('accessToken', 'stream-token')
+    apiMock.post.mockResolvedValueOnce({ data: { data: { ticket: 'stream-ticket', expiresAt: '2026-01-01T00:00:30Z' } } })
 
-    const source = notificationsApi.createNotificationEventSource()
+    const source = await notificationsApi.createNotificationEventSource()
 
     expect(source).toBeInstanceOf(MockEventSource)
-    expect(instances).toEqual(['http://localhost:3000/api/v1/notifications/stream?accessToken=stream-token'])
+    expect(apiMock.post).toHaveBeenCalledWith('/notifications/stream-ticket')
+    expect(instances).toEqual(['http://localhost:3000/api/v1/notifications/stream?ticket=stream-ticket'])
     vi.unstubAllGlobals()
   })
 

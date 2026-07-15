@@ -55,11 +55,10 @@ export const markNotificationRead = (notificationId: number) =>
 export const markAllNotificationsRead = () =>
   api.post<ApiResponse<void>>('/notifications/read-all')
 
-export function createNotificationEventSource() {
-  const token = localStorage.getItem('accessToken')
-  if (!token || typeof EventSource === 'undefined') return null
-
+export async function createNotificationEventSource() {
+  if (typeof EventSource === 'undefined') return null
+  const response = await api.post<ApiResponse<{ ticket: string; expiresAt: string }>>('/notifications/stream-ticket')
   const url = new URL(`${getApiBaseUrl()}/notifications/stream`, window.location.origin)
-  url.searchParams.set('accessToken', token)
+  url.searchParams.set('ticket', response.data.data.ticket)
   return new EventSource(url.toString())
 }

@@ -8,6 +8,7 @@ import com.betterclouddrive.web.dto.request.UpdateNotificationPreferencesRequest
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import com.betterclouddrive.web.service.NotificationSseService;
+import com.betterclouddrive.web.service.NotificationStreamTicketService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class NotificationController {
 
     private final NotificationService notificationService;
     private final NotificationSseService notificationSseService;
+    private final NotificationStreamTicketService notificationStreamTicketService;
 
     @GetMapping
     public ApiResponse<PageResult<NotificationEntity>> listNotifications(
@@ -52,10 +54,16 @@ public class NotificationController {
         return ApiResponse.success(notificationService.updatePreferences(user.getUserId(), request.getPreferences()));
     }
 
+    @PostMapping("/stream-ticket")
+    public ApiResponse<NotificationStreamTicketService.IssuedTicket> streamTicket(@CurrentUser UserPrincipal user) {
+        return ApiResponse.success(notificationStreamTicketService.issue(user.getUserId()));
+    }
+
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@CurrentUser UserPrincipal user) {
-        long unreadCount = notificationService.countUnread(user.getUserId());
-        return notificationSseService.subscribe(user.getUserId(), unreadCount);
+    public SseEmitter stream(@RequestParam String ticket) {
+        Long userId = notificationStreamTicketService.consume(ticket);
+        long unreadCount = notificationService.countUnread(userId);
+        return notificationSseService.subscribe(userId, unreadCount);
     }
 
     @PostMapping("/{notificationId}/read")
