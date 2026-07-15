@@ -83,6 +83,23 @@ class AndroidTeamsE2ETest {
     }
 
     @Test
+    fun authorizedOwnerCanOpenTeamTaskCenterAndSeeAuditAndZipTasks() {
+        val team = api.createTeam(owner.accessToken, uniqueName("task_center_team"))
+        val folder = api.createTeamFolder(owner.accessToken, team.id, uniqueName("task_folder"))
+        val audit = api.queueTeamAuditExport(owner.accessToken, team.id)
+        val archive = api.queueTeamFolderZip(owner.accessToken, team.id, folder.id)
+
+        composeRule.loginViaUi(owner)
+        composeRule.waitForTag("nav-teams").performClick()
+        composeRule.waitForTag("team-card-${team.name}").performClick()
+        composeRule.waitForTag("team-files-settings").performClick()
+        composeRule.waitForTag("team-settings-tasks").performClick()
+        composeRule.waitForTag("team-task-${audit.id}").assertIsDisplayed()
+        composeRule.waitForTag("team-task-${archive.id}").assertIsDisplayed()
+        assertTrue(api.listTeamTasks(owner.accessToken, team.id).map { it.id }.containsAll(listOf(audit.id, archive.id)))
+    }
+
+    @Test
     fun teamPermissionMatrixControlsFileMenuActions() {
         val editor = api.createUser()
         val team = api.createTeam(owner.accessToken, uniqueName("matrix_team"))

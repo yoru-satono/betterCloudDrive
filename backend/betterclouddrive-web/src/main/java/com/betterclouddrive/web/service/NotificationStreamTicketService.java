@@ -1,8 +1,8 @@
 package com.betterclouddrive.web.service;
 
-import org.springframework.http.HttpStatus;
+import com.betterclouddrive.common.constant.ApiCode;
+import com.betterclouddrive.common.exception.BusinessException;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -34,8 +34,8 @@ public class NotificationStreamTicketService {
         return ticket.userId();
     }
 
-    private ResponseStatusException unauthorized() {
-        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid or expired stream ticket");
+    private BusinessException unauthorized() {
+        return new BusinessException(ApiCode.UNAUTHORIZED, "Invalid or expired stream ticket");
     }
     private record Ticket(Long userId, Instant expiresAt) {}
     public record IssuedTicket(String ticket, Instant expiresAt) {}

@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -95,36 +96,63 @@ fun TeamTasksScreen(teamId: Long, onNavigateBack: () -> Unit, viewModel: TeamTas
         title = { Text("团队任务") }, navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
         actions = { IconButton(onClick = { viewModel.load(teamId, state.page) }) { Icon(Icons.Default.Refresh, "刷新") } }
     ) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            FilterRow("状态", listOf(null, "PENDING", "RUNNING", "SUCCEEDED", "FAILED"), state.status) { viewModel.filter(it, state.type) }
-            FilterRow("类型", listOf(null, "AUDIT_EXPORT", "FOLDER_ZIP", "THUMBNAIL", "ONLYOFFICE_SAVE", "TEAM_CLEANUP"), state.type) { viewModel.filter(state.status, it) }
-            if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
-            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.tasks, key = { it.id }) { task -> Card(Modifier.fillMaxWidth().testTag("team-task-${task.id}")) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(task.taskType, style = MaterialTheme.typography.titleMedium); Text("${task.status} · ${task.progress}%")
-                        task.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                            if (task.canRetry) TextButton(onClick = { viewModel.retry(task) }) { Text("重试") }
-                            if (task.canDownload) TextButton(onClick = { downloadTask = task; launcher.launch(task.resultFileName ?: "result") }) { Icon(Icons.Default.Download, null); Text("下载") }
-                        }
+        TeamTasksContent(
+            state = state,
+            modifier = Modifier.fillMaxSize().padding(padding),
+            onStatusSelected = { viewModel.filter(it, state.type) },
+            onTypeSelected = { viewModel.filter(state.status, it) },
+            onRetry = viewModel::retry,
+            onDownload = { task -> downloadTask = task; launcher.launch(task.resultFileName ?: "result") },
+            onPreviousPage = { viewModel.load(teamId, state.page - 1) },
+            onNextPage = { viewModel.load(teamId, state.page + 1) },
+        )
+    }
+}
+
+@Composable
+fun TeamTasksContent(
+    state: TeamTasksUiState,
+    modifier: Modifier = Modifier,
+    onStatusSelected: (String?) -> Unit,
+    onTypeSelected: (String?) -> Unit,
+    onRetry: (TeamTask) -> Unit,
+    onDownload: (TeamTask) -> Unit,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
+) {
+    Column(modifier) {
+        FilterRow("状态", "status", listOf(null, "PENDING", "RUNNING", "SUCCEEDED", "FAILED"), state.status, onStatusSelected)
+        FilterRow("类型", "type", listOf(null, "AUDIT_EXPORT", "FOLDER_ZIP", "THUMBNAIL", "ONLYOFFICE_SAVE", "TEAM_CLEANUP"), state.type, onTypeSelected)
+        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("team-tasks-loading"))
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp).testTag("team-tasks-error")) }
+        LazyColumn(Modifier.weight(1f).testTag("team-tasks-list"), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(state.tasks, key = { it.id }) { task -> Card(Modifier.fillMaxWidth().testTag("team-task-${task.id}")) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(task.taskType, style = MaterialTheme.typography.titleMedium); Text("${task.status} · ${task.progress}%")
+                    task.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        if (task.canRetry) TextButton(onClick = { onRetry(task) }, modifier = Modifier.testTag("team-task-retry-${task.id}")) { Text("重试") }
+                        if (task.canDownload) TextButton(onClick = { onDownload(task) }, modifier = Modifier.testTag("team-task-download-${task.id}")) { Icon(Icons.Default.Download, null); Text("下载") }
                     }
-                } }
-            }
-            Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = { viewModel.load(teamId, state.page - 1) }, enabled = state.page > 1) { Text("上一页") }
-                Text("${state.page}/${state.pages} · ${state.total} 项")
-                Button(onClick = { viewModel.load(teamId, state.page + 1) }, enabled = state.page < state.pages) { Text("下一页") }
-            }
+                }
+            } }
+        }
+        Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onPreviousPage, enabled = state.page > 1, modifier = Modifier.testTag("team-tasks-previous")) { Text("上一页") }
+            Text("${state.page}/${state.pages} · ${state.total} 项", modifier = Modifier.testTag("team-tasks-page"))
+            Button(onClick = onNextPage, enabled = state.page < state.pages, modifier = Modifier.testTag("team-tasks-next")) { Text("下一页") }
         }
     }
 }
 
-@Composable private fun FilterRow(label: String, values: List<String?>, selected: String?, onSelect: (String?) -> Unit) {
-    LazyColumn(Modifier.fillMaxWidth().height(52.dp), horizontalAlignment = Alignment.Start) {
-        item { Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label); values.forEach { value -> FilterChip(selected = selected == value, onClick = { onSelect(value) }, label = { Text(value ?: "全部") }) }
-        } }
+@Composable private fun FilterRow(label: String, kind: String, values: List<String?>, selected: String?, onSelect: (String?) -> Unit) {
+    LazyRow(Modifier.fillMaxWidth().height(52.dp), contentPadding = PaddingValues(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        item { Text(label) }
+        items(values) { value -> FilterChip(
+            selected = selected == value,
+            onClick = { onSelect(value) },
+            label = { Text(value ?: "全部") },
+            modifier = Modifier.testTag("team-tasks-filter-$kind-${value ?: "ALL"}"),
+        ) }
     }
 }

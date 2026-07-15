@@ -118,6 +118,7 @@ class TeamTaskServiceImplTest {
     void claimTasks_shouldRecoverTimedOutWorkBeforeAtomicClaim() {
         TeamTaskEntity claimed = TeamTaskEntity.builder().id(7L).status(TeamTaskEntity.STATUS_RUNNING).build();
         when(teamTaskProperties.getRunningTimeoutSeconds()).thenReturn(120L);
+        when(teamTaskRepository.recoverTimedOutTasks(any(LocalDateTime.class), any(LocalDateTime.class))).thenReturn(2);
         when(teamTaskRepository.claimPendingTasks("THUMBNAIL", 5)).thenReturn(List.of(claimed));
 
         List<TeamTaskEntity> result = teamTaskService.claimTasks(" thumbnail ", 5);
@@ -125,6 +126,8 @@ class TeamTaskServiceImplTest {
         assertThat(result).containsExactly(claimed);
         verify(teamTaskRepository).recoverTimedOutTasks(any(LocalDateTime.class), any(LocalDateTime.class));
         verify(teamTaskRepository).claimPendingTasks("THUMBNAIL", 5);
+        verify(queueMetrics).recordTimedOutTaskRecovery(2);
+        verify(queueMetrics).recordTaskClaim("THUMBNAIL", 1);
     }
 
     @Test
@@ -260,6 +263,7 @@ class TeamTaskServiceImplTest {
         assertThat(retried.getStartedAt()).isNull();
         assertThat(retried.getCompletedAt()).isNull();
         assertThat(retried.getUpdatedAt()).isNotNull();
+        verify(teamTaskOutboxWriter).enqueue(retried);
     }
 
     @Test

@@ -82,6 +82,12 @@ data class E2ETeamAuditLog(
     val targetId: Long?,
 )
 
+data class E2ETeamTask(
+    val id: Long,
+    val taskType: String,
+    val status: String,
+)
+
 data class E2ENotification(
     val id: Long,
     val teamId: Long?,
@@ -297,6 +303,19 @@ class E2EApiClient(
             .getJSONObject("data")
             .getJSONArray("records")
         return (0 until records.length()).map { index -> parseTeamAuditLog(records.getJSONObject(index)) }
+    }
+
+    fun queueTeamAuditExport(token: String, teamId: Long): E2ETeamTask =
+        parseTeamTask(postJson("$baseUrl/teams/$teamId/audit-logs/export-tasks", JSONObject(), token).getJSONObject("data"))
+
+    fun queueTeamFolderZip(token: String, teamId: Long, folderId: Long): E2ETeamTask =
+        parseTeamTask(postJson("$baseUrl/teams/$teamId/download/folders/$folderId/zip/tasks", JSONObject(), token).getJSONObject("data"))
+
+    fun listTeamTasks(token: String, teamId: Long): List<E2ETeamTask> {
+        val request = Request.Builder().url("$baseUrl/teams/$teamId/tasks?page=1&size=100").get()
+            .header("Authorization", "Bearer $token").build()
+        val records = expectApiSuccess(client.newCall(request).execute()).getJSONObject("data").getJSONArray("records")
+        return (0 until records.length()).map { parseTeamTask(records.getJSONObject(it)) }
     }
 
     fun listNotifications(token: String, unreadOnly: Boolean = false): List<E2ENotification> {
@@ -947,6 +966,10 @@ class E2EApiClient(
             targetId = if (json.isNull("targetId")) null else json.getLong("targetId"),
         )
     }
+
+    private fun parseTeamTask(json: JSONObject) = E2ETeamTask(
+        id = json.getLong("id"), taskType = json.getString("taskType"), status = json.getString("status"),
+    )
 
     private fun parseNotification(json: JSONObject): E2ENotification {
         return E2ENotification(

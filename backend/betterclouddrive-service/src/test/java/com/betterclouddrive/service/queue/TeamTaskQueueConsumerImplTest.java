@@ -65,6 +65,32 @@ class TeamTaskQueueConsumerImplTest {
         verifyNoInteractions(audit, thumbnails, zip, office);
     }
 
+    @Test void disabledQueueDoesNotReadOrDispatch() {
+        properties.setEnabled(false);
+        assertThat(consumer.processQueuedTasks(10)).isZero();
+        verifyNoInteractions(queue, audit, thumbnails, zip, office, metrics);
+    }
+
+    @Test void unsupportedTaskTypeMovesMessageToDeadLetterAndAcknowledgesIt() {
+        QueueMessage unsupported = message("5-0", "TEAM_CLEANUP");
+        when(queue.readGroup(anyString(), anyString(), anyString(), anyInt(), any(Duration.class)))
+                .thenReturn(List.of(unsupported));
+        assertThat(consumer.processQueuedTasks(10)).isEqualTo(1);
+        verify(queue).moveToDeadLetter(unsupported, "Unsupported team task type: TEAM_CLEANUP");
+        verify(queue).acknowledge("bcd:stream:team-tasks", "bcd-team-task-workers", "5-0");
+        verifyNoInteractions(audit, thumbnails, zip, office);
+    }
+
+    @Test void workerFailureLeavesWakeupPendingForDatabaseFallback() {
+        QueueMessage wakeup = message("6-0", "AUDIT_EXPORT");
+        when(queue.readGroup(anyString(), anyString(), anyString(), anyInt(), any(Duration.class)))
+                .thenReturn(List.of(wakeup));
+        when(audit.processPendingExports(1)).thenThrow(new IllegalStateException("storage down"));
+        assertThat(consumer.processQueuedTasks(10)).isZero();
+        verify(queue, never()).acknowledge(anyString(), anyString(), anyString());
+        verify(queue, never()).moveToDeadLetter(any(), anyString());
+    }
+
     private QueueMessage message(String id, String type) {
         return new QueueMessage("bcd:stream:team-tasks", id, Map.of("targetType", type, "aggregateId", "77"));
     }
