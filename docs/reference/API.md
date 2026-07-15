@@ -2141,6 +2141,8 @@ Authorization: Bearer <accessToken>
 
 `sourceType` 表示最终生效来源：`BASE_ROLE`、`ROLE_OVERRIDE` 或 `USER_OVERRIDE`。`sourceChain` 按解析顺序返回来源链，第一项通常是基础角色权限；后续项是最终命中的用户或角色覆盖。`inherited=true` 表示该覆盖来自父文件夹。
 
+Web/Tauri 与 Android 均展示该来源链；Android 团队文件页会标明基础角色、用户/角色覆盖、命中文件夹及是否继承。
+
 **PUT Request Body:**
 ```json
 {

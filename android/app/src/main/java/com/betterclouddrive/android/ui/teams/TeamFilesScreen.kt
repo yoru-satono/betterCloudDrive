@@ -77,6 +77,7 @@ import com.betterclouddrive.android.domain.model.FileItem
 import com.betterclouddrive.android.domain.model.Tag
 import com.betterclouddrive.android.domain.model.Team
 import com.betterclouddrive.android.domain.model.TeamEffectivePermission
+import com.betterclouddrive.android.domain.model.TeamPermissionSource
 import com.betterclouddrive.android.ui.components.BCDDialog
 import com.betterclouddrive.android.ui.components.BreadcrumbItem
 import com.betterclouddrive.android.ui.components.BreadcrumbBar
@@ -381,6 +382,8 @@ class TeamFilesViewModel @Inject constructor(
                 canShare = canWrite,
                 canDelete = canWrite,
                 canManage = canManage,
+                sourceType = "BASE_ROLE",
+                sourceChain = listOf(TeamPermissionSource(type = "BASE_ROLE", subjectRole = team?.role?.name)),
             )
         }
         return when (val result = teamRepository.getEffectivePermission(teamId, folderId)) {
@@ -781,6 +784,12 @@ private fun TeamFilesHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.testTag("team-files-permission-summary"),
             )
+            Text(
+                text = permissionSourceSummary(uiState.currentPermission),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("team-files-permission-source"),
+            )
             Spacer(modifier = Modifier.height(8.dp))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -808,6 +817,26 @@ private fun permissionSummary(permission: TeamEffectivePermission): String {
         if (permission.canManage) add("管理")
     }
     return parts.ifEmpty { listOf("无") }.joinToString(" / ")
+}
+
+private fun permissionSourceSummary(permission: TeamEffectivePermission): String {
+    if (permission.sourceChain.isEmpty()) {
+        return when (permission.sourceType) {
+            "BASE_ROLE" -> "权限来源：团队基础角色"
+            else -> "权限来源：未提供来源详情"
+        }
+    }
+    val chain = permission.sourceChain.joinToString(" → ") { source ->
+        val label = when (source.type) {
+            "BASE_ROLE" -> "基础角色${source.subjectRole?.let { "($it)" } ?: ""}"
+            "USER_OVERRIDE" -> "用户覆盖"
+            "ROLE_OVERRIDE" -> "角色覆盖${source.subjectRole?.let { "($it)" } ?: ""}"
+            else -> source.type
+        }
+        val location = source.fileName?.let { "@$it" } ?: ""
+        label + location + if (source.inherited) "（继承）" else ""
+    }
+    return "权限来源：$chain"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

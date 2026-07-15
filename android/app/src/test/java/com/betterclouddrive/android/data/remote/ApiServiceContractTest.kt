@@ -214,7 +214,7 @@ class ApiServiceContractTest {
             }
 
             api(server).listTeams()
-            assertEquals("/teams", server.takeRequest().path)
+            assertEquals("/teams?page=1&size=20", server.takeRequest().path)
 
             api(server).createTeam(CreateTeamRequest("Product"))
             val createTeam = server.takeRequest()
@@ -296,7 +296,7 @@ class ApiServiceContractTest {
             }
 
             api(server).listTeamMembers(7)
-            assertEquals("/teams/7/members", server.takeRequest().path)
+            assertEquals("/teams/7/members?page=1&size=20", server.takeRequest().path)
 
             api(server).addTeamMember(7, AddTeamMemberRequest(username = "chain", role = "EDITOR"))
             val addMember = server.takeRequest()
@@ -316,7 +316,7 @@ class ApiServiceContractTest {
             assertEquals("/teams/7/invites", server.takeRequest().path)
 
             api(server).listTeamInvites(7)
-            assertEquals("/teams/7/invites", server.takeRequest().path)
+            assertEquals("/teams/7/invites?page=1&size=20", server.takeRequest().path)
 
             api(server).resendTeamInvite(7, 3)
             assertEquals("/teams/7/invites/3/resend", server.takeRequest().path)

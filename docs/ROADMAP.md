@@ -8,13 +8,6 @@
 
 ## P1 客户端能力一致性
 
-### ANDROID-01 展示团队权限来源
-
-- 状态：待完成。
-- 目标：让 Android 能解释有效权限来自基础角色、当前文件覆盖还是父目录继承。
-- 实现要求：扩展 Android `TeamEffectivePermission` 以接收 `sourceType`、`sourceChain` 和 `inherited`，并在文件详情或权限页面展示来源链。
-- 验收：覆盖基础角色、用户覆盖、角色覆盖和父目录继承四类场景。
-
 ### ANDROID-02 增加团队任务中心
 
 - 状态：待完成。
@@ -59,6 +52,6 @@
 
 ## 执行顺序
 
-`ANDROID-01` → `ANDROID-02` → `NOTIFY-01` → `QUEUE-01`
+`ANDROID-02` → `NOTIFY-01` → `QUEUE-01`
 
 P2 项目不阻塞上述任务，按真实产品和部署需求独立排期。

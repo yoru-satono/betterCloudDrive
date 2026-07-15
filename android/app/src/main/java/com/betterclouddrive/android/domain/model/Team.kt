@@ -47,6 +47,26 @@ data class TeamEffectivePermission(
     @SerialName("canShare") val canShare: Boolean = false,
     @SerialName("canDelete") val canDelete: Boolean = false,
     @SerialName("canManage") val canManage: Boolean = false,
+    @SerialName("sourceType") val sourceType: String = "UNSPECIFIED",
+    @SerialName("sourceChain") val sourceChain: List<TeamPermissionSource> = emptyList(),
+)
+
+@Serializable
+data class TeamPermissionSource(
+    val type: String = "UNSPECIFIED",
+    @SerialName("fileId") val fileId: Long? = null,
+    @SerialName("fileName") val fileName: String? = null,
+    @SerialName("subjectType") val subjectType: String? = null,
+    @SerialName("subjectUserId") val subjectUserId: Long? = null,
+    @SerialName("subjectRole") val subjectRole: String? = null,
+    val inherited: Boolean = false,
+    @SerialName("canRead") val canRead: Boolean = false,
+    @SerialName("canWrite") val canWrite: Boolean = false,
+    @SerialName("canShare") val canShare: Boolean = false,
+    @SerialName("canDelete") val canDelete: Boolean = false,
+    @SerialName("canManage") val canManage: Boolean = false,
+    @SerialName("descriptionKey") val descriptionKey: String? = null,
+    @SerialName("descriptionParams") val descriptionParams: Map<String, JsonElement> = emptyMap(),
 )
 
 @Serializable
