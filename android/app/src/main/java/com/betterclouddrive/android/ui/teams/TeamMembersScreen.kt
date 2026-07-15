@@ -1,5 +1,8 @@
 package com.betterclouddrive.android.ui.teams
 
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -182,6 +185,7 @@ fun TeamMembersScreen(
             TopAppBar(
                 title = { Text("团队成员") },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
+                actions = { WorkspaceSwitchAction(Workspace.TEAM) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },

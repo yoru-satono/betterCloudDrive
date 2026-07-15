@@ -1,5 +1,8 @@
 package com.betterclouddrive.android.ui.teams
 
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -163,6 +166,7 @@ fun TeamRecycleBinScreen(
                 title = { Text("团队回收站") },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 actions = {
+                    WorkspaceSwitchAction(Workspace.TEAM)
                     if (uiState.team?.canWrite == true && uiState.files.isNotEmpty()) {
                         IconButton(onClick = viewModel::emptyBin, modifier = Modifier.testTag("team-recycle-empty")) {
                             Icon(Icons.Default.Delete, "清空")

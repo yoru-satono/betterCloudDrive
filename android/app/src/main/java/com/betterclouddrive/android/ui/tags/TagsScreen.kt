@@ -22,6 +22,8 @@ import com.betterclouddrive.android.data.repository.TagRepository
 import com.betterclouddrive.android.util.NetworkResult
 import com.betterclouddrive.android.ui.navigation.MainScaffold
 import com.betterclouddrive.android.ui.navigation.Screen
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +68,7 @@ fun TagsScreen(
                 title = { Text("标签管理") },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 actions = {
+                    WorkspaceSwitchAction(Workspace.PERSONAL)
                     IconButton(
                         onClick = { showCreate = true },
                         modifier = Modifier.testTag("tags-create"),

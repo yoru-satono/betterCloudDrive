@@ -37,7 +37,6 @@ async function createTeam() {
         <p>选择团队以访问共享文件和协作功能。</p>
       </div>
       <div class="teams-page__actions">
-        <OButton variant="ghost" data-testid="open-personal-drive" @click="router.push({ name: 'Files' })">返回个人网盘</OButton>
         <OButton variant="primary" @click="showCreate = true">新建团队</OButton>
       </div>
     </header>

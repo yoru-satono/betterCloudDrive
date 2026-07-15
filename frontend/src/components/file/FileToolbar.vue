@@ -9,9 +9,7 @@ const emit = defineEmits<{
   'new-folder': []
   delete: []
   refresh: []
-  'open-teams': []
 }>()
-defineProps<{ showTeamEntry?: boolean }>()
 const store = useFilesStore()
 const desktopRuntime = isDesktopRuntime()
 </script>
@@ -52,9 +50,6 @@ const desktopRuntime = isDesktopRuntime()
       </OButton>
     </div>
     <div class="toolbar__right">
-      <OButton v-if="showTeamEntry" variant="ghost" size="sm" data-testid="open-teams" @click="emit('open-teams')">
-        进入团队空间
-      </OButton>
       <span v-if="store.hasSelection" class="toolbar__sel-info">已选 {{ store.selectedIds.size }} 项</span>
       <OButton variant="subtle" size="sm" :icon="true" @click="emit('refresh')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

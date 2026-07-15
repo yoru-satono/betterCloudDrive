@@ -1,5 +1,8 @@
 package com.betterclouddrive.android.ui.teams
 
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
+
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -714,6 +717,7 @@ fun TeamSettingsScreen(
                 title = { Text("团队设置") },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 actions = {
+                    WorkspaceSwitchAction(Workspace.TEAM)
                     IconButton(onClick = { onNavigateTasks(teamId) }, modifier = Modifier.testTag("team-settings-tasks")) {
                         Icon(Icons.Default.FolderOpen, "后台任务")
                     }

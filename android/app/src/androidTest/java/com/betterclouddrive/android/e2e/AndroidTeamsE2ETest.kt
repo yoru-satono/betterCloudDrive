@@ -51,7 +51,7 @@ class AndroidTeamsE2ETest {
         val file = api.uploadTeamTextFile(owner.accessToken, team.id, folder.id, uniqueName("team_file") + ".txt", "team content")
 
         composeRule.loginViaUi(owner)
-        composeRule.waitForTag("files-open-teams").performClick()
+        composeRule.waitForTag("workspace-switch-team").performClick()
         composeRule.waitForTag("team-card-${team.name}").performClick()
         composeRule.waitForTag("team-files-content").assertIsDisplayed()
         composeRule.waitForText(folder.fileName).performClick()
@@ -71,7 +71,7 @@ class AndroidTeamsE2ETest {
         api.addTeamMember(owner.accessToken, team.id, viewer.username, "VIEWER")
 
         composeRule.loginViaUi(viewer)
-        composeRule.waitForTag("files-open-teams").performClick()
+        composeRule.waitForTag("workspace-switch-team").performClick()
         composeRule.waitForTag("team-card-${team.name}").performClick()
         composeRule.waitForText(file.fileName).assertIsDisplayed()
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -90,7 +90,7 @@ class AndroidTeamsE2ETest {
         val archive = api.queueTeamFolderZip(owner.accessToken, team.id, folder.id)
 
         composeRule.loginViaUi(owner)
-        composeRule.waitForTag("files-open-teams").performClick()
+        composeRule.waitForTag("workspace-switch-team").performClick()
         composeRule.waitForTag("team-card-${team.name}").performClick()
         composeRule.waitForTag("team-files-settings").performClick()
         composeRule.waitForTag("team-settings-tasks").performClick()
@@ -160,7 +160,7 @@ class AndroidTeamsE2ETest {
         api.deleteTeamFiles(owner.accessToken, team.id, listOf(recycleFile.id))
 
         composeRule.loginViaUi(owner)
-        composeRule.waitForTag("files-open-teams").performClick()
+        composeRule.waitForTag("workspace-switch-team").performClick()
         composeRule.waitForTag("team-card-${team.name}").performClick()
         composeRule.waitForTag("team-files-settings").performClick()
         composeRule.waitForTag("team-settings-overview").assertIsDisplayed()
@@ -360,7 +360,7 @@ class AndroidTeamsE2ETest {
     }
 
     private fun openTeam(team: E2ETeam) {
-        composeRule.waitForTag("files-open-teams").performClick()
+        composeRule.waitForTag("workspace-switch-team").performClick()
         composeRule.waitForTag("team-card-${team.name}").performClick()
         composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithTag("team-files-content", useUnmergedTree = true)

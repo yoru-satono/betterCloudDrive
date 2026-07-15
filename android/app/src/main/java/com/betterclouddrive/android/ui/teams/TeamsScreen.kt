@@ -25,7 +25,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -49,6 +48,8 @@ import com.betterclouddrive.android.domain.model.Team
 import com.betterclouddrive.android.ui.components.EmptyState
 import com.betterclouddrive.android.ui.components.InputDialog
 import com.betterclouddrive.android.ui.components.StorageBar
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
 import com.betterclouddrive.android.util.FormatUtil
 import com.betterclouddrive.android.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -105,7 +106,6 @@ class TeamsViewModel @Inject constructor(
 @Composable
 fun TeamsScreen(
     onOpenTeam: (Long) -> Unit,
-    onOpenPersonalDrive: () -> Unit,
     viewModel: TeamsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -118,10 +118,7 @@ fun TeamsScreen(
             TopAppBar(
                 title = { Text("团队") },
                 actions = {
-                    TextButton(
-                        onClick = onOpenPersonalDrive,
-                        modifier = Modifier.testTag("teams-open-personal-drive"),
-                    ) { Text("个人网盘") }
+                    WorkspaceSwitchAction(Workspace.TEAM)
                     IconButton(onClick = viewModel::load, modifier = Modifier.testTag("teams-refresh")) {
                         Icon(Icons.Default.Refresh, "刷新")
                     }

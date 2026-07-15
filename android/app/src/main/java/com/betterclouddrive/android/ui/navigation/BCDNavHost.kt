@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -58,6 +59,11 @@ fun BCDNavHost(
         }
     }
 
+    val activeWorkspace = remember { mutableStateOf(Workspace.PERSONAL) }
+    CompositionLocalProvider(
+        LocalWorkspaceNavController provides navController,
+        LocalActiveWorkspace provides activeWorkspace,
+    ) {
     NavHost(
         navController = navController,
         startDestination = initialInviteRoute ?: Screen.LOGIN,
@@ -122,7 +128,6 @@ fun BCDNavHost(
                 onNavigateToVersions = { fileId -> navController.navigate(Screen.versions(fileId)) },
                 onNavigateToProfile = { navController.navigateTopLevel(Screen.PROFILE) },
                 onNavigateToTransfers = { navController.navigateTopLevel(Screen.TRANSFERS) },
-                onNavigateToTeams = { navController.navigateTopLevel(Screen.TEAMS) },
                 onNavigateMain = { route -> navController.navigateTopLevel(route) },
             )
         }
@@ -141,7 +146,6 @@ fun BCDNavHost(
                 onNavigateToVersions = { fileId -> navController.navigate(Screen.versions(fileId)) },
                 onNavigateToProfile = { navController.navigateTopLevel(Screen.PROFILE) },
                 onNavigateToTransfers = { navController.navigateTopLevel(Screen.TRANSFERS) },
-                onNavigateToTeams = { navController.navigateTopLevel(Screen.TEAMS) },
                 onNavigateMain = { route -> navController.navigateTopLevel(route) },
             )
         }
@@ -177,7 +181,6 @@ fun BCDNavHost(
         composable(Screen.TEAMS) {
             TeamsScreen(
                 onOpenTeam = { teamId -> navController.navigate(Screen.teamFiles(teamId)) },
-                onOpenPersonalDrive = { navController.navigateTopLevel(Screen.FILES) },
             )
         }
         composable(
@@ -360,6 +363,7 @@ fun BCDNavHost(
                 },
             )
         }
+    }
     }
 }
 

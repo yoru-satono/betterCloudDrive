@@ -1,5 +1,8 @@
 package com.betterclouddrive.android.ui.teams
 
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
+
 import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -94,7 +97,7 @@ fun TeamTasksScreen(teamId: Long, onNavigateBack: () -> Unit, viewModel: TeamTas
     LaunchedEffect(events) { (events as? UiEvent.ShowSnackbar)?.let { snackbar.showSnackbar(it.message) } }
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, topBar = { TopAppBar(
         title = { Text("团队任务") }, navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
-        actions = { IconButton(onClick = { viewModel.load(teamId, state.page) }) { Icon(Icons.Default.Refresh, "刷新") } }
+        actions = { WorkspaceSwitchAction(Workspace.TEAM); IconButton(onClick = { viewModel.load(teamId, state.page) }) { Icon(Icons.Default.Refresh, "刷新") } }
     ) }) { padding ->
         TeamTasksContent(
             state = state,

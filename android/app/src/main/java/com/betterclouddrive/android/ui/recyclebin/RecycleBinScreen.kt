@@ -19,6 +19,8 @@ import com.betterclouddrive.android.ui.components.EmptyState
 import com.betterclouddrive.android.ui.components.FileRow
 import com.betterclouddrive.android.ui.navigation.MainScaffold
 import com.betterclouddrive.android.ui.navigation.Screen
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
 import com.betterclouddrive.android.util.NetworkResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +51,7 @@ fun RecycleBinScreen(
                     IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") }
                 },
                 actions = {
+                    WorkspaceSwitchAction(Workspace.PERSONAL)
                     TextButton(
                         onClick = { viewModel.emptyRecycleBin() },
                         modifier = Modifier.testTag("recycle-empty"),

@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
@@ -77,6 +76,8 @@ import com.betterclouddrive.android.ui.components.FileIcon
 import com.betterclouddrive.android.ui.components.FileRow
 import com.betterclouddrive.android.ui.components.InputDialog
 import com.betterclouddrive.android.ui.navigation.MainScaffold
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
 import com.betterclouddrive.android.util.FormatUtil
 import com.betterclouddrive.android.util.UiEvent
 
@@ -89,7 +90,6 @@ fun FileBrowserScreen(
     onNavigateToVersions: (Long) -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToTransfers: () -> Unit,
-    onNavigateToTeams: () -> Unit,
     onNavigateMain: (String) -> Unit,
     viewModel: FilesViewModel = hiltViewModel(),
 ) {
@@ -143,12 +143,7 @@ fun FileBrowserScreen(
                     )
                 },
                 actions = {
-                    if (folderId == null) {
-                        IconButton(
-                            onClick = onNavigateToTeams,
-                            modifier = Modifier.testTag("files-open-teams"),
-                        ) { Icon(Icons.Default.Groups, "进入团队空间") }
-                    }
+                    WorkspaceSwitchAction(Workspace.PERSONAL)
                     IconButton(
                         onClick = onNavigateToSearch,
                         modifier = Modifier.testTag("files-search"),

@@ -1,5 +1,7 @@
 package com.betterclouddrive.android.ui.teams
 
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -165,6 +167,7 @@ fun NotificationsScreen(
                 title = { Text("通知") },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 actions = {
+                    WorkspaceSwitchAction()
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
                         Text("仅未读", style = MaterialTheme.typography.bodySmall)
                         Switch(

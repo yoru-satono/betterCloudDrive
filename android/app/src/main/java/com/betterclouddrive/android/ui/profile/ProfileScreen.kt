@@ -22,6 +22,7 @@ import com.betterclouddrive.android.util.FormatUtil
 import com.betterclouddrive.android.ui.auth.AuthViewModel
 import com.betterclouddrive.android.ui.navigation.MainScaffold
 import com.betterclouddrive.android.ui.navigation.Screen
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
 import com.betterclouddrive.android.domain.model.ThemeMode
 import com.betterclouddrive.android.ui.theme.ThemeViewModel
 import com.betterclouddrive.android.R
@@ -46,6 +47,7 @@ fun ProfileScreen(
             TopAppBar(
                 title = { Text("个人设置") },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
+                actions = { WorkspaceSwitchAction() },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },

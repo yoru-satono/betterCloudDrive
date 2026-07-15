@@ -390,13 +390,11 @@ function handleFileInputChange(event: Event) {
     @drop="upload.onDrop"
   >
     <FileToolbar
-      :show-team-entry="route.name === 'Files'"
       @upload="triggerUpload"
       @upload-folder="upload.triggerFolderPicker"
       @new-folder="showNewFolder = true"
       @delete="deleteSelected"
       @refresh="store.refresh"
-      @open-teams="router.push({ name: 'Teams' })"
     />
     <input
       ref="fileInput"

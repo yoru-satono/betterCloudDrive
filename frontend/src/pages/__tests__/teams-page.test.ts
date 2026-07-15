@@ -31,7 +31,7 @@ describe('TeamsPage', () => {
     }])
   })
 
-  it('lists teams and exposes the only home-page switch back to personal files', async () => {
+  it('lists teams without embedding a workspace switch in page content', async () => {
     const wrapper = mount(TeamsPage, {
       global: {
         stubs: {
@@ -43,7 +43,6 @@ describe('TeamsPage', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('产品组')
-    await wrapper.get('[data-testid="open-personal-drive"]').trigger('click')
-    expect(routerPush).toHaveBeenCalledWith({ name: 'Files' })
+    expect(wrapper.find('[data-testid="open-personal-drive"]').exists()).toBe(false)
   })
 })

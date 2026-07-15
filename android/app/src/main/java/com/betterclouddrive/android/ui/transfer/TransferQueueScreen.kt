@@ -54,6 +54,7 @@ import com.betterclouddrive.android.data.repository.TransferTask
 import com.betterclouddrive.android.ui.components.EmptyState
 import com.betterclouddrive.android.ui.navigation.MainScaffold
 import com.betterclouddrive.android.ui.navigation.Screen
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
 import com.betterclouddrive.android.util.FormatUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -97,6 +98,7 @@ fun TransferQueueScreen(
                     }
                 },
                 actions = {
+                    WorkspaceSwitchAction()
                     IconButton(
                         onClick = viewModel::clearFinished,
                         modifier = Modifier.testTag("transfer-clear-finished"),

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export const useUIStore = defineStore('ui', () => {
+  const activeWorkspace = ref<'personal' | 'team'>('personal')
   const sidebarExpanded = ref(true)
   const searchOpen = ref(false)
   const confirmDialog = ref<{
@@ -12,6 +13,10 @@ export const useUIStore = defineStore('ui', () => {
 
   function toggleSidebar() {
     sidebarExpanded.value = !sidebarExpanded.value
+  }
+
+  function setActiveWorkspace(workspace: 'personal' | 'team') {
+    activeWorkspace.value = workspace
   }
 
   function openSearch() { searchOpen.value = true }
@@ -28,5 +33,5 @@ export const useUIStore = defineStore('ui', () => {
     confirmDialog.value = null
   }
 
-  return { sidebarExpanded, searchOpen, confirmDialog, toggleSidebar, openSearch, closeSearch, confirm, resolveConfirm }
+  return { activeWorkspace, sidebarExpanded, searchOpen, confirmDialog, setActiveWorkspace, toggleSidebar, openSearch, closeSearch, confirm, resolveConfirm }
 })

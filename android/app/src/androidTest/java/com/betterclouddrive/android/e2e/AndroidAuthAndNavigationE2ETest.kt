@@ -57,8 +57,8 @@ class AndroidAuthAndNavigationE2ETest {
     fun personalAndTeamHomesUseDedicatedSwitchButtons() {
         composeRule.loginViaUi(user)
 
-        composeRule.waitForTag("files-open-teams").performClick()
-        composeRule.waitForTag("teams-open-personal-drive").assertIsDisplayed().performClick()
+        composeRule.waitForTag("workspace-switch-team").performClick()
+        composeRule.waitForTag("workspace-switch-personal").assertIsDisplayed().performClick()
         composeRule.waitForTag("files-content").assertIsDisplayed()
     }
 

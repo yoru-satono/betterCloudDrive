@@ -85,6 +85,8 @@ import com.betterclouddrive.android.ui.components.EmptyState
 import com.betterclouddrive.android.ui.components.FileRow
 import com.betterclouddrive.android.ui.components.InputDialog
 import com.betterclouddrive.android.ui.navigation.Screen
+import com.betterclouddrive.android.ui.navigation.Workspace
+import com.betterclouddrive.android.ui.navigation.WorkspaceSwitchAction
 import com.betterclouddrive.android.util.FileTypeHelper
 import com.betterclouddrive.android.util.FormatUtil
 import com.betterclouddrive.android.util.NetworkResult
@@ -504,6 +506,7 @@ fun TeamFilesScreen(
                 },
                 navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 actions = {
+                    WorkspaceSwitchAction(Workspace.TEAM)
                     IconButton(onClick = { onOpenMembers(teamId) }, modifier = Modifier.testTag("team-files-members")) {
                         Icon(Icons.Default.Groups, "成员")
                     }

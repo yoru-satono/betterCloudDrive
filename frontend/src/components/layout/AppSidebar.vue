@@ -18,7 +18,7 @@ const route = useRoute()
 const { formatSize } = useFormatters()
 const showCreateTeam = ref(false)
 const teamName = ref('')
-const isTeamArea = computed(() => route.meta?.area === 'team')
+const isTeamArea = computed(() => route.meta?.area === 'team' || (route.meta?.area === 'shared' && ui.activeWorkspace === 'team'))
 
 const navItems = [
   { to: '/files',       label: '全部文件',  icon: 'folder' },
@@ -44,8 +44,14 @@ const iconPaths: Record<string, string> = {
 }
 
 watch(isTeamArea, active => {
+  if (route.meta?.area === 'team') ui.setActiveWorkspace('team')
+  if (route.meta?.area === 'personal') ui.setActiveWorkspace('personal')
   if (active && auth.user) void teams.fetchTeams()
 }, { immediate: true })
+
+function switchWorkspace() {
+  router.push({ name: isTeamArea.value ? 'Files' : 'Teams' })
+}
 
 async function createTeam() {
   const name = teamName.value.trim()
@@ -72,6 +78,21 @@ async function createTeam() {
         <span v-if="ui.sidebarExpanded" class="sidebar__brand">BetterCloudDrive</span>
       </Transition>
     </div>
+
+    <button
+      type="button"
+      class="sidebar__workspace"
+      :aria-label="isTeamArea ? '切换到个人网盘' : '切换到团队空间'"
+      data-testid="workspace-switcher"
+      @click="switchWorkspace"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path :d="iconPaths[isTeamArea ? 'folder' : 'team']" />
+      </svg>
+      <Transition name="fade">
+        <span v-if="ui.sidebarExpanded">{{ isTeamArea ? '切换到个人网盘' : '切换到团队空间' }}</span>
+      </Transition>
+    </button>
 
     <!-- Navigation -->
     <nav class="sidebar__nav">
@@ -195,6 +216,12 @@ async function createTeam() {
   flex-shrink: 0;
 }
 .sidebar--expanded { width: var(--sidebar-w); }
+.sidebar__workspace {
+  margin: 8px 8px 0; min-height: 36px; padding: 8px; display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elevated); color: var(--text-secondary);
+  font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; flex-shrink: 0;
+}
+.sidebar__workspace:hover { color: var(--accent); border-color: var(--border-hover); }
 
 .sidebar__logo {
   display: flex; align-items: center; gap: 10px;

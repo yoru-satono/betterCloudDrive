@@ -33,15 +33,4 @@ describe('FileToolbar', () => {
     expect(wrapper.text()).not.toContain('上传文件夹')
   })
 
-  it('shows and emits the team entry only on the personal root page', async () => {
-    isDesktopRuntime.mockReturnValue(false)
-    const FileToolbar = (await import('@/components/file/FileToolbar.vue')).default
-
-    const root = mount(FileToolbar, { props: { showTeamEntry: true } })
-    await root.get('[data-testid="open-teams"]').trigger('click')
-    expect(root.emitted('open-teams')).toHaveLength(1)
-
-    const folder = mount(FileToolbar, { props: { showTeamEntry: false } })
-    expect(folder.find('[data-testid="open-teams"]').exists()).toBe(false)
-  })
 })
