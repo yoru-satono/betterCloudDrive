@@ -86,7 +86,7 @@ describe('API endpoint contracts', () => {
 
   it('uses team management and team file routes', async () => {
     await teamsApi.listTeams()
-    expect(apiMock.get).toHaveBeenCalledWith('/teams')
+    expect(apiMock.get).toHaveBeenCalledWith('/teams', { params: { page: 1, size: 20 } })
 
     await teamsApi.createTeam('Product')
     expect(apiMock.post).toHaveBeenCalledWith('/teams', { name: 'Product' })
@@ -107,7 +107,7 @@ describe('API endpoint contracts', () => {
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/owner', { userId: 5 })
 
     await teamsApi.listMembers(10)
-    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/members')
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/members', { params: { page: 1, size: 20 } })
 
     await teamsApi.addMember(10, 'chain', 'EDITOR')
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/members', { username: 'chain', role: 'EDITOR' })
@@ -122,7 +122,7 @@ describe('API endpoint contracts', () => {
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/invites', { email: 'member@test.local', role: 'VIEWER' })
 
     await teamsApi.listInvites(10)
-    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/invites')
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/invites', { params: { page: 1, size: 20 } })
 
     await teamsApi.resendInvite(10, 4)
     expect(apiMock.post).toHaveBeenCalledWith('/teams/10/invites/4/resend')

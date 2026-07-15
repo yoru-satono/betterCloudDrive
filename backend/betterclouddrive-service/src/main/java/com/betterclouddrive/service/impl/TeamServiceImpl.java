@@ -2,6 +2,7 @@ package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.exception.BusinessException;
+import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
@@ -16,6 +17,8 @@ import com.betterclouddrive.service.dto.TeamView;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -41,10 +44,12 @@ public class TeamServiceImpl implements TeamService {
     private final TeamNotificationDispatchService teamNotificationDispatchService;
 
     @Override
-    public List<TeamView> listTeams(Long userId) {
-        return teamRepository.findActiveTeamsForUser(userId).stream()
+    public PageResult<TeamView> listTeams(Long userId, int page, int size) {
+        Page<TeamEntity> result = teamRepository.findActiveTeamsForUser(userId, PageRequest.of(Math.max(page - 1, 0), size));
+        List<TeamView> records = result.getContent().stream()
                 .map(team -> new TeamView(team, requireRead(userId, team.getId()).getRole()))
                 .toList();
+        return PageResult.of(records, result.getTotalElements(), page, size);
     }
 
     @Override
@@ -121,16 +126,19 @@ public class TeamServiceImpl implements TeamService {
     }
 
     @Override
-    public List<TeamMemberView> listMembers(Long userId, Long teamId) {
+    public PageResult<TeamMemberView> listMembers(Long userId, Long teamId, int page, int size) {
         requireRead(userId, teamId);
-        List<TeamMemberEntity> members = teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(teamId, ACTIVE);
+        Page<TeamMemberEntity> memberPage = teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(
+                teamId, ACTIVE, PageRequest.of(Math.max(page - 1, 0), size));
+        List<TeamMemberEntity> members = memberPage.getContent();
         Map<Long, UserEntity> users = userRepository.findAllById(
                         members.stream().map(TeamMemberEntity::getUserId).toList())
                 .stream()
                 .collect(Collectors.toMap(UserEntity::getId, Function.identity()));
-        return members.stream()
+        List<TeamMemberView> records = members.stream()
                 .map(member -> new TeamMemberView(member, users.get(member.getUserId())))
                 .toList();
+        return PageResult.of(records, memberPage.getTotalElements(), page, size);
     }
 
     @Override

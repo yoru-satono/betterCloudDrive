@@ -2,6 +2,7 @@ package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.exception.BusinessException;
+import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.TeamInviteEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
@@ -19,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -101,11 +104,14 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     }
 
     @Override
-    public List<TeamInviteView> listInvites(Long actorUserId, Long teamId) {
+    public PageResult<TeamInviteView> listInvites(Long actorUserId, Long teamId, int page, int size) {
         teamService.requireManageMembers(actorUserId, teamId);
-        return teamInviteRepository.findByTeamIdOrderByCreatedAtDesc(teamId).stream()
+        Page<TeamInviteEntity> result = teamInviteRepository.findByTeamIdOrderByCreatedAtDesc(
+                teamId, PageRequest.of(Math.max(page - 1, 0), size));
+        List<TeamInviteView> records = result.getContent().stream()
                 .map(this::view)
                 .toList();
+        return PageResult.of(records, result.getTotalElements(), page, size);
     }
 
     @Override

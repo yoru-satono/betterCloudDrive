@@ -1989,14 +1989,14 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 
 | 方法 | 路径 | 权限 | 请求 | 响应 |
 |------|------|------|------|------|
-| GET | `/api/v1/teams` | 登录用户 | 无 | 当前用户加入的团队列表 |
+| GET | `/api/v1/teams?page=1&size=20` | 登录用户 | 无 | 当前用户加入的团队分页列表，`size` 最大 100 |
 | POST | `/api/v1/teams` | 登录用户 | `{ "name": "研发团队" }` | `TeamResponse` |
 | GET | `/api/v1/teams/{teamId}` | 团队成员 | 无 | `TeamResponse` |
 | PUT | `/api/v1/teams/{teamId}` | OWNER/ADMIN | `{ "name": "新名称" }` | `TeamResponse` |
 | DELETE | `/api/v1/teams/{teamId}` | OWNER | 无 | 软删除团队 |
 | POST | `/api/v1/teams/{teamId}/leave` | 非唯一 OWNER | 无 | 退出团队 |
 | POST | `/api/v1/teams/{teamId}/owner` | OWNER | `{ "userId": 12 }` | 转让后的 `TeamResponse` |
-| GET | `/api/v1/teams/{teamId}/members` | 团队成员 | 无 | `TeamMemberResponse[]` |
+| GET | `/api/v1/teams/{teamId}/members?page=1&size=20` | 团队成员 | 无 | `PageResult<TeamMemberResponse>`，`size` 最大 100 |
 | POST | `/api/v1/teams/{teamId}/members` | OWNER/ADMIN | `{ "username": "lisi", "role": "VIEWER" }` | `TeamMemberResponse` |
 | PUT | `/api/v1/teams/{teamId}/members/{userId}` | OWNER/ADMIN | `{ "role": "EDITOR" }` | `TeamMemberResponse` |
 | DELETE | `/api/v1/teams/{teamId}/members/{userId}` | OWNER/ADMIN | 无 | 移除成员 |
@@ -2010,7 +2010,7 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 | 方法 | 路径 | 权限 | 请求 | 响应 |
 |------|------|------|------|------|
 | POST | `/api/v1/teams/{teamId}/invites` | OWNER/ADMIN | `{ "email": "user@example.com", "role": "VIEWER" }` | `TeamInviteResponse` |
-| GET | `/api/v1/teams/{teamId}/invites` | OWNER/ADMIN | 无 | 邀请列表 |
+| GET | `/api/v1/teams/{teamId}/invites?page=1&size=20` | OWNER/ADMIN | 无 | 邀请分页列表，`size` 最大 100 |
 | POST | `/api/v1/teams/{teamId}/invites/{inviteId}/resend` | OWNER/ADMIN | 无 | 重新发送后的邀请 |
 | DELETE | `/api/v1/teams/{teamId}/invites/{inviteId}` | OWNER/ADMIN | 无 | 取消邀请 |
 | GET | `/api/v1/team-invites/{token}` | 登录用户 | 无 | 邀请详情 |

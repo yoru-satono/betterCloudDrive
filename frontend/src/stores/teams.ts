@@ -10,8 +10,7 @@ export const useTeamsStore = defineStore('teams', () => {
   async function fetchTeams() {
     loading.value = true
     try {
-      const { data } = await teamsApi.listTeams()
-      teams.value = data.data
+      teams.value = await teamsApi.listAllTeams()
     } finally {
       loading.value = false
     }

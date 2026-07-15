@@ -46,10 +46,18 @@ async function loadFolders(parentId: number | null) {
   error.value = ''
   currentParentId.value = parentId
   try {
-    const { data } = props.teamId
-      ? await teamsApi.listTeamFiles(props.teamId, { parentId, page: 1, size: 100 })
-      : await filesApi.listFiles({ parentId, page: 1, size: 100 })
-    folders.value = data.data.records.filter(item => item.fileType === 'folder' && item.id !== props.excludeFolderId)
+    const records: FileEntity[] = []
+    let page = 1
+    let pages = 1
+    do {
+      const { data } = props.teamId
+        ? await teamsApi.listTeamFiles(props.teamId, { parentId, page, size: 100 })
+        : await filesApi.listFiles({ parentId, page, size: 100 })
+      records.push(...data.data.records)
+      pages = data.data.pages
+      page++
+    } while (page <= pages)
+    folders.value = records.filter(item => item.fileType === 'folder' && item.id !== props.excludeFolderId)
   } catch {
     error.value = '文件夹加载失败'
   } finally {

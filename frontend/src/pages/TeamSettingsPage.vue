@@ -129,8 +129,7 @@ async function load() {
 async function loadMembers() {
   membersLoading.value = true
   try {
-    const { data } = await teamsApi.listMembers(teamId.value)
-    members.value = data.data
+    members.value = await teamsApi.listAllMembers(teamId.value)
   } finally {
     membersLoading.value = false
   }
@@ -150,8 +149,7 @@ async function loadInvites() {
   if (!canManage.value) return
   invitesLoading.value = true
   try {
-    const { data } = await teamsApi.listInvites(teamId.value)
-    invites.value = data.data
+    invites.value = await teamsApi.listAllInvites(teamId.value)
   } finally {
     invitesLoading.value = false
   }

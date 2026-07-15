@@ -2,6 +2,7 @@ package com.betterclouddrive.service;
 
 import com.betterclouddrive.dal.entity.TeamInviteEntity;
 import com.betterclouddrive.service.dto.TeamInviteView;
+import com.betterclouddrive.common.dto.PageResult;
 
 import java.util.List;
 
@@ -9,7 +10,7 @@ public interface TeamInviteService {
 
     TeamInviteView createInvite(Long actorUserId, Long teamId, String email, String role);
 
-    List<TeamInviteView> listInvites(Long actorUserId, Long teamId);
+    PageResult<TeamInviteView> listInvites(Long actorUserId, Long teamId, int page, int size);
 
     TeamInviteView resendInvite(Long actorUserId, Long teamId, Long inviteId);
 

@@ -21,7 +21,7 @@ vi.mock('@/api/teams', () => ({
   listTeamFiles: vi.fn(),
   getTeamFileEffectivePermission: vi.fn(),
   listTeamFilePermissions: vi.fn(),
-  listMembers: vi.fn(),
+  listAllMembers: vi.fn(),
   upsertTeamFilePermission: vi.fn(),
   deleteTeamFilePermission: vi.fn(),
 }))
@@ -59,7 +59,7 @@ const getTeam = teamsApi.getTeam as Mock
 const listTeamFiles = teamsApi.listTeamFiles as Mock
 const getTeamFileEffectivePermission = teamsApi.getTeamFileEffectivePermission as Mock
 const listTeamFilePermissions = teamsApi.listTeamFilePermissions as Mock
-const listMembers = teamsApi.listMembers as Mock
+const listAllMembers = teamsApi.listAllMembers as Mock
 const upsertTeamFilePermission = teamsApi.upsertTeamFilePermission as Mock
 
 const file = (id: number, fileName: string): FileEntity => ({
@@ -144,14 +144,10 @@ beforeEach(() => {
     data: { data: { records: [file(7, 'design.docx')], total: 1, page: 1, pages: 1 } },
   })
   listTeamFilePermissions.mockResolvedValue({ data: { data: [] } })
-  listMembers.mockResolvedValue({
-    data: {
-      data: [
-        { teamId: 10, userId: 1, username: 'owner', email: null, role: 'OWNER', status: 1 },
-        { teamId: 10, userId: 2, username: 'chain', email: null, role: 'ADMIN', status: 1 },
-      ],
-    },
-  })
+  listAllMembers.mockResolvedValue([
+    { teamId: 10, userId: 1, username: 'owner', email: null, role: 'OWNER', status: 1 },
+    { teamId: 10, userId: 2, username: 'chain', email: null, role: 'ADMIN', status: 1 },
+  ])
   upsertTeamFilePermission.mockResolvedValue({ data: { data: null } })
   getTeamFileEffectivePermission.mockResolvedValue({
     data: { data: permission({ canWrite: false, canShare: false, canDelete: false, canManage: true }) },

@@ -82,7 +82,10 @@ interface ApiService {
 
     // ==================== Teams ====================
     @GET("teams")
-    suspend fun listTeams(): ApiResponse<List<Team>>
+    suspend fun listTeams(
+        @Query("page") page: Int = 1,
+        @Query("size") size: Int = 20,
+    ): ApiResponse<PageResult<Team>>
 
     @POST("teams")
     suspend fun createTeam(@Body request: CreateTeamRequest): ApiResponse<Team>
@@ -109,7 +112,11 @@ interface ApiService {
     ): ApiResponse<Team>
 
     @GET("teams/{teamId}/members")
-    suspend fun listTeamMembers(@Path("teamId") teamId: Long): ApiResponse<List<TeamMember>>
+    suspend fun listTeamMembers(
+        @Path("teamId") teamId: Long,
+        @Query("page") page: Int = 1,
+        @Query("size") size: Int = 20,
+    ): ApiResponse<PageResult<TeamMember>>
 
     @POST("teams/{teamId}/members")
     suspend fun addTeamMember(
@@ -137,7 +144,11 @@ interface ApiService {
     ): ApiResponse<TeamInvite>
 
     @GET("teams/{teamId}/invites")
-    suspend fun listTeamInvites(@Path("teamId") teamId: Long): ApiResponse<List<TeamInvite>>
+    suspend fun listTeamInvites(
+        @Path("teamId") teamId: Long,
+        @Query("page") page: Int = 1,
+        @Query("size") size: Int = 20,
+    ): ApiResponse<PageResult<TeamInvite>>
 
     @POST("teams/{teamId}/invites/{inviteId}/resend")
     suspend fun resendTeamInvite(

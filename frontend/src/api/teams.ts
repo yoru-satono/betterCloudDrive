@@ -23,8 +23,8 @@ export interface ListTeamFilesParams {
   order?: string
 }
 
-export const listTeams = () =>
-  api.get<ApiResponse<Team[]>>('/teams')
+export const listTeams = (page = 1, size = 20) =>
+  api.get<ApiResponse<PageResult<Team>>>('/teams', { params: { page, size } })
 
 export const createTeam = (name: string) =>
   api.post<ApiResponse<Team>>('/teams', { name })
@@ -44,8 +44,8 @@ export const leaveTeam = (teamId: number) =>
 export const transferTeamOwner = (teamId: number, userId: number) =>
   api.post<ApiResponse<Team>>(`/teams/${teamId}/owner`, { userId })
 
-export const listMembers = (teamId: number) =>
-  api.get<ApiResponse<TeamMember[]>>(`/teams/${teamId}/members`)
+export const listMembers = (teamId: number, page = 1, size = 20) =>
+  api.get<ApiResponse<PageResult<TeamMember>>>(`/teams/${teamId}/members`, { params: { page, size } })
 
 export const addMember = (teamId: number, username: string, role: Exclude<TeamRole, 'OWNER'>) =>
   api.post<ApiResponse<TeamMember>>(`/teams/${teamId}/members`, { username, role })
@@ -59,8 +59,25 @@ export const removeMember = (teamId: number, userId: number) =>
 export const createInvite = (teamId: number, email: string, role: Exclude<TeamRole, 'OWNER'>) =>
   api.post<ApiResponse<TeamInvite>>(`/teams/${teamId}/invites`, { email, role })
 
-export const listInvites = (teamId: number) =>
-  api.get<ApiResponse<TeamInvite[]>>(`/teams/${teamId}/invites`)
+export const listInvites = (teamId: number, page = 1, size = 20) =>
+  api.get<ApiResponse<PageResult<TeamInvite>>>(`/teams/${teamId}/invites`, { params: { page, size } })
+
+async function collectPages<T>(load: (page: number, size: number) => Promise<{ data: ApiResponse<PageResult<T>> }>) {
+  const records: T[] = []
+  let page = 1
+  let pages = 1
+  do {
+    const { data } = await load(page, 100)
+    records.push(...data.data.records)
+    pages = data.data.pages
+    page++
+  } while (page <= pages)
+  return records
+}
+
+export const listAllTeams = () => collectPages((page, size) => listTeams(page, size))
+export const listAllMembers = (teamId: number) => collectPages((page, size) => listMembers(teamId, page, size))
+export const listAllInvites = (teamId: number) => collectPages((page, size) => listInvites(teamId, page, size))
 
 export const resendInvite = (teamId: number, inviteId: number) =>
   api.post<ApiResponse<TeamInvite>>(`/teams/${teamId}/invites/${inviteId}/resend`)

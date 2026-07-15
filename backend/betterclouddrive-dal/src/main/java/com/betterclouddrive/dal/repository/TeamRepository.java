@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Page;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -38,7 +39,7 @@ public interface TeamRepository extends JpaRepository<TeamEntity, Long>, JpaSpec
             WHERE tm.userId = :userId AND tm.status = 1 AND t.deletedAt IS NULL AND t.archivedAt IS NULL
             ORDER BY t.name ASC
             """)
-    List<TeamEntity> findActiveTeamsForUser(@Param("userId") Long userId);
+    Page<TeamEntity> findActiveTeamsForUser(@Param("userId") Long userId, Pageable pageable);
 
     @Modifying
     @Query("UPDATE TeamEntity t SET t.storageUsed = t.storageUsed + :delta WHERE t.id = :teamId")

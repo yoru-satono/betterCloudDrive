@@ -159,10 +159,10 @@ class TeamFilesViewModel @Inject constructor(
                 return@launch
             }
             _uiState.value = _uiState.value.copy(isLoading = true)
-            when (val result = teamRepository.searchFiles(teamId, query, size = 100)) {
+            when (val result = teamRepository.searchAllFiles(teamId, query)) {
                 is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    files = result.data.records,
+                    files = result.data,
                 )
                 is NetworkResult.Error -> {
                     _uiState.value = _uiState.value.copy(isLoading = false)
@@ -281,9 +281,9 @@ class TeamFilesViewModel @Inject constructor(
                 is NetworkResult.Success -> {
                     val selected = mutableSetOf<Long>()
                     tagsResult.data.forEach { tag ->
-                        when (val filesResult = teamRepository.listFilesByTag(team.id, tag.id, size = 100)) {
+                        when (val filesResult = teamRepository.listAllFilesByTag(team.id, tag.id)) {
                             is NetworkResult.Success -> {
-                                if (filesResult.data.records.any { it.id == file.id }) selected.add(tag.id)
+                                if (filesResult.data.any { it.id == file.id }) selected.add(tag.id)
                             }
                             else -> Unit
                         }
@@ -358,10 +358,10 @@ class TeamFilesViewModel @Inject constructor(
 
     private suspend fun loadFilesInternal(teamId: Long, folderId: Long?) {
         _uiState.value = _uiState.value.copy(isLoading = true)
-        when (val result = teamRepository.listFiles(teamId, folderId, size = 100)) {
+        when (val result = teamRepository.listAllFiles(teamId, folderId)) {
             is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
                 isLoading = false,
-                files = result.data.records,
+                files = result.data,
             )
             is NetworkResult.Error -> {
                 _uiState.value = _uiState.value.copy(isLoading = false)

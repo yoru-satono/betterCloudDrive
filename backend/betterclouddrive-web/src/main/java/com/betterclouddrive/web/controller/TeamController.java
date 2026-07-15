@@ -94,10 +94,13 @@ public class TeamController {
     private final AuditCsvExporter auditCsvExporter;
 
     @GetMapping
-    public ApiResponse<List<TeamResponse>> listTeams(@CurrentUser UserPrincipal user) {
-        return ApiResponse.success(teamService.listTeams(user.getUserId()).stream()
-                .map(TeamResponse::from)
-                .toList());
+    public ApiResponse<PageResult<TeamResponse>> listTeams(
+            @CurrentUser UserPrincipal user,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") @Max(100) int size) {
+        PageResult<com.betterclouddrive.service.dto.TeamView> result = teamService.listTeams(user.getUserId(), page, size);
+        return ApiResponse.success(PageResult.of(result.getRecords().stream().map(TeamResponse::from).toList(),
+                result.getTotal(), result.getPage(), result.getSize()));
     }
 
     @PostMapping
@@ -141,10 +144,14 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}/members")
-    public ApiResponse<List<TeamMemberResponse>> listMembers(@CurrentUser UserPrincipal user, @PathVariable Long teamId) {
-        return ApiResponse.success(teamService.listMembers(user.getUserId(), teamId).stream()
-                .map(TeamMemberResponse::from)
-                .toList());
+    public ApiResponse<PageResult<TeamMemberResponse>> listMembers(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") @Max(100) int size) {
+        PageResult<com.betterclouddrive.service.dto.TeamMemberView> result = teamService.listMembers(user.getUserId(), teamId, page, size);
+        return ApiResponse.success(PageResult.of(result.getRecords().stream().map(TeamMemberResponse::from).toList(),
+                result.getTotal(), result.getPage(), result.getSize()));
     }
 
     @PostMapping("/{teamId}/members")
@@ -185,10 +192,14 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}/invites")
-    public ApiResponse<List<TeamInviteResponse>> listInvites(@CurrentUser UserPrincipal user, @PathVariable Long teamId) {
-        return ApiResponse.success(teamInviteService.listInvites(user.getUserId(), teamId).stream()
-                .map(TeamInviteResponse::from)
-                .toList());
+    public ApiResponse<PageResult<TeamInviteResponse>> listInvites(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") @Max(100) int size) {
+        PageResult<com.betterclouddrive.service.dto.TeamInviteView> result = teamInviteService.listInvites(user.getUserId(), teamId, page, size);
+        return ApiResponse.success(PageResult.of(result.getRecords().stream().map(TeamInviteResponse::from).toList(),
+                result.getTotal(), result.getPage(), result.getSize()));
     }
 
     @PostMapping("/{teamId}/invites/{inviteId}/resend")

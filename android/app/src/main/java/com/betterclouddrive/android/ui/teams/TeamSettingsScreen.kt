@@ -173,8 +173,8 @@ class TeamSettingsViewModel @Inject constructor(
                 }
                 is NetworkResult.Loading -> emptyList()
             }
-            val favorites = when (val result = repository.listFavorites(teamId, size = 100)) {
-                is NetworkResult.Success -> result.data.records
+            val favorites = when (val result = repository.listAllFavorites(teamId)) {
+                is NetworkResult.Success -> result.data
                 is NetworkResult.Error -> {
                     _events.emit(UiEvent.ShowSnackbar("团队收藏加载失败: ${result.message}", true))
                     emptyList()
@@ -630,10 +630,10 @@ class TeamSettingsViewModel @Inject constructor(
                 selectedTagName = tag.tagName,
                 tagFilesLoading = true,
             )
-            when (val result = repository.listFilesByTag(team.id, tag.id, size = 100)) {
+            when (val result = repository.listAllFilesByTag(team.id, tag.id)) {
                 is NetworkResult.Success -> _uiState.value = _uiState.value.copy(
                     selectedTagName = tag.tagName,
-                    tagFiles = result.data.records,
+                    tagFiles = result.data,
                     tagFilesLoading = false,
                 )
                 is NetworkResult.Error -> {

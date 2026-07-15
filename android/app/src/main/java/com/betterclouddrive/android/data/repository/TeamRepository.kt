@@ -9,6 +9,7 @@ import com.betterclouddrive.android.data.remote.dto.CreateTagRequest
 import com.betterclouddrive.android.data.remote.dto.CreateTeamInviteRequest
 import com.betterclouddrive.android.data.remote.dto.MoveRequest
 import com.betterclouddrive.android.data.remote.dto.PageResult
+import com.betterclouddrive.android.data.remote.dto.ApiResponse
 import com.betterclouddrive.android.data.remote.dto.RenameRequest
 import com.betterclouddrive.android.data.remote.dto.CreateShareRequest
 import com.betterclouddrive.android.data.remote.dto.TagFilesRequest
@@ -39,7 +40,7 @@ import javax.inject.Singleton
 
 @Singleton
 class TeamRepository @Inject constructor(private val api: ApiService) {
-    suspend fun listTeams(): NetworkResult<List<Team>> = apiCall { api.listTeams() }
+    suspend fun listTeams(): NetworkResult<List<Team>> = collectPages(api::listTeams)
 
     suspend fun createTeam(name: String): NetworkResult<Team> = apiCall {
         api.createTeam(CreateTeamRequest(name))
@@ -65,9 +66,8 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
         api.transferTeamOwner(teamId, TransferTeamOwnerRequest(userId))
     }
 
-    suspend fun listMembers(teamId: Long): NetworkResult<List<TeamMember>> = apiCall {
-        api.listTeamMembers(teamId)
-    }
+    suspend fun listMembers(teamId: Long): NetworkResult<List<TeamMember>> =
+        collectPages { page, size -> api.listTeamMembers(teamId, page, size) }
 
     suspend fun addMember(teamId: Long, username: String, role: TeamRole): NetworkResult<TeamMember> = apiCall {
         api.addTeamMember(teamId, AddTeamMemberRequest(username, role.name))
@@ -85,9 +85,8 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
         api.createTeamInvite(teamId, CreateTeamInviteRequest(email, role.name))
     }
 
-    suspend fun listInvites(teamId: Long): NetworkResult<List<TeamInvite>> = apiCall {
-        api.listTeamInvites(teamId)
-    }
+    suspend fun listInvites(teamId: Long): NetworkResult<List<TeamInvite>> =
+        collectPages { page, size -> api.listTeamInvites(teamId, page, size) }
 
     suspend fun resendInvite(teamId: Long, inviteId: Long): NetworkResult<TeamInvite> = apiCall {
         api.resendTeamInvite(teamId, inviteId)
@@ -148,6 +147,12 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
         apiCall {
             api.searchTeamFiles(teamId, query, page, size)
         }
+
+    suspend fun searchAllFiles(teamId: Long, query: String): NetworkResult<List<FileItem>> =
+        collectPages { page, size -> api.searchTeamFiles(teamId, query, page, size) }
+
+    suspend fun listAllFiles(teamId: Long, parentId: Long?): NetworkResult<List<FileItem>> =
+        collectPages { page, size -> api.listTeamFiles(teamId, parentId, page, size, "fileName", "asc") }
 
     suspend fun getFile(teamId: Long, fileId: Long): NetworkResult<FileItem> = apiCall {
         api.getTeamFile(teamId, fileId)
@@ -302,6 +307,9 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
         api.listTeamFavorites(teamId, query, page, size)
     }
 
+    suspend fun listAllFavorites(teamId: Long): NetworkResult<List<FileItem>> =
+        collectPages { page, size -> api.listTeamFavorites(teamId, null, page, size) }
+
     suspend fun createTag(teamId: Long, tagName: String, color: String = "#1890ff"): NetworkResult<Tag> = apiCall {
         api.createTeamTag(teamId, CreateTagRequest(tagName, color))
     }
@@ -341,6 +349,9 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
         api.listTeamFilesByTag(teamId, tagId, query, page, size)
     }
 
+    suspend fun listAllFilesByTag(teamId: Long, tagId: Long): NetworkResult<List<FileItem>> =
+        collectPages { page, size -> api.listTeamFilesByTag(teamId, tagId, null, page, size) }
+
     suspend fun listNotifications(page: Int = 1, size: Int = 20, unreadOnly: Boolean = false, type: String? = null): NetworkResult<PageResult<NotificationItem>> =
         apiCall {
             api.listNotifications(page, size, unreadOnly, type)
@@ -356,5 +367,28 @@ class TeamRepository @Inject constructor(private val api: ApiService) {
 
     suspend fun markAllNotificationsRead(): NetworkResult<Unit> = apiCall {
         api.markAllNotificationsRead()
+    }
+
+    private suspend fun <T> collectPages(
+        load: suspend (page: Int, size: Int) -> ApiResponse<PageResult<T>>,
+    ): NetworkResult<List<T>> {
+        return try {
+            val records = mutableListOf<T>()
+            var page = 1
+            var pages = 1
+            do {
+                val response = load(page, 100)
+                val result = response.data
+                if (response.code != 200 || result == null) {
+                    return NetworkResult.Error(response.code, response.messageKey, response.messageParams, response.requestId)
+                }
+                records += result.records
+                pages = result.pages
+                page++
+            } while (page <= pages)
+            NetworkResult.Success(records)
+        } catch (_: Exception) {
+            NetworkResult.Error(-1, "error.network")
+        }
     }
 }
