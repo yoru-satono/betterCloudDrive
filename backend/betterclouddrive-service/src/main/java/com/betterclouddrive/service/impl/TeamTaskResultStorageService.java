@@ -15,6 +15,9 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.io.BufferedWriter;
+import java.io.Writer;
 import java.time.LocalDateTime;
 
 @Service
@@ -45,6 +48,37 @@ public class TeamTaskResultStorageService {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to store team task result", e);
         }
+    }
+
+    public TeamTaskResult saveAuditExport(Long taskId, String fileName, AuditExportWriter writerAction) {
+        if (taskId == null) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Task id is required");
+        }
+        String safeName = sanitizeFileName(fileName);
+        String relativePath = AUDIT_EXPORT_DIRECTORY + "/" + taskId + "-" + safeName;
+        Path path = resolve(relativePath);
+        Path partial = path.resolveSibling(path.getFileName() + ".part");
+        try {
+            Files.createDirectories(path.getParent());
+            try (BufferedWriter writer = Files.newBufferedWriter(partial, StandardCharsets.UTF_8)) {
+                writerAction.write(writer);
+            }
+            Files.move(partial, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            return new TeamTaskResult(relativePath, safeName, "text/csv;charset=UTF-8", Files.size(path),
+                    LocalDateTime.now().plusHours(Math.max(1, properties.getResultRetentionHours())));
+        } catch (RuntimeException | IOException e) {
+            try {
+                Files.deleteIfExists(partial);
+            } catch (IOException ignored) {
+                // Preserve the original export failure.
+            }
+            throw new IllegalStateException("Failed to store team task result", e);
+        }
+    }
+
+    @FunctionalInterface
+    public interface AuditExportWriter {
+        void write(Writer writer) throws IOException;
     }
 
     public TeamTaskDownload open(TeamTaskEntity task) {

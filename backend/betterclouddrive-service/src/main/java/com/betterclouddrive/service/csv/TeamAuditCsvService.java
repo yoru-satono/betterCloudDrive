@@ -8,6 +8,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.io.IOException;
+import java.io.Writer;
 
 @Service
 public class TeamAuditCsvService {
@@ -44,6 +46,21 @@ public class TeamAuditCsvService {
                 csv(log.getTraceId()),
                 csv(log.getDetails()))));
         return String.join("\n", rows) + "\n";
+    }
+
+    public void writeHeader(Writer writer) throws IOException {
+        writer.write(TEAM_AUDIT_HEADER);
+        writer.write('\n');
+    }
+
+    public void writeRows(Writer writer, List<TeamOperationLogEntity> logs) throws IOException {
+        for (TeamOperationLogEntity log : logs) {
+            writer.write(String.join(",",
+                    csv(log.getCreatedAt()), csv(log.getTeamId()), csv(log.getActorUserId()), csv(log.getAction()),
+                    csv(log.getTargetType()), csv(log.getTargetId()), csv(log.getResult()), csv(log.getStatusCode()),
+                    csv(log.getTraceId()), csv(log.getDetails())));
+            writer.write('\n');
+        }
     }
 
     private String csv(Object value) {

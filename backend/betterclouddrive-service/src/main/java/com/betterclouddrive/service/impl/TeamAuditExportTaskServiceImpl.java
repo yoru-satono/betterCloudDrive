@@ -27,7 +27,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskService {
 
-    private static final int AUDIT_EXPORT_LIMIT = 10000;
+    private static final int AUDIT_EXPORT_BATCH_SIZE = 1000;
     public static final String TASK_TYPE_AUDIT_EXPORT = "AUDIT_EXPORT";
 
     private final TeamService teamService;
@@ -56,8 +56,8 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
                 normalize(targetType),
                 result,
                 formatDateTime(startAt),
-                formatDateTime(endAt),
-                AUDIT_EXPORT_LIMIT);
+                formatDateTime(endAt == null ? LocalDateTime.now() : endAt),
+                AUDIT_EXPORT_BATCH_SIZE);
         return teamTaskService.queueTask(
                 teamId,
                 requesterUserId,
@@ -106,20 +106,26 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
     private void processTask(TeamTaskEntity task) {
         try {
             TeamAuditExportPayload payload = readPayload(task);
-            PageResult<TeamOperationLogEntity> logs = teamAuditService.exportLogs(
-                    payload.requesterUserId(),
-                    payload.teamId(),
-                    payload.actorUserId(),
-                    payload.action(),
-                    payload.targetType(),
-                    payload.result(),
-                    parseDateTime(payload.startAt()),
-                    parseDateTime(payload.endAt()),
-                    payload.limit());
-            String csv = teamAuditCsvService.teamAuditCsv(logs.getRecords());
             String fileName = teamAuditCsvService.teamAuditFileName(payload.teamId());
-            TeamTaskResult result = teamTaskResultStorageService.saveAuditExport(task.getId(), fileName, csv);
-            teamTaskService.markSucceeded(task.getId(), "Exported " + logs.getRecords().size() + " audit records", result);
+            int[] exported = {0};
+            TeamTaskResult result = teamTaskResultStorageService.saveAuditExport(task.getId(), fileName, writer -> {
+                teamAuditCsvService.writeHeader(writer);
+                int page = 1;
+                int pages;
+                do {
+                    PageResult<TeamOperationLogEntity> batch = teamAuditService.listExportBatch(
+                            payload.requesterUserId(), payload.teamId(), payload.actorUserId(), payload.action(),
+                            payload.targetType(), payload.result(), parseDateTime(payload.startAt()),
+                            parseDateTime(payload.endAt()), page, Math.max(payload.limit(), 1));
+                    teamAuditCsvService.writeRows(writer, batch.getRecords());
+                    exported[0] += batch.getRecords().size();
+                    pages = batch.getPages();
+                    int progress = batch.getTotal() == 0 ? 99 : (int) Math.min(99, exported[0] * 100L / batch.getTotal());
+                    teamTaskService.updateProgress(task.getId(), progress);
+                    page++;
+                } while (page <= pages);
+            });
+            teamTaskService.markSucceeded(task.getId(), "Exported " + exported[0] + " audit records", result);
         } catch (RuntimeException e) {
             log.warn("Failed to process team audit export task {}", task.getId(), e);
             teamTaskService.markFailed(task.getId(), StringUtils.hasText(e.getMessage()) ? e.getMessage() : e.getClass().getSimpleName());

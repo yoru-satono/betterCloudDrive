@@ -2187,7 +2187,7 @@ POST /api/v1/teams/{teamId}/audit-logs/export-tasks?action=&targetType=&actorUse
 Authorization: Bearer <accessToken>
 ```
 
-OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表、同步导出和异步导出任务使用相同过滤语义。`GET /audit-logs/export` 保留同步 CSV 导出兼容旧客户端，响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。`POST /audit-logs/export-tasks` 返回 `TeamTask`，后台生成 CSV 后可在任务中心下载结果。
+OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表、同步导出和异步导出任务使用相同过滤语义。`GET /audit-logs/export` 保留同步 CSV 导出兼容旧客户端，响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。`POST /audit-logs/export-tasks` 返回 `TeamTask`；异步任务以创建时刻作为默认结束时间，按 `createdAt DESC, id DESC` 稳定分批读取并流式写入临时 CSV，成功后原子替换结果文件，因此不受 10000 行上限约束且重试不会暴露不完整结果。
 
 **错误码:** 400（参数格式错误）、403（非 OWNER/ADMIN）、404（团队不存在）。
 

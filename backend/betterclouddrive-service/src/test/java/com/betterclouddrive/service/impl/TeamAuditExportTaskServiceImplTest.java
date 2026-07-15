@@ -21,8 +21,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.ByteArrayInputStream;
+import java.io.StringWriter;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -30,6 +32,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class TeamAuditExportTaskServiceImplTest {
@@ -79,7 +83,7 @@ class TeamAuditExportTaskServiceImplTest {
         assertThat(payload.result()).isEqualTo(1);
         assertThat(payload.startAt()).isEqualTo("2026-07-09T12:00");
         assertThat(payload.endAt()).isEqualTo("2026-07-09T13:00");
-        assertThat(payload.limit()).isEqualTo(10000);
+        assertThat(payload.limit()).isEqualTo(1000);
     }
 
     @Test
@@ -95,7 +99,7 @@ class TeamAuditExportTaskServiceImplTest {
                 null,
                 "2026-07-09T12:00",
                 "2026-07-09T13:00",
-                10000);
+                1000);
         TeamTaskEntity task = TeamTaskEntity.builder()
                 .id(77L)
                 .teamId(10L)
@@ -111,16 +115,52 @@ class TeamAuditExportTaskServiceImplTest {
                 18,
                 LocalDateTime.now().plusHours(1));
         when(teamTaskService.claimTasks("AUDIT_EXPORT", 5)).thenReturn(List.of(task));
-        when(teamAuditService.exportLogs(2L, 10L, null, null, null, null, startAt, endAt, 10000))
-                .thenReturn(PageResult.of(List.of(log), 1, 1, 10000));
-        when(teamAuditCsvService.teamAuditCsv(List.of(log))).thenReturn("csv");
+        when(teamAuditService.listExportBatch(2L, 10L, null, null, null, null, startAt, endAt, 1, 1000))
+                .thenReturn(PageResult.of(List.of(log), 1, 1, 1000));
         when(teamAuditCsvService.teamAuditFileName(10L)).thenReturn("team-10-audit.csv");
-        when(teamTaskResultStorageService.saveAuditExport(77L, "team-10-audit.csv", "csv")).thenReturn(result);
+        doAnswer(invocation -> {
+            TeamTaskResultStorageService.AuditExportWriter writer = invocation.getArgument(2);
+            writer.write(new StringWriter());
+            return result;
+        }).when(teamTaskResultStorageService).saveAuditExport(
+                eq(77L), eq("team-10-audit.csv"), any(TeamTaskResultStorageService.AuditExportWriter.class));
 
         int processed = service.processPendingExports(5);
 
         assertThat(processed).isEqualTo(1);
+        verify(teamTaskService).updateProgress(77L, 99);
         verify(teamTaskService).markSucceeded(77L, "Exported 1 audit records", result);
+    }
+
+    @Test
+    void processPendingExports_shouldStreamMoreThanTenThousandRowsAcrossBatches() throws Exception {
+        TeamAuditExportPayload payload = new TeamAuditExportPayload(
+                2L, 10L, null, null, null, null, null, "2026-07-09T13:00", 10000);
+        TeamTaskEntity task = TeamTaskEntity.builder().id(77L).teamId(10L).taskType("AUDIT_EXPORT")
+                .status(TeamTaskEntity.STATUS_RUNNING).payload(objectMapper.writeValueAsString(payload)).build();
+        List<TeamOperationLogEntity> first = LongStream.rangeClosed(1, 10000)
+                .mapToObj(id -> TeamOperationLogEntity.builder().id(id).teamId(10L).build()).toList();
+        List<TeamOperationLogEntity> second = List.of(TeamOperationLogEntity.builder().id(10001L).teamId(10L).build());
+        TeamTaskResult result = new TeamTaskResult("audit-exports/77.csv", "audit.csv", "text/csv", 1, LocalDateTime.now());
+        when(teamTaskService.claimTasks("AUDIT_EXPORT", 1)).thenReturn(List.of(task));
+        when(teamAuditCsvService.teamAuditFileName(10L)).thenReturn("audit.csv");
+        when(teamAuditService.listExportBatch(eq(2L), eq(10L), eq(null), eq(null), eq(null), eq(null),
+                eq(null), any(LocalDateTime.class), eq(1), eq(10000)))
+                .thenReturn(PageResult.of(first, 10001, 1, 10000));
+        when(teamAuditService.listExportBatch(eq(2L), eq(10L), eq(null), eq(null), eq(null), eq(null),
+                eq(null), any(LocalDateTime.class), eq(2), eq(10000)))
+                .thenReturn(PageResult.of(second, 10001, 2, 10000));
+        doAnswer(invocation -> {
+            TeamTaskResultStorageService.AuditExportWriter writer = invocation.getArgument(2);
+            writer.write(new StringWriter());
+            return result;
+        }).when(teamTaskResultStorageService).saveAuditExport(
+                eq(77L), eq("audit.csv"), any(TeamTaskResultStorageService.AuditExportWriter.class));
+
+        assertThat(service.processPendingExports(1)).isEqualTo(1);
+
+        verify(teamTaskService).markSucceeded(77L, "Exported 10001 audit records", result);
+        verify(teamTaskService, times(2)).updateProgress(77L, 99);
     }
 
     @Test

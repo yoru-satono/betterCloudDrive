@@ -33,4 +33,8 @@ public interface TeamAuditService {
             LocalDateTime startAt,
             LocalDateTime endAt,
             int limit);
+
+    PageResult<TeamOperationLogEntity> listExportBatch(
+            Long requesterUserId, Long teamId, Long actorUserId, String action, String targetType,
+            Integer result, LocalDateTime startAt, LocalDateTime endAt, int page, int size);
 }

@@ -201,6 +201,21 @@ public class TeamTaskServiceImpl implements TeamTaskService {
 
     @Override
     @Transactional
+    public void updateProgress(Long taskId, int progress) {
+        if (taskId == null) {
+            return;
+        }
+        TeamTaskEntity task = teamTaskRepository.findById(taskId).orElse(null);
+        if (task == null || !TeamTaskEntity.STATUS_RUNNING.equals(task.getStatus())) {
+            return;
+        }
+        task.setProgress(Math.min(99, Math.max(0, progress)));
+        task.setUpdatedAt(LocalDateTime.now());
+        teamTaskRepository.save(task);
+    }
+
+    @Override
+    @Transactional
     public TeamTaskEntity retryTask(Long requesterUserId, Long teamId, Long taskId) {
         TeamMemberEntity member = teamService.requireRead(requesterUserId, teamId);
         TeamTaskEntity task = teamTaskRepository.findById(taskId)

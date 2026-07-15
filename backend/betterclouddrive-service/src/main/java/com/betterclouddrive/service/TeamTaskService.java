@@ -29,6 +29,8 @@ public interface TeamTaskService {
 
     void markFailed(Long taskId, String errorMessage);
 
+    void updateProgress(Long taskId, int progress);
+
     void clearResult(Long taskId, String resultMessage);
 
     List<TeamTaskEntity> listExpiredResults(LocalDateTime now);

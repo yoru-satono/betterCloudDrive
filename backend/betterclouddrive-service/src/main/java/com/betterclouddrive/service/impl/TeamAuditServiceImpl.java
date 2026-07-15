@@ -117,6 +117,18 @@ public class TeamAuditServiceImpl implements TeamAuditService {
         return PageResult.of(logs.getContent(), total, 1, safeLimit);
     }
 
+    @Override
+    public PageResult<TeamOperationLogEntity> listExportBatch(
+            Long requesterUserId, Long teamId, Long actorUserId, String action, String targetType,
+            Integer result, LocalDateTime startAt, LocalDateTime endAt, int page, int size) {
+        requireManageMembers(requesterUserId, teamId);
+        Specification<TeamOperationLogEntity> spec = auditSpec(teamId, actorUserId, action, targetType, result, startAt, endAt);
+        Sort sort = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+        Page<TeamOperationLogEntity> logs = teamOperationLogRepository.findAll(
+                spec, PageRequest.of(Math.max(page - 1, 0), size, sort));
+        return PageResult.of(logs.getContent(), logs.getTotalElements(), page, size);
+    }
+
     private Specification<TeamOperationLogEntity> auditSpec(
             Long teamId,
             Long actorUserId,
