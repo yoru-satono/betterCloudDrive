@@ -79,6 +79,25 @@ services:
     networks:
       - bcd-network
 
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: bcd-rabbitmq
+    restart: unless-stopped
+    env_file:
+      - ./config/env-files/rabbitmq.env
+    ports:
+      - "${HOST_RABBITMQ_PORT:-5672}:5672"
+      - "${HOST_RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - bcd-network
+
   onlyoffice-documentserver:
     image: onlyoffice/documentserver:latest
     container_name: bcd-onlyoffice
@@ -222,6 +241,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       seaweedfs:
         condition: service_healthy
       onlyoffice-documentserver:
@@ -230,6 +251,7 @@ services:
         condition: service_healthy
     env_file:
       - ./config/env-files/database.env
+      - ./config/env-files/rabbitmq.env
       - ./config/env-files/storage.env
       - ./config/env-files/security.env
       - ./config/env-files/backend.env
@@ -285,6 +307,8 @@ volumes:
   pgdata:
     driver: local
   redisdata:
+    driver: local
+  rabbitmqdata:
     driver: local
   seaweeddata:
     driver: local

@@ -3,95 +3,44 @@ package com.betterclouddrive.service.queue;
 import com.betterclouddrive.service.*;
 import com.betterclouddrive.service.config.QueueProperties;
 import com.betterclouddrive.service.metrics.QueueMetrics;
+import com.rabbitmq.client.Channel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.time.Duration;
-import java.util.List;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class TeamTaskQueueConsumerImplTest {
-    @Mock RedisStreamQueueService queue;
-    @Mock TeamAuditExportTaskService audit;
-    @Mock ThumbnailService thumbnails;
-    @Mock FolderZipTaskService zip;
-    @Mock OnlyOfficeSaveService office;
-    @Mock QueueMetrics metrics;
-    QueueProperties properties;
+    @Mock RabbitQueueService rabbit; @Mock TeamAuditExportTaskService audit; @Mock ThumbnailService thumbnails;
+    @Mock FolderZipTaskService zip; @Mock OnlyOfficeSaveService office; @Mock QueueMetrics metrics; @Mock Channel channel;
     TeamTaskQueueConsumerImpl consumer;
+    @BeforeEach void setUp() { consumer = new TeamTaskQueueConsumerImpl(rabbit, new QueueProperties(), audit, thumbnails, zip, office, metrics); }
 
-    @BeforeEach void setUp() {
-        properties = new QueueProperties();
-        consumer = new TeamTaskQueueConsumerImpl(queue, properties, audit, thumbnails, zip, office, metrics);
+    @Test void routesAllSupportedTaskTypesAndAcknowledges() throws Exception {
+        invoke("AUDIT_EXPORT"); verify(audit).processPendingExports(1);
+        invoke("THUMBNAIL"); verify(thumbnails).processPendingThumbnails(1);
+        invoke("FOLDER_ZIP"); verify(zip).processPendingFolderZips(1);
+        invoke("ONLYOFFICE_SAVE"); verify(office).processPendingSaves(1);
+        verify(channel, times(4)).basicAck(7L, false);
     }
 
-    @Test void duplicateWakeupsUseAtomicClaimAndAreBothAcknowledged() {
-        QueueMessage first = message("1-0", "FOLDER_ZIP");
-        QueueMessage duplicate = message("2-0", "FOLDER_ZIP");
-        when(queue.readGroup(anyString(), anyString(), anyString(), anyInt(), any(Duration.class)))
-                .thenReturn(List.of(first, duplicate));
-        when(zip.processPendingFolderZips(1)).thenReturn(1, 0);
-
-        assertThat(consumer.processQueuedTasks(10)).isEqualTo(2);
-        verify(zip, times(2)).processPendingFolderZips(1);
-        verify(queue, times(2)).acknowledge(eq("bcd:stream:team-tasks"), eq("bcd-team-task-workers"), anyString());
-        verify(metrics).recordDuplicateTaskWakeup("FOLDER_ZIP");
+    @Test void unknownTypeIsRejectedToDeadLetter() throws Exception {
+        invoke("TEAM_CLEANUP");
+        verify(channel).basicReject(7L, false); verify(metrics).recordDeadLetter("team-tasks");
     }
 
-    @Test void dispatchesAllMigratedTaskTypes() {
-        when(queue.readGroup(anyString(), anyString(), anyString(), anyInt(), any(Duration.class))).thenReturn(List.of(
-                message("1", "AUDIT_EXPORT"), message("2", "THUMBNAIL"),
-                message("3", "FOLDER_ZIP"), message("4", "ONLYOFFICE_SAVE")));
-        assertThat(consumer.processQueuedTasks(10)).isEqualTo(4);
-        verify(audit).processPendingExports(1);
-        verify(thumbnails).processPendingThumbnails(1);
-        verify(zip).processPendingFolderZips(1);
-        verify(office).processPendingSaves(1);
+    @Test void workerFailureIsRejectedAndDatabaseScannerRemainsRecoveryPath() throws Exception {
+        when(rabbit.read(any())).thenReturn(Map.of("targetType", "AUDIT_EXPORT"));
+        when(audit.processPendingExports(1)).thenThrow(new IllegalStateException("down"));
+        consumer.processQueuedTask(message(), channel);
+        verify(channel).basicReject(7L, false); verify(channel, never()).basicAck(anyLong(), anyBoolean());
     }
 
-    @Test void redisReadFailureDoesNotTouchDatabaseWorkers() {
-        when(queue.readGroup(anyString(), anyString(), anyString(), anyInt(), any(Duration.class)))
-                .thenThrow(new IllegalStateException("redis down"));
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> consumer.processQueuedTasks(10))
-                .isInstanceOf(IllegalStateException.class);
-        verifyNoInteractions(audit, thumbnails, zip, office);
-    }
-
-    @Test void disabledQueueDoesNotReadOrDispatch() {
-        properties.setEnabled(false);
-        assertThat(consumer.processQueuedTasks(10)).isZero();
-        verifyNoInteractions(queue, audit, thumbnails, zip, office, metrics);
-    }
-
-    @Test void unsupportedTaskTypeMovesMessageToDeadLetterAndAcknowledgesIt() {
-        QueueMessage unsupported = message("5-0", "TEAM_CLEANUP");
-        when(queue.readGroup(anyString(), anyString(), anyString(), anyInt(), any(Duration.class)))
-                .thenReturn(List.of(unsupported));
-        assertThat(consumer.processQueuedTasks(10)).isEqualTo(1);
-        verify(queue).moveToDeadLetter(unsupported, "Unsupported team task type: TEAM_CLEANUP");
-        verify(queue).acknowledge("bcd:stream:team-tasks", "bcd-team-task-workers", "5-0");
-        verifyNoInteractions(audit, thumbnails, zip, office);
-    }
-
-    @Test void workerFailureLeavesWakeupPendingForDatabaseFallback() {
-        QueueMessage wakeup = message("6-0", "AUDIT_EXPORT");
-        when(queue.readGroup(anyString(), anyString(), anyString(), anyInt(), any(Duration.class)))
-                .thenReturn(List.of(wakeup));
-        when(audit.processPendingExports(1)).thenThrow(new IllegalStateException("storage down"));
-        assertThat(consumer.processQueuedTasks(10)).isZero();
-        verify(queue, never()).acknowledge(anyString(), anyString(), anyString());
-        verify(queue, never()).moveToDeadLetter(any(), anyString());
-    }
-
-    private QueueMessage message(String id, String type) {
-        return new QueueMessage("bcd:stream:team-tasks", id, Map.of("targetType", type, "aggregateId", "77"));
-    }
+    private void invoke(String type) throws Exception { when(rabbit.read(any())).thenReturn(Map.of("targetType", type)); consumer.processQueuedTask(message(), channel); }
+    private Message message() { var p = new MessageProperties(); p.setDeliveryTag(7L); p.setMessageId("id"); return new Message(new byte[0], p); }
 }

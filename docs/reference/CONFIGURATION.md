@@ -12,6 +12,7 @@
 | `frontend` | Vue Web 前端，Docker 镜像中由 Nginx 托管 |
 | `postgres` | PostgreSQL 主数据库 |
 | `redis` | Redis，用于缓存和服务状态 |
+| `rabbitmq` | RabbitMQ，用于团队通知和后台任务消息队列 |
 | `seaweedfs` | S3 兼容对象存储，当前 Docker Compose 使用 SeaweedFS |
 | `mailpit` | 本地开发邮件服务 |
 | `loki` | 系统日志存储 |
@@ -27,6 +28,7 @@
 | `.env` | Docker Compose 的宿主机端口和前端 Docker 构建参数 |
 | `.env.example` | 根 `.env` 模板 |
 | `config/env-files/database.env` | PostgreSQL、Redis 连接和容器变量 |
+| `config/env-files/rabbitmq.env` | RabbitMQ 容器与后端连接变量 |
 | `config/env-files/storage.env` | SeaweedFS / S3 存储变量 |
 | `config/env-files/security.env` | JWT 和分享密码加密密钥 |
 | `config/env-files/backend.env` | 后端端口、日志目录 |
@@ -89,12 +91,13 @@ docker compose ps
 docker compose logs -f backend
 ```
 
-`postgres`、`redis`、`seaweedfs`、`mailpit`、`onlyoffice-documentserver`、`backend` 和 `frontend` 都定义了容器健康检查。后端只会在数据库、Redis、对象存储、邮件服务和 OnlyOffice 健康后启动，前端只会在后端健康后启动。
+`postgres`、`redis`、`rabbitmq`、`seaweedfs`、`mailpit`、`onlyoffice-documentserver`、`backend` 和 `frontend` 都定义了容器健康检查。后端只会在数据库、Redis、RabbitMQ、对象存储、邮件服务和 OnlyOffice 健康后启动，前端只会在后端健康后启动。
 
 | 服务 | 容器内健康检查 |
 |------|----------------|
 | PostgreSQL | `pg_isready` |
 | Redis | `redis-cli ping` |
+| RabbitMQ | `rabbitmq-diagnostics -q ping` |
 | SeaweedFS | Master `/cluster/status` |
 | Mailpit | `/api/v1/info` |
 | OnlyOffice | `/healthcheck` |
@@ -136,7 +139,7 @@ docker compose restart backend
 docker compose exec redis redis-cli ping
 ```
 
-清空并重建数据卷会删除数据库、Redis、对象存储和可观测性数据：
+清空并重建数据卷会删除数据库、Redis、RabbitMQ、对象存储和可观测性数据：
 
 ```powershell
 docker compose down -v
@@ -153,9 +156,10 @@ docker compose up -d --build
 |------|------|----------|
 | 接入层 | Nginx / Ingress / 负载均衡 | 统一 HTTPS 入口，代理 `/api/`、`/webdav/`、`/grafana/` |
 | 前端 | 静态文件服务 | 可用项目 `frontend` 镜像，也可将 `dist` 部署到 Nginx/CDN |
-| 后端 | Spring Boot JAR 或容器 | 至少 1 个实例；多实例时共享同一 PostgreSQL、Redis 和对象存储 |
+| 后端 | Spring Boot JAR 或容器 | 至少 1 个实例；多实例时共享同一 PostgreSQL、Redis、RabbitMQ 和对象存储 |
 | 数据库 | PostgreSQL | 使用托管 PostgreSQL 或独立高可用集群，开启备份 |
 | 缓存 | Redis | 使用独立 Redis，建议开启持久化或托管服务 |
+| 消息队列 | RabbitMQ | 使用持久化队列、Publisher Confirm 和 DLQ |
 | 对象存储 | S3 兼容存储 | 可用 SeaweedFS、MinIO、AWS S3、阿里云 OSS S3 兼容网关等 |
 | 日志 | Loki / 其他日志平台 | Promtail 或替代采集器采集后端 JSON 日志 |
 | Trace | Tempo / 其他 OTLP 后端 | 后端通过 OTLP HTTP 上报 |
@@ -278,6 +282,8 @@ pnpm run build
 |------|--------|------|
 | `HOST_POSTGRES_PORT` | `5432` | PostgreSQL 暴露到宿主机的端口 |
 | `HOST_REDIS_PORT` | `6379` | Redis 暴露到宿主机的端口 |
+| `HOST_RABBITMQ_PORT` | `5672` | RabbitMQ AMQP 端口 |
+| `HOST_RABBITMQ_MANAGEMENT_PORT` | `15672` | RabbitMQ 管理界面端口 |
 | `HOST_SEAWEEDFS_S3_PORT` | `8333` | SeaweedFS S3 API 宿主机端口 |
 | `HOST_SEAWEEDFS_WEBDAV_PORT` | `8888` | SeaweedFS WebDAV 宿主机端口 |
 | `HOST_SEAWEEDFS_MASTER_PORT` | `9333` | SeaweedFS Master UI/API 宿主机端口 |
@@ -361,20 +367,19 @@ pnpm run build
 | `ONLYOFFICE_JWT_SECRET` | OnlyOffice JWT 密钥，必须与根目录 `.env` 中传给 Document Server 的值一致 |
 | `ONLYOFFICE_TOKEN_TTL_SECONDS` | OnlyOffice 内容和回调 token 有效期，默认 86400 秒 |
 | `ONLYOFFICE_CALLBACK_DOWNLOAD_TIMEOUT_SECONDS` | 后端从 Document Server 下载编辑结果的超时时间，默认 30 秒 |
-| `QUEUE_ENABLED` | 是否初始化 Redis Streams 队列基础设施，默认 `true` |
-| `QUEUE_REDIS_CONSUMER_NAME` | 当前后端实例的 Redis Stream consumer 名称，默认 `backend-worker`；多实例建议使用唯一名称 |
-| `QUEUE_REDIS_READ_BATCH_SIZE` | 单次读取队列消息数量，默认 20 |
-| `QUEUE_REDIS_BLOCK_TIMEOUT_MS` | consumer 阻塞读取等待时间，默认 2000 毫秒 |
-| `QUEUE_REDIS_MAX_DELIVERIES` | 消息进入 dead-letter 前的最大投递次数，默认 5 |
-| `QUEUE_REDIS_CLAIM_IDLE_MS` | pending 消息可被重新接管的空闲时间，默认 60000 毫秒 |
-| `QUEUE_REDIS_TRIM_MAX_LENGTH` | Redis Stream 近似裁剪长度，默认 10000 |
-| `QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE` | 单次扫描并投递团队 outbox 事件的最大数量，默认 50 |
-| `QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS` | 团队 outbox 投递任务的执行间隔，默认 5000 毫秒 |
-| `QUEUE_REDIS_NOTIFICATION_DISPATCH_INTERVAL_MS` | 团队通知队列消费任务的执行间隔，默认 2000 毫秒 |
-| `QUEUE_REDIS_TEAM_TASK_DISPATCH_INTERVAL_MS` | 团队后台任务 Stream 唤醒消费间隔，默认 1000 毫秒 |
-| `QUEUE_REDIS_BACKLOG_WARN_THRESHOLD` | Redis consumer pending 或数据库 pending/retry 达到该值时记录一次告警日志，恢复后记录恢复日志，默认 100 |
-| `QUEUE_REDIS_DEAD_LETTER_WARN_THRESHOLD` | dead-letter Stream 长度达到该值时记录告警日志，默认 1 |
-| `QUEUE_METRICS_REFRESH_INTERVAL_MS` | 刷新 Redis Streams 和数据库队列积压指标的间隔，默认 15000 毫秒 |
+| `QUEUE_ENABLED` | 是否启用 RabbitMQ 队列，默认 `true` |
+| `RABBITMQ_HOST` / `RABBITMQ_PORT` | RabbitMQ 地址，默认 `localhost:5672` |
+| `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | RabbitMQ 登录凭据 |
+| `RABBITMQ_VHOST` | RabbitMQ virtual host，默认 `/` |
+| `QUEUE_RABBITMQ_PREFETCH` | 每个消费者预取消息数，默认 20 |
+| `QUEUE_RABBITMQ_CONCURRENCY` | Listener 初始并发数，默认 1 |
+| `QUEUE_RABBITMQ_MAX_CONCURRENCY` | Listener 最大并发数，默认 4 |
+| `QUEUE_RABBITMQ_MAX_DELIVERIES` | Outbox 最大投递次数，默认 5 |
+| `QUEUE_RABBITMQ_OUTBOX_PUBLISH_BATCH_SIZE` | 单次扫描 Outbox 的最大数量，默认 50 |
+| `QUEUE_RABBITMQ_OUTBOX_PUBLISH_INTERVAL_MS` | Outbox 发布间隔，默认 5000 毫秒 |
+| `QUEUE_RABBITMQ_BACKLOG_WARN_THRESHOLD` | RabbitMQ ready 或数据库 pending/retry 告警阈值，默认 100 |
+| `QUEUE_RABBITMQ_DEAD_LETTER_WARN_THRESHOLD` | DLQ 告警阈值，默认 1 |
+| `QUEUE_METRICS_REFRESH_INTERVAL_MS` | 刷新 RabbitMQ 和数据库队列指标的间隔，默认 15000 毫秒 |
 | `TEAM_QUOTA_METRICS_REFRESH_INTERVAL_MS` | 从数据库刷新团队配额 gauge 的间隔，默认 60000 毫秒 |
 | `TEAM_TASK_RESULT_DIRECTORY` | 团队后台任务结果文件目录，默认 `./data/team-task-results` |
 | `TEAM_TASK_RESULT_RETENTION_HOURS` | 团队后台任务结果文件保留小时数，默认 24 |
@@ -580,6 +585,7 @@ Docker Compose 使用这些 volume：
 |--------|------|
 | `pgdata` | PostgreSQL 数据 |
 | `redisdata` | Redis 数据 |
+| `rabbitmqdata` | RabbitMQ 持久化消息与元数据 |
 | `seaweeddata` | SeaweedFS 对象存储数据 |
 | `backendlogs` | 后端运行日志和审计日志 |
 | `lokidata` | Loki 数据 |
@@ -624,7 +630,7 @@ Docker Compose 使用这些 volume：
 | 阶段 | 行为 |
 |------|------|
 | 环境文件 | 复制缺失的 `.env` 和 `config/env-files/*.env` 模板，不覆盖已有文件 |
-| Docker | 执行 `docker compose up -d --build`，启动后端、前端、PostgreSQL、Redis、SeaweedFS、Mailpit、OnlyOffice 和可观测性组件 |
+| Docker | 执行 `docker compose up -d --build`，启动后端、前端、PostgreSQL、Redis、RabbitMQ、SeaweedFS、Mailpit、OnlyOffice 和可观测性组件 |
 | 健康检查 | 等待后端 `/actuator/health`、前端、Mailpit、OnlyOffice `/healthcheck` 可达 |
 | 后端 | 执行 `backend/mvn test` |
 | 黑盒 API | 执行 `backend-test` pytest；admin 测试会自动创建用户并提升为 `ROLE_ADMIN` |

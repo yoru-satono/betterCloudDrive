@@ -22,7 +22,7 @@ public class TeamEventOutboxQueuePublisher {
     private static final Duration PROCESSING_LOCK_TIMEOUT = Duration.ofSeconds(30);
 
     private final TeamEventOutboxRepository teamEventOutboxRepository;
-    private final RedisStreamQueueService redisStreamQueueService;
+    private final RabbitQueueService rabbitQueueService;
     private final QueueProperties queueProperties;
 
     public int publishPending(int batchSize) {
@@ -30,7 +30,7 @@ public class TeamEventOutboxQueuePublisher {
             return 0;
         }
         resetStaleProcessingEvents();
-        int limit = batchSize > 0 ? batchSize : queueProperties.getRedis().getOutboxPublishBatchSize();
+        int limit = batchSize > 0 ? batchSize : queueProperties.getRabbitmq().getOutboxPublishBatchSize();
         List<TeamEventOutboxEntity> events = teamEventOutboxRepository.findByStatusAndAvailableAtLessThanEqualOrderByIdAsc(
                 TeamEventOutboxEntity.STATUS_PENDING,
                 LocalDateTime.now(),
@@ -48,9 +48,14 @@ public class TeamEventOutboxQueuePublisher {
         try {
             markProcessing(event);
             teamEventOutboxRepository.save(event);
-            String recordId = redisStreamQueueService.publish(streamFor(event), payloadFor(event));
-            if (!StringUtils.hasText(recordId)) {
-                markFailedOrRetry(event, new IllegalStateException("Redis Stream did not return a record id"));
+            if (!isNotification(event) && !isTeamTask(event)) {
+                markProcessed(event);
+                teamEventOutboxRepository.save(event);
+                return true;
+            }
+            String messageId = rabbitQueueService.publish(routingKeyFor(event), payloadFor(event));
+            if (!StringUtils.hasText(messageId)) {
+                markFailedOrRetry(event, new IllegalStateException("RabbitMQ did not confirm the message"));
                 teamEventOutboxRepository.save(event);
                 return false;
             }
@@ -77,18 +82,19 @@ public class TeamEventOutboxQueuePublisher {
                 "Processing lock expired before dispatch");
     }
 
-    private String streamFor(TeamEventOutboxEntity event) {
+    private String routingKeyFor(TeamEventOutboxEntity event) {
         if (isNotification(event)) {
-            return queueProperties.getRedis().getStreams().getNotifications();
+            return queueProperties.getRabbitmq().getNotificationsRoutingKey();
         }
-        if (TeamTaskOutboxWriter.AGGREGATE_TEAM_TASK.equalsIgnoreCase(event.getAggregateType())) {
-            return queueProperties.getRedis().getStreams().getTeamTasks();
-        }
-        return queueProperties.getRedis().getStreams().getTeamEvents();
+        return queueProperties.getRabbitmq().getTeamTasksRoutingKey();
     }
 
     private boolean isNotification(TeamEventOutboxEntity event) {
         return AGGREGATE_NOTIFICATION.equalsIgnoreCase(event.getAggregateType());
+    }
+
+    private boolean isTeamTask(TeamEventOutboxEntity event) {
+        return TeamTaskOutboxWriter.AGGREGATE_TEAM_TASK.equalsIgnoreCase(event.getAggregateType());
     }
 
     private Map<String, String> payloadFor(TeamEventOutboxEntity event) {
@@ -132,7 +138,7 @@ public class TeamEventOutboxQueuePublisher {
         event.setRetryCount(retryCount);
         event.setErrorMessage(StringUtils.hasText(error.getMessage()) ? error.getMessage() : error.getClass().getSimpleName());
         event.setUpdatedAt(now);
-        if (retryCount >= queueProperties.getRedis().getMaxDeliveries()) {
+        if (retryCount >= queueProperties.getRabbitmq().getMaxDeliveries()) {
             event.setStatus(TeamEventOutboxEntity.STATUS_FAILED);
             event.setProcessedAt(now);
             return;

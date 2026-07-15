@@ -9,6 +9,7 @@
 | **后端** | Spring Boot 4.0 + JDK 25 + Spring Data JPA 4.0 |
 | **数据库** | PostgreSQL 18 + Flyway 迁移 |
 | **缓存** | Redis 7（限流、上传进度、配额同步、Token 黑名单） |
+| **消息队列** | RabbitMQ 4（团队通知、后台任务、死信队列） |
 | **存储** | SeaweedFS（S3 兼容对象存储） |
 | **邮件** | Mailpit（开发环境邮件模拟） |
 | **可观测性** | Spring Boot Actuator + OpenTelemetry + Loki + Promtail + Tempo + Grafana |

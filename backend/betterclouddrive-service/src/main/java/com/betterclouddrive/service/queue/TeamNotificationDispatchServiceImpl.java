@@ -18,6 +18,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import com.betterclouddrive.common.message.MessageKeys;
+import com.rabbitmq.client.Channel;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import java.io.IOException;
 
 @Slf4j
 @Service
@@ -26,7 +30,7 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
 
     private final TeamNotificationOutboxWriter teamNotificationOutboxWriter;
     private final TeamEventOutboxRepository teamEventOutboxRepository;
-    private final RedisStreamQueueService redisStreamQueueService;
+    private final RabbitQueueService rabbitQueueService;
     private final NotificationService notificationService;
     private final QueueProperties queueProperties;
     private final ObjectMapper objectMapper;
@@ -56,25 +60,27 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
         teamNotificationOutboxWriter.enqueueTeamMembers(teamId, excludeUserId, type, title, content, link, email);
     }
 
-    @Override
-    public int processQueuedNotifications(int batchSize) {
-        if (!queueProperties.isEnabled()) {
-            return 0;
-        }
-        QueueProperties.Redis redis = queueProperties.getRedis();
-        List<QueueMessage> messages = redisStreamQueueService.readGroup(
-                redis.getStreams().getNotifications(),
-                redis.getGroups().getNotifications(),
-                redis.getConsumerName(),
-                batchSize > 0 ? batchSize : redis.getReadBatchSize(),
-                Duration.ofMillis(redis.getBlockTimeoutMs()));
-        int processed = 0;
-        for (QueueMessage message : messages) {
-            if (processMessage(message)) {
-                processed++;
+    @RabbitListener(queues = "${queue.rabbitmq.notifications-queue:bcd.notifications}", autoStartup = "${queue.enabled:true}")
+    public void processQueuedNotification(Message raw, Channel channel) throws IOException {
+        queueMetrics.beginConsumer("notifications");
+        long started = queueMetrics.startProcessing();
+        try {
+            long tag = raw.getMessageProperties().getDeliveryTag();
+            QueueMessage message;
+            try {
+                message = new QueueMessage("notifications", raw.getMessageProperties().getMessageId(), rabbitQueueService.read(raw));
+            } catch (RuntimeException e) {
+                queueMetrics.recordDeadLetter("notifications");
+                channel.basicReject(tag, false);
+                queueMetrics.recordProcessing("notification-dispatch", "failure", started);
+                return;
             }
+            boolean accepted = processMessage(message);
+            if (accepted) channel.basicAck(tag, false); else channel.basicReject(tag, false);
+            queueMetrics.recordProcessing("notification-dispatch", accepted ? "success" : "failure", started);
+        } finally {
+            queueMetrics.endConsumer("notifications");
         }
-        return processed;
     }
 
     private boolean processMessage(QueueMessage message) {
@@ -83,22 +89,18 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
                 ? null
                 : teamEventOutboxRepository.findById(outboxId).orElse(null);
         if (event == null) {
-            moveToDeadLetter(message, "Notification outbox event not found");
-            acknowledge(message);
+            queueMetrics.recordDeadLetter("notifications");
             return false;
         }
         if (!TeamEventOutboxEntity.STATUS_PROCESSING.equals(event.getStatus())) {
-            acknowledge(message);
             return true;
         }
         try {
             dispatchIfNeeded(message);
             markProcessed(event);
-            acknowledge(message);
             return true;
         } catch (RuntimeException e) {
-            handleFailure(event, message, e);
-            return false;
+            return handleFailure(event, message, e);
         }
     }
 
@@ -106,7 +108,7 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
         String targetType = message.body().get("targetType");
         if (!TeamNotificationOutboxWriter.TARGET_USER.equals(targetType)
                 && !TeamNotificationOutboxWriter.TARGET_TEAM_MEMBERS.equals(targetType)) {
-            return;
+            throw new IllegalStateException("Unsupported notification target type: " + targetType);
         }
         NotificationDispatchPayload payload = readPayload(message.body().get("payload"));
         if (TeamNotificationOutboxWriter.TARGET_USER.equals(targetType)) {
@@ -155,39 +157,27 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
         teamEventOutboxRepository.save(event);
     }
 
-    private void handleFailure(TeamEventOutboxEntity event, QueueMessage message, RuntimeException error) {
+    private boolean handleFailure(TeamEventOutboxEntity event, QueueMessage message, RuntimeException error) {
         if (event == null) {
-            moveToDeadLetter(message, error.getMessage());
-            acknowledge(message);
-            return;
+            queueMetrics.recordDeadLetter("notifications");
+            return false;
         }
         LocalDateTime now = LocalDateTime.now();
         int retryCount = event.getRetryCount() == null ? 1 : event.getRetryCount() + 1;
         event.setRetryCount(retryCount);
         event.setErrorMessage(StringUtils.hasText(error.getMessage()) ? error.getMessage() : error.getClass().getSimpleName());
         event.setUpdatedAt(now);
-        if (retryCount >= queueProperties.getRedis().getMaxDeliveries()) {
+        if (retryCount >= queueProperties.getRabbitmq().getMaxDeliveries()) {
             event.setStatus(TeamEventOutboxEntity.STATUS_FAILED);
             event.setProcessedAt(now);
             teamEventOutboxRepository.save(event);
-            moveToDeadLetter(message, event.getErrorMessage());
-            acknowledge(message);
-            return;
+            queueMetrics.recordDeadLetter("notifications");
+            return false;
         }
         event.setStatus(TeamEventOutboxEntity.STATUS_PENDING);
         event.setAvailableAt(now.plusSeconds(Math.min(60, retryCount * 5L)));
         teamEventOutboxRepository.save(event);
-        acknowledge(message);
-    }
-
-    private void acknowledge(QueueMessage message) {
-        QueueProperties.Redis redis = queueProperties.getRedis();
-        redisStreamQueueService.acknowledge(message.stream(), redis.getGroups().getNotifications(), message.id());
-    }
-
-    private void moveToDeadLetter(QueueMessage message, String reason) {
-        redisStreamQueueService.moveToDeadLetter(message, reason);
-        queueMetrics.recordDeadLetter(message.stream());
+        return true;
     }
 
     private Long parseLong(String value) {

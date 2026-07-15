@@ -28,7 +28,7 @@ class TeamEventOutboxPublishTaskTest {
     @BeforeEach
     void setUp() {
         queueProperties = new QueueProperties();
-        queueProperties.getRedis().setOutboxPublishBatchSize(25);
+        queueProperties.getRabbitmq().setOutboxPublishBatchSize(25);
         task = new TeamEventOutboxPublishTask(teamEventOutboxQueuePublisher, queueProperties, queueMetrics);
     }
 

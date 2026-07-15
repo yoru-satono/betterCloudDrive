@@ -9,7 +9,7 @@
 ## 参考资料
 
 - [API 文档](reference/API.md)：认证、文件、分享、团队、通知、OnlyOffice 和管理员接口。
-- [配置与部署](reference/CONFIGURATION.md)：Docker Compose、环境变量、反向代理、Redis、安全和完整验证。
+- [配置与部署](reference/CONFIGURATION.md)：Docker Compose、环境变量、反向代理、Redis、RabbitMQ、安全和完整验证。
 - [本地化协议](reference/LOCALIZATION.md)：后端语义 key 与 Web、Tauri、Android 客户端文案约定。
 
 ## 运维手册
@@ -22,7 +22,7 @@
 ## 架构决策
 
 - [Android Admin 范围](decisions/ANDROID_ADMIN_SCOPE.md)：Android 管理功能的当前边界和未来最小入口。
-- [消息队列选型](decisions/MESSAGE_QUEUE_SELECTION.md)：Redis Streams 的选择依据、设计边界和落地范围。
+- [消息队列选型](decisions/MESSAGE_QUEUE_SELECTION.md)：RabbitMQ 拓扑、可靠性边界和切换策略。
 
 ## 历史归档
 

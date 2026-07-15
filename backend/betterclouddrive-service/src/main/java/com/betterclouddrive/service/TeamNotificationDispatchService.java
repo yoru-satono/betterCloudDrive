@@ -10,5 +10,4 @@ public interface TeamNotificationDispatchService {
 
     void enqueueTeamMembersNotification(Long teamId, Long excludeUserId, String type, String title, String content, String link, boolean email);
 
-    int processQueuedNotifications(int batchSize);
 }

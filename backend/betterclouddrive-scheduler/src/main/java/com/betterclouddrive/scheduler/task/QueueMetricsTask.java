@@ -17,7 +17,7 @@ public class QueueMetricsTask {
     public void refresh() {
         QueueMetrics.QueueSnapshot snapshot = queueMetrics.refresh();
         log.debug(
-                "Refreshed queue metrics: streamMessages={}, consumerPending={}, databasePending={}, retries={}, deadLetters={}",
+                "Refreshed queue metrics: readyMessages={}, consumerInflight={}, databasePending={}, retries={}, deadLetters={}",
                 snapshot.streamMessages(),
                 snapshot.consumerPending(),
                 snapshot.databasePending(),

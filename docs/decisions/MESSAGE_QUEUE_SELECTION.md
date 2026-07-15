@@ -2,94 +2,30 @@
 
 ## 结论
 
-当前阶段引入 **Redis Streams**，不引入 RabbitMQ 或 Kafka。
+BetterCloudDrive 使用 **RabbitMQ** 作为团队通知和后台任务的运行时投递通道。PostgreSQL `team_event_outbox` 与 `team_tasks` 是事实来源和幂等边界；RabbitMQ 只负责可靠分发和及时唤醒 worker。
 
-Redis 已经是 BetterCloudDrive 的必需组件，用于验证码、上传分片状态、下载 ticket、WebDAV 锁、统计同步等能力。团队模块已经有 `team_event_outbox` 表，团队任务中心也已经有 `team_tasks` 表。下一阶段应把 Redis Streams 作为运行时投递和消费通道，把 PostgreSQL outbox/task 表作为事实来源和幂等边界。
+Redis 仍用于验证码、上传状态、下载 ticket、WebDAV 锁、限流和缓存，但不再承载消息队列。
 
-## 为什么不是 RabbitMQ 或 Kafka
+## 拓扑
 
-| 方案 | 优点 | 当前阶段问题 | 结论 |
-| --- | --- | --- | --- |
-| Redis Streams | 复用现有 Redis；支持持久化消息、consumer group、pending entries、ack、重试；Spring Data Redis 可直接接入 | 路由能力弱于 RabbitMQ；长期大规模日志流能力弱于 Kafka | 采用 |
-| RabbitMQ | 路由、延迟、死信和消费确认模型成熟 | 需要新增基础设施和运维面；当前事件规模和路由复杂度还不需要 | 暂不引入 |
-| Kafka | 高吞吐、长留存、流处理能力强 | 运维成本最高；当前不是跨系统事件总线，也没有大规模日志流处理需求 | 暂不引入 |
-
-## 工作负载匹配
-
-| 工作负载 | 当前状态 | 队列化收益 | 第一阶段策略 |
-| --- | --- | --- | --- |
-| 团队通知 | 成员、邀请、权限、配额、删除等主流程已写 `NOTIFICATION` dispatch outbox，并由 `bcd:stream:notifications` worker 异步生成通知 | 降低团队成员、邀请、权限、配额、删除等主请求延迟；通知失败可重试 | 已队列化 |
-| 审计导出 | `team_tasks` 作为事实表，Redis Stream 唤醒 worker 生成 CSV | 大导出不阻塞 HTTP 请求；结果可下载、可过期清理 | 已队列化，保留数据库扫描兜底 |
-| 缩略图 | `team_tasks` 作为事实表，Redis Stream 唤醒 worker 生成 | 上传后先返回列表，后台生成缩略图，失败可重试 | 已队列化，保留数据库扫描兜底 |
-| OnlyOffice 保存 | callback 写入 `team_tasks` 和 Outbox，由 Stream 唤醒保存 worker | 降低轮询延迟并提供积压观测 | 已队列化，保留数据库扫描兜底 |
-| 文件夹 ZIP | `team_tasks` 作为事实表，Redis Stream 唤醒打包 worker | 大目录打包不占用请求线程，任务成功后从任务中心下载临时包 | 已队列化，保留数据库扫描兜底 |
-| 团队清理 | 已有删除、归档、purge 和定时清理 | 避免大团队清理阻塞定时任务或 admin 请求 | 第三批队列化 |
-
-## 设计边界
-
-1. PostgreSQL 是事实来源。
-   - 业务事务先写 `team_event_outbox` 或 `team_tasks`。
-   - Redis Stream 只负责唤醒和分发 worker。
-   - Redis 消息丢失时，可以用 outbox/task 表扫描补投。
-
-2. 消费必须幂等。
-   - 消息必须包含 `outboxId` 或 `taskId`。
-   - worker 处理前按数据库状态做幂等判断。
-   - 成功后更新数据库状态并 `XACK`。
-
-3. 失败可恢复且可定位。
-   - 使用 consumer group pending entries 记录未确认消息，并通过指标暴露积压。
-   - Outbox 发布失败会延迟重投，超过最大次数后标记失败。
-   - 团队任务仍由低频数据库扫描兜底；Redis 恢复后迟到或重复唤醒会因原子 claim 为空而安全 ACK。
-   - 无法识别的消息写入 dead-letter stream。
-
-4. 队列不是用户可见状态源。
-   - 用户看到的任务状态仍来自 `team_tasks`。
-   - 管理员排查仍以数据库审计、任务中心和日志为准。
-
-## Redis Stream 命名
-
-| Stream | Consumer group | 用途 |
+| 类型 | 名称 | 用途 |
 | --- | --- | --- |
-| `bcd:stream:team-events` | `bcd-team-event-workers` | 团队成员、邀请、权限、分享、配额、删除等领域事件 |
-| `bcd:stream:notifications` | `bcd-notification-workers` | 通知发送、邮件发送、实时推送补偿 |
-| `bcd:stream:team-tasks` | `bcd-team-task-workers` | 审计导出、缩略图、OnlyOffice 保存、ZIP、团队清理 |
-| `bcd:stream:dead-letter` | 无固定 group | 超过重试上限的异常消息 |
+| Topic Exchange | `bcd.events` | 应用事件入口 |
+| Queue | `bcd.notifications` | 异步生成站内通知、邮件和实时刷新事件 |
+| Queue | `bcd.team-tasks` | 审计导出、缩略图、OnlyOffice 保存和文件夹 ZIP 唤醒 |
+| Direct Exchange | `bcd.dead-letter` | 无法处理消息的死信路由 |
+| Queue | `bcd.dead-letter` | 统一保存通知和任务死信 |
 
-## 第一阶段落地范围
+通知使用 routing key `notification.dispatch`，团队任务使用 `team-task.wakeup`。Exchange、队列和消息均持久化；Listener 使用手动 ACK，拒绝且不重新入队的消息由 broker 投递到死信队列。
 
-第一阶段只做队列基础设施和团队通知异步化，对应 ROADMAP 的 `PERF-02` 和 `PERF-03`。
+## 可靠性边界
 
-### PERF-02 队列基础设施
+1. 业务事务先写 PostgreSQL Outbox 或任务表，Outbox 调度器仅在 Publisher Confirm 成功且消息可路由后更新发布状态。
+2. 通知消费失败时回写 Outbox 为 `PENDING` 并 ACK，由数据库控制退避和最大重试次数；最终失败进入 DLQ。
+3. 团队任务消费前通过数据库原子 claim 保证幂等；重复唤醒安全 ACK，执行异常进入 DLQ，同时由低频数据库扫描兜底。
+4. 普通团队领域事件当前没有消费者，只保留在 PostgreSQL Outbox，不创建永久积压的无人消费队列。
+5. 队列不是用户可见状态源，任务中心状态始终来自 `team_tasks`。
 
-- 增加队列配置：
-  - `queue.enabled`
-  - `queue.redis.consumer-name`
-  - `queue.redis.max-deliveries`
-  - `queue.redis.claim-idle-ms`
-  - `queue.redis.trim-maxlen`
-- 增加 Redis Stream publisher 和 consumer 基础封装。
-- 启动时确保 consumer group 存在。
-- 增加 outbox 补投任务：扫描可投递的 `team_event_outbox`，写入对应 stream。
-- 增加最小消费者测试：发布消息、消费、ack、失败重试、dead-letter。
+## 切换策略
 
-### PERF-03 通知异步化
-
-- 团队成员、邀请、权限、配额、删除等主流程写入 `NOTIFICATION` dispatch outbox，不直接同步生成通知。
-- outbox 补投任务把 dispatch 事件投递到 `bcd:stream:notifications`。
-- 通知 worker 消费 `bcd:stream:notifications`，调用现有通知服务生成站内通知、邮件和实时刷新事件。
-- 通知偏好仍在现有通知服务内判断。
-- `NotificationService.notifyUser` 创建通知后仍写 `NOTIFICATION` outbox 作为下游事件记录；通知 worker 只处理 dispatch target，避免重复通知。
-- 主接口只依赖领域事件写入成功，不依赖通知写入、邮件发送或 SSE 推送成功。
-- 消费失败会回写 outbox 为 `PENDING` 并延迟重投；超过最大投递次数后标记 `FAILED` 并写入 dead-letter stream。
-
-## 后续批次完成情况
-
-审计导出、缩略图、团队文件夹 ZIP 和 OnlyOffice 保存均已接入 `bcd:stream:team-tasks` 唤醒；任务创建事务同时写事实表和 Outbox。consumer 只选择任务类型并调用数据库原子 claim，重复消息不会重复取得同一任务。原 scheduler 扫描降频保留，Redis 短暂不可用或消息遗漏时仍能完成数据库中的待处理任务。
-
-## 暂不做
-
-- 不把审计日志本身迁移到 Kafka。
-- 不把 Redis Stream 当作长期事件仓库。
-- 不引入跨语言独立 worker 进程；第一阶段仍由 Spring Boot 内部 worker 消费。
-- 不改变现有用户可见 API，队列化应保持接口响应结构兼容。
+迁移采用直接切换，不双读 Redis Streams，也不搬迁 Stream 消息。遗留通知的超时 `PROCESSING` Outbox 会自动重置后发布到 RabbitMQ；团队任务由数据库扫描恢复。

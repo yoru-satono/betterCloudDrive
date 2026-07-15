@@ -10,38 +10,24 @@ import org.springframework.stereotype.Component;
 public class QueueProperties {
 
     private boolean enabled = true;
-    private Redis redis = new Redis();
+    private Rabbitmq rabbitmq = new Rabbitmq();
 
     @Data
-    public static class Redis {
-        private String consumerName = "backend-worker";
-        private int readBatchSize = 20;
-        private long blockTimeoutMs = 2000;
+    public static class Rabbitmq {
+        private String exchange = "bcd.events";
+        private String deadLetterExchange = "bcd.dead-letter";
+        private String notificationsQueue = "bcd.notifications";
+        private String teamTasksQueue = "bcd.team-tasks";
+        private String deadLetterQueue = "bcd.dead-letter";
+        private String notificationsRoutingKey = "notification.dispatch";
+        private String teamTasksRoutingKey = "team-task.wakeup";
+        private int prefetch = 20;
+        private int concurrency = 1;
+        private int maxConcurrency = 4;
         private int maxDeliveries = 5;
-        private long claimIdleMs = 60000;
-        private long trimMaxLength = 10000;
         private int outboxPublishBatchSize = 50;
         private long outboxPublishIntervalMs = 5000;
-        private long notificationDispatchIntervalMs = 2000;
-        private long teamTaskDispatchIntervalMs = 1000;
         private long backlogWarnThreshold = 100;
         private long deadLetterWarnThreshold = 1;
-        private Streams streams = new Streams();
-        private Groups groups = new Groups();
-    }
-
-    @Data
-    public static class Streams {
-        private String teamEvents = "bcd:stream:team-events";
-        private String notifications = "bcd:stream:notifications";
-        private String teamTasks = "bcd:stream:team-tasks";
-        private String deadLetter = "bcd:stream:dead-letter";
-    }
-
-    @Data
-    public static class Groups {
-        private String teamEvents = "bcd-team-event-workers";
-        private String notifications = "bcd-notification-workers";
-        private String teamTasks = "bcd-team-task-workers";
     }
 }

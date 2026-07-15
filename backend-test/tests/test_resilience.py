@@ -1,10 +1,9 @@
-"""Isolated dependency recovery acceptance checks. Cleanup always restores Redis."""
+"""Isolated dependency recovery acceptance checks. Cleanup always restores paused services."""
 
 import subprocess
 import time
 
 import pytest
-import subprocess
 import uuid
 from pathlib import Path
 
@@ -45,14 +44,14 @@ def test_backend_recovers_after_redis_pause_without_manual_restart(client, auth_
     raise AssertionError("backend did not recover after Redis was restored")
 
 
-def test_team_task_database_scanner_completes_work_while_redis_is_paused(client, auth_headers):
+def test_team_task_database_scanner_completes_work_while_rabbitmq_is_paused(client, auth_headers):
     team = assert_api_ok(client.post(
-        "/api/v1/teams", json={"name": f"redis_fallback_{uuid.uuid4().hex[:8]}"}, headers=auth_headers,
+        "/api/v1/teams", json={"name": f"rabbit_fallback_{uuid.uuid4().hex[:8]}"}, headers=auth_headers,
     ))
     task = assert_api_ok(client.post(
         f"/api/v1/teams/{team['id']}/audit-logs/export-tasks", headers=auth_headers,
     ))
-    paused = _compose("pause", "redis")
+    paused = _compose("pause", "rabbitmq")
     assert paused.returncode == 0, paused.stderr
     try:
         reset = _psql(
@@ -69,9 +68,9 @@ def test_team_task_database_scanner_completes_work_while_redis_is_paused(client,
                 break
             time.sleep(2)
         else:
-            raise AssertionError("database fallback did not complete the pending team task while Redis was paused")
+            raise AssertionError("database fallback did not complete the pending team task while RabbitMQ was paused")
     finally:
-        restored = _compose("unpause", "redis")
+        restored = _compose("unpause", "rabbitmq")
         assert restored.returncode == 0, restored.stderr
 
     deadline = time.monotonic() + 30
@@ -82,4 +81,4 @@ def test_team_task_database_scanner_completes_work_while_redis_is_paused(client,
         if response.status_code == 200 and response.content:
             return
         time.sleep(1)
-    raise AssertionError("completed fallback task result was not downloadable after Redis recovered")
+    raise AssertionError("completed fallback task result was not downloadable after RabbitMQ recovered")

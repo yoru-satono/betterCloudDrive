@@ -150,7 +150,7 @@ copy_if_missing() {
 prepare_env() {
   copy_if_missing .env.example .env
   local name
-  for name in database storage security backend frontend observability mail; do
+  for name in database rabbitmq storage security backend frontend observability mail; do
     copy_if_missing "config/env-files/$name.env.example" "config/env-files/$name.env"
   done
 }

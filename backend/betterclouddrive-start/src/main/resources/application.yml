@@ -34,6 +34,15 @@ spring:
           max-idle: 8
           min-idle: 4
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:bcd_user}
+    password: ${RABBITMQ_PASSWORD:bcd_pass_2026}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
   # Mailpit (email simulation)
   mail:
     host: ${MAIL_HOST:localhost}
@@ -113,31 +122,25 @@ onlyoffice:
   token-ttl-seconds: ${ONLYOFFICE_TOKEN_TTL_SECONDS:86400}
   callback-download-timeout-seconds: ${ONLYOFFICE_CALLBACK_DOWNLOAD_TIMEOUT_SECONDS:30}
 
-# Redis Stream queue
+# RabbitMQ queue
 queue:
   enabled: ${QUEUE_ENABLED:true}
-  redis:
-    consumer-name: ${QUEUE_REDIS_CONSUMER_NAME:backend-worker}
-    read-batch-size: ${QUEUE_REDIS_READ_BATCH_SIZE:20}
-    block-timeout-ms: ${QUEUE_REDIS_BLOCK_TIMEOUT_MS:2000}
-    max-deliveries: ${QUEUE_REDIS_MAX_DELIVERIES:5}
-    claim-idle-ms: ${QUEUE_REDIS_CLAIM_IDLE_MS:60000}
-    trim-max-length: ${QUEUE_REDIS_TRIM_MAX_LENGTH:10000}
-    outbox-publish-batch-size: ${QUEUE_REDIS_OUTBOX_PUBLISH_BATCH_SIZE:50}
-    outbox-publish-interval-ms: ${QUEUE_REDIS_OUTBOX_PUBLISH_INTERVAL_MS:5000}
-    notification-dispatch-interval-ms: ${QUEUE_REDIS_NOTIFICATION_DISPATCH_INTERVAL_MS:2000}
-    team-task-dispatch-interval-ms: ${QUEUE_REDIS_TEAM_TASK_DISPATCH_INTERVAL_MS:1000}
-    backlog-warn-threshold: ${QUEUE_REDIS_BACKLOG_WARN_THRESHOLD:100}
-    dead-letter-warn-threshold: ${QUEUE_REDIS_DEAD_LETTER_WARN_THRESHOLD:1}
-    streams:
-      team-events: ${QUEUE_REDIS_STREAM_TEAM_EVENTS:bcd:stream:team-events}
-      notifications: ${QUEUE_REDIS_STREAM_NOTIFICATIONS:bcd:stream:notifications}
-      team-tasks: ${QUEUE_REDIS_STREAM_TEAM_TASKS:bcd:stream:team-tasks}
-      dead-letter: ${QUEUE_REDIS_STREAM_DEAD_LETTER:bcd:stream:dead-letter}
-    groups:
-      team-events: ${QUEUE_REDIS_GROUP_TEAM_EVENTS:bcd-team-event-workers}
-      notifications: ${QUEUE_REDIS_GROUP_NOTIFICATIONS:bcd-notification-workers}
-      team-tasks: ${QUEUE_REDIS_GROUP_TEAM_TASKS:bcd-team-task-workers}
+  rabbitmq:
+    exchange: ${QUEUE_RABBITMQ_EXCHANGE:bcd.events}
+    dead-letter-exchange: ${QUEUE_RABBITMQ_DEAD_LETTER_EXCHANGE:bcd.dead-letter}
+    notifications-queue: ${QUEUE_RABBITMQ_NOTIFICATIONS_QUEUE:bcd.notifications}
+    team-tasks-queue: ${QUEUE_RABBITMQ_TEAM_TASKS_QUEUE:bcd.team-tasks}
+    dead-letter-queue: ${QUEUE_RABBITMQ_DEAD_LETTER_QUEUE:bcd.dead-letter}
+    notifications-routing-key: ${QUEUE_RABBITMQ_NOTIFICATIONS_ROUTING_KEY:notification.dispatch}
+    team-tasks-routing-key: ${QUEUE_RABBITMQ_TEAM_TASKS_ROUTING_KEY:team-task.wakeup}
+    prefetch: ${QUEUE_RABBITMQ_PREFETCH:20}
+    concurrency: ${QUEUE_RABBITMQ_CONCURRENCY:1}
+    max-concurrency: ${QUEUE_RABBITMQ_MAX_CONCURRENCY:4}
+    max-deliveries: ${QUEUE_RABBITMQ_MAX_DELIVERIES:5}
+    outbox-publish-batch-size: ${QUEUE_RABBITMQ_OUTBOX_PUBLISH_BATCH_SIZE:50}
+    outbox-publish-interval-ms: ${QUEUE_RABBITMQ_OUTBOX_PUBLISH_INTERVAL_MS:5000}
+    backlog-warn-threshold: ${QUEUE_RABBITMQ_BACKLOG_WARN_THRESHOLD:100}
+    dead-letter-warn-threshold: ${QUEUE_RABBITMQ_DEAD_LETTER_WARN_THRESHOLD:1}
 
 # Application settings
 drive:

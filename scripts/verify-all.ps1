@@ -135,6 +135,7 @@ function Initialize-EnvFiles {
     Copy-IfMissing ".env.example" ".env"
     $envFiles = @(
         "database",
+        "rabbitmq",
         "storage",
         "security",
         "backend",

@@ -196,7 +196,9 @@ def assert_page_has_id(page, item_id):
 
 
 def assert_member_role(client, headers, team_id, username, role):
-    members = assert_api_ok(client.get(f"/api/v1/teams/{team_id}/members", headers=headers))
+    members = assert_paginated(
+        client.get(f"/api/v1/teams/{team_id}/members", headers=headers),
+    )["records"]
     member = next((item for item in members if item["username"] == username), None)
     assert member is not None, f"Member {username} not found in {members}"
     assert member["role"] == role
@@ -294,7 +296,9 @@ class TestTeamLifecycle:
         reject_detail = assert_api_ok(client.get(f"/api/v1/team-invites/{reject_token}", headers=rejecter["headers"]))
         assert reject_detail["status"] == "PENDING"
         assert_api_ok(client.post(f"/api/v1/team-invites/{reject_token}/reject", headers=rejecter["headers"]))
-        rejected_invites = assert_api_ok(client.get(f"/api/v1/teams/{team_id}/invites", headers=auth_headers))
+        rejected_invites = assert_paginated(
+            client.get(f"/api/v1/teams/{team_id}/invites", headers=auth_headers),
+        )["records"]
         assert any(invite["email"] == rejecter["email"] and invite["status"] == "REJECTED"
                    for invite in rejected_invites)
 

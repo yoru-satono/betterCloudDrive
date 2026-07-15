@@ -17,14 +17,14 @@ public class TeamEventOutboxPublishTask {
     private final QueueProperties queueProperties;
     private final QueueMetrics queueMetrics;
 
-    @Scheduled(fixedDelayString = "${queue.redis.outbox-publish-interval-ms:5000}")
+    @Scheduled(fixedDelayString = "${queue.rabbitmq.outbox-publish-interval-ms:5000}")
     public void publishPendingOutboxEvents() {
         long startedAt = queueMetrics.startProcessing();
         try {
-            int published = teamEventOutboxQueuePublisher.publishPending(queueProperties.getRedis().getOutboxPublishBatchSize());
+            int published = teamEventOutboxQueuePublisher.publishPending(queueProperties.getRabbitmq().getOutboxPublishBatchSize());
             queueMetrics.recordProcessing("outbox-publish", "success", startedAt);
             if (published > 0) {
-                log.info("Published {} team outbox events to Redis Streams", published);
+                log.info("Published {} team outbox events to RabbitMQ", published);
             }
         } catch (RuntimeException e) {
             queueMetrics.recordProcessing("outbox-publish", "failure", startedAt);

@@ -9,7 +9,8 @@
 | 团队、成员、权限、邀请、分享、标签、审计、任务 | PostgreSQL | 是 |
 | 文件当前内容、缩略图、历史版本、任务结果 | SeaweedFS / S3 | 是 |
 | 分享密码加密和 JWT 密钥 | `.env`、`config/env-files/*.env` 或外部密钥系统 | 是 |
-| 队列临时状态和缓存 | Redis | 可选，数据库 outbox/task 是事实来源 |
+| 队列临时状态 | RabbitMQ | 可选，数据库 outbox/task 是事实来源 |
+| 缓存和服务状态 | Redis | 按业务恢复时间要求选择备份 |
 | Document Server 本地状态 | `onlyofficedata` | 可选 |
 | OnlyOffice 日志 | `onlyofficelogs` | 按审计保留策略 |
 

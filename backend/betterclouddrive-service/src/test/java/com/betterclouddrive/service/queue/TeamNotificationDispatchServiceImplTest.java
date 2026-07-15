@@ -5,241 +5,58 @@ import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.config.QueueProperties;
 import com.betterclouddrive.service.metrics.QueueMetrics;
+import com.rabbitmq.client.Channel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
 import tools.jackson.databind.ObjectMapper;
-
-import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class TeamNotificationDispatchServiceImplTest {
+    @Mock TeamNotificationOutboxWriter writer; @Mock TeamEventOutboxRepository repository; @Mock RabbitQueueService rabbit;
+    @Mock NotificationService notifications; @Mock QueueMetrics metrics; @Mock Channel channel;
+    QueueProperties properties; TeamNotificationDispatchServiceImpl service;
+    @BeforeEach void setUp() { properties = new QueueProperties(); service = new TeamNotificationDispatchServiceImpl(writer, repository, rabbit, notifications, properties, new ObjectMapper(), metrics); }
 
-    @Mock
-    private TeamNotificationOutboxWriter teamNotificationOutboxWriter;
-
-    @Mock
-    private TeamEventOutboxRepository teamEventOutboxRepository;
-
-    @Mock
-    private RedisStreamQueueService redisStreamQueueService;
-
-    @Mock
-    private NotificationService notificationService;
-
-    @Mock
-    private QueueMetrics queueMetrics;
-
-    private QueueProperties queueProperties;
-    private ObjectMapper objectMapper;
-    private TeamNotificationDispatchServiceImpl service;
-
-    @BeforeEach
-    void setUp() {
-        queueProperties = new QueueProperties();
-        objectMapper = new ObjectMapper();
-        service = new TeamNotificationDispatchServiceImpl(
-                teamNotificationOutboxWriter,
-                teamEventOutboxRepository,
-                redisStreamQueueService,
-                notificationService,
-                queueProperties,
-                objectMapper,
-                queueMetrics);
+    @Test void dispatchesNotificationMarksOutboxProcessedAndAcks() throws Exception {
+        var event = processing(1L, 0); when(repository.findById(1L)).thenReturn(java.util.Optional.of(event));
+        when(rabbit.read(any())).thenReturn(Map.of("outboxId", "1", "targetType", "NOTIFICATION_USER", "payload", payload()));
+        service.processQueuedNotification(message(), channel);
+        verify(notifications).notifyUser(eq(2L), eq(3L), eq("TYPE"), anyString(), anyString(), anyMap(), isNull(), eq(false));
+        verify(channel).basicAck(9L, false); verify(repository).save(event);
     }
 
-    @Test
-    void enqueueUserNotification_shouldWriteOutboxWhenQueueEnabled() {
-        service.enqueueUserNotification(2L, 10L, "TEAM_INVITE", "团队邀请", "加入团队", "/teams/10", true);
-
-        verify(teamNotificationOutboxWriter).enqueueUser(2L, 10L, "TEAM_INVITE", Map.of(), "/teams/10", true);
-        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), anyBoolean());
+    @Test void transientFailureReturnsOutboxToPendingAndAcksForRepublish() throws Exception {
+        var event = processing(1L, 0); when(repository.findById(1L)).thenReturn(java.util.Optional.of(event));
+        when(rabbit.read(any())).thenReturn(Map.of("outboxId", "1", "targetType", "NOTIFICATION_USER", "payload", payload()));
+        doThrow(new IllegalStateException("mail down")).when(notifications).notifyUser(anyLong(), anyLong(), anyString(), anyString(), anyString(), anyMap(), any(), anyBoolean());
+        service.processQueuedNotification(message(), channel);
+        verify(channel).basicAck(9L, false); org.assertj.core.api.Assertions.assertThat(event.getStatus()).isEqualTo("PENDING");
     }
 
-    @Test
-    void enqueueUserNotification_shouldPreserveSemanticParameters() {
-        Map<String, Object> params = Map.of("teamName", "Product", "role", "EDITOR");
-
-        service.enqueueUserNotification(2L, 10L, "TEAM_INVITE", params, "/teams/10", true);
-
-        verify(teamNotificationOutboxWriter).enqueueUser(2L, 10L, "TEAM_INVITE", params, "/teams/10", true);
+    @Test void missingOutboxIsRejectedToDeadLetter() throws Exception {
+        when(rabbit.read(any())).thenReturn(Map.of("outboxId", "404")); when(repository.findById(404L)).thenReturn(java.util.Optional.empty());
+        service.processQueuedNotification(message(), channel);
+        verify(channel).basicReject(9L, false); verify(metrics).recordDeadLetter("notifications");
     }
 
-    @Test
-    void enqueueTeamMembersNotification_shouldFallbackWhenQueueDisabled() {
-        queueProperties.setEnabled(false);
-
-        service.enqueueTeamMembersNotification(10L, 2L, "TEAM_DELETE", "团队已删除", "团队已被删除", null, true);
-
-        verify(notificationService).notifyTeamMembers(10L, 2L, "TEAM_DELETE", "团队已删除", "团队已被删除", null, true);
-        verify(teamNotificationOutboxWriter, never()).enqueueTeamMembers(any(), any(), any(), any(), any(), any(), anyBoolean());
+    @Test void finalFailureMarksOutboxFailedAndRejectsToDeadLetter() throws Exception {
+        var event = processing(1L, 4); when(repository.findById(1L)).thenReturn(java.util.Optional.of(event));
+        when(rabbit.read(any())).thenReturn(Map.of("outboxId", "1", "targetType", "NOTIFICATION_USER", "payload", payload()));
+        doThrow(new IllegalStateException("mail down")).when(notifications).notifyUser(anyLong(), anyLong(), anyString(), anyString(), anyString(), anyMap(), any(), anyBoolean());
+        service.processQueuedNotification(message(), channel);
+        verify(channel).basicReject(9L, false); verify(metrics).recordDeadLetter("notifications");
+        org.assertj.core.api.Assertions.assertThat(event.getStatus()).isEqualTo("FAILED");
     }
 
-    @Test
-    void processQueuedNotifications_shouldDispatchUserNotificationAndMarkProcessed() throws Exception {
-        TeamEventOutboxEntity event = processingEvent(99L, 0);
-        QueueMessage message = userMessage(event.getId());
-        when(redisStreamQueueService.readGroup(
-                eq("bcd:stream:notifications"),
-                eq("bcd-notification-workers"),
-                eq("backend-worker"),
-                eq(10),
-                any(Duration.class)))
-                .thenReturn(List.of(message));
-        when(teamEventOutboxRepository.findById(99L)).thenReturn(Optional.of(event));
-
-        int processed = service.processQueuedNotifications(10);
-
-        assertThat(processed).isEqualTo(1);
-        verify(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "notification.team_invite.title", "notification.team_invite.content", Map.of(), "/teams/10", false);
-        ArgumentCaptor<TeamEventOutboxEntity> eventCaptor = ArgumentCaptor.forClass(TeamEventOutboxEntity.class);
-        verify(teamEventOutboxRepository).save(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(TeamEventOutboxEntity.STATUS_PROCESSED);
-        assertThat(eventCaptor.getValue().getProcessedAt()).isNotNull();
-        assertThat(eventCaptor.getValue().getErrorMessage()).isNull();
-        verify(redisStreamQueueService).acknowledge("bcd:stream:notifications", "bcd-notification-workers", "1-0");
-    }
-
-    @Test
-    void processQueuedNotifications_shouldRetryFailedDispatchByReturningOutboxToPending() throws Exception {
-        TeamEventOutboxEntity event = processingEvent(99L, 0);
-        QueueMessage message = userMessage(event.getId());
-        when(redisStreamQueueService.readGroup(any(), any(), any(), anyInt(), any(Duration.class)))
-                .thenReturn(List.of(message));
-        when(teamEventOutboxRepository.findById(99L)).thenReturn(Optional.of(event));
-        doThrow(new IllegalStateException("notification db down"))
-                .when(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "notification.team_invite.title", "notification.team_invite.content", Map.of(), "/teams/10", false);
-
-        int processed = service.processQueuedNotifications(10);
-
-        assertThat(processed).isZero();
-        ArgumentCaptor<TeamEventOutboxEntity> eventCaptor = ArgumentCaptor.forClass(TeamEventOutboxEntity.class);
-        verify(teamEventOutboxRepository).save(eventCaptor.capture());
-        TeamEventOutboxEntity saved = eventCaptor.getValue();
-        assertThat(saved.getStatus()).isEqualTo(TeamEventOutboxEntity.STATUS_PENDING);
-        assertThat(saved.getRetryCount()).isEqualTo(1);
-        assertThat(saved.getAvailableAt()).isAfter(LocalDateTime.now().minusSeconds(1));
-        assertThat(saved.getErrorMessage()).isEqualTo("notification db down");
-        verify(redisStreamQueueService, never()).moveToDeadLetter(any(), any());
-        verify(redisStreamQueueService).acknowledge("bcd:stream:notifications", "bcd-notification-workers", "1-0");
-    }
-
-    @Test
-    void processQueuedNotifications_shouldMoveFailedDispatchToDeadLetterAtMaxDeliveries() throws Exception {
-        TeamEventOutboxEntity event = processingEvent(99L, 4);
-        QueueMessage message = userMessage(event.getId());
-        when(redisStreamQueueService.readGroup(any(), any(), any(), anyInt(), any(Duration.class)))
-                .thenReturn(List.of(message));
-        when(teamEventOutboxRepository.findById(99L)).thenReturn(Optional.of(event));
-        doThrow(new IllegalStateException("notification db down"))
-                .when(notificationService).notifyUser(2L, 10L, "TEAM_INVITE", "notification.team_invite.title", "notification.team_invite.content", Map.of(), "/teams/10", false);
-
-        int processed = service.processQueuedNotifications(10);
-
-        assertThat(processed).isZero();
-        ArgumentCaptor<TeamEventOutboxEntity> eventCaptor = ArgumentCaptor.forClass(TeamEventOutboxEntity.class);
-        verify(teamEventOutboxRepository).save(eventCaptor.capture());
-        TeamEventOutboxEntity saved = eventCaptor.getValue();
-        assertThat(saved.getStatus()).isEqualTo(TeamEventOutboxEntity.STATUS_FAILED);
-        assertThat(saved.getRetryCount()).isEqualTo(5);
-        assertThat(saved.getProcessedAt()).isNotNull();
-        verify(redisStreamQueueService).moveToDeadLetter(message, "notification db down");
-        verify(queueMetrics).recordDeadLetter("bcd:stream:notifications");
-        verify(redisStreamQueueService).acknowledge("bcd:stream:notifications", "bcd-notification-workers", "1-0");
-    }
-
-    @Test
-    void processQueuedNotifications_shouldDeadLetterMessageWithoutOutboxEvent() throws Exception {
-        QueueMessage message = userMessage(99L);
-        when(redisStreamQueueService.readGroup(any(), any(), any(), anyInt(), any(Duration.class)))
-                .thenReturn(List.of(message));
-        when(teamEventOutboxRepository.findById(99L)).thenReturn(Optional.empty());
-
-        int processed = service.processQueuedNotifications(10);
-
-        assertThat(processed).isZero();
-        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), anyBoolean());
-        verify(teamEventOutboxRepository, never()).save(any());
-        verify(redisStreamQueueService).moveToDeadLetter(message, "Notification outbox event not found");
-        verify(queueMetrics).recordDeadLetter("bcd:stream:notifications");
-        verify(redisStreamQueueService).acknowledge("bcd:stream:notifications", "bcd-notification-workers", "1-0");
-    }
-
-    @Test
-    void processQueuedNotifications_shouldAcknowledgeAlreadyHandledOutboxWithoutDispatchingAgain() throws Exception {
-        TeamEventOutboxEntity event = processingEvent(99L, 0);
-        event.setStatus(TeamEventOutboxEntity.STATUS_PROCESSED);
-        QueueMessage message = userMessage(event.getId());
-        when(redisStreamQueueService.readGroup(any(), any(), any(), anyInt(), any(Duration.class)))
-                .thenReturn(List.of(message));
-        when(teamEventOutboxRepository.findById(99L)).thenReturn(Optional.of(event));
-
-        int processed = service.processQueuedNotifications(10);
-
-        assertThat(processed).isEqualTo(1);
-        verify(notificationService, never()).notifyUser(any(), any(), any(), any(), any(), any(), anyBoolean());
-        verify(teamEventOutboxRepository, never()).save(any());
-        verify(redisStreamQueueService).acknowledge("bcd:stream:notifications", "bcd-notification-workers", "1-0");
-    }
-
-    @Test
-    void processQueuedNotifications_shouldIgnoreQueueWhenDisabled() {
-        queueProperties.setEnabled(false);
-
-        int processed = service.processQueuedNotifications(10);
-
-        assertThat(processed).isZero();
-        verify(redisStreamQueueService, never()).readGroup(any(), any(), any(), anyInt(), any());
-    }
-
-    private QueueMessage userMessage(Long outboxId) throws Exception {
-        NotificationDispatchPayload payload = new NotificationDispatchPayload(
-                2L,
-                10L,
-                null,
-                "TEAM_INVITE",
-                "notification.team_invite.title",
-                "notification.team_invite.content",
-                Map.of(),
-                "/teams/10",
-                false);
-        return new QueueMessage("bcd:stream:notifications", "1-0", Map.of(
-                "outboxId", String.valueOf(outboxId),
-                "targetType", TeamNotificationOutboxWriter.TARGET_USER,
-                "payload", objectMapper.writeValueAsString(payload)));
-    }
-
-    private TeamEventOutboxEntity processingEvent(Long id, int retryCount) {
-        LocalDateTime now = LocalDateTime.now();
-        return TeamEventOutboxEntity.builder()
-                .id(id)
-                .aggregateType(TeamNotificationOutboxWriter.AGGREGATE_NOTIFICATION)
-                .aggregateId(10L)
-                .eventType("TEAM_INVITE")
-                .targetType(TeamNotificationOutboxWriter.TARGET_USER)
-                .targetId(2L)
-                .status(TeamEventOutboxEntity.STATUS_PROCESSING)
-                .retryCount(retryCount)
-                .lockedAt(now.minusSeconds(1))
-                .createdAt(now.minusMinutes(1))
-                .updatedAt(now.minusSeconds(1))
-                .build();
-    }
+    private TeamEventOutboxEntity processing(Long id, int retries) { return TeamEventOutboxEntity.builder().id(id).status("PROCESSING").retryCount(retries).updatedAt(LocalDateTime.now()).build(); }
+    private String payload() { return "{\"userId\":2,\"teamId\":3,\"type\":\"TYPE\",\"titleKey\":\"title\",\"contentKey\":\"content\",\"messageParams\":{},\"email\":false}"; }
+    private Message message() { var p = new MessageProperties(); p.setDeliveryTag(9L); p.setMessageId("id"); return new Message(new byte[0], p); }
 }
