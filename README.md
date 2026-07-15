@@ -209,7 +209,7 @@ UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
 
 ## 测试
 
-测试分层、独立命令、Testcontainers 依赖和覆盖率报告位置见 [测试策略](docs/reference/TESTING.md)。完整验证现已包含独立的 `integration`、`security` 和 Tauri Rust 单元测试阶段；Java、Web 与 Android 覆盖率只生成基线报告，暂不设置失败阈值。
+测试分层、独立命令、Testcontainers 依赖和覆盖率报告位置见 [测试策略](docs/reference/TESTING.md)。完整验证包含独立的 `integration`、`security` 和 Tauri Rust 单元测试阶段；Java 与 Web 覆盖率用于生成基线报告，Android JVM 业务代码执行 80% 覆盖率门禁。
 
 推荐在 Windows PowerShell 7 中使用一键验证脚本：
 
@@ -238,9 +238,9 @@ UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
 .\scripts\verify-all.ps1 -Module office -SkipDockerBuild
 ```
 
-`-Module` 可选 `all`、`backend`、`blackbox`、`web`、`tauri`、`android`、`office`、`webdav`、`observability`、`resilience`。默认是 `all`，保持完整验证；`web` 子集只跑前端单测和非 OnlyOffice Web E2E，`office` 子集单独跑 OnlyOffice Web E2E。除非传入 `-SkipE2ECleanup`，脚本结束时会自动调用 E2E 数据清理。
+`-Module` 可选 `all`、`backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`android-unit`、`android`、`office`、`webdav`、`observability`、`resilience`。默认是 `all`，保持完整验证；`web` 子集只跑前端单测和非 OnlyOffice Web E2E，`office` 子集单独跑 OnlyOffice Web E2E，`android-unit` 不依赖设备，`android` 会运行设备测试并包含 JVM 快速门禁。除非传入 `-SkipE2ECleanup`，脚本结束时会自动调用 E2E 数据清理。
 
-当前完整验证基线（2026-07-13）：15 个阶段全部通过，包括后端单元 429 项、黑盒 136 项、前端单元 145 项、Web E2E 29 项、WebDAV 4 项、Android 单元 18 项和设备 E2E 26 项，以及 Tauri、可观测性与韧性测试。
+当前完整验证基线（2026-07-15）：所有阶段通过，包括后端 Maven 全模块单元测试、Testcontainers 集成测试 4 项、黑盒 139 项、安全验收 7 项、前端单元 156 项、Web Core E2E 30 项、OnlyOffice E2E 7 项、Tauri Rust 单元 14 项、Tauri 桌面 E2E 3 个 spec、WebDAV 4 项、可观测性 3 项、韧性 2 项、Android JVM 单元 48 项和设备 instrumentation 30 项。Android JVM 业务代码覆盖率为 80.36%，通过 80% 门禁。
 
 清理 E2E 和黑盒测试数据：
 

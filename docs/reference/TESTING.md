@@ -1,6 +1,6 @@
 # 测试策略
 
-BetterCloudDrive 使用分层测试，覆盖后端业务逻辑、真实数据库和对象存储、HTTP API、Web/Tauri/Android 客户端及专项运维能力。覆盖率当前只生成基线报告，不设置失败阈值。
+BetterCloudDrive 使用分层测试，覆盖后端业务逻辑、真实数据库和对象存储、HTTP API、Web/Tauri/Android 客户端及专项运维能力。Java 与 Web 覆盖率用于生成基线报告；Android JVM 对选定业务代码执行 80% 覆盖率门禁。
 
 ## 一键验证
 
@@ -16,7 +16,7 @@ Linux/macOS：
 ./scripts/verify-all.sh
 ```
 
-`all` 包含 `backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`android`、`office`、`webdav`、`observability` 和 `resilience`。完整验证要求 Docker、rclone、Rust、pnpm、Android SDK 和可用设备。
+`all` 包含 `backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`android`、`office`、`webdav`、`observability` 和 `resilience`。其中 `android` 会先执行与 `android-unit` 相同的 JVM 单测和 80% 覆盖率门禁，再在指定设备上运行 instrumentation。完整验证要求 Docker、rclone、Rust、pnpm、Android SDK 和可用设备。
 
 ## 分层与独立命令
 
@@ -43,7 +43,11 @@ Testcontainers 测试不连接开发数据库，也不复用 Compose 数据；�
 
 Android 的 80% 门槛统计 Repository、网络拦截器、本地设置、工具类和 ViewModel；Compose/Hilt/Kotlin 编译生成类、纯资源与 DTO 不进入业务门槛。设备测试通过 AGP 的 `createDebugAndroidTestCoverageReport` 另外生成报告，避免快速门禁依赖模拟器。
 
-覆盖率用于暴露未测试实现。建立稳定基线前不设置阈值；后续门禁应按模块分别设置，避免高覆盖模块掩盖关键模块的空洞。
+覆盖率用于暴露未测试实现。Android 已针对 Repository、网络拦截器、本地设置、工具类和 ViewModel 建立 80% 业务门禁；Java 与 Web 暂不设置阈值。后续新增门禁应按模块分别设置，避免高覆盖模块掩盖关键模块的空洞。
+
+## 当前验证基线
+
+2026-07-15 的完整验证结果：Testcontainers 4 项、API 黑盒 139 项、安全验收 7 项、Web 单元 156 项、Web Core E2E 30 项、OnlyOffice E2E 7 项、Tauri Rust 单元 14 项、Tauri 桌面 E2E 3 个 spec、WebDAV 4 项、可观测性 3 项、韧性 2 项、Android JVM 单元 48 项和设备 instrumentation 30 项全部通过。Android JVM 业务代码覆盖率为 80.36%。
 
 ## 新测试约定
 
