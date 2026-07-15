@@ -199,7 +199,9 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9080/ready"]
+      # The upstream Promtail image has no HTTP client; Prometheus separately
+      # scrapes :9080, while this check verifies the process remains alive.
+      test: ["CMD-SHELL", "pidof promtail >/dev/null"]
       interval: 15s
       timeout: 5s
       retries: 5
