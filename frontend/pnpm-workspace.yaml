@@ -3,3 +3,5 @@ allowBuilds:
   esbuild: true
   geckodriver: true
   vue-demi: true
+minimumReleaseAgeExclude:
+  - '@lucide/vue@1.27.0'

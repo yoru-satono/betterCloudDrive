@@ -15,7 +15,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.6</version>
+        <version>4.1.0</version>
         <relativePath/>
     </parent>
 
@@ -31,10 +31,10 @@
 
     <properties>
         <java.version>25</java.version>
-        <minio-sdk.version>8.5.12</minio-sdk.version>
-        <jjwt.version>0.12.6</jjwt.version>
-        <hutool.version>5.8.27</hutool.version>
-        <jacoco.version>0.8.13</jacoco.version>
+        <minio-sdk.version>9.0.3</minio-sdk.version>
+        <jjwt.version>0.13.0</jjwt.version>
+        <hutool.version>5.8.47</hutool.version>
+        <jacoco.version>0.8.15</jacoco.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <skipUnitTests>false</skipUnitTests>
     </properties>

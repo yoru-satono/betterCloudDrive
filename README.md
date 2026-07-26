@@ -6,15 +6,16 @@
 
 | 层 | 技术 |
 |---|------|
-| **后端** | Spring Boot 4.0 + JDK 25 + Spring Data JPA 4.0 |
-| **数据库** | PostgreSQL 18 + Flyway 迁移 |
-| **缓存** | Redis 7（限流、上传进度、配额同步、Token 黑名单） |
+| **后端** | Spring Boot 4.1.0 + JDK 25 + Spring Data JPA |
+| **数据库** | PostgreSQL 18.4 + Flyway 迁移 |
+| **缓存** | Redis 8.8.1（限流、上传进度、配额同步、Token 黑名单） |
 | **消息队列** | RabbitMQ 4（团队通知、后台任务、死信队列） |
 | **存储** | SeaweedFS（S3 兼容对象存储） |
 | **邮件** | Mailpit（开发环境邮件模拟） |
 | **可观测性** | Actuator/Micrometer + Prometheus + Alertmanager + OpenTelemetry + Loki + Grafana Alloy + Tempo + Grafana |
-| **Web 前端** | Vue 3 + Vite + Pinia + Vue Router 4 |
-| **Android** | Kotlin + Jetpack Compose + Material 3 + Hilt + Retrofit |
+| **Web 前端** | Vue 3.5.40 + Vite 8.1.5 + Pinia 4.0.2 + Vue Router 5.2.0 |
+| **桌面端** | Tauri 2.11.5 + Rust 1.88.0 |
+| **Android** | Kotlin 2.3.21 + Jetpack Compose 2026.06.00 + Android SDK 37 + Hilt + Retrofit |
 | **测试** | JUnit 5 + Mockito（后端）、pytest + httpx（黑盒）、Vitest + Playwright（前端） |
 | **部署** | Docker Compose 一键编排 |
 

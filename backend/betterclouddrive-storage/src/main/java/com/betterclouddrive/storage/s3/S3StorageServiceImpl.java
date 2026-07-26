@@ -47,7 +47,7 @@ public class S3StorageServiceImpl implements StorageService {
                 PutObjectArgs.builder()
                     .bucket(props.getBucket())
                     .object(objectKey)
-                    .stream(inputStream, size, -1)
+                    .stream(inputStream, size, -1L)
                     .contentType(contentType)
                     .build()
             );
@@ -112,7 +112,7 @@ public class S3StorageServiceImpl implements StorageService {
                 PutObjectArgs.builder()
                     .bucket(props.getBucket())
                     .object(partKey)
-                    .stream(data, size, -1)
+                    .stream(data, size, -1L)
                     .build()
             );
             return partKey;
@@ -142,7 +142,7 @@ public class S3StorageServiceImpl implements StorageService {
                 PutObjectArgs.builder()
                     .bucket(props.getBucket())
                     .object(finalObjectKey)
-                    .stream(stream, -1, COMPOSE_UPLOAD_PART_SIZE)
+                    .stream(stream, -1L, COMPOSE_UPLOAD_PART_SIZE)
                     .build()
             );
         }
@@ -205,7 +205,7 @@ public class S3StorageServiceImpl implements StorageService {
                 CopyObjectArgs.builder()
                     .bucket(props.getBucket())
                     .object(destKey)
-                    .source(CopySource.builder().bucket(props.getBucket()).object(sourceKey).build())
+                    .source(SourceObject.builder().bucket(props.getBucket()).object(sourceKey).build())
                     .build()
             );
         } catch (Exception e) {

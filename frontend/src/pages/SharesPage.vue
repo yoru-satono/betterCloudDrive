@@ -4,7 +4,7 @@ const __t = __i18n.global.t
 
 import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Eye } from 'lucide-vue-next'
+import { Eye } from '@lucide/vue'
 import OButton from '@/components/base/OButton.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
 import OSpinner from '@/components/base/OSpinner.vue'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Eye } from 'lucide-vue-next'
+import { Eye } from '@lucide/vue'
 import OButton from '@/components/base/OButton.vue'
 import OEmptyState from '@/components/base/OEmptyState.vue'
 import OInput from '@/components/base/OInput.vue'

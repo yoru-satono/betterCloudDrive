@@ -6,9 +6,9 @@ import { useSearchContextStore } from '@/stores/searchContext'
 import { useRoute, useRouter } from 'vue-router'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { getSearchTriggerPlaceholder, resolveSearchMode } from '@/config/search'
-import { Bell } from 'lucide-vue-next'
+import { Bell } from '@lucide/vue'
 import * as notificationsApi from '@/api/notifications'
-import { Menu } from 'lucide-vue-next'
+import { Menu } from '@lucide/vue'
 import { i18n } from '@/i18n'
 
 const ui = useUIStore()

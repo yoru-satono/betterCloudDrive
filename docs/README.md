@@ -6,6 +6,21 @@
 
 - [后续计划](ROADMAP.md)：当前尚未完成的安全、正确性、扩展性和客户端改进任务。
 
+## 当前版本基线
+
+以下版本与仓库中的构建文件和 `docker-compose.yml` 保持一致：
+
+| 范围 | 版本 |
+| --- | --- |
+| 后端 | Spring Boot 4.1.0、JDK 25、MinIO SDK 9.0.3、JJWT 0.13.0 |
+| Web | Node.js 24.18.0、pnpm 11.16.0、Vue 3.5.40、Vue Router 5.2.0、Pinia 4.0.2、Vite 8.1.5、TypeScript 6.0.3 |
+| 桌面端 | Tauri 2.11.5、Rust 1.88.0 |
+| Android | Android Gradle Plugin 9.3.1、Gradle 9.6.1、Kotlin 2.3.21、compileSdk/targetSdk 37、Compose BOM 2026.06.00 |
+| 核心服务 | PostgreSQL 18.4、Redis 8.8.1、RabbitMQ 4.3.4、SeaweedFS 4.40、OnlyOffice 9.3.0.1 |
+| 可观测性 | Grafana 13.1.1、Prometheus 3.13.1、Loki 3.6.13、Tempo 2.9.4、Alloy 1.18.0、OpenTelemetry Collector 0.157.0 |
+
+TypeScript 暂时保留在 6.0.3，因为 TypeScript 7 不再提供当前 i18n 检查脚本使用的编译器 API；Zod 暂时保留在 3.25.76，以兼容当前 `@vee-validate/zod` 集成。
+
 ## 参考资料
 
 - [API 文档](reference/API.md)：认证、文件、分享、团队、通知、OnlyOffice 和管理员接口。

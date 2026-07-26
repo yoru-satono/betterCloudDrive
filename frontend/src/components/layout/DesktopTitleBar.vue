@@ -4,7 +4,7 @@ const __t = __i18n.global.t
 
 import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
-import { Settings, Minus, Square, X } from 'lucide-vue-next'
+import { Settings, Minus, Square, X } from '@lucide/vue'
 import OButton from '@/components/base/OButton.vue'
 import OInput from '@/components/base/OInput.vue'
 import OModal from '@/components/base/OModal.vue'

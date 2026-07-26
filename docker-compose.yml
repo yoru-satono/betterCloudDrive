@@ -2,7 +2,7 @@ services:
   # ==================== 基础设施 ====================
 
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18.4-alpine
     container_name: bcd-postgres
     restart: unless-stopped
     command: ["postgres", "-c", "log_min_duration_statement=${POSTGRES_LOG_MIN_DURATION_MS:-500}"]
@@ -21,7 +21,7 @@ services:
       - bcd-network
 
   redis:
-    image: redis:7-alpine
+    image: redis:8.8.1-alpine
     container_name: bcd-redis
     restart: unless-stopped
     env_file:
@@ -41,7 +41,7 @@ services:
       - bcd-network
 
   seaweedfs:
-    image: chrislusf/seaweedfs:latest
+    image: chrislusf/seaweedfs:4.40
     container_name: bcd-seaweedfs
     restart: unless-stopped
     env_file:
@@ -62,7 +62,7 @@ services:
       - bcd-network
 
   mailpit:
-    image: axllent/mailpit:latest
+    image: axllent/mailpit:v1.30.5
     container_name: bcd-mailpit
     restart: unless-stopped
     env_file:
@@ -80,7 +80,7 @@ services:
       - bcd-network
 
   rabbitmq:
-    image: rabbitmq:4-management-alpine
+    image: rabbitmq:4.3.4-management-alpine
     container_name: bcd-rabbitmq
     restart: unless-stopped
     env_file:
@@ -100,7 +100,7 @@ services:
       - bcd-network
 
   onlyoffice-documentserver:
-    image: onlyoffice/documentserver:latest
+    image: onlyoffice/documentserver:9.3.0.1
     container_name: bcd-onlyoffice
     restart: unless-stopped
     environment:
@@ -123,7 +123,7 @@ services:
       - bcd-network
 
   loki:
-    image: grafana/loki:2.9.8
+    image: grafana/loki:3.6.13
     container_name: bcd-loki
     restart: unless-stopped
     env_file:
@@ -135,7 +135,8 @@ services:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
       - lokidata:/loki
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3100/ready"]
+      # Loki 3.x is distroless and no longer contains a shell or wget.
+      test: ["CMD", "/usr/bin/loki", "-version"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -143,7 +144,7 @@ services:
       - bcd-network
 
   tempo:
-    image: grafana/tempo:2.7.2
+    image: grafana/tempo:2.9.4
     container_name: bcd-tempo
     restart: unless-stopped
     env_file:
@@ -155,7 +156,8 @@ services:
       - ./observability/tempo-config.yml:/etc/tempo/config.yml:ro
       - tempodata:/var/tempo
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3200/ready"]
+      # Tempo 2.9 is distroless and no longer contains a shell or wget.
+      test: ["CMD", "/tempo", "-version"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -163,7 +165,7 @@ services:
       - bcd-network
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.133.0
+    image: otel/opentelemetry-collector-contrib:0.157.0
     container_name: bcd-otel-collector
     restart: unless-stopped
     env_file:
@@ -182,7 +184,7 @@ services:
       - bcd-network
 
   alloy:
-    image: grafana/alloy:v1.17.0
+    image: grafana/alloy:v1.18.0
     container_name: bcd-alloy
     restart: unless-stopped
     env_file:
@@ -214,7 +216,7 @@ services:
       - bcd-network
 
   prometheus:
-    image: prom/prometheus:v3.4.1
+    image: prom/prometheus:v3.13.1
     container_name: bcd-prometheus
     restart: unless-stopped
     env_file:
@@ -241,7 +243,7 @@ services:
       - bcd-network
 
   alertmanager:
-    image: prom/alertmanager:v0.28.1
+    image: prom/alertmanager:v0.33.1
     container_name: bcd-alertmanager
     restart: unless-stopped
     command:
@@ -262,7 +264,7 @@ services:
       - bcd-network
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.17.1
+    image: prometheuscommunity/postgres-exporter:v0.20.1
     container_name: bcd-postgres-exporter
     restart: unless-stopped
     env_file:
@@ -274,7 +276,7 @@ services:
       - bcd-network
 
   redis-exporter:
-    image: oliver006/redis_exporter:v1.74.0
+    image: oliver006/redis_exporter:v1.88.0-alpine
     container_name: bcd-redis-exporter
     restart: unless-stopped
     env_file:
@@ -300,7 +302,7 @@ services:
       - bcd-network
 
   grafana:
-    image: grafana/grafana:11.5.2
+    image: grafana/grafana:13.1.1
     container_name: bcd-grafana
     restart: unless-stopped
     env_file:
