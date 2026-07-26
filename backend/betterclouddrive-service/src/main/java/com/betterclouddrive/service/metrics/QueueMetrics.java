@@ -28,6 +28,7 @@ public class QueueMetrics {
     private final TeamEventOutboxRepository outbox;
     private final TeamTaskRepository tasks;
     private final QueueProperties properties;
+    private final ObservationMetrics observationMetrics;
     private final Map<String, AtomicLong> ready = new LinkedHashMap<>();
     private final Map<String, AtomicLong> inflight = new LinkedHashMap<>();
     private final Map<String, AtomicLong> pending = new LinkedHashMap<>();
@@ -36,8 +37,10 @@ public class QueueMetrics {
     private final Map<String, AtomicBoolean> warnings = new ConcurrentHashMap<>();
 
     public QueueMetrics(MeterRegistry registry, RabbitQueueService rabbit,
-                        TeamEventOutboxRepository outbox, TeamTaskRepository tasks, QueueProperties properties) {
+                        TeamEventOutboxRepository outbox, TeamTaskRepository tasks, QueueProperties properties,
+                        ObservationMetrics observationMetrics) {
         this.registry = registry; this.rabbit = rabbit; this.outbox = outbox; this.tasks = tasks; this.properties = properties;
+        this.observationMetrics = observationMetrics;
         for (String queue : List.of("notifications", "team-tasks", "dead-letter")) {
             ready.put(queue, gauge("messages.ready", "queue", queue, "Ready messages in RabbitMQ"));
         }
@@ -80,24 +83,39 @@ public class QueueMetrics {
     public void recordTimedOutTaskRecovery(int recovered) { registry.counter(PREFIX + "team_tasks.timeout_recovered").increment(Math.max(0, recovered)); }
 
     private void refreshRabbit() {
-        if (!properties.isEnabled()) { ready.values().forEach(v -> v.set(0)); available("rabbitmq", true, null); return; }
+        long startedAt = observationMetrics.startRefresh();
+        if (!properties.isEnabled()) {
+            ready.values().forEach(v -> v.set(0));
+            available("rabbitmq", true, null);
+            observationMetrics.recordSuccess(ObservationMetrics.Source.QUEUE_RABBITMQ, startedAt);
+            return;
+        }
         try {
             var rabbitmq = properties.getRabbitmq();
             ready.get("notifications").set(rabbit.messageCount(rabbitmq.getNotificationsQueue()));
             ready.get("team-tasks").set(rabbit.messageCount(rabbitmq.getTeamTasksQueue()));
             ready.get("dead-letter").set(rabbit.messageCount(rabbitmq.getDeadLetterQueue()));
             available("rabbitmq", true, null);
-        } catch (RuntimeException e) { available("rabbitmq", false, e); }
+            observationMetrics.recordSuccess(ObservationMetrics.Source.QUEUE_RABBITMQ, startedAt);
+        } catch (RuntimeException e) {
+            available("rabbitmq", false, e);
+            observationMetrics.recordFailure(ObservationMetrics.Source.QUEUE_RABBITMQ, startedAt);
+        }
     }
 
     private void refreshDatabase() {
+        long startedAt = observationMetrics.startRefresh();
         try {
             pending.get("outbox").set(outbox.countByStatus(TeamEventOutboxEntity.STATUS_PENDING));
             retries.get("outbox").set(outbox.countByStatusAndRetryCountGreaterThan(TeamEventOutboxEntity.STATUS_PENDING, 0));
             pending.get("team-tasks").set(tasks.countByStatus(TeamTaskEntity.STATUS_PENDING));
             retries.get("team-tasks").set(tasks.countByStatusAndRetryCountGreaterThan(TeamTaskEntity.STATUS_PENDING, 0));
             available("database", true, null);
-        } catch (RuntimeException e) { available("database", false, e); }
+            observationMetrics.recordSuccess(ObservationMetrics.Source.QUEUE_DATABASE, startedAt);
+        } catch (RuntimeException e) {
+            available("database", false, e);
+            observationMetrics.recordFailure(ObservationMetrics.Source.QUEUE_DATABASE, startedAt);
+        }
     }
 
     private void warnOnBacklog() {

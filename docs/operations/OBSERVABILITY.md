@@ -55,6 +55,18 @@ Invoke-WebRequest http://127.0.0.1:8081/actuator/prometheus
 
 告警触发和通知失败同时写入结构化运行日志。单团队明细保留在业务数据库和管理后台；Prometheus 仅存总量与固定分桶，不使用团队或用户 ID 标签，避免无界基数。
 
+## 观测数据新鲜度
+
+队列和团队配额 Gauge 可能在采集失败后保留旧值，因此不能只根据业务 Gauge 判断采集是否正常。后端为三个固定采集源 `team-quota`、`queue-rabbitmq`、`queue-database` 暴露：
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `bcd.observation.last.success.timestamp` | Gauge | `source` | 最近一次成功刷新的 Unix 时间戳；进程启动后尚未成功时为 `0` |
+| `bcd.observation.refresh.failures` | Counter | `source` | 刷新失败次数 |
+| `bcd.observation.refresh.duration` | Timer | `source,outcome` | 成功或失败刷新耗时 |
+
+Prometheus 名称分别规范化为 `_seconds`、`_total` 和 `_seconds` 后缀。`BetterCloudDriveObservationDataStale` 在最近成功时间超过五分钟时进入 pending；对于从未成功的采集源，会等待应用启动超过五分钟后再判断，避免启动期误报。告警恢复表示采集重新成功，不代表之前缓存的业务值本身一定发生变化。
+
 ## Trace 关联
 
 Spring 的 OpenTelemetry/Micrometer Observation 是 trace context 的唯一事实来源。HTTP 审计从当前真实 Span 读取 `trace_id/span_id`，RabbitTemplate 和监听容器启用 Observation，自动通过消息头传播 W3C context。

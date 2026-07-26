@@ -437,3 +437,57 @@ tests:
       - eval_time: 22m
         alertname: BetterCloudDrivePostgresDeadlocks
         exp_alerts: []
+
+  - name: observation freshness stays healthy after a recent success
+    interval: 1m
+    input_series:
+      - series: 'process_start_time_seconds{job="better-cloud-drive"}'
+        values: '0x12'
+      - series: 'bcd_observation_last_success_timestamp_seconds{source="team-quota"}'
+        values: '300x12'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: BetterCloudDriveObservationDataStale
+        exp_alerts: []
+
+  - name: observation freshness detects a source that never succeeded after startup grace
+    interval: 1m
+    input_series:
+      - series: 'process_start_time_seconds{job="better-cloud-drive"}'
+        values: '0x12'
+      - series: 'bcd_observation_last_success_timestamp_seconds{source="queue-rabbitmq"}'
+        values: '0x12'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: BetterCloudDriveObservationDataStale
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: BetterCloudDriveObservationDataStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: queue-rabbitmq
+            exp_annotations:
+              summary: BetterCloudDrive observation data is stale
+              description: The queue-rabbitmq observation source has not refreshed successfully for more than five minutes.
+
+  - name: stale observation data fires and resolves after a successful refresh
+    interval: 1m
+    input_series:
+      - series: 'process_start_time_seconds{job="better-cloud-drive"}'
+        values: '0x12'
+      - series: 'bcd_observation_last_success_timestamp_seconds{source="queue-database"}'
+        values: '1x8 540x4'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: BetterCloudDriveObservationDataStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              source: queue-database
+            exp_annotations:
+              summary: BetterCloudDrive observation data is stale
+              description: The queue-database observation source has not refreshed successfully for more than five minutes.
+      - eval_time: 9m
+        alertname: BetterCloudDriveObservationDataStale
+        exp_alerts: []

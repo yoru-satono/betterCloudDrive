@@ -121,6 +121,21 @@ groups:
 
   - name: better-cloud-drive-observability
     rules:
+      - alert: BetterCloudDriveObservationDataStale
+        expr: |
+          (time() - bcd_observation_last_success_timestamp_seconds > 300)
+          or
+          (
+            bcd_observation_last_success_timestamp_seconds == 0
+            and on() (max(time() - process_start_time_seconds) > 300)
+          )
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: BetterCloudDrive observation data is stale
+          description: The {{ $labels.source }} observation source has not refreshed successfully for more than five minutes.
+
       - alert: BetterCloudDriveObservabilityTargetDown
         expr: up{job=~"loki|tempo|otel-collector|alloy|prometheus|alertmanager"} == 0
         for: 5m
