@@ -23,7 +23,12 @@ class TeamEventOutboxQueuePublisherTest {
     QueueProperties properties;
     TeamEventOutboxQueuePublisher publisher;
 
-    @BeforeEach void setUp() { properties = new QueueProperties(); publisher = new TeamEventOutboxQueuePublisher(repository, rabbit, properties); }
+    @BeforeEach void setUp() {
+        properties = new QueueProperties();
+        publisher = new TeamEventOutboxQueuePublisher(repository, rabbit, properties,
+                new com.betterclouddrive.service.observability.AsyncTraceService(
+                        io.opentelemetry.api.OpenTelemetry.noop()));
+    }
 
     @Test void ordinaryTeamEventRemainsInOutboxWithoutRabbitQueue() {
         var event = event("TEAM", "TEAM_CREATED"); pending(event);

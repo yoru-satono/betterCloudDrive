@@ -287,7 +287,7 @@ try {
     if ($RunIntegration) {
         Invoke-Step "Backend Testcontainers integration tests" {
             Invoke-InDirectory "backend" {
-                Invoke-External "mvn" @("verify", "-Pintegration", "-DskipUnitTests", "-pl", "betterclouddrive-dal,betterclouddrive-storage", "-am")
+                Invoke-External "mvn" @("verify", "-Pintegration", "-DskipUnitTests", "-pl", "betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service", "-am")
             }
         }
     }

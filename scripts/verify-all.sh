@@ -221,7 +221,7 @@ run_pytest() {
 }
 
 backend_tests() { (cd backend && mvn test -Dsurefire.reportNameSuffix=backend); }
-integration_tests() { (cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage -am); }
+integration_tests() { (cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service -am); }
 blackbox_tests() { run_pytest 'not webdav and not office and not observability and not resilience and not security' ../test-results/blackbox/junit.xml; }
 security_tests() { run_pytest security ../test-results/security/junit.xml; }
 web_unit_tests() { (cd frontend && pnpm run test:coverage); }

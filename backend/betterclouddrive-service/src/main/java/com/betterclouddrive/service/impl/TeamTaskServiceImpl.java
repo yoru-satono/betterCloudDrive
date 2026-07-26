@@ -16,6 +16,7 @@ import com.betterclouddrive.service.config.TeamTaskProperties;
 import com.betterclouddrive.service.metrics.OnlyOfficeSaveMetrics;
 import com.betterclouddrive.service.metrics.QueueMetrics;
 import com.betterclouddrive.service.queue.TeamTaskOutboxWriter;
+import com.betterclouddrive.service.observability.AsyncTraceService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -46,6 +47,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     private final TeamTaskProperties teamTaskProperties;
     private final TeamTaskOutboxWriter teamTaskOutboxWriter;
     private final QueueMetrics queueMetrics;
+    private final AsyncTraceService asyncTraceService;
 
     @Override
     public PageResult<TeamTaskEntity> listTasks(Long requesterUserId, Long teamId, String status, String taskType, int page, int size) {
@@ -137,6 +139,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
             String payload,
             String status) {
         LocalDateTime now = LocalDateTime.now();
+        AsyncTraceService.TraceContext trace = asyncTraceService.capture();
         TeamTaskEntity task = teamTaskRepository.save(TeamTaskEntity.builder()
                 .teamId(teamId)
                 .actorUserId(actorUserId)
@@ -149,6 +152,8 @@ public class TeamTaskServiceImpl implements TeamTaskService {
                 .payload(payload)
                 .progress(0)
                 .retryCount(0)
+                .traceparent(trace.traceparent())
+                .tracestate(trace.tracestate())
                 .createdAt(now)
                 .updatedAt(now)
                 .startedAt(TeamTaskEntity.STATUS_RUNNING.equals(status) ? now : null)
@@ -251,6 +256,9 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         task.setResultSizeBytes(null);
         task.setResultExpiresAt(null);
         task.setRetryCount((task.getRetryCount() == null ? 0 : task.getRetryCount()) + 1);
+        AsyncTraceService.TraceContext trace = asyncTraceService.capture();
+        task.setTraceparent(trace.traceparent());
+        task.setTracestate(trace.tracestate());
         task.setStartedAt(null);
         task.setCompletedAt(null);
         task.setUpdatedAt(LocalDateTime.now());

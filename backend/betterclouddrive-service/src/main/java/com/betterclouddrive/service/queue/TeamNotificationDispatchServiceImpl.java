@@ -6,6 +6,7 @@ import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamNotificationDispatchService;
 import com.betterclouddrive.service.config.QueueProperties;
 import com.betterclouddrive.service.metrics.QueueMetrics;
+import com.betterclouddrive.service.observability.AsyncTraceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
     private final QueueProperties queueProperties;
     private final ObjectMapper objectMapper;
     private final QueueMetrics queueMetrics;
+    private final AsyncTraceService asyncTraceService;
 
     @Override
     public void enqueueUserNotification(Long userId, Long teamId, String type, String title, String content, String link, boolean email) {
@@ -64,7 +66,9 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
     public void processQueuedNotification(Message raw, Channel channel) throws IOException {
         queueMetrics.beginConsumer("notifications");
         long started = queueMetrics.startProcessing();
-        try {
+        AsyncTraceService.TraceOperation trace =
+                asyncTraceService.startConsumer("notification.dispatch", raw, "notifications", null);
+        try (trace) {
             long tag = raw.getMessageProperties().getDeliveryTag();
             QueueMessage message;
             try {
@@ -73,32 +77,46 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
                 queueMetrics.recordDeadLetter("notifications");
                 channel.basicReject(tag, false);
                 queueMetrics.recordProcessing("notification-dispatch", "failure", started);
+                trace.deadLetter();
                 return;
             }
-            boolean accepted = processMessage(message);
-            if (accepted) channel.basicAck(tag, false); else channel.basicReject(tag, false);
-            queueMetrics.recordProcessing("notification-dispatch", accepted ? "success" : "failure", started);
+            DispatchResult result = processMessage(message);
+            if (result == DispatchResult.DEAD_LETTER) {
+                channel.basicReject(tag, false);
+                trace.deadLetter();
+            } else {
+                channel.basicAck(tag, false);
+                if (result == DispatchResult.RETRY) {
+                    trace.retry();
+                } else {
+                    trace.success();
+                }
+            }
+            queueMetrics.recordProcessing(
+                    "notification-dispatch",
+                    result == DispatchResult.SUCCESS ? "success" : "failure",
+                    started);
         } finally {
             queueMetrics.endConsumer("notifications");
         }
     }
 
-    private boolean processMessage(QueueMessage message) {
+    private DispatchResult processMessage(QueueMessage message) {
         Long outboxId = parseLong(message.body().get("outboxId"));
         TeamEventOutboxEntity event = outboxId == null
                 ? null
                 : teamEventOutboxRepository.findById(outboxId).orElse(null);
         if (event == null) {
             queueMetrics.recordDeadLetter("notifications");
-            return false;
+            return DispatchResult.DEAD_LETTER;
         }
         if (!TeamEventOutboxEntity.STATUS_PROCESSING.equals(event.getStatus())) {
-            return true;
+            return DispatchResult.SUCCESS;
         }
         try {
             dispatchIfNeeded(message);
             markProcessed(event);
-            return true;
+            return DispatchResult.SUCCESS;
         } catch (RuntimeException e) {
             return handleFailure(event, message, e);
         }
@@ -157,10 +175,10 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
         teamEventOutboxRepository.save(event);
     }
 
-    private boolean handleFailure(TeamEventOutboxEntity event, QueueMessage message, RuntimeException error) {
+    private DispatchResult handleFailure(TeamEventOutboxEntity event, QueueMessage message, RuntimeException error) {
         if (event == null) {
             queueMetrics.recordDeadLetter("notifications");
-            return false;
+            return DispatchResult.DEAD_LETTER;
         }
         LocalDateTime now = LocalDateTime.now();
         int retryCount = event.getRetryCount() == null ? 1 : event.getRetryCount() + 1;
@@ -172,12 +190,12 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
             event.setProcessedAt(now);
             teamEventOutboxRepository.save(event);
             queueMetrics.recordDeadLetter("notifications");
-            return false;
+            return DispatchResult.DEAD_LETTER;
         }
         event.setStatus(TeamEventOutboxEntity.STATUS_PENDING);
         event.setAvailableAt(now.plusSeconds(Math.min(60, retryCount * 5L)));
         teamEventOutboxRepository.save(event);
-        return true;
+        return DispatchResult.RETRY;
     }
 
     private Long parseLong(String value) {
@@ -190,5 +208,11 @@ public class TeamNotificationDispatchServiceImpl implements TeamNotificationDisp
             log.warn("Invalid outbox id in queue message: {}", value);
             return null;
         }
+    }
+
+    private enum DispatchResult {
+        SUCCESS,
+        RETRY,
+        DEAD_LETTER
     }
 }

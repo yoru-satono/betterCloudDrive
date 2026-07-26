@@ -1,6 +1,7 @@
 package com.betterclouddrive.storage.metrics;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -15,7 +16,7 @@ class StorageMetricsTest {
     @Test
     void recordsBoundedOperationOutcomesDurationsAndTransferredBytes() throws Exception {
         var registry = new SimpleMeterRegistry();
-        var metrics = new StorageMetrics(registry);
+        var metrics = new StorageMetrics(registry, OpenTelemetry.noop());
 
         assertThat(metrics.observe(StorageMetrics.Operation.PUT, () -> "stored")).isEqualTo("stored");
         assertThatThrownBy(() -> metrics.observeDownload(() -> {

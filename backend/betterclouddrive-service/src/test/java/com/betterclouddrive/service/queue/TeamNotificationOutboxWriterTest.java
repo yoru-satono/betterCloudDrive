@@ -29,7 +29,11 @@ class TeamNotificationOutboxWriterTest {
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper();
-        writer = new TeamNotificationOutboxWriter(teamEventOutboxRepository, objectMapper);
+        writer = new TeamNotificationOutboxWriter(
+                teamEventOutboxRepository,
+                objectMapper,
+                new com.betterclouddrive.service.observability.AsyncTraceService(
+                        io.opentelemetry.api.OpenTelemetry.noop()));
     }
 
     @Test

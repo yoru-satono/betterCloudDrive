@@ -12,12 +12,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class TeamEventOutboxServiceImplTest {
 
     @Mock private TeamEventOutboxRepository teamEventOutboxRepository;
+    @Spy private com.betterclouddrive.service.observability.AsyncTraceService asyncTraceService =
+            new com.betterclouddrive.service.observability.AsyncTraceService(
+                    io.opentelemetry.api.OpenTelemetry.noop());
     @InjectMocks private TeamEventOutboxServiceImpl service;
 
     @Test

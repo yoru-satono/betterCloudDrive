@@ -17,7 +17,10 @@ class TeamTaskOutboxWriterTest {
     @Mock TeamEventOutboxRepository repository;
 
     @Test void storesDurableWakeupWithTaskIdentityAndType() {
-        var writer = new TeamTaskOutboxWriter(repository);
+        var writer = new TeamTaskOutboxWriter(
+                repository,
+                new com.betterclouddrive.service.observability.AsyncTraceService(
+                        io.opentelemetry.api.OpenTelemetry.noop()));
         writer.enqueue(TeamTaskEntity.builder().id(77L).teamId(10L).actorUserId(2L).taskType("AUDIT_EXPORT").build());
         var captor = ArgumentCaptor.forClass(TeamEventOutboxEntity.class);
         verify(repository).save(captor.capture());

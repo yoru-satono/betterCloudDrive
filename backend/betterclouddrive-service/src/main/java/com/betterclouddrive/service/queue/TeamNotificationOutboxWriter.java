@@ -2,6 +2,7 @@ package com.betterclouddrive.service.queue;
 
 import com.betterclouddrive.dal.entity.TeamEventOutboxEntity;
 import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
+import com.betterclouddrive.service.observability.AsyncTraceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -22,6 +23,7 @@ public class TeamNotificationOutboxWriter {
 
     private final TeamEventOutboxRepository teamEventOutboxRepository;
     private final ObjectMapper objectMapper;
+    private final AsyncTraceService asyncTraceService;
 
     public void enqueueUser(Long userId, Long teamId, String type, String title, String content, String link, boolean email) {
         if (!StringUtils.hasText(title)) {
@@ -64,6 +66,7 @@ public class TeamNotificationOutboxWriter {
 
     private void save(Long teamId, String type, String targetType, Long targetId, NotificationDispatchPayload payload) {
         LocalDateTime now = LocalDateTime.now();
+        AsyncTraceService.TraceContext trace = asyncTraceService.capture();
         teamEventOutboxRepository.save(TeamEventOutboxEntity.builder()
                 .aggregateType(AGGREGATE_NOTIFICATION)
                 .aggregateId(teamId)
@@ -74,6 +77,8 @@ public class TeamNotificationOutboxWriter {
                 .payload(toJson(payload))
                 .messageKey(payload.contentKey())
                 .messageParams(payload.messageParams())
+                .traceparent(trace.traceparent())
+                .tracestate(trace.tracestate())
                 .status(TeamEventOutboxEntity.STATUS_PENDING)
                 .retryCount(0)
                 .availableAt(now)

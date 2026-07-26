@@ -3,6 +3,12 @@ package com.betterclouddrive.storage.metrics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 import org.springframework.stereotype.Component;
 
 import java.io.FilterInputStream;
@@ -18,12 +24,16 @@ public class StorageMetrics {
     private static final String OPERATIONS = "bcd.storage.operations";
     private static final String DURATION = "bcd.storage.operation.duration";
     private static final String BYTES = "bcd.storage.bytes";
+    private static final AttributeKey<String> TRACE_OUTCOME =
+            AttributeKey.stringKey("bcd.operation.outcome");
 
     private final MeterRegistry registry;
+    private final Tracer tracer;
     private final Map<Direction, Counter> byteCounters = new EnumMap<>(Direction.class);
 
-    public StorageMetrics(MeterRegistry registry) {
+    public StorageMetrics(MeterRegistry registry, OpenTelemetry openTelemetry) {
         this.registry = registry;
+        this.tracer = openTelemetry.getTracer("com.betterclouddrive.storage");
         for (Operation operation : Operation.values()) {
             for (Outcome outcome : Outcome.values()) {
                 registry.counter(OPERATIONS, "operation", operation.tag(), "outcome", outcome.tag());
@@ -41,12 +51,15 @@ public class StorageMetrics {
 
     public <T> T observe(Operation operation, StorageSupplier<T> supplier) throws Exception {
         Timer.Sample sample = Timer.start(registry);
-        try {
+        Span span = tracer.spanBuilder("storage." + operation.tag()).startSpan();
+        try (Scope ignored = span.makeCurrent()) {
             T result = supplier.get();
             record(operation, Outcome.SUCCESS, sample);
+            finishSpan(span, Outcome.SUCCESS);
             return result;
         } catch (Exception e) {
             record(operation, Outcome.FAILURE, sample);
+            finishSpan(span, Outcome.FAILURE);
             throw e;
         }
     }
@@ -66,15 +79,17 @@ public class StorageMetrics {
 
     public InputStream observeDownload(StorageSupplier<InputStream> supplier) throws Exception {
         Timer.Sample sample = Timer.start(registry);
-        try {
-            return trackedDownload(supplier.get(), sample);
+        Span span = tracer.spanBuilder("storage.get").startSpan();
+        try (Scope ignored = span.makeCurrent()) {
+            return trackedDownload(supplier.get(), sample, span);
         } catch (Exception e) {
             record(Operation.GET, Outcome.FAILURE, sample);
+            finishSpan(span, Outcome.FAILURE);
             throw e;
         }
     }
 
-    private InputStream trackedDownload(InputStream input, Timer.Sample sample) {
+    private InputStream trackedDownload(InputStream input, Timer.Sample sample, Span span) {
         return new FilterInputStream(input) {
             private final AtomicBoolean completed = new AtomicBoolean();
             private long bytesRead;
@@ -126,6 +141,7 @@ public class StorageMetrics {
                 if (completed.compareAndSet(false, true)) {
                     recordBytes(Direction.DOWNLOAD, bytesRead);
                     record(Operation.GET, outcome, sample);
+                    finishSpan(span, outcome);
                 }
             }
         };
@@ -134,6 +150,14 @@ public class StorageMetrics {
     private void record(Operation operation, Outcome outcome, Timer.Sample sample) {
         registry.counter(OPERATIONS, "operation", operation.tag(), "outcome", outcome.tag()).increment();
         sample.stop(registry.timer(DURATION, "operation", operation.tag(), "outcome", outcome.tag()));
+    }
+
+    private void finishSpan(Span span, Outcome outcome) {
+        span.setAttribute(TRACE_OUTCOME, outcome.tag());
+        if (outcome == Outcome.FAILURE) {
+            span.setStatus(StatusCode.ERROR);
+        }
+        span.end();
     }
 
     @FunctionalInterface

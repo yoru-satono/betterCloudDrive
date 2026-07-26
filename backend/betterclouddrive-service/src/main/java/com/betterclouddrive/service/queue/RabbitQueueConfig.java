@@ -66,7 +66,10 @@ public class RabbitQueueConfig {
     RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);
         template.setMandatory(true);
-        template.setObservationEnabled(true);
+        // AsyncTraceService owns the application message context. Enabling the
+        // template observation would replace that header with the scheduler's
+        // context after the durable outbox link has been restored.
+        template.setObservationEnabled(false);
         return template;
     }
 

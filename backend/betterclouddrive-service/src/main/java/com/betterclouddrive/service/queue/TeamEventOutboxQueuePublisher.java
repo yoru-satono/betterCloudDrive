@@ -3,6 +3,7 @@ package com.betterclouddrive.service.queue;
 import com.betterclouddrive.dal.entity.TeamEventOutboxEntity;
 import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
 import com.betterclouddrive.service.config.QueueProperties;
+import com.betterclouddrive.service.observability.AsyncTraceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class TeamEventOutboxQueuePublisher {
     private final TeamEventOutboxRepository teamEventOutboxRepository;
     private final RabbitQueueService rabbitQueueService;
     private final QueueProperties queueProperties;
+    private final AsyncTraceService asyncTraceService;
 
     public int publishPending(int batchSize) {
         if (!queueProperties.isEnabled()) {
@@ -45,29 +47,42 @@ public class TeamEventOutboxQueuePublisher {
     }
 
     private boolean publishEvent(TeamEventOutboxEntity event) {
-        try {
-            markProcessing(event);
-            teamEventOutboxRepository.save(event);
-            if (!isNotification(event) && !isTeamTask(event)) {
-                markProcessed(event);
+        String destination = isNotification(event) ? "notifications"
+                : isTeamTask(event) ? "team-tasks" : "unknown";
+        String taskType = isTeamTask(event) ? event.getTargetType() : null;
+        AsyncTraceService.TraceContext link =
+                new AsyncTraceService.TraceContext(event.getTraceparent(), event.getTracestate());
+        AsyncTraceService.TraceOperation trace =
+                asyncTraceService.startLinked("outbox.publish", link, destination, taskType);
+        try (trace) {
+            try {
+                markProcessing(event);
                 teamEventOutboxRepository.save(event);
+                if (!isNotification(event) && !isTeamTask(event)) {
+                    markProcessed(event);
+                    teamEventOutboxRepository.save(event);
+                    trace.success();
+                    return true;
+                }
+                String messageId = rabbitQueueService.publish(routingKeyFor(event), payloadFor(event));
+                if (!StringUtils.hasText(messageId)) {
+                    markFailedOrRetry(event, new IllegalStateException("RabbitMQ did not confirm the message"));
+                    teamEventOutboxRepository.save(event);
+                    recordFailureOutcome(trace, event);
+                    return false;
+                }
+                if (!isNotification(event)) {
+                    markProcessed(event);
+                    teamEventOutboxRepository.save(event);
+                }
+                trace.success();
                 return true;
-            }
-            String messageId = rabbitQueueService.publish(routingKeyFor(event), payloadFor(event));
-            if (!StringUtils.hasText(messageId)) {
-                markFailedOrRetry(event, new IllegalStateException("RabbitMQ did not confirm the message"));
+            } catch (RuntimeException e) {
+                markFailedOrRetry(event, e);
                 teamEventOutboxRepository.save(event);
+                recordFailureOutcome(trace, event);
                 return false;
             }
-            if (!isNotification(event)) {
-                markProcessed(event);
-                teamEventOutboxRepository.save(event);
-            }
-            return true;
-        } catch (RuntimeException e) {
-            markFailedOrRetry(event, e);
-            teamEventOutboxRepository.save(event);
-            return false;
         }
     }
 
@@ -145,5 +160,13 @@ public class TeamEventOutboxQueuePublisher {
         }
         event.setStatus(TeamEventOutboxEntity.STATUS_PENDING);
         event.setAvailableAt(now.plusSeconds(Math.min(60, retryCount * 5L)));
+    }
+
+    private void recordFailureOutcome(AsyncTraceService.TraceOperation trace, TeamEventOutboxEntity event) {
+        if (TeamEventOutboxEntity.STATUS_FAILED.equals(event.getStatus())) {
+            trace.deadLetter();
+        } else {
+            trace.retry();
+        }
     }
 }

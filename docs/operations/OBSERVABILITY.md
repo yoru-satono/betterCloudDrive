@@ -97,7 +97,23 @@ Prometheus 名称分别规范化为 `_seconds`、`_total` 和 `_seconds` 后缀�
 
 ## Trace 关联
 
-Spring 的 OpenTelemetry/Micrometer Observation 是 trace context 的唯一事实来源。HTTP 审计从当前真实 Span 读取 `trace_id/span_id`，RabbitTemplate 和监听容器启用 Observation，自动通过消息头传播 W3C context。
+Spring 的 OpenTelemetry/Micrometer Observation 是 trace context 的唯一事实来源。HTTP 审计从当前真实 Span 读取 `trace_id/span_id`；消息发布显式写入 W3C `traceparent`/`tracestate`，消息消费端提取它并创建 Consumer Span。监听容器保留框架级 Observation；RabbitTemplate 的发送 Observation 则关闭，避免它在发送前用调度器上下文覆盖应用已恢复的 Outbox context。
+
+事务 Outbox 和数据库后台任务不会把请求 Span 长时间保持为 parent。写入事实表时只保存 W3C context，后台执行时创建新的 root Span，并用 span link 指回原请求。这样即使消息延迟或多次重试，也不会形成跨分钟/小时的父子链或无限增长的 retry parent chain。每一次重试都是独立 trace，并链接同一个原始请求。
+
+应用定义的异步 Span 如下：
+
+| Span | Kind/关联方式 | 说明 |
+|------|---------------|------|
+| `outbox.publish` | Producer；新 root + 原请求 link | 从数据库 Outbox 发布消息，每次尝试独立 |
+| `notification.dispatch` | Consumer；消息 header parent | 消费并派发团队通知 |
+| `team_task.execute` | Consumer；消息 header parent | 消费团队任务唤醒消息 |
+| `onlyoffice.save` | Internal；新 root + 任务来源 link | 执行延迟的 OnlyOffice 保存 |
+| `storage.put` / `storage.get` | 当前执行上下文的子 Span | S3 兼容存储写入和流式读取 |
+
+自定义属性严格限制为固定枚举：`messaging.system`、`messaging.destination.name`、`bcd.task.type`、`bcd.operation.outcome`。文件名、对象 Key、payload、团队/用户/任务 ID 和异常消息均不写入 Span。未知 destination/task type 统一归为 `unknown`/`UNKNOWN`。`retry` 和 `dead_letter` 同时记录同名事件、`ERROR` 状态及对应 outcome，正常完成记录 `success`。
+
+在 Tempo 排障时，先按 `outbox.publish`、`team_task.execute` 等 Span 名称搜索，再查看 `Links` 中的原请求 trace/span；不要假定延迟任务与 HTTP 请求共享同一个 trace ID。Consumer Span 则应与对应 `outbox.publish` 处在同一 trace，并以发布 Span 为 parent。
 
 当前在应用入口使用 head sampling：dev profile 默认采样率为 `1.0`，prod profile 默认采样率为 `0.1`，均可用 `TRACING_SAMPLING_PROBABILITY` 覆盖。完整验收脚本会显式使用 `1.0`，避免 Tempo 关联测试受到概率采样影响。生产环境应根据流量和存储预算把该值维持在 `0.01-0.2` 范围；head sampling 在请求开始时决策，成本低，但不能保证保留所有错误或慢请求。若未来需要错误和慢请求优先保留，应在评估 Collector 容量后引入 tail sampling，不能同时假设上游已丢弃的 Trace 可被恢复。
 

@@ -19,7 +19,12 @@ class TeamTaskQueueConsumerImplTest {
     @Mock RabbitQueueService rabbit; @Mock TeamAuditExportTaskService audit; @Mock ThumbnailService thumbnails;
     @Mock FolderZipTaskService zip; @Mock OnlyOfficeSaveService office; @Mock QueueMetrics metrics; @Mock Channel channel;
     TeamTaskQueueConsumerImpl consumer;
-    @BeforeEach void setUp() { consumer = new TeamTaskQueueConsumerImpl(rabbit, new QueueProperties(), audit, thumbnails, zip, office, metrics); }
+    @BeforeEach void setUp() {
+        consumer = new TeamTaskQueueConsumerImpl(
+                rabbit, new QueueProperties(), audit, thumbnails, zip, office, metrics,
+                new com.betterclouddrive.service.observability.AsyncTraceService(
+                        io.opentelemetry.api.OpenTelemetry.noop()));
+    }
 
     @Test void routesAllSupportedTaskTypesAndAcknowledges() throws Exception {
         invoke("AUDIT_EXPORT"); verify(audit).processPendingExports(1);

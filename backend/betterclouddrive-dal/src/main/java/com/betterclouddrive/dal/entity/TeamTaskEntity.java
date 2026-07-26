@@ -99,6 +99,12 @@ public class TeamTaskEntity {
     @Column(name = "retry_count", nullable = false)
     private Integer retryCount;
 
+    @Column(name = "traceparent", length = 55)
+    private String traceparent;
+
+    @Column(name = "tracestate", length = 512)
+    private String tracestate;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

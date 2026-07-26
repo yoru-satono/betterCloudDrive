@@ -77,6 +77,12 @@ public class TeamEventOutboxEntity {
     @Column(name = "last_error")
     private String errorMessage;
 
+    @Column(name = "traceparent", length = 55)
+    private String traceparent;
+
+    @Column(name = "tracestate", length = 512)
+    private String tracestate;
+
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 

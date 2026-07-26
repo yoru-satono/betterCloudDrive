@@ -1,6 +1,7 @@
 package com.betterclouddrive.service.queue;
 
 import com.betterclouddrive.service.config.QueueProperties;
+import com.betterclouddrive.service.observability.AsyncTraceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
@@ -24,6 +25,7 @@ public class RabbitQueueService {
     private final RabbitAdmin rabbitAdmin;
     private final ObjectMapper objectMapper;
     private final QueueProperties properties;
+    private final AsyncTraceService asyncTraceService;
 
     public String publish(String routingKey, Map<String, String> body) {
         try {
@@ -33,6 +35,7 @@ public class RabbitQueueService {
             messageProperties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
             messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
             messageProperties.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+            asyncTraceService.injectCurrent(messageProperties);
             Message message = new Message(objectMapper.writeValueAsBytes(body), messageProperties);
             CorrelationData correlation = new CorrelationData(messageId);
             rabbitTemplate.send(properties.getRabbitmq().getExchange(), routingKey, message, correlation);

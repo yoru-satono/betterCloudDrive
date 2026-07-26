@@ -3,6 +3,7 @@ package com.betterclouddrive.service.impl;
 import com.betterclouddrive.dal.entity.TeamEventOutboxEntity;
 import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
 import com.betterclouddrive.service.TeamEventOutboxService;
+import com.betterclouddrive.service.observability.AsyncTraceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ public class TeamEventOutboxServiceImpl implements TeamEventOutboxService {
     private static final String AGGREGATE_NOTIFICATION = "NOTIFICATION";
 
     private final TeamEventOutboxRepository teamEventOutboxRepository;
+    private final AsyncTraceService asyncTraceService;
 
     @Override
     @Transactional
@@ -46,6 +48,7 @@ public class TeamEventOutboxServiceImpl implements TeamEventOutboxService {
             return;
         }
         LocalDateTime now = LocalDateTime.now();
+        AsyncTraceService.TraceContext trace = asyncTraceService.capture();
         teamEventOutboxRepository.save(TeamEventOutboxEntity.builder()
                 .aggregateType(normalize(aggregateType))
                 .aggregateId(aggregateId)
@@ -54,6 +57,8 @@ public class TeamEventOutboxServiceImpl implements TeamEventOutboxService {
                 .targetType(StringUtils.hasText(targetType) ? normalize(targetType) : null)
                 .targetId(targetId)
                 .payload(payload)
+                .traceparent(trace.traceparent())
+                .tracestate(trace.tracestate())
                 .status(TeamEventOutboxEntity.STATUS_PENDING)
                 .retryCount(0)
                 .availableAt(now)

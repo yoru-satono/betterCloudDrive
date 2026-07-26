@@ -23,7 +23,7 @@ Linux/macOS：
 | 层 | 命令 | 说明 |
 |---|---|---|
 | Java 单元测试 | `cd backend && mvn test` | 自动生成各 Maven 模块的 JaCoCo 报告 |
-| DAL/S3 集成测试 | `cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage -am` | Testcontainers 启动 PostgreSQL 18 和 SeaweedFS |
+| DAL/S3/RabbitMQ 集成测试 | `cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service -am` | Testcontainers 启动 PostgreSQL 18、SeaweedFS 和 RabbitMQ，并验证 W3C trace context 穿过真实消息代理 |
 | API 黑盒 | `cd backend-test && uv run pytest -m "not security and not webdav and not office and not observability and not resilience"` | 运行核心 HTTP 验收 |
 | 安全验收 | `cd backend-test && uv run pytest -m security` | Token、下载凭证、IDOR 和路径边界 |
 | Prometheus 配置与规则 | `./scripts/verify-all.sh --module observability` | 依次执行 `promtool check config`、`check rules`、`test rules`，再运行外部可观测性验收 |

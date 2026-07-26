@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
@@ -45,6 +46,11 @@ class OnlyOfficeSaveServiceImplTest {
 
     @Mock
     private OnlyOfficeSaveMetrics onlyOfficeSaveMetrics;
+
+    @Spy
+    private com.betterclouddrive.service.observability.AsyncTraceService asyncTraceService =
+            new com.betterclouddrive.service.observability.AsyncTraceService(
+                    io.opentelemetry.api.OpenTelemetry.noop());
 
     @InjectMocks
     private OnlyOfficeSaveServiceImpl onlyOfficeSaveService;

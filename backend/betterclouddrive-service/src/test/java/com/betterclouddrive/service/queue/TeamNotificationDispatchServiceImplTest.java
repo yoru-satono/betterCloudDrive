@@ -23,7 +23,13 @@ class TeamNotificationDispatchServiceImplTest {
     @Mock TeamNotificationOutboxWriter writer; @Mock TeamEventOutboxRepository repository; @Mock RabbitQueueService rabbit;
     @Mock NotificationService notifications; @Mock QueueMetrics metrics; @Mock Channel channel;
     QueueProperties properties; TeamNotificationDispatchServiceImpl service;
-    @BeforeEach void setUp() { properties = new QueueProperties(); service = new TeamNotificationDispatchServiceImpl(writer, repository, rabbit, notifications, properties, new ObjectMapper(), metrics); }
+    @BeforeEach void setUp() {
+        properties = new QueueProperties();
+        service = new TeamNotificationDispatchServiceImpl(
+                writer, repository, rabbit, notifications, properties, new ObjectMapper(), metrics,
+                new com.betterclouddrive.service.observability.AsyncTraceService(
+                        io.opentelemetry.api.OpenTelemetry.noop()));
+    }
 
     @Test void dispatchesNotificationMarksOutboxProcessedAndAcks() throws Exception {
         var event = processing(1L, 0); when(repository.findById(1L)).thenReturn(java.util.Optional.of(event));

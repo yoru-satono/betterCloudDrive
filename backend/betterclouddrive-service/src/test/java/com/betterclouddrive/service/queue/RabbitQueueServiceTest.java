@@ -14,7 +14,9 @@ import static org.mockito.Mockito.mock;
 
 class RabbitQueueServiceTest {
     private final RabbitQueueService service = new RabbitQueueService(
-            mock(RabbitTemplate.class), mock(RabbitAdmin.class), new ObjectMapper(), new QueueProperties());
+            mock(RabbitTemplate.class), mock(RabbitAdmin.class), new ObjectMapper(), new QueueProperties(),
+            new com.betterclouddrive.service.observability.AsyncTraceService(
+                    io.opentelemetry.api.OpenTelemetry.noop()));
 
     @Test void readsJsonPayloadAsStringMap() {
         var message = new Message("{\"outboxId\":42,\"targetType\":\"AUDIT_EXPORT\"}".getBytes(StandardCharsets.UTF_8), new MessageProperties());

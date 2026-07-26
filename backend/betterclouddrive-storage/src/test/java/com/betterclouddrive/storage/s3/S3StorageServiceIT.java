@@ -33,7 +33,9 @@ class S3StorageServiceIT {
         properties.setAccessKey("any");
         properties.setSecretKey("any");
         properties.setBucket("bcd-integration-test");
-        storage = new S3StorageServiceImpl(properties, new StorageMetrics(new SimpleMeterRegistry()));
+        storage = new S3StorageServiceImpl(
+                properties,
+                new StorageMetrics(new SimpleMeterRegistry(), io.opentelemetry.api.OpenTelemetry.noop()));
         storage.init();
     }
 
