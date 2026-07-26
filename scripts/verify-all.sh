@@ -220,7 +220,11 @@ tauri_unit_tests() { (cd frontend/src-tauri && cargo test --locked); }
 tauri_tests() { (cd frontend && pnpm run test:e2e:tauri); }
 webdav_tests() { run_pytest webdav ../test-results/webdav/junit.xml; }
 observability_tests() { run_pytest observability ../test-results/observability/junit.xml; }
-prometheus_rule_tests() { docker compose exec -T prometheus promtool test rules /etc/prometheus/tests/better-cloud-drive.test.yml; }
+prometheus_rule_tests() {
+  docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml &&
+    docker compose exec -T prometheus promtool check rules /etc/prometheus/rules/better-cloud-drive.yml &&
+    docker compose exec -T prometheus promtool test rules /etc/prometheus/tests/better-cloud-drive.test.yml
+}
 resilience_tests() { run_pytest resilience ../test-results/resilience/junit.xml; }
 android_unit_tests() { (cd android && ./gradlew testDebugUnitTest); }
 android_coverage() { (cd android && ./gradlew jacocoDebugUnitTestCoverageVerification); }

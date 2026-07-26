@@ -371,6 +371,8 @@ try {
 
     if ($RunObservability) {
         Invoke-Step "Prometheus rule tests" {
+            Invoke-External "docker" @("compose", "exec", "-T", "prometheus", "promtool", "check", "config", "/etc/prometheus/prometheus.yml")
+            Invoke-External "docker" @("compose", "exec", "-T", "prometheus", "promtool", "check", "rules", "/etc/prometheus/rules/better-cloud-drive.yml")
             Invoke-External "docker" @("compose", "exec", "-T", "prometheus", "promtool", "test", "rules", "/etc/prometheus/tests/better-cloud-drive.test.yml")
         }
         Invoke-Step "Observability acceptance" {

@@ -26,12 +26,15 @@ Linux/macOS：
 | DAL/S3 集成测试 | `cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage -am` | Testcontainers 启动 PostgreSQL 18 和 SeaweedFS |
 | API 黑盒 | `cd backend-test && uv run pytest -m "not security and not webdav and not office and not observability and not resilience"` | 运行核心 HTTP 验收 |
 | 安全验收 | `cd backend-test && uv run pytest -m security` | Token、下载凭证、IDOR 和路径边界 |
+| Prometheus 配置与规则 | `./scripts/verify-all.sh --module observability` | 依次执行 `promtool check config`、`check rules`、`test rules`，再运行外部可观测性验收 |
 | Web 单测/覆盖率 | `cd frontend && pnpm run test:coverage` | Vitest + V8 coverage |
 | Tauri Rust 单测 | `cd frontend/src-tauri && cargo test --locked` | 上传、下载、传输和设置逻辑 |
 | Android 快速门禁 | `./scripts/verify-all.sh --module android-unit` | JVM 单测、JaCoCo 报告和业务代码 80% 行覆盖率门槛 |
 | Android 完整验证 | `./scripts/verify-all.sh --module android` | 快速门禁、设备 Compose/E2E 和仪器覆盖率报告 |
 
 Testcontainers 测试不连接开发数据库，也不复用 Compose 数据；容器端口随机映射，测试结束后自动销毁。Docker 引擎不可用时 `integration` 必须失败，不能静默跳过。
+
+Prometheus 规则测试位于 `observability/prometheus-rules.test.yml`。核心告警必须覆盖健康基线、`for` 等待窗口和 firing 状态；关键恢复路径还应验证告警解除。Recording rule 测试需要包含正常流量、失败比例、空或缺失序列以及 counter reset，避免只证明 PromQL 能解析而没有证明告警语义。
 
 ## 覆盖率报告
 
