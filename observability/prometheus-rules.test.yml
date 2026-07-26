@@ -491,3 +491,37 @@ tests:
       - eval_time: 9m
         alertname: BetterCloudDriveObservationDataStale
         exp_alerts: []
+
+  - name: HTTP probe stays healthy
+    interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-http",service="frontend",instance="http://frontend/healthz"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: BetterCloudDriveHttpProbeFailed
+        exp_alerts: []
+
+  - name: HTTP probe failure respects pending window and recovers
+    interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-http",service="seaweedfs-s3",instance="http://seaweedfs:8333/"}'
+        values: '0x3 1x3'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: BetterCloudDriveHttpProbeFailed
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: BetterCloudDriveHttpProbeFailed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: blackbox-http
+              service: seaweedfs-s3
+              instance: http://seaweedfs:8333/
+            exp_annotations:
+              summary: BetterCloudDrive seaweedfs-s3 HTTP probe is failing
+              description: The seaweedfs-s3 endpoint http://seaweedfs:8333/ has failed from the application network for 2 minutes. Check the service health endpoint, container logs, and bcd-network connectivity.
+      - eval_time: 4m
+        alertname: BetterCloudDriveHttpProbeFailed
+        exp_alerts: []

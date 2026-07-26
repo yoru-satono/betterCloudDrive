@@ -1,5 +1,7 @@
 package com.betterclouddrive.storage.s3;
 
+import com.betterclouddrive.storage.metrics.StorageMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
@@ -31,7 +33,7 @@ class S3StorageServiceIT {
         properties.setAccessKey("any");
         properties.setSecretKey("any");
         properties.setBucket("bcd-integration-test");
-        storage = new S3StorageServiceImpl(properties);
+        storage = new S3StorageServiceImpl(properties, new StorageMetrics(new SimpleMeterRegistry()));
         storage.init();
     }
 

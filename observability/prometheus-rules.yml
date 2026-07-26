@@ -34,6 +34,15 @@ groups:
 
   - name: better-cloud-drive-availability
     rules:
+      - alert: BetterCloudDriveHttpProbeFailed
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: BetterCloudDrive {{ $labels.service }} HTTP probe is failing
+          description: The {{ $labels.service }} endpoint {{ $labels.instance }} has failed from the application network for 2 minutes. Check the service health endpoint, container logs, and bcd-network connectivity.
+
       - alert: BetterCloudDriveBackendDown
         expr: up{job="better-cloud-drive"} == 0
         for: 2m
@@ -137,7 +146,7 @@ groups:
           description: The {{ $labels.source }} observation source has not refreshed successfully for more than five minutes.
 
       - alert: BetterCloudDriveObservabilityTargetDown
-        expr: up{job=~"loki|tempo|otel-collector|alloy|prometheus|alertmanager"} == 0
+        expr: up{job=~"loki|tempo|otel-collector|alloy|prometheus|alertmanager|blackbox-exporter"} == 0
         for: 5m
         labels:
           severity: warning

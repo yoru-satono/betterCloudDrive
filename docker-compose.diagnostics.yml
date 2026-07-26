@@ -17,6 +17,10 @@ services:
     ports:
       - "127.0.0.1:${HOST_PROMETHEUS_PORT:-9090}:9090"
 
+  blackbox-exporter:
+    ports:
+      - "127.0.0.1:${HOST_BLACKBOX_EXPORTER_PORT:-9115}:9115"
+
   alertmanager:
     ports:
       - "127.0.0.1:${HOST_ALERTMANAGER_PORT:-9093}:9093"

@@ -1,5 +1,6 @@
 """Acceptance checks for audit correlation and the external observability chain."""
 
+import hashlib
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -8,6 +9,28 @@ import httpx
 import pytest
 
 pytestmark = pytest.mark.observability
+
+
+def _prometheus_query(query):
+    response = httpx.get("http://localhost:9090/api/v1/query", params={"query": query}, timeout=5)
+    assert response.status_code == 200, response.text
+    return response.json()["data"]["result"]
+
+
+def _wait_for_prometheus(query, predicate, timeout=45):
+    deadline = time.time() + timeout
+    samples = []
+    while time.time() < deadline:
+        samples = _prometheus_query(query)
+        if predicate(samples):
+            return samples
+        time.sleep(1)
+    raise AssertionError(f"Prometheus query did not reach the expected state: {query}; samples={samples}")
+
+
+def _metric_total(query):
+    samples = _prometheus_query(query)
+    return float(samples[0]["value"][1]) if samples else 0.0
 
 
 def test_request_id_reaches_loki_and_grafana_is_admin_only(client, auth_headers, admin_headers):
@@ -69,21 +92,27 @@ def test_prometheus_metrics_rules_and_observability_targets():
         time.sleep(1)
     assert targets is not None
     health_by_job = {target["labels"].get("job"): target["health"] for target in targets}
-    for job in ("better-cloud-drive", "prometheus", "loki", "tempo", "otel-collector", "alloy"):
+    for job in (
+        "better-cloud-drive", "prometheus", "loki", "tempo", "otel-collector", "alloy",
+        "blackbox-exporter",
+    ):
         assert health_by_job.get(job) == "up", f"Prometheus target {job} is not up: {health_by_job}"
 
-    metrics = httpx.get("http://localhost:9090/api/v1/query", params={
-        "query": 'bcd_queue_observation_available',
-    }, timeout=5)
-    assert metrics.status_code == 200
-    assert metrics.json()["data"]["result"], metrics.text
+    probes = _wait_for_prometheus(
+        'probe_success{job="blackbox-http"}',
+        lambda samples: len(samples) == 9 and all(float(sample["value"][1]) == 1 for sample in samples),
+    )
+    assert {sample["metric"]["service"] for sample in probes} == {
+        "frontend", "backend", "onlyoffice", "seaweedfs-master", "seaweedfs-filer",
+        "seaweedfs-s3", "grafana", "loki", "tempo",
+    }
 
-    availability = httpx.get("http://localhost:9090/api/v1/query", params={
-        "query": 'bcd:sli:http_availability:ratio_5m',
-    }, timeout=5)
-    assert availability.status_code == 200
-    samples = availability.json()["data"]["result"]
-    assert samples, availability.text
+    assert _prometheus_query("bcd_queue_observation_available")
+
+    samples = _wait_for_prometheus(
+        "bcd:sli:http_availability:ratio_5m",
+        lambda result: bool(result),
+    )
     assert 0 <= float(samples[0]["value"][1]) <= 1
 
     rules = httpx.get("http://localhost:9090/api/v1/rules", params={"type": "alert"}, timeout=5)
@@ -103,6 +132,61 @@ def test_prometheus_metrics_rules_and_observability_targets():
 
     alertmanager = httpx.get("http://localhost:9093/-/ready", timeout=5)
     assert alertmanager.status_code == 200
+
+
+def test_storage_lifecycle_changes_bounded_metrics(client, auth_headers, created_folder):
+    queries = {
+        "put": 'sum(bcd_storage_operations_total{operation="put",outcome="success"})',
+        "get": 'sum(bcd_storage_operations_total{operation="get",outcome="success"})',
+        "delete": 'sum(bcd_storage_operations_total{operation="delete",outcome="success"})',
+        "upload_bytes": 'sum(bcd_storage_bytes_total{direction="upload"})',
+        "download_bytes": 'sum(bcd_storage_bytes_total{direction="download"})',
+    }
+    baseline = {name: _metric_total(query) for name, query in queries.items()}
+
+    content = b"observability-storage-lifecycle"
+    file_name = f"obs_{uuid.uuid4().hex[:8]}.txt"
+    init = client.post("/api/v1/upload/init", json={
+        "parentId": created_folder["id"],
+        "fileName": file_name,
+        "fileSize": len(content),
+        "totalChunks": 1,
+        "md5Hash": hashlib.md5(content).hexdigest(),
+    }, headers=auth_headers)
+    assert init.status_code == 200 and init.json()["code"] == 200, init.text
+    session_id = init.json()["data"]["sessionId"]
+    chunk = client.post(
+        f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+        files={"file": (file_name, content, "text/plain")},
+        headers=auth_headers,
+    )
+    assert chunk.status_code == 200 and chunk.json()["code"] == 200, chunk.text
+    complete = client.post(f"/api/v1/upload/{session_id}/complete", headers=auth_headers)
+    assert complete.status_code == 200 and complete.json()["code"] == 200, complete.text
+    file_id = complete.json()["data"]["fileId"]
+
+    download = client.get(f"/api/v1/download/{file_id}", headers=auth_headers)
+    assert download.status_code == 200 and download.content == content
+    soft_delete = client.request(
+        "DELETE", "/api/v1/files", json={"fileIds": [file_id]}, headers=auth_headers,
+    )
+    assert soft_delete.status_code == 200 and soft_delete.json()["code"] == 200, soft_delete.text
+    permanent_delete = client.delete(f"/api/v1/recycle-bin/{file_id}", headers=auth_headers)
+    assert permanent_delete.status_code == 200 and permanent_delete.json()["code"] == 200, permanent_delete.text
+
+    for name, query in queries.items():
+        _wait_for_prometheus(
+            query,
+            lambda samples, previous=baseline[name]: (
+                bool(samples) and float(samples[0]["value"][1]) > previous
+            ),
+        )
+
+    operation_series = _prometheus_query("bcd_storage_operations_total")
+    assert {sample["metric"]["operation"] for sample in operation_series} == {
+        "put", "get", "delete", "head", "copy",
+    }
+    assert {sample["metric"]["outcome"] for sample in operation_series} == {"success", "failure"}
 
 
 def test_alertmanager_delivers_a_development_notification_to_mailpit():

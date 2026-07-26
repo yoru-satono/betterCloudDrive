@@ -91,7 +91,7 @@ docker compose ps
 docker compose logs -f backend
 ```
 
-`postgres`、`redis`、`rabbitmq`、`seaweedfs`、`mailpit`、`onlyoffice-documentserver`、`backend` 和 `frontend` 都定义了容器健康检查。后端只会在数据库、Redis、RabbitMQ、对象存储、邮件服务和 OnlyOffice 健康后启动，前端只会在后端健康后启动。
+`postgres`、`redis`、`rabbitmq`、`seaweedfs`、`mailpit`、`onlyoffice-documentserver`、`blackbox-exporter`、`backend` 和 `frontend` 都定义了容器健康检查。后端只会在数据库、Redis、RabbitMQ、对象存储、邮件服务和 OnlyOffice 健康后启动；Prometheus 会等待后端和 Blackbox Exporter 健康，前端只会在后端健康后启动。
 
 | 服务 | 容器内健康检查 |
 |------|----------------|
@@ -101,6 +101,7 @@ docker compose logs -f backend
 | SeaweedFS | Master `/cluster/status` |
 | Mailpit | `/api/v1/info` |
 | OnlyOffice | `/healthcheck` |
+| Blackbox Exporter | `/-/healthy` |
 | 后端 | `/actuator/health` |
 | 前端 | `/healthz` |
 

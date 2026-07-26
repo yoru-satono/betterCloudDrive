@@ -1,6 +1,7 @@
 package com.betterclouddrive.storage.s3;
 
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.storage.metrics.StorageMetrics;
 import io.minio.*;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class S3StorageServiceImpl implements StorageService {
     private static final long COMPOSE_UPLOAD_PART_SIZE = 10L * 1024 * 1024;
 
     private final S3StorageProperties props;
+    private final StorageMetrics metrics;
     private MinioClient client;
 
     @PostConstruct
@@ -43,14 +45,14 @@ public class S3StorageServiceImpl implements StorageService {
     @Override
     public String uploadObject(String objectKey, InputStream inputStream, long size, String contentType) {
         try {
-            client.putObject(
-                PutObjectArgs.builder()
-                    .bucket(props.getBucket())
-                    .object(objectKey)
-                    .stream(inputStream, size, -1L)
-                    .contentType(contentType)
-                    .build()
-            );
+            metrics.observe(StorageMetrics.Operation.PUT, () -> client.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(objectKey)
+                            .stream(inputStream, size, -1L)
+                            .contentType(contentType)
+                            .build()));
+            metrics.recordBytes(StorageMetrics.Direction.UPLOAD, size);
             return objectKey;
         } catch (Exception e) {
             log.error("Failed to upload object: {}", objectKey, e);
@@ -61,12 +63,11 @@ public class S3StorageServiceImpl implements StorageService {
     @Override
     public InputStream downloadObject(String objectKey) {
         try {
-            return client.getObject(
-                GetObjectArgs.builder()
-                    .bucket(props.getBucket())
-                    .object(objectKey)
-                    .build()
-            );
+            return metrics.observeDownload(() -> client.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(objectKey)
+                            .build()));
         } catch (Exception e) {
             log.error("Failed to download object: {}", objectKey, e);
             throw new RuntimeException("Storage download failed: " + objectKey, e);
@@ -76,14 +77,13 @@ public class S3StorageServiceImpl implements StorageService {
     @Override
     public InputStream downloadObjectRange(String objectKey, long offset, long length) {
         try {
-            return client.getObject(
-                GetObjectArgs.builder()
-                    .bucket(props.getBucket())
-                    .object(objectKey)
-                    .offset(offset)
-                    .length(length)
-                    .build()
-            );
+            return metrics.observeDownload(() -> client.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(objectKey)
+                            .offset(offset)
+                            .length(length)
+                            .build()));
         } catch (Exception e) {
             log.error("Failed to download object range: {} offset={} length={}", objectKey, offset, length, e);
             throw new RuntimeException("Storage range download failed: " + objectKey, e);
@@ -93,12 +93,11 @@ public class S3StorageServiceImpl implements StorageService {
     @Override
     public void deleteObject(String objectKey) {
         try {
-            client.removeObject(
-                RemoveObjectArgs.builder()
-                    .bucket(props.getBucket())
-                    .object(objectKey)
-                    .build()
-            );
+            metrics.observe(StorageMetrics.Operation.DELETE, () -> client.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(objectKey)
+                            .build()));
         } catch (Exception e) {
             log.warn("Failed to delete object: {}", objectKey, e);
         }
@@ -108,13 +107,13 @@ public class S3StorageServiceImpl implements StorageService {
     public String uploadPart(String prefix, int partNumber, InputStream data, long size) {
         String partKey = prefix + ".part." + (partNumber + 1);
         try {
-            client.putObject(
-                PutObjectArgs.builder()
-                    .bucket(props.getBucket())
-                    .object(partKey)
-                    .stream(data, size, -1L)
-                    .build()
-            );
+            metrics.observe(StorageMetrics.Operation.PUT, () -> client.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(partKey)
+                            .stream(data, size, -1L)
+                            .build()));
+            metrics.recordBytes(StorageMetrics.Direction.UPLOAD, size);
             return partKey;
         } catch (Exception e) {
             log.error("Failed to upload part {} for prefix {}", partNumber, prefix, e);
@@ -138,13 +137,12 @@ public class S3StorageServiceImpl implements StorageService {
 
     private void uploadComposedObject(String finalObjectKey, String sourcePrefix, int totalParts) throws Exception {
         try (InputStream stream = new SequenceInputStream(partStreams(sourcePrefix, totalParts))) {
-            client.putObject(
-                PutObjectArgs.builder()
-                    .bucket(props.getBucket())
-                    .object(finalObjectKey)
-                    .stream(stream, -1L, COMPOSE_UPLOAD_PART_SIZE)
-                    .build()
-            );
+            metrics.observe(StorageMetrics.Operation.PUT, () -> client.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(finalObjectKey)
+                            .stream(stream, -1L, COMPOSE_UPLOAD_PART_SIZE)
+                            .build()));
         }
     }
 
@@ -164,12 +162,11 @@ public class S3StorageServiceImpl implements StorageService {
                 }
                 String partKey = partKey(sourcePrefix, index++);
                 try {
-                    return client.getObject(
-                        GetObjectArgs.builder()
-                            .bucket(props.getBucket())
-                            .object(partKey)
-                            .build()
-                    );
+                    return metrics.observeDownload(() -> client.getObject(
+                            GetObjectArgs.builder()
+                                    .bucket(props.getBucket())
+                                    .object(partKey)
+                                    .build()));
                 } catch (Exception e) {
                     throw new RuntimeException("Failed to read upload part: " + partKey, e);
                 }
@@ -191,7 +188,8 @@ public class S3StorageServiceImpl implements StorageService {
     @Override
     public boolean objectExists(String objectKey) {
         try {
-            client.statObject(StatObjectArgs.builder().bucket(props.getBucket()).object(objectKey).build());
+            metrics.observe(StorageMetrics.Operation.HEAD,
+                    () -> client.statObject(StatObjectArgs.builder().bucket(props.getBucket()).object(objectKey).build()));
             return true;
         } catch (Exception e) {
             return false;
@@ -201,13 +199,12 @@ public class S3StorageServiceImpl implements StorageService {
     @Override
     public void copyObject(String sourceKey, String destKey) {
         try {
-            client.copyObject(
-                CopyObjectArgs.builder()
-                    .bucket(props.getBucket())
-                    .object(destKey)
-                    .source(SourceObject.builder().bucket(props.getBucket()).object(sourceKey).build())
-                    .build()
-            );
+            metrics.observe(StorageMetrics.Operation.COPY, () -> client.copyObject(
+                    CopyObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(destKey)
+                            .source(SourceObject.builder().bucket(props.getBucket()).object(sourceKey).build())
+                            .build()));
         } catch (Exception e) {
             log.error("Failed to copy object: {} -> {}", sourceKey, destKey, e);
             throw new RuntimeException("Storage copy failed", e);
@@ -217,8 +214,8 @@ public class S3StorageServiceImpl implements StorageService {
     @Override
     public long getObjectSize(String objectKey) {
         try {
-            return client.statObject(StatObjectArgs.builder()
-                    .bucket(props.getBucket()).object(objectKey).build()).size();
+            return metrics.observe(StorageMetrics.Operation.HEAD, () -> client.statObject(StatObjectArgs.builder()
+                    .bucket(props.getBucket()).object(objectKey).build()).size());
         } catch (Exception e) {
             log.warn("Failed to get object size: {}", objectKey, e);
             return -1;

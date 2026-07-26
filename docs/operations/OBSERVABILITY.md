@@ -10,6 +10,7 @@ Spring OpenTelemetry -> Collector -> Tempo-+
 Actuator/exporters -> Prometheus ----------+
                          |
                          +-> Alertmanager -> Mailpit（开发环境）
+Blackbox Exporter -> 关键 HTTP 端点 -------+
 ```
 
 Grafana 的 `BetterCloudDrive` 目录预置以下 Dashboard：
@@ -33,6 +34,7 @@ Prometheus 默认保留 30 天数据，配置位于 `observability/prometheus.ym
 Invoke-RestMethod http://127.0.0.1:9090/api/v1/targets
 Invoke-RestMethod 'http://127.0.0.1:9090/api/v1/rules?type=alert'
 Invoke-RestMethod http://127.0.0.1:9093/-/ready
+Invoke-RestMethod 'http://127.0.0.1:9115/probe?module=http_2xx&target=http://frontend/healthz'
 ```
 
 主 Compose 只保留容器网络访问。诊断 overlay 也仅绑定 `127.0.0.1`，不要在生产公网入口代理这些端口。
@@ -42,6 +44,28 @@ Invoke-RestMethod http://127.0.0.1:9093/-/ready
 ```powershell
 Invoke-WebRequest http://127.0.0.1:8081/actuator/prometheus
 ```
+
+## 对象存储与 HTTP 探测
+
+后端直接记录 S3 兼容对象存储调用，不依赖上层 HTTP 状态推断存储是否正常：
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `bcd.storage.operations` | Counter | `operation,outcome` | `put/get/delete/head/copy` 操作的成功与失败次数 |
+| `bcd.storage.operation.duration` | Timer | `operation,outcome` | S3 调用完成或返回响应流前的耗时 |
+| `bcd.storage.bytes` | Counter | `direction` | 实际上传或被调用方读取的 payload 字节数 |
+
+标签均来自固定枚举，不包含 bucket、对象 Key、文件名、团队或用户标识。下载字节在响应流关闭时累计；若调用方没有读取完整内容，指标只记录实际读取量。Prometheus 中对应名称为 `bcd_storage_operations_total`、`bcd_storage_operation_duration_seconds` 和 `bcd_storage_bytes_total`。
+
+Blackbox Exporter 从 `bcd-network` 内执行真实 HTTP GET，覆盖前端、后端管理健康端点、OnlyOffice、SeaweedFS Master/Filer/S3，以及 Grafana、Loki、Tempo 的只读健康端点。查询整体状态：
+
+```promql
+probe_success{job="blackbox-http"}
+```
+
+`BetterCloudDriveHttpProbeFailed` 在任一端点连续失败两分钟后触发，并在探测恢复后自动解除。先用告警的 `service` 和 `instance` 检查对应健康端点、容器日志及 `bcd-network` 连通性。Blackbox Exporter 无持久状态，主 Compose 不发布端口；诊断 overlay 仅把 `9115` 绑定到 `127.0.0.1`。
+
+当前 SeaweedFS `4.40` 的 Master 与 Filer `/metrics` 均未提供稳定 Prometheus 输出，因此本阶段只接入真实 HTTP 探测，不生成不可靠的容量、节点或 Volume 指标。后续升级 SeaweedFS 并确认其指标契约后再单独增强。
 
 ## 团队配额
 
@@ -117,7 +141,7 @@ Invoke-RestMethod "http://127.0.0.1:3200/api/traces/$traceId"
 
 ## 安全与保留策略
 
-- Loki、Tempo、Prometheus、Alertmanager、OTLP 和 Alloy 默认不发布宿主机端口。
+- Loki、Tempo、Prometheus、Alertmanager、Blackbox Exporter、OTLP 和 Alloy 默认不发布宿主机端口。
 - 审计事件默认写入数据库和 `audit.log`，但请求正文默认不采集；设置 `AUDIT_CAPTURE_BODY=true` 后也仅采集限长、可解析并脱敏的 JSON。
 - 只有来自 `OBSERVABILITY_TRUSTED_PROXY_CIDRS` 的请求才会采用 `X-Forwarded-For` / `X-Real-IP`。
 - 默认保留期为 Loki 30 天、Tempo 7 天、Prometheus 30 天。指标、日志和 trace 可按保留期淘汰，持久审计事实以 PostgreSQL 为准。

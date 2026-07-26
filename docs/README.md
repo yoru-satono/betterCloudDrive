@@ -17,7 +17,7 @@
 | 桌面端 | Tauri 2.11.5、Rust 1.88.0 |
 | Android | Android Gradle Plugin 9.3.1、Gradle 9.6.1、Kotlin 2.3.21、compileSdk/targetSdk 37、Compose BOM 2026.06.00 |
 | 核心服务 | PostgreSQL 18.4、Redis 8.8.1、RabbitMQ 4.3.4、SeaweedFS 4.40、OnlyOffice 9.3.0.1 |
-| 可观测性 | Grafana 13.1.1、Prometheus 3.13.1、Loki 3.6.13、Tempo 2.9.4、Alloy 1.18.0、OpenTelemetry Collector 0.157.0 |
+| 可观测性 | Grafana 13.1.1、Prometheus 3.13.1、Blackbox Exporter 0.28.0、Loki 3.6.13、Tempo 2.9.4、Alloy 1.18.0、OpenTelemetry Collector 0.157.0 |
 
 TypeScript 暂时保留在 6.0.3，因为 TypeScript 7 不再提供当前 i18n 检查脚本使用的编译器 API；Zod 暂时保留在 3.25.76，以兼容当前 `@vee-validate/zod` 集成。
 
