@@ -30,7 +30,15 @@ Prometheus 默认保留 30 天数据，配置位于 `observability/prometheus.ym
 
 同时提供四个低基数 SLI 记录规则：HTTP 可用率、HTTP P95 延迟、队列处理成功率和 OnlyOffice 保存成功率。当前初始目标为 HTTP/队列成功率 99%；这些数值是项目默认基线，生产上线前应根据实际流量、依赖 SLA 和错误预算重新评审。
 
-开发环境 Alertmanager 把告警发给 Mailpit 中的 `admin@betterclouddrive.local`。生产部署前必须修改 `observability/alertmanager.yml` 的 SMTP 和接收人，或改为受控的 Webhook/企业通知渠道。告警均使用持续时间窗口，避免瞬时尖峰造成告警风暴。
+开发环境继续使用 `observability/alertmanager.yml`，把告警发给 Mailpit 中的 `admin@betterclouddrive.local`。生产环境必须复制并评审 `observability/alertmanager-production.yml.example`，把 SMTP、收件人、Webhook 和密钥替换为真实值，然后通过独立 overlay 启动：
+
+```powershell
+$env:ALERTMANAGER_PRODUCTION_CONFIG_FILE = 'C:\restricted\alertmanager.yml'
+$env:PROMETHEUS_ENVIRONMENT = 'production'
+docker compose -f docker-compose.yml -f docker-compose.production-observability.yml up -d
+```
+
+生产配置按 `environment/service/alertname` 分组，warning 只发邮件，critical 同时发邮件和 Webhook；两条路径都发送 resolved。相同环境、服务和告警名的 critical 会抑制 warning，其他服务或告警不受影响。每条新增生产告警必须提供 `runbook_url`。不要把包含凭据的生产配置提交到仓库。
 
 诊断端口默认不发布；先使用 `docker-compose.diagnostics.yml` overlay 启动，再检查采集目标和告警规则：
 
@@ -117,7 +125,25 @@ Spring 的 OpenTelemetry/Micrometer Observation 是 trace context 的唯一事�
 
 当前在应用入口使用 head sampling：dev profile 默认采样率为 `1.0`，prod profile 默认采样率为 `0.1`，均可用 `TRACING_SAMPLING_PROBABILITY` 覆盖。完整验收脚本会显式使用 `1.0`，避免 Tempo 关联测试受到概率采样影响。生产环境应根据流量和存储预算把该值维持在 `0.01-0.2` 范围；head sampling 在请求开始时决策，成本低，但不能保证保留所有错误或慢请求。若未来需要错误和慢请求优先保留，应在评估 Collector 容量后引入 tail sampling，不能同时假设上游已丢弃的 Trace 可被恢复。
 
-Collector 的 trace pipeline 先经过 `memory_limiter`，再进入有界 `batch`。默认软内存上限为 `384` MiB、尖峰预留为 `96` MiB；可分别通过 `OTEL_COLLECTOR_MEMORY_LIMIT_MIB` 和 `OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB` 调整。容器内存限制应高于软上限，并为 Collector 进程本身保留余量。
+Collector 的 trace pipeline 先经过 `memory_limiter`，再进入有界 `batch`。默认软内存上限为 `384` MiB、尖峰预留为 `96` MiB；可分别通过 `OTEL_COLLECTOR_MEMORY_LIMIT_MIB` 和 `OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB` 调整。到 Tempo 的导出启用指数退避重试和有界内存队列，默认 4 个消费者、4096 批，可通过 `OTEL_COLLECTOR_QUEUE_CONSUMERS` 和 `OTEL_COLLECTOR_QUEUE_SIZE` 调整。队列不是持久队列；Tempo 长时间不可用时，数据会在重试上限或队列满后丢弃。Collector 容器限制为 640 MiB，必须让软内存上限低于容器上限并保留进程余量。
+
+## 宿主机、容器与容量告警
+
+Node Exporter 采集 Docker 宿主机 CPU、内存、文件系统空间和 inode；cAdvisor 采集容器启动时间、OOM、内存使用和限制。两者只加入内部 `bcd-network`，不发布宿主机端口。Prometheus 中应看到 `node-exporter` 和 `cadvisor` target 为 `up`：
+
+```promql
+up{job=~"node-exporter|cadvisor"}
+```
+
+默认告警提前覆盖：
+
+- 数据盘可用空间低于 15% 持续 15 分钟发 warning，低于 5% 持续 5 分钟发 critical；inode 低于 10% 持续 15 分钟发 warning。
+- 容器 15 分钟内启动时间变化超过 2 次视为频繁重启；出现 OOM 事件立即告警；受限容器内存使用超过限制的 90% 持续 10 分钟告警。
+- Prometheus 块写入、Loki 日志接收或 Tempo span 接收超过 5 MiB/s 持续 30 分钟，提示检查异常数据增长与保留预算。
+
+Docker Desktop 的 exporter 看到的是其 Linux VM，而不是 Windows/macOS 宿主机本身；生产 Linux 部署应确认 `/:/host`、`/sys`、`/var/lib/docker` 等只读挂载可见。主 Compose 没有要求 `rslave` 挂载传播，以兼容 Docker Desktop；若 Linux 主机使用动态挂载的数据盘，应在受控的生产 overlay 中为 `/host` 增加 `rslave`，并验证新挂载点能被采集。磁盘告警触发后，先用 `instance/device/mountpoint` 定位文件系统，再检查 Prometheus、Loki、Tempo 的保留期和对应命名卷增长；不要直接删除卷。
+
+可观测性容器设有 CPU、内存和 PID 上限：Exporter/Blackbox 为 192 MiB，Alertmanager/Alloy/cAdvisor 为 320 MiB，Loki/Tempo/Collector/Grafana 为 640 MiB，Prometheus 为 896 MiB。Prometheus、Loki、Tempo、Grafana 和 Alertmanager 使用命名卷；Exporter、Blackbox、Alloy 和 Collector 为无状态组件。生产调优必须同时观察 OOM、近上限告警、采集间隔和磁盘增长，不能只提高单项上限。
 
 按响应头检查 trace：
 
@@ -165,4 +191,4 @@ Invoke-RestMethod "http://127.0.0.1:3200/api/traces/$traceId"
 - 审计事件默认写入数据库和 `audit.log`，但请求正文默认不采集；设置 `AUDIT_CAPTURE_BODY=true` 后也仅采集限长、可解析并脱敏的 JSON。
 - 只有来自 `OBSERVABILITY_TRUSTED_PROXY_CIDRS` 的请求才会采用 `X-Forwarded-For` / `X-Real-IP`。
 - 默认保留期为 Loki 30 天、Tempo 7 天、Prometheus 30 天。指标、日志和 trace 可按保留期淘汰，持久审计事实以 PostgreSQL 为准。
-- 生产告警配置从 `alertmanager-production.yml.example` 复制并通过 `ALERTMANAGER_CONFIG_FILE` 挂载；warning 发邮件，critical 同时发邮件和 Webhook。
+- 生产告警配置从 `alertmanager-production.yml.example` 复制，并通过 `docker-compose.production-observability.yml` 和 `ALERTMANAGER_PRODUCTION_CONFIG_FILE` 挂载；开发环境仍由 Mailpit 接收。

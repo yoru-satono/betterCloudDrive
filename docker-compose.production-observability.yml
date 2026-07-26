@@ -1,0 +1,10 @@
+services:
+  prometheus:
+    environment:
+      PROMETHEUS_ENVIRONMENT: ${PROMETHEUS_ENVIRONMENT:-production}
+
+  alertmanager:
+    depends_on: !reset {}
+    volumes:
+      - ${ALERTMANAGER_PRODUCTION_CONFIG_FILE:?set ALERTMANAGER_PRODUCTION_CONFIG_FILE to a reviewed production config}:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanagerdata:/alertmanager

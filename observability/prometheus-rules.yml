@@ -155,7 +155,7 @@ groups:
           description: Prometheus cannot scrape {{ $labels.job }} at {{ $labels.instance }}.
 
       - alert: BetterCloudDriveInfrastructureExporterDown
-        expr: up{job=~"postgres|redis|rabbitmq"} == 0
+        expr: up{job=~"postgres|redis|rabbitmq|node-exporter|cadvisor"} == 0
         for: 5m
         labels:
           severity: warning
@@ -231,9 +231,141 @@ groups:
         for: 2m
         labels:
           severity: warning
+          service: tempo
         annotations:
           summary: Tempo trace flush failed
           description: Tempo failed to flush trace blocks during the last 10 minutes.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
+
+  - name: better-cloud-drive-host-and-containers
+    rules:
+      - alert: BetterCloudDriveHostDiskSpaceLow
+        expr: |
+          (
+            node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}
+            /
+            clamp_min(node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}, 1)
+          ) < 0.15
+          and on(instance, device, mountpoint)
+          node_filesystem_readonly{job="node-exporter"} == 0
+        for: 15m
+        labels:
+          severity: warning
+          service: host-storage
+        annotations:
+          summary: Host filesystem free space is below 15%
+          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is approaching capacity; database or object-storage writes may fail.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
+
+      - alert: BetterCloudDriveHostDiskSpaceCritical
+        expr: |
+          (
+            node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}
+            /
+            clamp_min(node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}, 1)
+          ) < 0.05
+          and on(instance, device, mountpoint)
+          node_filesystem_readonly{job="node-exporter"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: host-storage
+        annotations:
+          summary: Host filesystem free space is below 5%
+          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is critically full.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
+
+      - alert: BetterCloudDriveHostInodesLow
+        expr: |
+          (
+            node_filesystem_files_free{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}
+            /
+            clamp_min(node_filesystem_files{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}, 1)
+          ) < 0.10
+          and on(instance, device, mountpoint)
+          node_filesystem_readonly{job="node-exporter"} == 0
+        for: 15m
+        labels:
+          severity: warning
+          service: host-storage
+        annotations:
+          summary: Host filesystem free inodes are below 10%
+          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is approaching inode exhaustion.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
+
+      - alert: BetterCloudDriveContainerRestartLoop
+        expr: |
+          changes(container_start_time_seconds{
+            job="cadvisor",
+            container_label_com_docker_compose_project="betterclouddrive",
+            container_label_com_docker_compose_service!=""
+          }[15m]) > 2
+        labels:
+          severity: warning
+          service: containers
+        annotations:
+          summary: BetterCloudDrive container is restarting repeatedly
+          description: Container {{ $labels.name }} restarted more than twice in fifteen minutes.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
+
+      - alert: BetterCloudDriveContainerOomKilled
+        expr: |
+          increase(container_oom_events_total{
+            job="cadvisor",
+            container_label_com_docker_compose_project="betterclouddrive",
+            container_label_com_docker_compose_service!=""
+          }[15m]) > 0
+        labels:
+          severity: critical
+          service: containers
+        annotations:
+          summary: BetterCloudDrive container was OOM killed
+          description: Container {{ $labels.name }} recorded an out-of-memory event in the last fifteen minutes.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
+
+      - alert: BetterCloudDriveContainerMemoryNearLimit
+        expr: |
+          (
+            container_memory_working_set_bytes{
+              job="cadvisor",
+              container_label_com_docker_compose_project="betterclouddrive",
+              container_label_com_docker_compose_service!=""
+            }
+            /
+            clamp_min(container_spec_memory_limit_bytes{
+              job="cadvisor",
+              container_label_com_docker_compose_project="betterclouddrive",
+              container_label_com_docker_compose_service!=""
+            }, 1)
+          ) > 0.90
+          and
+          container_spec_memory_limit_bytes{
+            job="cadvisor",
+            container_label_com_docker_compose_project="betterclouddrive",
+            container_label_com_docker_compose_service!=""
+          } < 9e18
+        for: 10m
+        labels:
+          severity: warning
+          service: containers
+        annotations:
+          summary: BetterCloudDrive container memory is near its limit
+          description: Container {{ $labels.name }} has used more than 90% of its memory limit for ten minutes.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
+
+      - alert: BetterCloudDriveObservabilityDataGrowthHigh
+        expr: |
+          deriv(prometheus_tsdb_storage_blocks_bytes{job="prometheus"}[30m]) > 5242880
+          or rate(loki_distributor_bytes_received_total{job="loki"}[15m]) > 5242880
+          or rate(tempo_distributor_bytes_received_total{job="tempo"}[15m]) > 5242880
+        for: 30m
+        labels:
+          severity: warning
+          service: observability-storage
+        annotations:
+          summary: Observability data is growing unusually fast
+          description: Prometheus, Loki, or Tempo data has grown above the initial 5 MiB/s safety baseline for thirty minutes.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
 
   - name: better-cloud-drive-slo
     rules:

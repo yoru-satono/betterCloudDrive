@@ -3,34 +3,49 @@ global:
   smtp_smarthost: smtp.example.com:587
   smtp_from: alerts@example.com
   smtp_auth_username: alerts@example.com
-  smtp_auth_password: replace_with_smtp_password
+  smtp_auth_password: replace_with_secret_from_restricted_file
   smtp_require_tls: true
 
 route:
-  receiver: production-email
-  group_by: [alertname, severity]
+  receiver: production-warning
+  group_by: [environment, service, alertname]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
   routes:
     - matchers: ['severity="critical"']
       receiver: production-critical
+      group_wait: 10s
+      repeat_interval: 1h
+    - matchers: ['severity="warning"']
+      receiver: production-warning
 
 receivers:
-  - name: production-email
+  - name: production-warning
     email_configs:
       - to: operations@example.com
         send_resolved: true
+        html: >-
+          <h2>{{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}</h2>
+          <p>{{ .CommonAnnotations.description }}</p>
+          <p><a href="{{ .CommonAnnotations.runbook_url }}">Open runbook</a></p>
 
   - name: production-critical
     email_configs:
       - to: operations@example.com
         send_resolved: true
+        html: >-
+          <h2>{{ .Status | toUpper }}: {{ .CommonAnnotations.summary }}</h2>
+          <p>{{ .CommonAnnotations.description }}</p>
+          <p><a href="{{ .CommonAnnotations.runbook_url }}">Open runbook</a></p>
     webhook_configs:
       - url: https://notifications.example.com/alertmanager
         send_resolved: true
+        max_alerts: 20
 
+# A critical alert suppresses its warning instance for the same environment
+# and service, while unrelated alerts and services continue notifying.
 inhibit_rules:
   - source_matchers: ['severity="critical"']
     target_matchers: ['severity="warning"']
-    equal: [alertname]
+    equal: [environment, service, alertname]

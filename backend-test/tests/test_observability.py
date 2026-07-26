@@ -199,7 +199,7 @@ def test_prometheus_metrics_rules_and_observability_targets():
     health_by_job = {target["labels"].get("job"): target["health"] for target in targets}
     for job in (
         "better-cloud-drive", "prometheus", "loki", "tempo", "otel-collector", "alloy",
-        "blackbox-exporter",
+        "blackbox-exporter", "node-exporter", "cadvisor",
     ):
         assert health_by_job.get(job) == "up", f"Prometheus target {job} is not up: {health_by_job}"
 

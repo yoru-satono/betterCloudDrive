@@ -1,3 +1,23 @@
+x-observability-tiny: &observability-tiny
+  cpus: 0.20
+  mem_limit: 192m
+  pids_limit: 128
+
+x-observability-small: &observability-small
+  cpus: 0.35
+  mem_limit: 320m
+  pids_limit: 192
+
+x-observability-medium: &observability-medium
+  cpus: 0.60
+  mem_limit: 640m
+  pids_limit: 256
+
+x-observability-large: &observability-large
+  cpus: 0.80
+  mem_limit: 896m
+  pids_limit: 320
+
 services:
   # ==================== 基础设施 ====================
 
@@ -123,6 +143,7 @@ services:
       - bcd-network
 
   loki:
+    <<: *observability-medium
     image: grafana/loki:3.6.13
     container_name: bcd-loki
     restart: unless-stopped
@@ -144,6 +165,7 @@ services:
       - bcd-network
 
   tempo:
+    <<: *observability-medium
     image: grafana/tempo:2.9.4
     container_name: bcd-tempo
     restart: unless-stopped
@@ -165,6 +187,7 @@ services:
       - bcd-network
 
   otel-collector:
+    <<: *observability-medium
     image: otel/opentelemetry-collector-contrib:0.157.0
     container_name: bcd-otel-collector
     restart: unless-stopped
@@ -173,6 +196,8 @@ services:
     environment:
       OTEL_COLLECTOR_MEMORY_LIMIT_MIB: ${OTEL_COLLECTOR_MEMORY_LIMIT_MIB:-384}
       OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB: ${OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB:-96}
+      OTEL_COLLECTOR_QUEUE_SIZE: ${OTEL_COLLECTOR_QUEUE_SIZE:-4096}
+      OTEL_COLLECTOR_QUEUE_CONSUMERS: ${OTEL_COLLECTOR_QUEUE_CONSUMERS:-4}
     command: ["--config=/etc/otel/config.yml"]
     volumes:
       - ./observability/otel-collector.yml:/etc/otel/config.yml:ro
@@ -187,6 +212,7 @@ services:
       - bcd-network
 
   alloy:
+    <<: *observability-small
     image: grafana/alloy:v1.18.0
     container_name: bcd-alloy
     restart: unless-stopped
@@ -219,6 +245,7 @@ services:
       - bcd-network
 
   blackbox-exporter:
+    <<: *observability-tiny
     image: prom/blackbox-exporter:v0.28.0
     container_name: bcd-blackbox-exporter
     restart: unless-stopped
@@ -235,6 +262,7 @@ services:
       - bcd-network
 
   prometheus:
+    <<: *observability-large
     image: prom/prometheus:v3.13.1
     container_name: bcd-prometheus
     restart: unless-stopped
@@ -245,6 +273,8 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-30d}
       - --web.enable-lifecycle
+    environment:
+      PROMETHEUS_ENVIRONMENT: ${PROMETHEUS_ENVIRONMENT:-development}
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./observability/prometheus-rules.yml:/etc/prometheus/rules/better-cloud-drive.yml:ro
@@ -264,12 +294,14 @@ services:
       - bcd-network
 
   alertmanager:
+    <<: *observability-small
     image: prom/alertmanager:v0.33.1
     container_name: bcd-alertmanager
     restart: unless-stopped
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
+      - --data.retention=${ALERTMANAGER_RETENTION_TIME:-120h}
     volumes:
       - ${ALERTMANAGER_CONFIG_FILE:-./observability/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
       - alertmanagerdata:/alertmanager
@@ -285,6 +317,7 @@ services:
       - bcd-network
 
   postgres-exporter:
+    <<: *observability-tiny
     image: prometheuscommunity/postgres-exporter:v0.20.1
     container_name: bcd-postgres-exporter
     restart: unless-stopped
@@ -297,6 +330,7 @@ services:
       - bcd-network
 
   redis-exporter:
+    <<: *observability-tiny
     image: oliver006/redis_exporter:v1.88.0-alpine
     container_name: bcd-redis-exporter
     restart: unless-stopped
@@ -305,6 +339,49 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    networks:
+      - bcd-network
+
+  node-exporter:
+    <<: *observability-tiny
+    image: prom/node-exporter:v1.10.2
+    container_name: bcd-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($|/)
+    pid: host
+    volumes:
+      - /:/host:ro
+    healthcheck:
+      test: ["CMD", "/bin/node_exporter", "--version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - bcd-network
+
+  cadvisor:
+    <<: *observability-small
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: bcd-cadvisor
+    restart: unless-stopped
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --storage_duration=2m
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    healthcheck:
+      test: ["CMD", "/usr/bin/cadvisor", "-version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - bcd-network
 
@@ -323,6 +400,7 @@ services:
       - bcd-network
 
   grafana:
+    <<: *observability-medium
     image: grafana/grafana:13.1.1
     container_name: bcd-grafana
     restart: unless-stopped

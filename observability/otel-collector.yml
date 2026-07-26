@@ -21,6 +21,15 @@ exporters:
     endpoint: ${env:OTEL_COLLECTOR_TEMPO_ENDPOINT}
     tls:
       insecure: true
+    sending_queue:
+      enabled: true
+      num_consumers: ${env:OTEL_COLLECTOR_QUEUE_CONSUMERS}
+      queue_size: ${env:OTEL_COLLECTOR_QUEUE_SIZE}
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 5m
 
   debug:
     verbosity: basic
