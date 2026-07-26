@@ -57,7 +57,11 @@ Invoke-WebRequest http://127.0.0.1:8081/actuator/prometheus
 
 ## Trace 关联
 
-Spring 的 OpenTelemetry/Micrometer Observation 是 trace context 的唯一事实来源。HTTP 审计从当前真实 Span 读取 `trace_id/span_id`，RabbitTemplate 和监听容器启用 Observation，自动通过消息头传播 W3C context。生产环境建议将 `TRACING_SAMPLING_PROBABILITY` 调低到 `0.01-0.2`；开发和验收环境可保持 `1.0`。
+Spring 的 OpenTelemetry/Micrometer Observation 是 trace context 的唯一事实来源。HTTP 审计从当前真实 Span 读取 `trace_id/span_id`，RabbitTemplate 和监听容器启用 Observation，自动通过消息头传播 W3C context。
+
+当前在应用入口使用 head sampling：dev profile 默认采样率为 `1.0`，prod profile 默认采样率为 `0.1`，均可用 `TRACING_SAMPLING_PROBABILITY` 覆盖。完整验收脚本会显式使用 `1.0`，避免 Tempo 关联测试受到概率采样影响。生产环境应根据流量和存储预算把该值维持在 `0.01-0.2` 范围；head sampling 在请求开始时决策，成本低，但不能保证保留所有错误或慢请求。若未来需要错误和慢请求优先保留，应在评估 Collector 容量后引入 tail sampling，不能同时假设上游已丢弃的 Trace 可被恢复。
+
+Collector 的 trace pipeline 先经过 `memory_limiter`，再进入有界 `batch`。默认软内存上限为 `384` MiB、尖峰预留为 `96` MiB；可分别通过 `OTEL_COLLECTOR_MEMORY_LIMIT_MIB` 和 `OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB` 调整。容器内存限制应高于软上限，并为 Collector 进程本身保留余量。
 
 按响应头检查 trace：
 

@@ -209,7 +209,7 @@ management:
       otlp:
         enabled: ${TRACING_EXPORT_OTLP_ENABLED:true}
     sampling:
-      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
   opentelemetry:
     tracing:
       export:

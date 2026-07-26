@@ -17,3 +17,8 @@ logging:
     com.betterclouddrive: DEBUG
     org.springframework.security: DEBUG
     org.springframework.jdbc: DEBUG
+
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}

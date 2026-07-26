@@ -170,6 +170,9 @@ services:
     restart: unless-stopped
     env_file:
       - ./config/env-files/observability.env
+    environment:
+      OTEL_COLLECTOR_MEMORY_LIMIT_MIB: ${OTEL_COLLECTOR_MEMORY_LIMIT_MIB:-384}
+      OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB: ${OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB:-96}
     command: ["--config=/etc/otel/config.yml"]
     volumes:
       - ./observability/otel-collector.yml:/etc/otel/config.yml:ro
@@ -372,6 +375,7 @@ services:
       - ./config/env-files/mail.env
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-0.1}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
       MAIL_FROM: ${MAIL_FROM:-noreply@betterclouddrive.local}
       GRAFANA_AUTH_COOKIE_SECURE: ${GRAFANA_AUTH_COOKIE_SECURE:-false}

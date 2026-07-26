@@ -230,10 +230,12 @@ try {
     }
 
     if ($NeedsDocker) { Invoke-Step "Start Docker stack" {
-        if ($SkipDockerBuild) {
-            Invoke-External "docker" @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml", "up", "-d")
-        } else {
-            Invoke-External "docker" @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml", "up", "-d", "--build")
+        Invoke-WithEnv @{ TRACING_SAMPLING_PROBABILITY = "1.0" } {
+            if ($SkipDockerBuild) {
+                Invoke-External "docker" @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml", "up", "-d")
+            } else {
+                Invoke-External "docker" @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml", "up", "-d", "--build")
+            }
         }
         $script:StackStarted = $true
     } }

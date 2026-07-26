@@ -7,10 +7,17 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: ${env:OTEL_COLLECTOR_MEMORY_LIMIT_MIB}
+    spike_limit_mib: ${env:OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB}
   batch:
+    timeout: 5s
+    send_batch_size: 512
+    send_batch_max_size: 1024
 
 exporters:
-  otlp/tempo:
+  otlp_grpc/tempo:
     endpoint: ${env:OTEL_COLLECTOR_TEMPO_ENDPOINT}
     tls:
       insecure: true
@@ -30,5 +37,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [batch]
-      exporters: [otlp/tempo]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_grpc/tempo]

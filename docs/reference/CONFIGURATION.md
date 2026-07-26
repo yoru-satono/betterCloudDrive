@@ -472,11 +472,13 @@ Web 前端地址解析顺序：
 | `OTEL_HTTP_PORT` | OTel Collector HTTP 端口标记 |
 | `METRICS_EXPORT_OTLP_ENABLED` | 是否通过 OTLP 导出 metrics |
 | `TRACING_ENABLED` | 是否启用 tracing 导出 |
-| `TRACING_SAMPLING_PROBABILITY` | trace 采样率，`1.0` 表示全量 |
+| `TRACING_SAMPLING_PROBABILITY` | head sampling 采样率；dev 默认 `1.0`，prod 默认 `0.1`，完整验收显式使用 `1.0` |
 | `TRACING_EXPORT_OTLP_ENABLED` | 是否通过 OTLP 导出 traces |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | 通用 OTLP endpoint |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | 后端 trace OTLP HTTP endpoint |
 | `OTEL_COLLECTOR_TEMPO_ENDPOINT` | Collector 转发到 Tempo 的 gRPC 地址 |
+| `OTEL_COLLECTOR_MEMORY_LIMIT_MIB` | Collector 软内存上限，默认 `384` MiB；达到上限时拒绝新遥测数据以保护进程 |
+| `OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB` | Collector 短时内存尖峰预留，默认 `96` MiB，必须小于内存上限 |
 | `ALLOY_LOKI_PUSH_URL` | Alloy 推送 Loki 的地址 |
 | `SYSTEM_LOG_DEFAULT_LIMIT` | 管理后台系统日志默认返回条数 |
 | `SYSTEM_LOG_MAX_LIMIT` | 管理后台系统日志最大返回条数 |

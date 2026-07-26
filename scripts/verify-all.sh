@@ -160,9 +160,11 @@ prepare_env() {
 
 start_stack() {
   if ((skip_docker_build)); then
-    docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d
+    TRACING_SAMPLING_PROBABILITY=1.0 \
+      docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d
   else
-    docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d --build
+    TRACING_SAMPLING_PROBABILITY=1.0 \
+      docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d --build
   fi
   stack_started=1
 }
