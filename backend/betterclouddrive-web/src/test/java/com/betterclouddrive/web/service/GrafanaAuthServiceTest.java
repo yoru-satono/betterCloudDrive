@@ -94,6 +94,33 @@ class GrafanaAuthServiceTest {
     }
 
     @Test
+    void expiredCookieIsRejected() {
+        properties.getGrafanaAuth().setTtlSeconds(-1);
+        UserEntity admin = user(1L, "admin", "admin@test.local", "ROLE_ADMIN", 1);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
+        MockHttpServletResponse issueResponse = new MockHttpServletResponse();
+        service.issueSession(authentication(1L, "admin", "ROLE_ADMIN"), issueResponse);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/grafana/auth");
+        request.setCookies(new Cookie("BCD_GRAFANA_SESSION", cookieValue(issueResponse.getHeader(HttpHeaders.SET_COOKIE))));
+
+        assertThatThrownBy(() -> service.authenticateProxyRequest(request, new MockHttpServletResponse()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("Grafana session is expired");
+    }
+
+    @Test
+    void clientSuppliedAuthProxyHeadersCannotReplaceTheSessionCookie() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/grafana/auth");
+        request.addHeader(GrafanaAuthService.HEADER_USER, "forged-admin");
+        request.addHeader(GrafanaAuthService.HEADER_ROLE, "Admin");
+
+        assertThatThrownBy(() -> service.authenticateProxyRequest(request, new MockHttpServletResponse()))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessage("Grafana session is missing");
+    }
+
+    @Test
     void secureCookieIsConfigurable() {
         properties.getGrafanaAuth().setCookieSecure(true);
         UserEntity admin = user(1L, "admin", "admin@test.local", "ROLE_ADMIN", 1);

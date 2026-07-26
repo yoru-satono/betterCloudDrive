@@ -36,6 +36,8 @@ Testcontainers 测试不连接开发数据库，也不复用 Compose 数据；�
 
 Prometheus 规则测试位于 `observability/prometheus-rules.test.yml`。核心告警必须覆盖健康基线、`for` 等待窗口和 firing 状态；关键恢复路径还应验证告警解除。Recording rule 测试需要包含正常流量、失败比例、空或缺失序列以及 counter reset，避免只证明 PromQL 能解析而没有证明告警语义。
 
+`observability` 验收还会经过前端 Nginx 的真实 `/grafana/` 路径，验证匿名用户、普通用户、伪造 Auth Proxy Header 和无效短期 Cookie 均被拒绝；管理员则必须能加载 Grafana、查询健康状态、取得 Admin 组织角色、读取四个预置数据源与 Dashboard，并通过 Grafana 的 Prometheus 数据源执行查询。
+
 ## 覆盖率报告
 
 报告统一写入未跟踪的 `test-results/coverage/`：

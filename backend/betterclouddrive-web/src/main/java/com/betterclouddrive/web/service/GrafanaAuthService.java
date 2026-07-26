@@ -117,7 +117,7 @@ public class GrafanaAuthService {
         } catch (NumberFormatException e) {
             throw new AccessDeniedException("Grafana session identifiers are invalid");
         }
-        if (Instant.now().getEpochSecond() > expiresAt) {
+        if (Instant.now().getEpochSecond() >= expiresAt) {
             throw new AccessDeniedException("Grafana session is expired");
         }
 

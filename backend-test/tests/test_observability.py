@@ -26,6 +26,13 @@ EXPECTED_DASHBOARDS = {
     "bcd-business-operations": "BetterCloudDrive / Async & Collaboration",
     "bcd-infrastructure": "BetterCloudDrive / Infrastructure",
 }
+EXPECTED_DATASOURCES = {
+    "bcd-prometheus": "prometheus",
+    "bcd-loki": "loki",
+    "bcd-tempo": "tempo",
+    "bcd-alertmanager": "alertmanager",
+}
+GRAFANA_URL = "http://localhost:3000/grafana"
 
 
 def _prometheus_query(query):
@@ -48,6 +55,11 @@ def _wait_for_prometheus(query, predicate, timeout=45):
 def _metric_total(query):
     samples = _prometheus_query(query)
     return float(samples[0]["value"][1]) if samples else 0.0
+
+
+def _tamper(value):
+    replacement = "A" if value[-1] != "A" else "B"
+    return value[:-1] + replacement
 
 
 def test_request_id_reaches_loki_and_grafana_is_admin_only(client, auth_headers, admin_headers):
@@ -94,6 +106,82 @@ def test_request_id_reaches_loki_and_grafana_is_admin_only(client, auth_headers,
         assert trace.status_code == 404, trace.text
         time.sleep(1)
     assert trace_found, f"trace ID {trace_id} from the response was not found in Tempo"
+
+
+def test_grafana_auth_proxy_end_to_end(auth_headers, admin_headers):
+    forged_headers = {
+        "X-WEBAUTH-USER": "forged-admin",
+        "X-WEBAUTH-NAME": "Forged Admin",
+        "X-WEBAUTH-EMAIL": "forged-admin@test.local",
+        "X-WEBAUTH-ROLE": "Admin",
+    }
+    with httpx.Client(base_url="http://localhost:8080", timeout=30) as anonymous:
+        denied = anonymous.get(f"{GRAFANA_URL}/")
+        assert denied.status_code == 401, denied.text
+        forged = anonymous.get(f"{GRAFANA_URL}/api/health", headers=forged_headers)
+        assert forged.status_code == 401, forged.text
+
+    with httpx.Client(base_url="http://localhost:8080", timeout=30) as ordinary:
+        session = ordinary.post("/api/v1/admin/grafana/session", headers=auth_headers)
+        assert session.status_code in (401, 403) or session.json().get("code") == 403
+        denied = ordinary.get(
+            f"{GRAFANA_URL}/api/health",
+            headers={**auth_headers, **forged_headers},
+        )
+        assert denied.status_code == 401, denied.text
+
+    with httpx.Client(base_url="http://localhost:8080", timeout=30) as admin:
+        session = admin.post("/api/v1/admin/grafana/session", headers=admin_headers)
+        assert session.status_code == 200 and session.json()["code"] == 200, session.text
+        cookie = admin.cookies.get("BCD_GRAFANA_SESSION")
+        assert cookie
+
+        home = admin.get(f"{GRAFANA_URL}/")
+        assert home.status_code == 200 and "Grafana" in home.text
+
+        health = admin.get(f"{GRAFANA_URL}/api/health")
+        assert health.status_code == 200, health.text
+        assert health.json()["database"] == "ok"
+
+        organizations = admin.get(f"{GRAFANA_URL}/api/user/orgs")
+        assert organizations.status_code == 200, organizations.text
+        assert any(
+            organization["orgId"] == 1 and organization["role"] == "Admin"
+            for organization in organizations.json()
+        )
+
+        datasources = admin.get(f"{GRAFANA_URL}/api/datasources")
+        assert datasources.status_code == 200, datasources.text
+        provisioned_datasources = {
+            datasource["uid"]: datasource["type"]
+            for datasource in datasources.json()
+        }
+        assert provisioned_datasources == EXPECTED_DATASOURCES
+
+        query = admin.post(f"{GRAFANA_URL}/api/ds/query", json={
+            "from": str(int((time.time() - 60) * 1000)),
+            "to": str(int(time.time() * 1000)),
+            "queries": [{
+                "refId": "A",
+                "datasource": {"uid": "bcd-prometheus", "type": "prometheus"},
+                "expr": "vector(1)",
+                "format": "time_series",
+                "instant": True,
+            }],
+        })
+        assert query.status_code == 200, query.text
+        frames = query.json()["results"]["A"]["frames"]
+        assert frames and frames[0]["data"]["values"][1][-1] == 1
+
+    with httpx.Client(timeout=30) as invalid:
+        invalid.cookies.set(
+            "BCD_GRAFANA_SESSION",
+            _tamper(cookie),
+            domain="localhost",
+            path="/",
+        )
+        rejected = invalid.get(f"{GRAFANA_URL}/api/health")
+        assert rejected.status_code == 401, rejected.text
 
 
 def test_prometheus_metrics_rules_and_observability_targets():
