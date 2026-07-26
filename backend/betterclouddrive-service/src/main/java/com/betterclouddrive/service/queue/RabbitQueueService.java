@@ -49,6 +49,33 @@ public class RabbitQueueService {
         }
     }
 
+    public void republish(String routingKey, String messageId, String payload,
+                          String traceparent, String tracestate, String replayToken) {
+        try {
+            MessageProperties messageProperties = new MessageProperties();
+            messageProperties.setMessageId(messageId);
+            messageProperties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+            messageProperties.setContentEncoding(StandardCharsets.UTF_8.name());
+            messageProperties.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+            if (traceparent != null && !traceparent.isBlank()) {
+                messageProperties.setHeader(AsyncTraceService.TRACEPARENT, traceparent);
+            }
+            if (tracestate != null && !tracestate.isBlank()) {
+                messageProperties.setHeader(AsyncTraceService.TRACESTATE, tracestate);
+            }
+            messageProperties.setHeader("bcd-replay-token", replayToken);
+            Message message = new Message(payload.getBytes(StandardCharsets.UTF_8), messageProperties);
+            CorrelationData correlation = new CorrelationData(messageId);
+            rabbitTemplate.send(properties.getRabbitmq().getExchange(), routingKey, message, correlation);
+            CorrelationData.Confirm confirm = correlation.getFuture().get(10, TimeUnit.SECONDS);
+            if (!confirm.ack() || correlation.getReturned() != null) {
+                throw new IllegalStateException("RabbitMQ rejected dead-letter replay");
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("RabbitMQ dead-letter replay failed", e);
+        }
+    }
+
     public Map<String, String> read(Message message) {
         try {
             Map<?, ?> raw = objectMapper.readValue(message.getBody(), Map.class);

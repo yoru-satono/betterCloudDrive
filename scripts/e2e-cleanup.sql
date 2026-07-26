@@ -77,6 +77,11 @@ deleted_audit AS (
         )
     RETURNING 1
 ),
+deleted_test_dead_letters AS (
+    DELETE FROM dead_letter_records
+    WHERE test_marker LIKE 'bcd-e2e:%'
+    RETURNING 1
+),
 deleted_teams AS (
     DELETE FROM teams
     WHERE id IN (SELECT id FROM bcd_e2e_teams)
@@ -96,6 +101,7 @@ SELECT
     (SELECT count(*) FROM deleted_test_invites) AS deleted_test_invites,
     (SELECT count(*) FROM deleted_notifications) AS deleted_notifications,
     (SELECT count(*) FROM deleted_team_audit) AS deleted_team_audit,
+    (SELECT count(*) FROM deleted_test_dead_letters) AS deleted_test_dead_letters,
     (SELECT count(*) FROM deleted_audit) AS deleted_audit;
 
 COMMIT;

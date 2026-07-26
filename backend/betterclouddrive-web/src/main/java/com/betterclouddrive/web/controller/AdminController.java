@@ -10,6 +10,10 @@ import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.service.AdminService;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.OperationLogService;
+import com.betterclouddrive.service.DeadLetterService;
+import com.betterclouddrive.service.dto.DeadLetterView;
+import com.betterclouddrive.web.dto.request.AdminDiscardDeadLetterRequest;
+import com.betterclouddrive.web.dto.request.AdminReplayDeadLettersRequest;
 import com.betterclouddrive.service.dto.AdminTeamRecoveryDetails;
 import com.betterclouddrive.web.dto.request.AdminUpdateTeamQuotaRequest;
 import com.betterclouddrive.web.dto.request.AdminUpdateUserQuotaRequest;
@@ -34,6 +38,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -48,6 +53,7 @@ public class AdminController {
     private final SystemLogQueryService systemLogQueryService;
     private final GrafanaAuthService grafanaAuthService;
     private final AuditCsvExporter auditCsvExporter;
+    private final DeadLetterService deadLetterService;
 
     // ==================== User Management ====================
 
@@ -251,6 +257,38 @@ public class AdminController {
     @GetMapping("/stats")
     public ApiResponse<Map<String, Object>> getStats() {
         return ApiResponse.success(adminService.getSystemStats());
+    }
+
+    // ==================== Dead-letter Management ====================
+
+    @GetMapping("/dead-letters")
+    public ApiResponse<PageResult<DeadLetterView>> listDeadLetters(
+            @RequestParam(required = false) String queue,
+            @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "OPEN") String status,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") @Max(100) int size) {
+        return ApiResponse.success(deadLetterService.list(queue, category, status, page, size));
+    }
+
+    @GetMapping("/dead-letters/{id}")
+    public ApiResponse<DeadLetterView> getDeadLetter(@PathVariable UUID id) {
+        return ApiResponse.success(deadLetterService.get(id));
+    }
+
+    @PostMapping("/dead-letters/replay")
+    public ApiResponse<List<DeadLetterView>> replayDeadLetters(
+            @CurrentUser UserPrincipal user,
+            @Valid @RequestBody AdminReplayDeadLettersRequest request) {
+        return ApiResponse.success(deadLetterService.replay(user.getUserId(), request.ids()));
+    }
+
+    @PostMapping("/dead-letters/{id}/discard")
+    public ApiResponse<DeadLetterView> discardDeadLetter(
+            @CurrentUser UserPrincipal user,
+            @PathVariable UUID id,
+            @Valid @RequestBody AdminDiscardDeadLetterRequest request) {
+        return ApiResponse.success(deadLetterService.discard(user.getUserId(), id, request.reason()));
     }
 
 }

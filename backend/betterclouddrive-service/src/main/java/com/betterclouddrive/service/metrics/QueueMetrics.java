@@ -29,6 +29,7 @@ public class QueueMetrics {
     private final TeamTaskRepository tasks;
     private final QueueProperties properties;
     private final ObservationMetrics observationMetrics;
+    private final DeadLetterMetrics deadLetterMetrics;
     private final Map<String, AtomicLong> ready = new LinkedHashMap<>();
     private final Map<String, AtomicLong> inflight = new LinkedHashMap<>();
     private final Map<String, AtomicLong> pending = new LinkedHashMap<>();
@@ -38,9 +39,10 @@ public class QueueMetrics {
 
     public QueueMetrics(MeterRegistry registry, RabbitQueueService rabbit,
                         TeamEventOutboxRepository outbox, TeamTaskRepository tasks, QueueProperties properties,
-                        ObservationMetrics observationMetrics) {
+                        ObservationMetrics observationMetrics, DeadLetterMetrics deadLetterMetrics) {
         this.registry = registry; this.rabbit = rabbit; this.outbox = outbox; this.tasks = tasks; this.properties = properties;
         this.observationMetrics = observationMetrics;
+        this.deadLetterMetrics = deadLetterMetrics;
         for (String queue : List.of("notifications", "team-tasks", "dead-letter")) {
             ready.put(queue, gauge("messages.ready", "queue", queue, "Ready messages in RabbitMQ"));
         }
@@ -62,7 +64,7 @@ public class QueueMetrics {
     }
 
     public QueueSnapshot refresh() {
-        refreshRabbit(); refreshDatabase(); warnOnBacklog();
+        refreshRabbit(); refreshDatabase(); deadLetterMetrics.refresh(); warnOnBacklog();
         return new QueueSnapshot(sum(ready), sum(inflight), sum(pending), sum(retries), ready.get("dead-letter").get());
     }
 

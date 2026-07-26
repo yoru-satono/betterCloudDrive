@@ -45,6 +45,7 @@ const routes = [
       { path: 'teams',  name: 'AdminTeams',     component: () => import('@/pages/admin/AdminTeams.vue') },
       { path: 'users/:userId/files', name: 'AdminUserFiles', component: () => import('@/pages/admin/AdminUserFiles.vue') },
       { path: 'logs',   name: 'AdminLogs',      component: () => import('@/pages/admin/AdminLogs.vue') },
+      { path: 'dead-letters', name: 'AdminDeadLetters', component: () => import('@/pages/admin/AdminDeadLetters.vue') },
     ]
   },
   { path: '/:pathMatch(.*)*', redirect: '/files' }

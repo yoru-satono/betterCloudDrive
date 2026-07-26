@@ -102,13 +102,16 @@ groups:
           description: A RabbitMQ queue or durable database queue has exceeded 100 pending records for 10 minutes.
 
       - alert: BetterCloudDriveDeadLettersPresent
-        expr: bcd_queue_messages_ready{queue="dead-letter"} > 0
+        expr: bcd_queue_dead_letters > 0
         for: 2m
         labels:
           severity: critical
+          service: dead-letter-management
         annotations:
-          summary: BetterCloudDrive dead-letter queue is not empty
-          description: Messages have remained in the dead-letter queue for more than 2 minutes.
+          summary: BetterCloudDrive has unresolved dead letters
+          description: Open dead letters from {{ $labels.queue }} with category {{ $labels.category }} require an administrator to replay or explicitly discard them.
+          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md#死信处置
+          dashboard_url: /admin/dead-letters
 
       - alert: BetterCloudDriveQueueObservationUnavailable
         expr: bcd_queue_observation_available == 0

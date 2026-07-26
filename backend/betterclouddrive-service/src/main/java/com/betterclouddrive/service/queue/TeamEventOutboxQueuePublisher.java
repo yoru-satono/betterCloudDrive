@@ -122,6 +122,7 @@ public class TeamEventOutboxQueuePublisher {
         put(payload, "targetType", event.getTargetType());
         put(payload, "targetId", event.getTargetId());
         put(payload, "payload", event.getPayload());
+        put(payload, "deliveryCount", (event.getRetryCount() == null ? 0 : event.getRetryCount()) + 1);
         return payload;
     }
 

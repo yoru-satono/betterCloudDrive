@@ -77,6 +77,20 @@ export interface AdminStats {
   totalStorageUsed: number
 }
 
+export interface DeadLetter {
+  id: string
+  originalQueue: 'notifications' | 'team-tasks' | 'unknown'
+  taskType: string
+  failureCategory: 'invalid-payload' | 'missing-record' | 'delivery-exhausted' | 'unknown'
+  deliveryCount: number
+  firstFailedAt: string
+  lastFailedAt: string
+  requestId: string | null
+  traceId: string | null
+  status: 'OPEN' | 'REPLAYING' | 'REPLAYED' | 'DISCARDED'
+  resolvedAt: string | null
+}
+
 export const getStats = () =>
   api.get<ApiResponse<AdminStats>>('/admin/stats')
 
@@ -198,3 +212,21 @@ export const listSystemLogs = (params: {
 
 export const createGrafanaSession = () =>
   api.post<ApiResponse<void>>('/admin/grafana/session')
+
+export const listDeadLetters = (params: {
+  queue?: string
+  category?: string
+  status?: string
+  page?: number
+  size?: number
+} = {}) =>
+  api.get<ApiResponse<PageResult<DeadLetter>>>('/admin/dead-letters', { params })
+
+export const getDeadLetter = (id: string) =>
+  api.get<ApiResponse<DeadLetter>>(`/admin/dead-letters/${id}`)
+
+export const replayDeadLetters = (ids: string[]) =>
+  api.post<ApiResponse<DeadLetter[]>>('/admin/dead-letters/replay', { ids })
+
+export const discardDeadLetter = (id: string, reason: string) =>
+  api.post<ApiResponse<DeadLetter>>(`/admin/dead-letters/${id}/discard`, { reason })

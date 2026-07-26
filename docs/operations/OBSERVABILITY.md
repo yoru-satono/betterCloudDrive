@@ -185,6 +185,29 @@ Invoke-RestMethod "http://127.0.0.1:3200/api/traces/$traceId"
 
 实际消费异常优先查看 `messages.ready`、`consumer.inflight`、数据库 `records.pending/retry`、DLQ 和 processing failure/duration。
 
+## 死信处置
+
+RabbitMQ 仍是死信路由入口，但 `bcd.dead-letter` 由单并发的入库消费者处理。消费者只在 `dead_letter_records` 持久化成功后 ACK；数据库暂时不可用时 NACK 并重新入队。管理列表因此不会通过 `basic.get` 等方式破坏性地遍历 RabbitMQ。
+
+持久记录包含原始队列、固定任务类型、有限失败分类、投递次数、首次/最后失败时间以及 request/trace ID。原始 payload 仅用于服务端重放，不会由列表或详情 API 返回。指标使用固定标签：
+
+| 指标 | 标签 | 说明 |
+|------|------|------|
+| `bcd_queue_dead_letters` | `queue,category` | 当前 OPEN 死信数 |
+| `bcd_queue_dead_letter_actions_total` | `action,outcome` | 重放和丢弃操作结果 |
+
+`queue` 仅允许 `notifications/team-tasks/unknown`；`category` 仅允许 `invalid-payload/missing-record/delivery-exhausted/unknown`。`BetterCloudDriveDeadLettersPresent` 持续两分钟后按来源和分类触发，并提供管理入口 `/admin/dead-letters`。
+
+管理员处置顺序：
+
+1. 按来源和失败分类筛选，使用 request/trace ID 关联日志和 Tempo。
+2. 确认依赖已恢复、消息类型有效且对应数据库事实仍存在。
+3. 单条或最多 20 条批量重放。服务使用行锁和状态转换保证同一死信记录只接受一次重放；业务消费者继续依靠 Outbox/任务 claim 保证副作用幂等。
+4. 无法或不应重放时显式丢弃，并填写 3–500 字符原因。
+5. 在管理员操作日志中核对 `DEAD_LETTER_REPLAY` 或 `DEAD_LETTER_DISCARD`。
+
+不要通过 RabbitMQ 管理页清空整个 DLQ，也不要直接删除生产记录。自动化测试消息必须携带 `bcd-e2e:` 前缀的 `testMarker`；清理脚本只删除这种显式标记记录，不会按时间、队列或状态批量清除其他死信。
+
 ## 安全与保留策略
 
 - Loki、Tempo、Prometheus、Alertmanager、Blackbox Exporter、OTLP 和 Alloy 默认不发布宿主机端口。

@@ -130,7 +130,7 @@ tests:
         values: '0+100x25'
       - series: 'bcd_queue_messages_ready{queue="notifications"}'
         values: '20x25'
-      - series: 'bcd_queue_messages_ready{queue="dead-letter"}'
+      - series: 'bcd_queue_dead_letters{queue="notifications",category="delivery-exhausted"}'
         values: '0x25'
       - series: 'bcd_queue_records_pending{source="outbox"}'
         values: '20x25'
@@ -307,7 +307,7 @@ tests:
   - name: dead letters respect their pending window and fire
     interval: 1m
     input_series:
-      - series: 'bcd_queue_messages_ready{queue="dead-letter"}'
+      - series: 'bcd_queue_dead_letters{queue="notifications",category="delivery-exhausted"}'
         values: '1x3 0x4'
     alert_rule_test:
       - eval_time: 1m
@@ -318,10 +318,14 @@ tests:
         exp_alerts:
           - exp_labels:
               severity: critical
-              queue: dead-letter
+              service: dead-letter-management
+              queue: notifications
+              category: delivery-exhausted
             exp_annotations:
-              summary: BetterCloudDrive dead-letter queue is not empty
-              description: Messages have remained in the dead-letter queue for more than 2 minutes.
+              summary: BetterCloudDrive has unresolved dead letters
+              description: Open dead letters from notifications with category delivery-exhausted require an administrator to replay or explicitly discard them.
+              runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md#死信处置
+              dashboard_url: /admin/dead-letters
       - eval_time: 4m
         alertname: BetterCloudDriveDeadLettersPresent
         exp_alerts: []

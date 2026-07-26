@@ -2,6 +2,7 @@ package com.betterclouddrive.service.metrics;
 
 import com.betterclouddrive.dal.repository.TeamEventOutboxRepository;
 import com.betterclouddrive.dal.repository.TeamTaskRepository;
+import com.betterclouddrive.dal.repository.DeadLetterRecordRepository;
 import com.betterclouddrive.service.config.QueueProperties;
 import com.betterclouddrive.service.queue.RabbitQueueService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -16,7 +17,8 @@ class QueueMetricsTest {
         when(rabbit.messageCount("bcd.notifications")).thenReturn(3L); when(rabbit.messageCount("bcd.team-tasks")).thenReturn(4L); when(rabbit.messageCount("bcd.dead-letter")).thenReturn(1L);
         when(outbox.countByStatus("PENDING")).thenReturn(2L); when(tasks.countByStatus("PENDING")).thenReturn(5L);
         var observation = new ObservationMetrics(registry);
-        var metrics = new QueueMetrics(registry, rabbit, outbox, tasks, props, observation);
+        var deadLetters = new DeadLetterMetrics(registry, mock(DeadLetterRecordRepository.class));
+        var metrics = new QueueMetrics(registry, rabbit, outbox, tasks, props, observation, deadLetters);
         assertThat(metrics.refresh()).isEqualTo(new QueueMetrics.QueueSnapshot(8, 0, 7, 0, 1));
         assertThat(registry.get("bcd.queue.messages.ready").tag("queue", "notifications").gauge().value()).isEqualTo(3);
         assertThat(registry.get("bcd.queue.observation.available").tag("source", "rabbitmq").gauge().value()).isEqualTo(1);
@@ -29,7 +31,8 @@ class QueueMetricsTest {
         var outbox = mock(TeamEventOutboxRepository.class); var tasks = mock(TeamTaskRepository.class); var props = new QueueProperties();
         when(rabbit.messageCount("bcd.notifications")).thenThrow(new IllegalStateException("rabbit unavailable"));
         when(outbox.countByStatus("PENDING")).thenReturn(2L); when(tasks.countByStatus("PENDING")).thenReturn(5L);
-        var metrics = new QueueMetrics(registry, rabbit, outbox, tasks, props, new ObservationMetrics(registry));
+        var deadLetters = new DeadLetterMetrics(registry, mock(DeadLetterRecordRepository.class));
+        var metrics = new QueueMetrics(registry, rabbit, outbox, tasks, props, new ObservationMetrics(registry), deadLetters);
 
         metrics.refresh();
 
