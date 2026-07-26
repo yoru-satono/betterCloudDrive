@@ -182,6 +182,24 @@ wait_http() {
   return 1
 }
 
+wait_docker_service_healthy() {
+  local service=$1 timeout=${2:-120} deadline=$((SECONDS + timeout))
+  local container_id="" status="container not found"
+  while ((SECONDS < deadline)); do
+    container_id=$(docker compose ps -q "$service" 2>/dev/null | head -n 1)
+    if [[ -n $container_id ]]; then
+      status=$(docker inspect --format '{{.State.Health.Status}}' "$container_id" 2>/dev/null || true)
+      if [[ $status == healthy ]]; then
+        printf '%s container is healthy\n' "$service"
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  printf '%s did not become healthy within %ss. Last status: %s\n' "$service" "$timeout" "$status" >&2
+  return 1
+}
+
 wait_services() {
   ((needs_backend_http == 0)) || wait_http Backend http://127.0.0.1:8080/actuator/health || return
   ((needs_frontend_http == 0)) || wait_http Frontend http://127.0.0.1:3000 || return
@@ -220,6 +238,11 @@ tauri_unit_tests() { (cd frontend/src-tauri && cargo test --locked); }
 tauri_tests() { (cd frontend && pnpm run test:e2e:tauri); }
 webdav_tests() { run_pytest webdav ../test-results/webdav/junit.xml; }
 observability_tests() { run_pytest observability ../test-results/observability/junit.xml; }
+reload_grafana_provisioning() {
+  docker compose restart frontend grafana &&
+    wait_docker_service_healthy frontend &&
+    wait_docker_service_healthy grafana
+}
 prometheus_rule_tests() {
   docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml &&
     docker compose exec -T prometheus promtool check rules /etc/prometheus/rules/better-cloud-drive.yml &&
@@ -283,6 +306,7 @@ run_step "Prepare env files" prepare_env || exit $?
 ((run_tauri == 0)) || run_step "Tauri E2E build" tauri_build || exit $?
 ((run_tauri == 0)) || run_step "Tauri E2E tests" tauri_tests || exit $?
 ((run_webdav == 0)) || run_step "WebDAV protocol and rclone acceptance" webdav_tests || exit $?
+((run_observability == 0)) || run_step "Reload Grafana provisioning and gateway" reload_grafana_provisioning || exit $?
 ((run_observability == 0)) || run_step "Prometheus rule tests" prometheus_rule_tests || exit $?
 ((run_observability == 0)) || run_step "Observability acceptance" observability_tests || exit $?
 ((run_resilience == 0)) || run_step "Resilience acceptance" resilience_tests || exit $?

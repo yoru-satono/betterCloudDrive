@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -15,6 +16,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class TeamQuotaMetrics {
 
     private static final String METRIC_PREFIX = "bcd.team.quota.";
+    private static final Set<String> FAILURE_CHANNELS = Set.of("queue", "direct", "email");
 
     private final MeterRegistry meterRegistry;
     private final TeamRepository teamRepository;
@@ -36,6 +38,12 @@ public class TeamQuotaMetrics {
                     .description("Number of active teams grouped by quota usage")
                     .tag("usage", bucket)
                     .register(meterRegistry);
+        }
+        for (String threshold : new String[]{"80", "90", "100", "other"}) {
+            meterRegistry.counter(METRIC_PREFIX + "alerts", "threshold", threshold);
+        }
+        for (String channel : new String[]{"queue", "direct", "email", "unknown"}) {
+            meterRegistry.counter(METRIC_PREFIX + "notification.failures", "channel", channel);
         }
     }
 
@@ -68,7 +76,7 @@ public class TeamQuotaMetrics {
     public void recordAlertTriggered(int thresholdPercent) {
         meterRegistry.counter(
                 METRIC_PREFIX + "alerts",
-                "threshold", String.valueOf(thresholdPercent)).increment();
+                "threshold", normalizeThreshold(thresholdPercent)).increment();
     }
 
     public void recordNotificationFailure(String channel) {
@@ -88,7 +96,18 @@ public class TeamQuotaMetrics {
     }
 
     private String normalizeChannel(String channel) {
-        return channel == null || channel.isBlank() ? "unknown" : channel.trim().toLowerCase();
+        if (channel == null || channel.isBlank()) {
+            return "unknown";
+        }
+        String normalized = channel.trim().toLowerCase();
+        return FAILURE_CHANNELS.contains(normalized) ? normalized : "unknown";
+    }
+
+    private String normalizeThreshold(int thresholdPercent) {
+        return switch (thresholdPercent) {
+            case 80, 90, 100 -> String.valueOf(thresholdPercent);
+            default -> "other";
+        };
     }
 
     private static final class QuotaSnapshot {

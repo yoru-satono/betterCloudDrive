@@ -175,6 +175,27 @@ function Wait-Http {
     throw "$Name did not become reachable at $Url within ${TimeoutSeconds}s. Last error: $lastError"
 }
 
+function Wait-DockerServiceHealthy {
+    param(
+        [string]$Service,
+        [int]$TimeoutSeconds = 120
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastStatus = "container not found"
+    while ((Get-Date) -lt $deadline) {
+        $containerId = (& docker compose ps -q $Service 2>$null | Select-Object -First 1)
+        if ($LASTEXITCODE -eq 0 -and $containerId) {
+            $lastStatus = (& docker inspect --format "{{.State.Health.Status}}" $containerId 2>$null)
+            if ($LASTEXITCODE -eq 0 -and $lastStatus -eq "healthy") {
+                Write-Host "$Service container is healthy"
+                return
+            }
+        }
+        Start-Sleep -Seconds 2
+    }
+    throw "$Service did not become healthy within ${TimeoutSeconds}s. Last status: $lastStatus"
+}
+
 function Invoke-InDirectory {
     param(
         [string]$Path,
@@ -370,6 +391,11 @@ try {
     }
 
     if ($RunObservability) {
+        Invoke-Step "Reload Grafana provisioning and gateway" {
+            Invoke-External "docker" @("compose", "restart", "frontend", "grafana")
+            Wait-DockerServiceHealthy "frontend"
+            Wait-DockerServiceHealthy "grafana"
+        }
         Invoke-Step "Prometheus rule tests" {
             Invoke-External "docker" @("compose", "exec", "-T", "prometheus", "promtool", "check", "config", "/etc/prometheus/prometheus.yml")
             Invoke-External "docker" @("compose", "exec", "-T", "prometheus", "promtool", "check", "rules", "/etc/prometheus/rules/better-cloud-drive.yml")

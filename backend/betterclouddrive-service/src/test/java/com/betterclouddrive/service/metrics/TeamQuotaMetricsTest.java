@@ -35,12 +35,20 @@ class TeamQuotaMetricsTest {
 
         metrics.recordAlertTriggered(90);
         metrics.recordAlertTriggered(90);
+        metrics.recordAlertTriggered(123);
         metrics.recordNotificationFailure("queue");
+        metrics.recordNotificationFailure("dynamic-channel");
 
         assertThat(registry.get("bcd.team.quota.alerts").tag("threshold", "90").counter().count())
                 .isEqualTo(2.0);
         assertThat(registry.get("bcd.team.quota.notification.failures").tag("channel", "queue").counter().count())
                 .isEqualTo(1.0);
+        assertThat(registry.get("bcd.team.quota.alerts").tag("threshold", "other").counter().count())
+                .isEqualTo(1.0);
+        assertThat(registry.get("bcd.team.quota.notification.failures").tag("channel", "unknown").counter().count())
+                .isEqualTo(1.0);
+        assertThat(registry.find("bcd.team.quota.alerts").counters()).hasSize(4);
+        assertThat(registry.find("bcd.team.quota.notification.failures").counters()).hasSize(4);
     }
 
     @Test

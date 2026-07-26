@@ -15,8 +15,12 @@ Blackbox Exporter -> 关键 HTTP 端点 -------+
 
 Grafana 的 `BetterCloudDrive` 目录预置以下 Dashboard：
 
-- `Application Overview`：可用性、吞吐、错误率、HTTP 延迟、JVM、连接池及观测组件健康度。
-- `Business Operations`：RabbitMQ/事实表积压、DLQ、队列消费和 OnlyOffice 保存。
+- `Service Overview`：服务状态、当前告警、HTTP/队列/OnlyOffice SLI、吞吐、错误率和延迟。
+- `Storage & Transfer`：对象存储调用成功/失败、耗时、传输量及 SeaweedFS 三个 HTTP 探测。
+- `Async & Collaboration`：队列积压与处理、观测数据新鲜度、OnlyOffice，以及团队配额总量、区间、告警和通知失败。
+- `Infrastructure`：Blackbox、可观测性组件、JVM、连接池、PostgreSQL、Redis 和 RabbitMQ。
+
+四个 Dashboard 使用固定 UID，所有 Prometheus 面板固定引用 `bcd-prometheus`，不会依赖 Grafana 自动生成的数据源 ID。顶部统一显示服务状态和当前 firing 告警，并提供 Loki 日志、Tempo Trace 与本文档的跳转链接。聚合 Stat 面板对无流量使用明确的 `0` 或健康基线，时序与表格面板设置 `noValue` 文案，避免把 `NaN` 当成真实故障。
 
 Loki 数据源会把 JSON 日志中的 `trace_id` 链接到 Tempo；Tempo 也能按 trace ID 回查 Loki。`trace_id`、`request_id` 不作为 Loki 标签，避免高基数索引。
 

@@ -1,14 +1,31 @@
 """Acceptance checks for audit correlation and the external observability chain."""
 
 import hashlib
+import json
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
 import pytest
 
 pytestmark = pytest.mark.observability
+
+DASHBOARD_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "observability"
+    / "grafana"
+    / "provisioning"
+    / "dashboards"
+    / "json"
+)
+EXPECTED_DASHBOARDS = {
+    "bcd-application-overview": "BetterCloudDrive / Service Overview",
+    "bcd-storage-transfer": "BetterCloudDrive / Storage & Transfer",
+    "bcd-business-operations": "BetterCloudDrive / Async & Collaboration",
+    "bcd-infrastructure": "BetterCloudDrive / Infrastructure",
+}
 
 
 def _prometheus_query(query):
@@ -187,6 +204,82 @@ def test_storage_lifecycle_changes_bounded_metrics(client, auth_headers, created
         "put", "get", "delete", "head", "copy",
     }
     assert {sample["metric"]["outcome"] for sample in operation_series} == {"success", "failure"}
+
+
+def test_dashboards_are_provisioned_and_all_promql_is_valid(client, admin_headers):
+    definitions = [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(DASHBOARD_DIR.glob("*.json"))
+    ]
+    assert {dashboard["uid"]: dashboard["title"] for dashboard in definitions} == EXPECTED_DASHBOARDS
+
+    required_metrics = {
+        "bcd_team_quota_used_bytes",
+        "bcd_team_quota_limit_bytes",
+        "bcd_team_quota_teams",
+        "bcd_team_quota_alerts_total",
+        "bcd_team_quota_notification_failures_total",
+        "bcd_storage_operations_total",
+        "bcd_storage_operation_duration_seconds_count",
+        "bcd_storage_bytes_total",
+        "bcd_observation_last_success_timestamp_seconds",
+        "probe_success",
+        "ALERTS",
+    }
+    metric_names = httpx.get(
+        "http://localhost:9090/api/v1/label/__name__/values", timeout=5,
+    )
+    assert metric_names.status_code == 200, metric_names.text
+    assert required_metrics.issubset(set(metric_names.json()["data"]))
+
+    for dashboard in definitions:
+        assert {link["title"] for link in dashboard["links"]} == {
+            "Logs / Loki", "Traces / Tempo", "Observability runbook",
+        }
+        assert {"Service status"}.issubset({panel["title"] for panel in dashboard["panels"]})
+        assert any("Current" in panel["title"] and "alert" in panel["title"] for panel in dashboard["panels"])
+        for panel in dashboard["panels"]:
+            assert panel["datasource"]["uid"] == "bcd-prometheus"
+            assert panel["fieldConfig"]["defaults"].get("noValue") is not None
+            for target in panel.get("targets", []):
+                expression = target.get("expr")
+                if not expression:
+                    continue
+                response = httpx.get(
+                    "http://localhost:9090/api/v1/query",
+                    params={"query": expression},
+                    timeout=5,
+                )
+                assert response.status_code == 200, (
+                    f"{dashboard['uid']} / {panel['title']}: {response.text}"
+                )
+                assert response.json()["status"] == "success"
+
+    session = client.post("/api/v1/admin/grafana/session", headers=admin_headers)
+    assert session.status_code == 200 and session.json()["code"] == 200, session.text
+    deadline = time.time() + 45
+    provisioned = {}
+    search = None
+    while time.time() < deadline:
+        search = client.get(
+            "http://localhost:3000/grafana/api/search",
+            params={"tag": "betterclouddrive"},
+        )
+        assert search.status_code == 200, search.text
+        provisioned = {
+            item["uid"]: item["title"]
+            for item in search.json()
+            if item.get("type") == "dash-db"
+        }
+        if provisioned == EXPECTED_DASHBOARDS:
+            break
+        time.sleep(1)
+    assert provisioned == EXPECTED_DASHBOARDS
+
+    for uid in EXPECTED_DASHBOARDS:
+        loaded = client.get(f"http://localhost:3000/grafana/api/dashboards/uid/{uid}")
+        assert loaded.status_code == 200, loaded.text
+        assert loaded.json()["dashboard"]["uid"] == uid
 
 
 def test_alertmanager_delivers_a_development_notification_to_mailpit():
