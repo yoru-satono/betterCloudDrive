@@ -84,7 +84,7 @@
 ## 迁移要求
 
 - 数据库使用合并后的 Flyway baseline：`V1__schema.sql` 定义最终结构，`R__development_data.sql` 提供幂等开发数据。
-- 合并后的 baseline 仅支持全新数据库；旧版 Flyway 数据库升级前必须备份并重建。
+- 迁移目录只保留一个 DDL baseline 和一个 repeatable DML；旧版 Flyway 数据库必须删除并重建。
 - PostgreSQL 版本按当前环境模板使用 PostgreSQL 18。
 - 生产环境必须替换默认 JWT、数据库、邮箱、OnlyOffice JWT secret 等密钥。
 - 升级前建议备份 PostgreSQL 和 SeaweedFS 数据；团队文件、分享、版本、审计都依赖这两类存储。

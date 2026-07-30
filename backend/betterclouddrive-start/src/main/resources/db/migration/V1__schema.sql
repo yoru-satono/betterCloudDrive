@@ -1,7 +1,7 @@
 -- ============================================================
 -- Better Cloud Drive - Consolidated Schema
 -- PostgreSQL 16+
--- Fresh databases only. This file represents the final schema after V1-V14.
+-- Fresh databases only. This file is the complete current schema baseline.
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -25,6 +25,7 @@ CREATE TABLE users (
     password_hash   VARCHAR(255) NOT NULL,
     email           VARCHAR(128),
     email_verified  BOOLEAN      NOT NULL DEFAULT FALSE,
+    preferred_locale VARCHAR(35) NOT NULL DEFAULT 'zh-CN',
     nickname        VARCHAR(64),
     avatar_url      VARCHAR(512),
     role            VARCHAR(32)  NOT NULL DEFAULT 'ROLE_USER',
@@ -49,6 +50,7 @@ CREATE TRIGGER trg_users_updated_at
 
 COMMENT ON TABLE users IS 'Users';
 COMMENT ON COLUMN users.email_verified IS 'Whether the user has verified their email address';
+COMMENT ON COLUMN users.preferred_locale IS 'Preferred UI locale as a canonical BCP 47 language tag';
 COMMENT ON COLUMN users.role IS 'User role: ROLE_USER (default) or ROLE_ADMIN';
 COMMENT ON COLUMN users.status IS '1=active, 0=disabled, -1=frozen';
 COMMENT ON COLUMN users.storage_quota IS 'Storage quota in bytes; default 10 GB';
@@ -662,6 +664,8 @@ CREATE TABLE team_event_outbox (
     payload        TEXT,
     message_key    VARCHAR(200),
     message_params JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    traceparent    VARCHAR(55),
+    tracestate     VARCHAR(512),
     status         VARCHAR(24)  NOT NULL DEFAULT 'PENDING',
     retry_count    INT          NOT NULL DEFAULT 0,
     available_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -683,6 +687,8 @@ CREATE TRIGGER trg_team_event_outbox_updated_at
 COMMENT ON TABLE team_event_outbox IS 'Team-domain event outbox for future asynchronous workers';
 COMMENT ON COLUMN team_event_outbox.aggregate_type IS 'TEAM, NOTIFICATION, or future aggregate category';
 COMMENT ON COLUMN team_event_outbox.status IS 'PENDING, PROCESSING, PROCESSED, FAILED';
+COMMENT ON COLUMN team_event_outbox.traceparent IS 'W3C trace context captured when the durable event was created';
+COMMENT ON COLUMN team_event_outbox.tracestate IS 'Optional W3C vendor trace state for the durable event';
 
 CREATE TABLE team_tasks (
     id                  BIGSERIAL PRIMARY KEY,
@@ -701,6 +707,8 @@ CREATE TABLE team_tasks (
     error_message_params  JSONB      NOT NULL DEFAULT '{}'::jsonb,
     retry_count         INTEGER      NOT NULL DEFAULT 0,
     payload             TEXT,
+    traceparent         VARCHAR(55),
+    tracestate          VARCHAR(512),
     result_path         VARCHAR(1024),
     result_file_name    VARCHAR(255),
     result_content_type VARCHAR(128),
@@ -726,6 +734,8 @@ CREATE TRIGGER trg_team_tasks_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 COMMENT ON TABLE team_tasks IS 'Team long-running task status center';
+COMMENT ON COLUMN team_tasks.traceparent IS 'W3C trace context linked by delayed task execution';
+COMMENT ON COLUMN team_tasks.tracestate IS 'Optional W3C vendor trace state for delayed task execution';
 
 CREATE TABLE onlyoffice_callbacks (
     id               BIGSERIAL PRIMARY KEY,
@@ -765,3 +775,49 @@ COMMENT ON COLUMN onlyoffice_callbacks.download_url IS 'Resolved document server
 COMMENT ON COLUMN onlyoffice_callbacks.task_id IS 'Linked team task that exposes save progress and retry state';
 COMMENT ON COLUMN onlyoffice_callbacks.last_attempt_at IS 'Last background save attempt timestamp';
 COMMENT ON COLUMN onlyoffice_callbacks.state IS '1=pending, 2=saved, 3=failed';
+
+-- ============================================================
+-- Dead-letter management
+-- ============================================================
+CREATE TABLE dead_letter_records (
+    id                  UUID PRIMARY KEY,
+    original_message_id VARCHAR(128) NOT NULL,
+    original_queue      VARCHAR(32)  NOT NULL,
+    routing_key         VARCHAR(64)  NOT NULL,
+    task_type           VARCHAR(64)  NOT NULL,
+    failure_category    VARCHAR(32)  NOT NULL,
+    delivery_count      INTEGER      NOT NULL DEFAULT 1,
+    first_failed_at     TIMESTAMP    NOT NULL,
+    last_failed_at      TIMESTAMP    NOT NULL,
+    request_id          VARCHAR(128),
+    trace_id            VARCHAR(32),
+    traceparent         VARCHAR(55),
+    tracestate          VARCHAR(512),
+    test_marker         VARCHAR(128),
+    payload             TEXT         NOT NULL,
+    status              VARCHAR(16)  NOT NULL DEFAULT 'OPEN',
+    replay_token        UUID,
+    resolution_reason   VARCHAR(500),
+    resolved_by         BIGINT,
+    resolved_at         TIMESTAMP,
+    created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uk_dead_letter_original_message UNIQUE (original_message_id),
+    CONSTRAINT ck_dead_letter_queue CHECK (original_queue IN ('notifications', 'team-tasks', 'unknown')),
+    CONSTRAINT ck_dead_letter_category CHECK (failure_category IN ('invalid-payload', 'missing-record', 'delivery-exhausted', 'unknown')),
+    CONSTRAINT ck_dead_letter_status CHECK (status IN ('OPEN', 'REPLAYING', 'REPLAYED', 'DISCARDED'))
+);
+
+CREATE INDEX idx_dead_letter_open_failed
+    ON dead_letter_records(status, last_failed_at DESC) WHERE status = 'OPEN';
+CREATE INDEX idx_dead_letter_source
+    ON dead_letter_records(original_queue, failure_category, status);
+
+CREATE TRIGGER trg_dead_letter_records_updated_at
+    BEFORE UPDATE ON dead_letter_records
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE dead_letter_records IS 'Queryable, auditable dead-letter control records; payload is never exposed by APIs';
+COMMENT ON COLUMN dead_letter_records.replay_token IS 'Idempotency token for a single accepted replay transition';
+COMMENT ON COLUMN dead_letter_records.test_marker IS 'Explicit bcd-e2e marker used by scoped automated cleanup only';
