@@ -4,7 +4,9 @@ const unexpectedConsoleErrors: unknown[][] = []
 const originalFetch = globalThis.fetch
 const originalConsoleError = console.error
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { initializeLocale } = await import('../i18n')
+  await initializeLocale()
   unexpectedConsoleErrors.length = 0
   console.error = vi.fn((...args: unknown[]) => {
     unexpectedConsoleErrors.push(args)

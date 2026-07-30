@@ -1,23 +1,35 @@
 <script setup lang="ts">
-import { i18n, locale, setLocale, type SupportedLocale } from '@/i18n'
+import { computed } from 'vue'
+import { i18n, locale, localeLoading, setLocale, SUPPORTED_LOCALES, type SupportedLocale } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
 const t = i18n.global.t
+const localeOptions = computed(() => {
+  let displayNames: Intl.DisplayNames | undefined
+  try {
+    displayNames = new Intl.DisplayNames([locale.value], { type: 'language' })
+  } catch {
+    // Older embedded webviews can still use the canonical locale code.
+  }
+  return SUPPORTED_LOCALES.map(value => ({
+    value,
+    label: displayNames?.of(value) || value,
+  }))
+})
 
 async function change(event: Event) {
   const next = (event.target as HTMLSelectElement).value as SupportedLocale
   if (auth.isLoggedIn) await auth.updateLocale(next)
-  else setLocale(next)
+  else await setLocale(next)
 }
 </script>
 
 <template>
   <label class="locale-switcher">
     <span class="sr-only">{{ t('ui.language') }}</span>
-    <select :value="locale" :aria-label="t('ui.language')" data-testid="locale-switcher" @change="change">
-      <option value="zh-CN">{{ t('commonUi.localeswitcher.simplifiedChinese') }}</option>
-      <option value="en-US">{{ t('ui.english') }}</option>
+    <select :value="locale" :aria-label="t('ui.language')" :disabled="localeLoading" data-testid="locale-switcher" @change="change">
+      <option v-for="option in localeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
     </select>
   </label>
 </template>

@@ -26,6 +26,6 @@ public class RegisterRequest {
     @Pattern(regexp = "^\\d{6}$", message = "Verification code must be 6 digits")
     private String verificationCode;
 
-    @Pattern(regexp = "^(zh-CN|en-US)$", message = "Locale must be zh-CN or en-US")
+    @Size(max = 35)
     private String preferredLocale;
 }

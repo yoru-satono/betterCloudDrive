@@ -28,12 +28,19 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function fetchMe() {
+    let currentUser: UserEntity
     try {
       const { data } = await authApi.getMe()
-      user.value = data.data
-      setLocale(data.data.preferredLocale || 'zh-CN')
+      currentUser = data.data
     } catch {
       user.value = null
+      return
+    }
+    user.value = currentUser
+    try {
+      await setLocale(currentUser.preferredLocale || 'zh-CN')
+    } catch (error) {
+      console.warn('Failed to load the preferred locale', error)
     }
   }
 
@@ -52,13 +59,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function updateLocale(next: SupportedLocale) {
     const previous = locale.value
-    setLocale(next)
+    await setLocale(next)
     try {
       const { data } = await authApi.updateLocale(next)
       user.value = data.data
       return data
     } catch (error) {
-      setLocale(previous)
+      await setLocale(previous)
       throw error
     }
   }

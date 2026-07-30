@@ -145,6 +145,8 @@ queue:
 # Application settings
 drive:
   app-public-url: ${APP_PUBLIC_URL:http://localhost:3000}
+  i18n:
+    default-locale: zh-CN
   mail:
     from: ${MAIL_FROM:noreply@betterclouddrive.local}
   recycle-bin:

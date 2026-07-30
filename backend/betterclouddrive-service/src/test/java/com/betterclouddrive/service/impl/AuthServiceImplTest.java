@@ -10,10 +10,12 @@ import com.betterclouddrive.dal.entity.UserTokenEntity;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.dal.repository.UserTokenRepository;
 import com.betterclouddrive.service.EmailService;
+import com.betterclouddrive.service.i18n.LocaleCatalog;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -32,6 +34,7 @@ class AuthServiceImplTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private EmailService emailService;
+    @Spy private LocaleCatalog localeCatalog = new LocaleCatalog("zh-CN");
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -309,8 +312,16 @@ class AuthServiceImplTest {
         when(userRepository.existsByEmail("en@test.com")).thenReturn(false);
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
-        authService.sendRegistrationCode("en@test.com", "en-US");
+        authService.sendRegistrationCode("en@test.com", "en-us");
 
         verify(emailService).sendVerificationCode(eq("en@test.com"), anyString(), eq("en-US"));
+    }
+
+    @Test
+    void sendRegistrationCode_shouldRejectAnUndiscoveredLocale() {
+        assertThatThrownBy(() -> authService.sendRegistrationCode("fr@test.com", "fr-FR"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Unsupported locale");
+        verifyNoInteractions(valueOps, emailService);
     }
 }

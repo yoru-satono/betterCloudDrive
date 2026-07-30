@@ -31,12 +31,12 @@ describe('semantic message resolver', () => {
     warning.mockRestore()
   })
 
-  it('switches semantic messages, persistence, and document language to English', () => {
-    setLocale('en-US')
+  it('switches semantic messages, persistence, and document language to English', async () => {
+    await setLocale('en-US')
     expect(resolveMessage('error.unauthorized')).toBe('Please sign in first')
     expect(localStorage.getItem('preferredLocale')).toBe('en-US')
     expect(document.documentElement.lang).toBe('en-US')
-    setLocale('zh-CN')
+    await setLocale('zh-CN')
   })
 
   it('keeps Chinese and English message packs structurally complete', () => {
@@ -53,9 +53,9 @@ describe('semantic message resolver', () => {
     }
   })
 
-  it('uses a semantic login error instead of the authentication-required copy', () => {
-    setLocale('en-US')
+  it('uses a semantic login error instead of the authentication-required copy', async () => {
+    await setLocale('en-US')
     expect(resolveMessage('error.invalidCredentials')).toBe('Incorrect username or password')
-    setLocale('zh-CN')
+    await setLocale('zh-CN')
   })
 })

@@ -1,6 +1,7 @@
 package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.service.mail.MailTemplateRenderer;
+import com.betterclouddrive.service.i18n.LocaleCatalog;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +25,7 @@ class EmailServiceImplTest {
     @BeforeEach
     void setUp() throws Exception {
         mailSender = mock(JavaMailSender.class);
-        service = new EmailServiceImpl(mailSender, new MailTemplateRenderer());
+        service = new EmailServiceImpl(mailSender, new MailTemplateRenderer(new LocaleCatalog("zh-CN")));
         setField("from", "noreply@test.local");
         setField("appPublicUrl", "https://cloud.example/");
         when(mailSender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));

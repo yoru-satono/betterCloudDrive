@@ -8,6 +8,7 @@ import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.dal.repository.UserTokenRepository;
 import com.betterclouddrive.service.AuthService;
 import com.betterclouddrive.service.EmailService;
+import com.betterclouddrive.service.i18n.LocaleCatalog;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -30,6 +31,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
+    private final LocaleCatalog localeCatalog;
 
     @Value("${drive.storage.default-quota-bytes:10737418240}")
     private long defaultQuotaBytes;
@@ -145,13 +147,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private String normalizeLocale(String preferredLocale) {
-        if (!StringUtils.hasText(preferredLocale)) {
-            return "zh-CN";
-        }
-        if (!"zh-CN".equals(preferredLocale) && !"en-US".equals(preferredLocale)) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Unsupported locale");
-        }
-        return preferredLocale;
+        return localeCatalog.normalize(preferredLocale);
     }
 
     @Override
@@ -163,9 +159,10 @@ public class AuthServiceImpl implements AuthService {
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new BusinessException(ApiCode.CONFLICT, "Email already exists");
         }
+        String normalizedLocale = normalizeLocale(preferredLocale);
         String code = generateCode();
         redisTemplate.opsForValue().set(EMAIL_REGISTER_PREFIX + normalizedEmail, code, CODE_TTL_MINUTES, TimeUnit.MINUTES);
-        emailService.sendVerificationCode(normalizedEmail, code, normalizeLocale(preferredLocale));
+        emailService.sendVerificationCode(normalizedEmail, code, normalizedLocale);
     }
 
     @Override

@@ -12,6 +12,48 @@ const words = /[\p{L}]/u
 const allowed = new Set(config.allowedText.map(item => item.value))
 const allowedPatterns = config.allowedPatterns.map(item => new RegExp(item.pattern, 'u'))
 const violations = []
+const defaultLocale = 'zh-CN'
+
+function canonicalLocale(value) {
+  try {
+    return Intl.getCanonicalLocales(value.replaceAll('_', '-'))[0]
+  } catch {
+    throw new Error(`Invalid locale resource name: ${value}`)
+  }
+}
+
+async function checkLocaleResources() {
+  const frontendLocales = new Set(
+    (await readdir(path.join(srcRoot, 'locales')))
+      .filter(name => name.endsWith('.ts'))
+      .map(name => canonicalLocale(name.slice(0, -3))),
+  )
+  if (!frontendLocales.has(defaultLocale)) {
+    throw new Error(`Default frontend locale is missing: ${defaultLocale}`)
+  }
+
+  const backendMailRoot = path.resolve(root, '../backend/betterclouddrive-service/src/main/resources/mail')
+  let backendFiles
+  try {
+    backendFiles = await readdir(backendMailRoot)
+  } catch (error) {
+    if (error?.code === 'ENOENT') return
+    throw error
+  }
+  const backendLocales = new Set(
+    backendFiles
+      .filter(name => /^messages_.+\.properties$/.test(name))
+      .map(name => canonicalLocale(name.slice('messages_'.length, -'.properties'.length))),
+  )
+  const frontendOnly = [...frontendLocales].filter(locale => !backendLocales.has(locale))
+  const backendOnly = [...backendLocales].filter(locale => !frontendLocales.has(locale))
+  if (frontendOnly.length || backendOnly.length) {
+    throw new Error(
+      `Frontend and backend locale resources differ. Frontend only: ${frontendOnly.join(', ') || 'none'}; `
+      + `backend only: ${backendOnly.join(', ') || 'none'}`,
+    )
+  }
+}
 
 function isAllowed(value) {
   const normalized = value.replace(/\s+/g, ' ').trim()
@@ -84,6 +126,8 @@ function checkVue(file, source) {
   }
   walk(ast)
 }
+
+await checkLocaleResources()
 
 for (const file of await files(srcRoot)) {
   const source = await readFile(file, 'utf8')

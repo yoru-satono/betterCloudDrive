@@ -1,5 +1,7 @@
 package com.betterclouddrive.service.mail;
 
+import com.betterclouddrive.service.i18n.LocaleCatalog;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
@@ -13,16 +15,19 @@ import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 @Component
+@RequiredArgsConstructor
 public class MailTemplateRenderer {
 
     private static final String BUNDLE = "mail.messages";
+    private final LocaleCatalog localeCatalog;
     private final TemplateEngine htmlEngine = engine("mail/templates/", ".html", TemplateMode.HTML);
     private final TemplateEngine textEngine = engine("mail/templates/", ".txt", TemplateMode.TEXT);
 
     public RenderedEmail render(String messageKey, String localeTag, Map<String, Object> variables) {
         messageKey = semanticKey(messageKey);
-        Locale locale = normalizeLocale(localeTag);
-        ResourceBundle messages = ResourceBundle.getBundle(BUNDLE, locale);
+        Locale locale = Locale.forLanguageTag(localeCatalog.resolveOrDefault(localeTag));
+        ResourceBundle messages = ResourceBundle.getBundle(
+                BUNDLE, locale, ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES));
         Map<String, Object> model = new LinkedHashMap<>();
         if (variables != null) model.putAll(variables);
         localizeRole(messages, model);
@@ -83,10 +88,6 @@ public class MailTemplateRenderer {
         TemplateEngine engine = new TemplateEngine();
         engine.setTemplateResolver(resolver);
         return engine;
-    }
-
-    private static Locale normalizeLocale(String localeTag) {
-        return "en-US".equals(localeTag) ? Locale.forLanguageTag("en-US") : Locale.forLanguageTag("zh-CN");
     }
 
     private static String message(ResourceBundle bundle, String key) {

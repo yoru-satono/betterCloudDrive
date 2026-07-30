@@ -10,9 +10,11 @@ vi.mock('@/config/runtime', async (importOriginal) => ({
 }))
 
 describe('FileToolbar', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     setActivePinia(createPinia())
     vi.resetModules()
+    const { initializeLocale } = await import('@/i18n')
+    await initializeLocale()
   })
 
   it('shows folder upload only in desktop runtime', async () => {

@@ -1,5 +1,6 @@
 package com.betterclouddrive.service.mail;
 
+import com.betterclouddrive.service.i18n.LocaleCatalog;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -8,7 +9,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class MailTemplateRendererTest {
 
-    private final MailTemplateRenderer renderer = new MailTemplateRenderer();
+    private final LocaleCatalog localeCatalog = new LocaleCatalog("zh-CN");
+    private final MailTemplateRenderer renderer = new MailTemplateRenderer(localeCatalog);
 
     @Test
     void verificationRendersLocalizedMultipartBodies() {
@@ -37,7 +39,7 @@ class MailTemplateRendererTest {
     }
 
     @Test
-    void allNotificationTypesHaveEnglishAndChineseContent() {
+    void allNotificationTypesHaveContentForEveryDiscoveredLocale() {
         String[] types = {
                 "TEAM_INVITE", "TEAM_INVITE_ACCEPT", "TEAM_INVITE_REJECT", "TEAM_QUOTA_ALERT",
                 "TEAM_ARCHIVE", "TEAM_UNARCHIVE", "TEAM_RESTORE", "TEAM_PERMISSION_UPDATE",
@@ -47,8 +49,9 @@ class MailTemplateRendererTest {
         Map<String, Object> values = Map.of("teamName", "Product", "userName", "Alice", "threshold", 90);
         for (String type : types) {
             String key = renderer.notificationKey(type);
-            assertThat(renderer.render(key, "en-US", values).subject()).isNotBlank();
-            assertThat(renderer.render(key, "zh-CN", values).subject()).isNotBlank();
+            for (String locale : localeCatalog.supportedLocales()) {
+                assertThat(renderer.render(key, locale, values).subject()).isNotBlank();
+            }
         }
         assertThat(renderer.notificationKey("UNEXPECTED_EVENT")).isEqualTo("notification.generic");
     }

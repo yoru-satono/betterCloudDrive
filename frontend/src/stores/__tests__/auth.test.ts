@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import * as authApi from '@/api/auth'
 import { useAuthStore } from '@/stores/auth'
+import { locale } from '@/i18n'
 
 vi.mock('@/api/auth', () => ({
   login: vi.fn(),
@@ -68,5 +69,27 @@ describe('auth store', () => {
     expect(localStorage.getItem('accessToken')).toBeNull()
     expect(localStorage.getItem('refreshToken')).toBeNull()
     expect(store.user).toBeNull()
+  })
+
+  it('loads the authenticated user locale preference', async () => {
+    vi.mocked(authApi.getMe).mockResolvedValue({
+      data: { data: { ...user, preferredLocale: 'en-US' } },
+    } as never)
+    const store = useAuthStore()
+
+    await store.fetchMe()
+
+    expect(locale.value).toBe('en-US')
+    expect(document.documentElement.lang).toBe('en-US')
+  })
+
+  it('restores the previous locale when preference persistence fails', async () => {
+    vi.mocked(authApi.updateLocale).mockRejectedValue(new Error('offline'))
+    const store = useAuthStore()
+
+    await expect(store.updateLocale('en-US')).rejects.toThrow('offline')
+
+    expect(locale.value).toBe('zh-CN')
+    expect(localStorage.getItem('preferredLocale')).toBe('zh-CN')
   })
 })

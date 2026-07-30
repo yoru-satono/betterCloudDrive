@@ -4,6 +4,7 @@ import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.web.config.OnlyOfficeProperties;
 import com.betterclouddrive.web.dto.response.OfficeConfigResponse;
+import com.betterclouddrive.service.i18n.LocaleCatalog;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -22,7 +23,8 @@ class OnlyOfficeServiceTest {
     private static final String ONLYOFFICE_AI_PLUGIN_GUID = "asc.{9DC93CDB-B576-4F0C-B55E-FCC9C48DD007}";
 
     private final OnlyOfficeProperties properties = new OnlyOfficeProperties();
-    private final OnlyOfficeService service = new OnlyOfficeService(properties, RestClient.builder());
+    private final OnlyOfficeService service =
+            new OnlyOfficeService(properties, RestClient.builder(), new LocaleCatalog("zh-CN"));
 
     OnlyOfficeServiceTest() {
         properties.setJwtSecret("01234567890123456789012345678901");

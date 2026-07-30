@@ -5,6 +5,7 @@ import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.web.config.OnlyOfficeProperties;
 import com.betterclouddrive.web.dto.response.OfficeConfigResponse;
+import com.betterclouddrive.service.i18n.LocaleCatalog;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -33,9 +34,10 @@ public class OnlyOfficeService {
 
     private final OnlyOfficeProperties properties;
     private final RestClient.Builder restClientBuilder;
+    private final LocaleCatalog localeCatalog;
 
     public OfficeConfigResponse buildPersonalConfig(Long userId, FileEntity file) {
-        return buildPersonalConfig(userId, file, "zh-CN");
+        return buildPersonalConfig(userId, file, localeCatalog.defaultLocale());
     }
 
     public OfficeConfigResponse buildPersonalConfig(Long userId, FileEntity file, String locale) {
@@ -43,7 +45,7 @@ public class OnlyOfficeService {
     }
 
     public OfficeConfigResponse buildTeamConfig(Long userId, Long teamId, FileEntity file, boolean editable) {
-        return buildTeamConfig(userId, teamId, file, editable, "zh-CN");
+        return buildTeamConfig(userId, teamId, file, editable, localeCatalog.defaultLocale());
     }
 
     public OfficeConfigResponse buildTeamConfig(Long userId, Long teamId, FileEntity file, boolean editable,
@@ -148,7 +150,7 @@ public class OnlyOfficeService {
 
         Map<String, Object> editorConfig = new LinkedHashMap<>();
         editorConfig.put("mode", editable ? "edit" : "view");
-        editorConfig.put("lang", "en-US".equals(locale) ? "en-US" : "zh-CN");
+        editorConfig.put("lang", localeCatalog.resolveOrDefault(locale));
         editorConfig.put("user", Map.of(
                 "id", String.valueOf(userId),
                 "name", "user-" + userId

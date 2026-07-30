@@ -3,7 +3,7 @@ package com.betterclouddrive.web.dto.request;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
-import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 
 @Data
 public class RegisterCodeRequest {
@@ -11,6 +11,6 @@ public class RegisterCodeRequest {
     @Email
     private String email;
 
-    @Pattern(regexp = "^(zh-CN|en-US)$", message = "Locale must be zh-CN or en-US")
+    @Size(max = 35)
     private String preferredLocale;
 }
