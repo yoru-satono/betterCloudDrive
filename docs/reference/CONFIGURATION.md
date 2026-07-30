@@ -27,6 +27,9 @@
 |------|------|
 | `.env` | Docker Compose 的宿主机端口和前端 Docker 构建参数 |
 | `.env.example` | 根 `.env` 模板 |
+| `.env.production.example` | 生产 Compose 插值变量模板，不包含真实密钥 |
+| `docker-compose.production.yml` | 生产端口收紧 overlay |
+| `deploy/Caddyfile.production.example` | 宿主机 Caddy HTTPS 双域名反向代理示例 |
 | `config/env-files/database.env` | PostgreSQL、Redis 连接和容器变量 |
 | `config/env-files/rabbitmq.env` | RabbitMQ 容器与后端连接变量 |
 | `config/env-files/storage.env` | SeaweedFS / S3 存储变量 |
@@ -150,6 +153,33 @@ docker compose up -d --build
 ## 生产环境拆分部署
 
 生产环境可以继续使用 Docker Compose，也可以将各组件拆到不同主机、Kubernetes、托管数据库、托管对象存储和独立日志平台。拆分部署时建议遵循下列拓扑。
+
+### 单机 Compose 安全部署
+
+基础 `docker-compose.yml` 保持面向本地开发，会发布数据库、中间件和调试端口。生产环境必须叠加 `docker-compose.production.yml`，不要单独使用基础配置：
+
+```bash
+cp .env.production.example .env.production
+# 编辑 .env.production，替换域名、OnlyOffice JWT 和告警配置路径。
+
+docker compose \
+  --env-file .env.production \
+  -f docker-compose.yml \
+  -f docker-compose.production.yml \
+  -f docker-compose.production-observability.yml \
+  up -d --build
+```
+
+生产 overlay 会移除 PostgreSQL、Redis、RabbitMQ、SeaweedFS、Mailpit 和后端的全部宿主机端口，只保留两个回环地址：
+
+| 宿主机地址 | 用途 | 公网入口 |
+|------|------|------|
+| `127.0.0.1:3000` | 前端及同域 API、WebDAV、Grafana 代理 | `https://drive.example.com` |
+| `127.0.0.1:8082` | OnlyOffice Document Server | `https://office.example.com` |
+
+将 `deploy/Caddyfile.production.example` 安装为宿主机 Caddy 配置，并在 Caddy 服务环境中设置 `BCD_PUBLIC_DOMAIN` 和 `BCD_ONLYOFFICE_DOMAIN`。两个域名必须解析到部署主机；Caddy 对公网监听 TCP 80/443 并自动管理 HTTPS 证书。防火墙只应放行 80/443，以及限制来源地址的运维端口。
+
+生产环境不要叠加 `docker-compose.diagnostics.yml`。如需临时诊断，优先使用 `docker compose exec`；确需发布诊断端口时，应限定在维护窗口，并在完成后移除 diagnostics overlay 并重建相关容器。
 
 ### 推荐拓扑
 

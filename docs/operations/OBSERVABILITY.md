@@ -35,7 +35,7 @@ Prometheus 默认保留 30 天数据，配置位于 `observability/prometheus.ym
 ```powershell
 $env:ALERTMANAGER_PRODUCTION_CONFIG_FILE = 'C:\restricted\alertmanager.yml'
 $env:PROMETHEUS_ENVIRONMENT = 'production'
-docker compose -f docker-compose.yml -f docker-compose.production-observability.yml up -d
+docker compose --env-file .env.production -f docker-compose.yml -f docker-compose.production.yml -f docker-compose.production-observability.yml up -d
 ```
 
 生产配置按 `environment/service/alertname` 分组，warning 只发邮件，critical 同时发邮件和 Webhook；两条路径都发送 resolved。相同环境、服务和告警名的 critical 会抑制 warning，其他服务或告警不受影响。每条新增生产告警必须提供 `runbook_url`。不要把包含凭据的生产配置提交到仓库。
@@ -49,7 +49,7 @@ Invoke-RestMethod http://127.0.0.1:9093/-/ready
 Invoke-RestMethod 'http://127.0.0.1:9115/probe?module=http_2xx&target=http://frontend/healthz'
 ```
 
-主 Compose 只保留容器网络访问。诊断 overlay 也仅绑定 `127.0.0.1`，不要在生产公网入口代理这些端口。
+可观测性服务在主 Compose 中只保留容器网络访问。诊断 overlay 也仅绑定 `127.0.0.1`，但生产环境默认不要叠加它，也不要在生产公网入口代理这些端口。
 
 生产 profile 在内部管理端口 `8081` 暴露 Actuator，业务 API 端口不提供 metrics。诊断 overlay 可从宿主机检查：
 

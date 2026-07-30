@@ -1,0 +1,11 @@
+# Set BCD_PUBLIC_DOMAIN and BCD_ONLYOFFICE_DOMAIN in Caddy's service
+# environment before loading this file. Caddy obtains and renews HTTPS
+# certificates automatically when both names resolve to this host.
+
+{$BCD_PUBLIC_DOMAIN} {
+	reverse_proxy 127.0.0.1:3000
+}
+
+{$BCD_ONLYOFFICE_DOMAIN} {
+	reverse_proxy 127.0.0.1:8082
+}
