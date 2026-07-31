@@ -39,9 +39,11 @@ public class GrafanaAuthService {
 
     private final ObservabilityProperties properties;
     private final UserRepository userRepository;
+    private final GrafanaLocaleSyncService grafanaLocaleSyncService;
 
     public void issueSession(Authentication authentication, HttpServletResponse response) {
         UserEntity user = authenticatedAdmin(authentication);
+        grafanaLocaleSyncService.syncIfAdmin(user);
         long expiresAt = Instant.now().plusSeconds(properties.getGrafanaAuth().getTtlSeconds()).getEpochSecond();
         String payload = user.getId() + "|" + expiresAt;
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8))
@@ -65,6 +67,8 @@ public class GrafanaAuthService {
             response.setHeader(HEADER_EMAIL, user.getEmail());
         }
         response.setHeader(HEADER_ROLE, GRAFANA_ROLE_ADMIN);
+        response.setHeader(GrafanaLocaleSyncService.HEADER_LOCALE,
+                grafanaLocaleSyncService.grafanaLocale(user.getPreferredLocale()));
         response.setStatus(HttpServletResponse.SC_NO_CONTENT);
     }
 

@@ -17,6 +17,7 @@ import com.betterclouddrive.web.dto.response.UserProfileResponse;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.JwtTokenProvider;
 import com.betterclouddrive.web.security.UserPrincipal;
+import com.betterclouddrive.web.service.GrafanaLocaleSyncService;
 import io.jsonwebtoken.Claims;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserTokenRepository userTokenRepository;
     private final StringRedisTemplate redisTemplate;
+    private final GrafanaLocaleSyncService grafanaLocaleSyncService;
 
     @PostMapping("/register")
     public ApiResponse<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request) {
@@ -149,6 +151,7 @@ public class AuthController {
             @CurrentUser UserPrincipal user,
             @Valid @RequestBody UpdateLocaleRequest request) {
         UserEntity updated = authService.updatePreferredLocale(user.getUserId(), request.getPreferredLocale());
+        grafanaLocaleSyncService.syncIfAdmin(updated);
         return ApiResponse.success(UserProfileResponse.from(updated));
     }
 

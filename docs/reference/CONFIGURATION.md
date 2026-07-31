@@ -289,6 +289,8 @@ pnpm run build
 7. 后端验证 cookie 和管理员身份，返回 `X-WEBAUTH-*` 头。
 8. Nginx 将请求代理给 Grafana Auth Proxy。
 
+创建 Grafana 会话和管理员修改语言偏好时，后端会使用 Auth Proxy 身份调用 Grafana 用户偏好 API。Better Cloud Drive 的 `zh-CN` 映射为 Grafana 的 `zh-Hans`，`en-US` 保持不变；Nginx 同时把该语言作为 `Accept-Language` 传给 Grafana。同步失败只记录警告，不阻断 Grafana 访问。已经打开的 Grafana 页面需要刷新或重新打开才能重新加载对应语言资源。
+
 关键变量：
 
 | 变量 | 说明 |
@@ -296,6 +298,9 @@ pnpm run build
 | `GRAFANA_BASE_URL` | 后端生成 Grafana Explore 链接时使用的路径，默认 `/grafana` |
 | `GRAFANA_AUTH_PROXY_SECRET` | 后端签名 Grafana 短期 cookie 的密钥 |
 | `GRAFANA_AUTH_PROXY_TTL_SECONDS` | Grafana 短期 cookie 有效期，默认 300 秒 |
+| `GRAFANA_INTERNAL_URL` | 后端同步 Grafana 用户偏好的容器内地址，Compose 默认 `http://grafana:3000` |
+| `GRAFANA_LOCALE_SYNC_ENABLED` | 是否将管理员语言偏好同步到 Grafana，默认 `true` |
+| `GRAFANA_LOCALE_SYNC_TIMEOUT_MS` | Grafana 偏好同步的连接和读取超时，默认 2000 毫秒 |
 | `GF_SERVER_ROOT_URL` | Grafana 自身生成资源链接使用的外部根地址 |
 | `GF_SERVER_SERVE_FROM_SUB_PATH` | Grafana 是否运行在子路径，当前为 `true` |
 | `GF_AUTH_PROXY_ENABLED` | 启用 Grafana Auth Proxy |

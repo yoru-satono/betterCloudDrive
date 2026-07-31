@@ -50,5 +50,8 @@ public class ObservabilityProperties {
         private String secret = "";
         private long ttlSeconds = 300;
         private boolean cookieSecure = false;
+        private String internalUrl = "http://localhost:3000";
+        private boolean localeSyncEnabled = true;
+        private int localeSyncTimeoutMs = 2000;
     }
 }

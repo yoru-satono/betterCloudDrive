@@ -69,3 +69,5 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 ## 兼容性与数据库
 
 数据库仅提供面向全新实例的合并基线。`V1__schema.sql` 直接包含规范化 BCP 47 语言偏好字段和语义化 message key 字段，不提供旧数据库或旧 snake_case key 的原地升级路径。
+
+管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。应用 locale 与 Grafana locale 独立映射，目前 `zh-CN` 对应 `zh-Hans`，`en-US` 对应 `en-US`；Grafana 同步失败不会影响主应用语言保存或管理员排障入口。

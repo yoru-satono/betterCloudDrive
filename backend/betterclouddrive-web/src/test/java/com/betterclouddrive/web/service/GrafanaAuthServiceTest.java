@@ -26,6 +26,7 @@ class GrafanaAuthServiceTest {
 
     private ObservabilityProperties properties;
     private UserRepository userRepository;
+    private GrafanaLocaleSyncService grafanaLocaleSyncService;
     private GrafanaAuthService service;
 
     @BeforeEach
@@ -34,7 +35,10 @@ class GrafanaAuthServiceTest {
         properties.getGrafanaAuth().setSecret("test-grafana-auth-secret");
         properties.getGrafanaAuth().setTtlSeconds(300);
         userRepository = mock(UserRepository.class);
-        service = new GrafanaAuthService(properties, userRepository);
+        grafanaLocaleSyncService = mock(GrafanaLocaleSyncService.class);
+        when(grafanaLocaleSyncService.grafanaLocale(org.mockito.ArgumentMatchers.any()))
+                .thenReturn("zh-Hans");
+        service = new GrafanaAuthService(properties, userRepository, grafanaLocaleSyncService);
     }
 
     @Test
@@ -58,6 +62,8 @@ class GrafanaAuthServiceTest {
         assertThat(authResponse.getHeader(GrafanaAuthService.HEADER_USER)).isEqualTo("admin");
         assertThat(authResponse.getHeader(GrafanaAuthService.HEADER_EMAIL)).isEqualTo("admin@test.local");
         assertThat(authResponse.getHeader(GrafanaAuthService.HEADER_ROLE)).isEqualTo("Admin");
+        assertThat(authResponse.getHeader(GrafanaLocaleSyncService.HEADER_LOCALE)).isEqualTo("zh-Hans");
+        org.mockito.Mockito.verify(grafanaLocaleSyncService).syncIfAdmin(admin);
     }
 
     @Test
@@ -144,6 +150,7 @@ class GrafanaAuthServiceTest {
                 .id(id)
                 .username(username)
                 .email(email)
+                .preferredLocale("zh-CN")
                 .role(role)
                 .status(status)
                 .build();

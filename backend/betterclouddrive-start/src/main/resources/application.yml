@@ -246,6 +246,9 @@ observability:
     secret: ${GRAFANA_AUTH_PROXY_SECRET:}
     ttl-seconds: ${GRAFANA_AUTH_PROXY_TTL_SECONDS:300}
     cookie-secure: ${GRAFANA_AUTH_COOKIE_SECURE:false}
+    internal-url: ${GRAFANA_INTERNAL_URL:http://localhost:3000}
+    locale-sync-enabled: ${GRAFANA_LOCALE_SYNC_ENABLED:true}
+    locale-sync-timeout-ms: ${GRAFANA_LOCALE_SYNC_TIMEOUT_MS:2000}
   audit:
     enabled: ${AUDIT_LOG_ENABLED:true}
     event-enabled: ${AUDIT_EVENT_ENABLED:${AUDIT_FULL_EVENT_ENABLED:true}}

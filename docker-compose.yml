@@ -417,6 +417,7 @@ services:
       GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
       GF_AUTH_PROXY_HEADERS: "Name:X-WEBAUTH-NAME Email:X-WEBAUTH-EMAIL Role:X-WEBAUTH-ROLE"
       GF_USERS_AUTO_ASSIGN_ORG_ROLE: Admin
+      GF_USERS_DEFAULT_LANGUAGE: detect
     volumes:
       - grafanadata:/var/lib/grafana
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -475,6 +476,9 @@ services:
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
       MAIL_FROM: ${MAIL_FROM:-noreply@betterclouddrive.local}
       GRAFANA_AUTH_COOKIE_SECURE: ${GRAFANA_AUTH_COOKIE_SECURE:-false}
+      GRAFANA_INTERNAL_URL: ${GRAFANA_INTERNAL_URL:-http://grafana:3000}
+      GRAFANA_LOCALE_SYNC_ENABLED: ${GRAFANA_LOCALE_SYNC_ENABLED:-true}
+      GRAFANA_LOCALE_SYNC_TIMEOUT_MS: ${GRAFANA_LOCALE_SYNC_TIMEOUT_MS:-2000}
     ports:
       - "${HOST_BACKEND_PORT:-8080}:8080"
     volumes:
