@@ -235,7 +235,26 @@ office_tests() {
 }
 tauri_build() { (cd frontend && pnpm run tauri:e2e:build); }
 tauri_unit_tests() { (cd frontend/src-tauri && cargo test --locked); }
-tauri_tests() { (cd frontend && pnpm run test:e2e:tauri); }
+set_tauri_test_rate_limits() {
+  DRIVE_RATE_LIMIT_DEFAULT_PERMITS=10000 \
+    DRIVE_RATE_LIMIT_DEFAULT_PERIOD_SECONDS=1 \
+    DRIVE_RATE_LIMIT_UPLOAD_PERMITS=10000 \
+    DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS=1 \
+    docker compose up -d --no-deps --force-recreate backend &&
+    wait_docker_service_healthy backend
+}
+restore_default_rate_limits() {
+  docker compose up -d --no-deps --force-recreate backend &&
+    wait_docker_service_healthy backend
+}
+tauri_tests() {
+  local rc=0 restore_rc=0
+  set_tauri_test_rate_limits || return
+  (cd frontend && pnpm run test:e2e:tauri) || rc=$?
+  restore_default_rate_limits || restore_rc=$?
+  ((rc != 0)) && return "$rc"
+  return "$restore_rc"
+}
 webdav_tests() { run_pytest webdav ../test-results/webdav/junit.xml; }
 observability_tests() { run_pytest observability ../test-results/observability/junit.xml; }
 reload_grafana_provisioning() {

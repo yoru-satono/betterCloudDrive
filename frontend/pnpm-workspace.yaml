@@ -5,3 +5,5 @@ allowBuilds:
   vue-demi: true
 minimumReleaseAgeExclude:
   - '@lucide/vue@1.27.0'
+overrides:
+  '@wdio/native-utils': 2.5.0

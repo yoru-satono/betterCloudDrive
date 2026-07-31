@@ -5,11 +5,18 @@ mod upload;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(settings::TransferLimiters::default())
         .manage(transfer::DesktopTransferState::default())
         .manage(upload::DesktopUploadState::default())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_dialog::init());
+
+    #[cfg(feature = "e2e-webdriver")]
+    let builder = builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             settings::get_desktop_settings,
             settings::save_desktop_settings,

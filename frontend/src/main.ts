@@ -9,6 +9,9 @@ import { initializeTheme } from './theme'
 initializeTheme()
 
 async function bootstrap() {
+  if (import.meta.env.VITE_TAURI_E2E === '1') {
+    await import('@wdio/tauri-plugin')
+  }
   await initializeLocale()
   const app = createApp(App)
   app.use(createPinia())

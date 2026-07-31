@@ -52,16 +52,24 @@ The login page exposes API and Web share URL fields in desktop mode.
 
 ## Tauri Window E2E
 
-The Tauri E2E smoke test drives the real desktop window through `tauri-driver`
-and WebdriverIO. It reuses the web E2E API helpers, so the Docker backend stack
-must be running on the usual local ports.
+The Tauri E2E smoke test drives the real desktop window through WebdriverIO. It
+reuses the web E2E API helpers, so the Docker backend stack must be running on
+the usual local ports.
 
-Prerequisites:
+Windows prerequisites:
 
 - `tauri-driver` is available on `PATH` or `TAURI_DRIVER_PATH` is set.
 - Microsoft WebView2 Runtime is installed.
 - `msedgedriver.exe` is on `PATH`, `EDGEWEBDRIVER_PATH` is set, or the
   `edgedriver` package can download a matching driver.
+
+Linux prerequisites:
+
+- The standard Tauri 2 development dependencies for WebKitGTK 4.1 are installed.
+- A graphical display is available, or `xvfb-run` is installed for headless use.
+- The Linux E2E build uses an instrumented embedded WebDriver. It does not
+  require `tauri-driver` or `WebKitWebDriver`, and the instrumentation is not
+  included in a normal `tauri:build`.
 
 Run:
 
@@ -71,6 +79,8 @@ pnpm run test:e2e:tauri
 ```
 
 Set `TAURI_E2E_APP_PATH` to test a different built executable.
+For the complete Linux flow, including temporary E2E rate-limit configuration
+and restoration, run `../scripts/verify-all.sh --module tauri`.
 
 The Rust desktop upload client also consumes the semantic API envelope. Keep
 its `ApiEnvelope` aligned with `code/messageKey/messageParams/data`; restoring

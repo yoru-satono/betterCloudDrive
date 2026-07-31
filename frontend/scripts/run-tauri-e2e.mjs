@@ -7,12 +7,17 @@ import { fileURLToPath } from 'node:url'
 import { download as downloadEdgeDriver } from 'edgedriver'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const appPath = path.resolve(root, process.env.TAURI_E2E_APP_PATH || 'src-tauri/target/release/betterclouddrive.exe')
+const defaultApp = process.platform === 'win32'
+  ? 'src-tauri/target/release/betterclouddrive.exe'
+  : 'src-tauri/target/release/betterclouddrive'
+const appPath = path.resolve(root, process.env.TAURI_E2E_APP_PATH || defaultApp)
 const driverPort = Number(process.env.TAURI_DRIVER_PORT || 4444)
 const nativePort = Number(process.env.TAURI_NATIVE_DRIVER_PORT || 4445)
 const tauriDriverPath = process.env.TAURI_DRIVER_PATH || 'tauri-driver'
 const wdioBin = path.resolve(root, 'node_modules/@wdio/cli/bin/wdio.js')
-const wdioConfig = path.resolve(root, 'wdio.tauri.conf.ts')
+const wdioConfig = path.resolve(root, process.platform === 'linux'
+  ? 'wdio.tauri.linux.conf.ts'
+  : 'wdio.tauri.conf.ts')
 const downloadDir = path.resolve(process.env.BCD_E2E_DOWNLOAD_DIR || path.join(root, '.wdio-cache', 'downloads', String(Date.now())))
 const uploadDir = path.resolve(process.env.BCD_E2E_UPLOAD_DIR || path.join(root, '.wdio-cache', 'uploads', String(Date.now()), 'tauri-upload-folder'))
 let nativeDriverPath = process.env.EDGEWEBDRIVER_PATH || process.env.TAURI_NATIVE_DRIVER_PATH
@@ -23,6 +28,35 @@ if (!fs.existsSync(appPath)) {
 
 if (!fs.existsSync(wdioBin)) {
   fail('WebdriverIO CLI is not installed. Run "pnpm install" in frontend first.')
+}
+
+if (process.platform === 'linux') {
+  const env = {
+    ...process.env,
+    E2E_BACKEND_URL: process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8080',
+    E2E_MAILPIT_URL: process.env.E2E_MAILPIT_URL || 'http://127.0.0.1:8025',
+    TAURI_E2E_APP_PATH: appPath,
+    BCD_E2E_DOWNLOAD_DIR: downloadDir,
+    BCD_E2E_UPLOAD_DIR: uploadDir,
+    BCD_TAURI_E2E_DRIVER: 'embedded',
+  }
+  const command = process.env.DISPLAY ? process.execPath : findOnPath('xvfb-run')
+  if (!command) {
+    fail('No graphical display is available. Install xvfb and ensure xvfb-run is on PATH.')
+  }
+  const args = process.env.DISPLAY
+    ? [wdioBin, 'run', wdioConfig]
+    : ['-a', process.execPath, wdioBin, 'run', wdioConfig]
+  const wdio = spawn(command, args, {
+    cwd: root,
+    env,
+    stdio: 'inherit',
+  })
+  wdio.once('error', error => fail(`Unable to start Linux Tauri E2E: ${formatError(error)}`))
+  const exitCode = await new Promise(resolve => {
+    wdio.once('exit', code => resolve(code ?? 1))
+  })
+  process.exit(Number(exitCode))
 }
 
 const tauriDriverArgs = [

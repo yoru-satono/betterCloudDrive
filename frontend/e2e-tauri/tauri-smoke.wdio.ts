@@ -196,7 +196,18 @@ async function expectTeamFileUploaded(
 async function sendInviteFromTeamSettings(email: string) {
   const inviteSection = await sectionByHeading('邀请')
   await (await inviteSection.$('input[placeholder="邮箱地址"]')).setValue(email)
-  await (await inviteSection.$('select')).selectByAttribute('value', 'EDITOR')
+  if (process.env.BCD_TAURI_E2E_DRIVER === 'embedded') {
+    await browser.execute(() => {
+      const section = Array.from(document.querySelectorAll<HTMLElement>('section.team-section'))
+        .find(candidate => candidate.querySelector('h3')?.textContent?.trim() === '邀请')
+      const select = section?.querySelector<HTMLSelectElement>('select')
+      if (!select) throw new Error('Invite role selector was not found')
+      select.value = 'EDITOR'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+  } else {
+    await (await inviteSection.$('select')).selectByAttribute('value', 'EDITOR')
+  }
   await (await inviteSection.$('.//button[normalize-space(.)="发送邀请"]')).click()
   await waitForTextWithin(inviteSection, email)
 }
@@ -241,10 +252,32 @@ async function acceptInviteFromNotification(accessToken: string, refreshToken: s
   await (await $('.notifications-page__type')).selectByAttribute('value', 'TEAM_INVITE')
   const notificationRow = await $(`//button[contains(@class, "notification-row") and contains(normalize-space(.), "${teamName}")]`)
   await notificationRow.waitForDisplayed()
-  await notificationRow.click()
+  if (process.env.BCD_TAURI_E2E_DRIVER === 'embedded') {
+    await browser.execute((name) => {
+      const row = Array.from(document.querySelectorAll<HTMLButtonElement>('button.notification-row'))
+        .find(candidate => candidate.textContent?.includes(name))
+      if (!row) throw new Error(`Notification row for ${name} was not found`)
+      row.click()
+    }, teamName)
+  } else {
+    await notificationRow.click()
+  }
   await expectVisibleText(teamName)
-  await clickButton('接受邀请')
-  await expectVisibleText(teamName)
+  if (process.env.BCD_TAURI_E2E_DRIVER === 'embedded') {
+    await browser.execute(() => {
+      const button = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
+        .find(candidate => candidate.textContent?.trim() === '接受邀请')
+      if (!button) throw new Error('Accept invite button was not found')
+      button.click()
+    })
+    await browser.waitUntil(async () => /\/teams\/\d+\/files/.test(await browser.getUrl()), {
+      timeout: 15_000,
+      timeoutMsg: 'Accepting the team invite did not navigate to the team files page',
+    })
+  } else {
+    await clickButton('接受邀请')
+    await expectVisibleText(teamName)
+  }
 }
 
 async function expectTeamMemberRole(

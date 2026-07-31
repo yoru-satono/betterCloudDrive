@@ -83,7 +83,25 @@ export async function expectFolderUploadAvailable() {
 
 export async function openFileContextMenu(fileName: string) {
   const card = await fileCard(fileName)
-  await card.click({ button: 'right' })
+  if (process.env.BCD_TAURI_E2E_DRIVER === 'embedded') {
+    await browser.waitUntil(async () => browser.execute((testId) => {
+      const element = Array.from(document.querySelectorAll<HTMLElement>('[data-testid]'))
+        .find(candidate => candidate.dataset.testid === testId)
+      if (!element) return false
+      element.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        button: 2,
+        buttons: 2,
+      }))
+      return true
+    }, `file-card-${fileName}`), {
+      timeout: 10_000,
+      timeoutMsg: `File card for ${fileName} was not available for a context menu`,
+    })
+  } else {
+    await card.click({ button: 'right' })
+  }
   await expect(await menuItemByText('下载')).toBeDisplayed()
 }
 
