@@ -262,7 +262,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         UserEntity recipient = userRepository.findByEmail(invite.getEmail()).orElse(null);
         UserEntity inviter = userRepository.findById(invite.getInvitedByUserId()).orElse(null);
         String locale = recipient != null ? recipient.getPreferredLocale()
-                : inviter != null ? inviter.getPreferredLocale() : "zh-CN";
+                : inviter != null ? inviter.getPreferredLocale() : "zh-Hans";
         emailService.sendTeamInvite(invite.getEmail(), team.getName(), invite.getRole(), link,
                 invite.getExpiresAt(), locale);
     }

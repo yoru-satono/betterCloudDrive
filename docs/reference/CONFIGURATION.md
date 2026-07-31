@@ -289,7 +289,7 @@ pnpm run build
 7. 后端验证 cookie 和管理员身份，返回 `X-WEBAUTH-*` 头。
 8. Nginx 将请求代理给 Grafana Auth Proxy。
 
-创建 Grafana 会话和管理员修改语言偏好时，后端会使用 Auth Proxy 身份调用 Grafana 用户偏好 API。Better Cloud Drive 的 `zh-CN` 映射为 Grafana 的 `zh-Hans`，`en-US` 保持不变；Nginx 同时把该语言作为 `Accept-Language` 传给 Grafana。同步失败只记录警告，不阻断 Grafana 访问。已经打开的 Grafana 页面需要刷新或重新打开才能重新加载对应语言资源。
+创建 Grafana 会话和管理员修改语言偏好时，后端会使用 Auth Proxy 身份调用 Grafana 用户偏好 API。Better Cloud Drive 的 `zh-Hans` 映射为 Grafana 的 `zh-Hans`，`en-US` 保持不变；Nginx 同时把该语言作为 `Accept-Language` 传给 Grafana。同步失败只记录警告，不阻断 Grafana 访问。已经打开的 Grafana 页面需要刷新或重新打开才能重新加载对应语言资源。
 
 关键变量：
 

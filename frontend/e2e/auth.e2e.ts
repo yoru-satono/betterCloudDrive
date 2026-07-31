@@ -2,7 +2,7 @@ import { test, expect } from './fixtures/test'
 import { clearMailpit, getLatestVerificationCode } from './helpers/api'
 
 test('redirects unauthenticated users to login', async ({ browser }) => {
-  const context = await browser.newContext({ locale: 'zh-CN', storageState: { cookies: [], origins: [] } })
+  const context = await browser.newContext({ locale: 'zh-Hans', storageState: { cookies: [], origins: [] } })
   const page = await context.newPage()
 
   await page.goto('/files')

@@ -2,7 +2,7 @@
 
 BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务端只传递稳定的文案键和结构化参数，由 Web/Tauri 与 Android 使用本地简体中文或英文资源渲染。
 
-客户端支持 `zh-CN` 和 `en-US`。未登录时使用当前设备已保存的选择，首次访问按系统语言选择；注册会保存当前语言。登录后以账号的 `preferredLocale` 为准，并同步到当前设备。现有账号通过数据库迁移默认使用 `zh-CN`。
+客户端支持 `zh-Hans` 和 `en-US`。未登录时使用当前设备已保存的选择，首次访问按系统语言选择；注册会保存当前语言。登录后以账号的 `preferredLocale` 为准，并同步到当前设备。全新数据库实例中的账号默认使用 `zh-Hans`。
 
 ## API 响应
 
@@ -45,7 +45,7 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 
 ## Web 与 Tauri
 
-- 入口位于 `frontend/src/i18n.ts`，资源位于 `frontend/src/locales/zh-CN.ts` 和 `frontend/src/locales/en-US.ts`。
+- 入口位于 `frontend/src/i18n.ts`，资源位于 `frontend/src/locales/zh-Hans.ts` 和 `frontend/src/locales/en-US.ts`。
 - 生产源码中的用户可见文本必须通过 locale key 获取。`pnpm run check:i18n` 检查 Vue 裸文本、用户可见静态属性和 TypeScript 中文字符串；技术名词例外集中登记在 `frontend/i18n-hardcode.config.mjs`，并必须说明原因。
 - `pnpm run test` 和 `pnpm run build` 会自动执行硬编码检查。词典、i18n 最终兜底和测试断言不在门禁范围内。
 - 公开认证页提供全局语言入口，登录后可在个人资料中修改。切换立即生效并更新页面 `lang`；保存账号失败时回滚。
@@ -55,7 +55,7 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 
 ## Android
 
-- 英文默认资源位于 `android/app/src/main/res/values/strings.xml`，简体中文资源位于 `values-zh-rCN/strings.xml`。
+- 英文默认资源位于 `android/app/src/main/res/values/strings.xml`，简体中文资源位于 `values-b+zh+Hans/strings.xml`。
 - 使用 Android per-app locale；认证页与个人设置提供语言入口，账号同步规则与 Web 一致。
 - `MessageResolver` 集中映射服务端 key，并负责参数格式化和未知键降级。
 - 网络错误模型只携带 `code/messageKey/messageParams/requestId`。
@@ -63,11 +63,11 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 ## 服务端文本边界
 
 - 固定日志、内部诊断和数据库注释使用英文。
-- 邮件由服务端外部 HTML/纯文本模板生成，支持 `zh-CN` 与 `en-US`，不复用客户端翻译文本。已注册收件人优先使用账号语言，外部收件人使用操作发起人的语言。
+- 邮件由服务端外部 HTML/纯文本模板生成，支持 `zh-Hans` 与 `en-US`，不复用客户端翻译文本。已注册收件人优先使用账号语言，外部收件人使用操作发起人的语言。
 - 后端生产源码、资源及 DDL 不应包含面向用户的中文；测试中的显式 Unicode 用户输入样本除外。
 
 ## 兼容性与数据库
 
 数据库仅提供面向全新实例的合并基线。`V1__schema.sql` 直接包含规范化 BCP 47 语言偏好字段和语义化 message key 字段，不提供旧数据库或旧 snake_case key 的原地升级路径。
 
-管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。应用 locale 与 Grafana locale 独立映射，目前 `zh-CN` 对应 `zh-Hans`，`en-US` 对应 `en-US`；Grafana 同步失败不会影响主应用语言保存或管理员排障入口。
+管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。应用 locale 与 Grafana locale 独立映射，目前 `zh-Hans` 对应 `zh-Hans`，`en-US` 对应 `en-US`；Grafana 同步失败不会影响主应用语言保存或管理员排障入口。

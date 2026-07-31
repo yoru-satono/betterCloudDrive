@@ -12,7 +12,7 @@ const words = /[\p{L}]/u
 const allowed = new Set(config.allowedText.map(item => item.value))
 const allowedPatterns = config.allowedPatterns.map(item => new RegExp(item.pattern, 'u'))
 const violations = []
-const defaultLocale = 'zh-CN'
+const defaultLocale = 'zh-Hans'
 
 function canonicalLocale(value) {
   try {

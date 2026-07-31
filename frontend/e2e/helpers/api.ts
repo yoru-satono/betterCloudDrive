@@ -152,7 +152,7 @@ export async function refreshUserLogin(request: APIRequestContext, user: E2EUser
 
 export async function createAuthenticatedContext(browser: Browser, user: E2EUser): Promise<BrowserContext> {
   return browser.newContext({
-    locale: 'zh-CN',
+    locale: 'zh-Hans',
     storageState: {
       cookies: [],
       origins: [
@@ -161,7 +161,7 @@ export async function createAuthenticatedContext(browser: Browser, user: E2EUser
           localStorage: [
             { name: 'accessToken', value: user.accessToken },
             { name: 'refreshToken', value: user.refreshToken },
-            { name: 'preferredLocale', value: 'zh-CN' },
+            { name: 'preferredLocale', value: 'zh-Hans' },
           ],
         },
       ],

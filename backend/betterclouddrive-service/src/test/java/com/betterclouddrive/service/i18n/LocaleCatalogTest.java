@@ -7,18 +7,18 @@ import org.springframework.beans.factory.BeanInitializationException;
 import static org.assertj.core.api.Assertions.*;
 
 class LocaleCatalogTest {
-    private final LocaleCatalog catalog = new LocaleCatalog("zh-CN");
+    private final LocaleCatalog catalog = new LocaleCatalog("zh-Hans");
 
     @Test
     void discoversEveryMailBundleLocale() {
-        assertThat(catalog.supportedLocales()).containsExactly("en-US", "zh-CN");
+        assertThat(catalog.supportedLocales()).containsExactly("en-US", "zh-Hans");
     }
 
     @Test
     void normalizesSupportedLanguageTagsAndUsesTheDefaultForMissingValues() {
         assertThat(catalog.normalize("en-us")).isEqualTo("en-US");
-        assertThat(catalog.normalize(null)).isEqualTo("zh-CN");
-        assertThat(catalog.resolveOrDefault("not-a-supported-locale")).isEqualTo("zh-CN");
+        assertThat(catalog.normalize(null)).isEqualTo("zh-Hans");
+        assertThat(catalog.resolveOrDefault("not-a-supported-locale")).isEqualTo("zh-Hans");
     }
 
     @Test

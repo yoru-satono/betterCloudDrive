@@ -12,7 +12,7 @@ import com.betterclouddrive.android.util.LocaleController
 fun LocaleSelector(onChange: (String) -> Unit = LocaleController::set) {
     val current = LocaleController.current()
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(selected = current == LocaleController.ZH_CN, onClick = { onChange(LocaleController.ZH_CN) }, label = { Text("简体中文") })
+        FilterChip(selected = current == LocaleController.ZH_HANS, onClick = { onChange(LocaleController.ZH_HANS) }, label = { Text("简体中文") })
         FilterChip(selected = current == LocaleController.EN_US, onClick = { onChange(LocaleController.EN_US) }, label = { Text("English") })
     }
 }

@@ -58,7 +58,7 @@ test.describe('share save, password, and visit limits', () => {
     const receiverTarget = await createFolder(request, receiver.accessToken, uniqueName('receiver-target'))
     const share = await createShare(request, e2eUser.accessToken, sharedFolder.id)
 
-    const anonymousContext = await browser.newContext({ locale: 'zh-CN', storageState: { cookies: [], origins: [] } })
+    const anonymousContext = await browser.newContext({ locale: 'zh-Hans', storageState: { cookies: [], origins: [] } })
     const anonymousPage = await anonymousContext.newPage()
     await anonymousPage.goto(`/s/${share.shareCode}`)
     await expect(anonymousPage.getByText(sharedFolder.fileName)).toBeVisible()

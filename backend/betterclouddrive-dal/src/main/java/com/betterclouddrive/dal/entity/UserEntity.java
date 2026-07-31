@@ -45,7 +45,7 @@ public class UserEntity {
 
     @Column(name = "preferred_locale", length = 35)
     @Builder.Default
-    private String preferredLocale = "zh-CN";
+    private String preferredLocale = "zh-Hans";
 
     @Column(name = "nickname")
     private String nickname;

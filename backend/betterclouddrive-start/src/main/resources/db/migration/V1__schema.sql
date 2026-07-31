@@ -25,7 +25,7 @@ CREATE TABLE users (
     password_hash   VARCHAR(255) NOT NULL,
     email           VARCHAR(128),
     email_verified  BOOLEAN      NOT NULL DEFAULT FALSE,
-    preferred_locale VARCHAR(35) NOT NULL DEFAULT 'zh-CN',
+    preferred_locale VARCHAR(35) NOT NULL DEFAULT 'zh-Hans',
     nickname        VARCHAR(64),
     avatar_url      VARCHAR(512),
     role            VARCHAR(32)  NOT NULL DEFAULT 'ROLE_USER',

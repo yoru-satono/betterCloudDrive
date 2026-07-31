@@ -25,7 +25,7 @@ class EmailServiceImplTest {
     @BeforeEach
     void setUp() throws Exception {
         mailSender = mock(JavaMailSender.class);
-        service = new EmailServiceImpl(mailSender, new MailTemplateRenderer(new LocaleCatalog("zh-CN")));
+        service = new EmailServiceImpl(mailSender, new MailTemplateRenderer(new LocaleCatalog("zh-Hans")));
         setField("from", "noreply@test.local");
         setField("appPublicUrl", "https://cloud.example/");
         when(mailSender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));

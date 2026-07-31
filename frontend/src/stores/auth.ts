@@ -38,7 +38,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     user.value = currentUser
     try {
-      await setLocale(currentUser.preferredLocale || 'zh-CN')
+      await setLocale(currentUser.preferredLocale || 'zh-Hans')
     } catch (error) {
       console.warn('Failed to load the preferred locale', error)
     }

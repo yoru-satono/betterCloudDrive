@@ -33,14 +33,14 @@ data class RegisterRequest(
     val password: String,
     val email: String,
     @SerialName("verificationCode") val verificationCode: String,
-    @SerialName("preferredLocale") val preferredLocale: String = "zh-CN",
+    @SerialName("preferredLocale") val preferredLocale: String = "zh-Hans",
 )
 
 @Serializable
 data class UpdateLocaleRequest(@SerialName("preferredLocale") val preferredLocale: String)
 
 @Serializable
-data class RegisterCodeRequest(val email: String, @SerialName("preferredLocale") val preferredLocale: String = "zh-CN")
+data class RegisterCodeRequest(val email: String, @SerialName("preferredLocale") val preferredLocale: String = "zh-Hans")
 
 @Serializable
 data class RefreshRequest(@SerialName("refreshToken") val refreshToken: String)

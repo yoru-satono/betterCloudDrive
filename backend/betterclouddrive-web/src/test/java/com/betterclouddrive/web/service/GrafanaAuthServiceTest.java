@@ -150,7 +150,7 @@ class GrafanaAuthServiceTest {
                 .id(id)
                 .username(username)
                 .email(email)
-                .preferredLocale("zh-CN")
+                .preferredLocale("zh-Hans")
                 .role(role)
                 .status(status)
                 .build();

@@ -219,7 +219,7 @@ public class AuthServiceImpl implements AuthService {
         UserEntity recipient = userRepository.findByEmail(normalizeEmail(toEmail)).orElse(null);
         UserEntity actor = actorUserId == null ? null : userRepository.findById(actorUserId).orElse(null);
         String locale = recipient != null ? recipient.getPreferredLocale()
-                : actor != null ? actor.getPreferredLocale() : "zh-CN";
+                : actor != null ? actor.getPreferredLocale() : "zh-Hans";
         emailService.sendShareNotification(toEmail, shareCode, fileName, sharedBy, normalizeLocale(locale));
     }
 

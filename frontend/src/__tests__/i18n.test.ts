@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { resolveMessage, setLocale } from '@/i18n'
-import zhCN from '@/locales/zh-CN'
+import zhHans from '@/locales/zh-Hans'
 import enUS from '@/locales/en-US'
 
 function leafKeys(value: unknown, prefix = ''): string[] {
@@ -36,15 +36,15 @@ describe('semantic message resolver', () => {
     expect(resolveMessage('error.unauthorized')).toBe('Please sign in first')
     expect(localStorage.getItem('preferredLocale')).toBe('en-US')
     expect(document.documentElement.lang).toBe('en-US')
-    await setLocale('zh-CN')
+    await setLocale('zh-Hans')
   })
 
   it('keeps Chinese and English message packs structurally complete', () => {
-    expect(leafKeys(enUS).sort()).toEqual(leafKeys(zhCN).sort())
+    expect(leafKeys(enUS).sort()).toEqual(leafKeys(zhHans).sort())
   })
 
   it('keeps interpolation contracts aligned and rejects legacy hash keys', () => {
-    const chinese = new Map(leafMessages(zhCN))
+    const chinese = new Map(leafMessages(zhHans))
     const english = new Map(leafMessages(enUS))
     for (const [key, message] of chinese) {
       expect(key).not.toMatch(/(?:^|\.)migrated(?:\.|$)|(?:^|\.)m_[0-9a-f]+(?:\.|$)/)
@@ -56,6 +56,6 @@ describe('semantic message resolver', () => {
   it('uses a semantic login error instead of the authentication-required copy', async () => {
     await setLocale('en-US')
     expect(resolveMessage('error.invalidCredentials')).toBe('Incorrect username or password')
-    await setLocale('zh-CN')
+    await setLocale('zh-Hans')
   })
 })

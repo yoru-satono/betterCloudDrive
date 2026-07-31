@@ -60,7 +60,7 @@ public class GrafanaLocaleSyncService {
     public String grafanaLocale(String preferredLocale) {
         String locale = localeCatalog.resolveOrDefault(preferredLocale);
         return switch (locale) {
-            case "zh-CN" -> "zh-Hans";
+            case "zh-Hans" -> "zh-Hans";
             case "en-US" -> "en-US";
             default -> "en-US";
         };

@@ -15,6 +15,6 @@ describe('LocaleSwitcher', () => {
     const values = wrapper.findAll('option').map(option => option.attributes('value'))
 
     expect(values).toEqual(SUPPORTED_LOCALES)
-    expect([...values].sort()).toEqual(['en-US', 'zh-CN'])
+    expect([...values].sort()).toEqual(['en-US', 'zh-Hans'])
   })
 })

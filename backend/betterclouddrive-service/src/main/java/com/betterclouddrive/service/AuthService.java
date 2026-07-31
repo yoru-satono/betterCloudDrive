@@ -4,7 +4,7 @@ import com.betterclouddrive.dal.entity.UserEntity;
 
 public interface AuthService {
     default UserEntity register(String username, String password, String email, String verificationCode) {
-        return register(username, password, email, verificationCode, "zh-CN");
+        return register(username, password, email, verificationCode, "zh-Hans");
     }
     UserEntity register(String username, String password, String email, String verificationCode, String preferredLocale);
     UserEntity login(String username, String password);
@@ -14,7 +14,7 @@ public interface AuthService {
     UserEntity updatePreferredLocale(Long userId, String preferredLocale);
 
     /** Send 6-digit verification code before account registration */
-    default void sendRegistrationCode(String email) { sendRegistrationCode(email, "zh-CN"); }
+    default void sendRegistrationCode(String email) { sendRegistrationCode(email, "zh-Hans"); }
     void sendRegistrationCode(String email, String preferredLocale);
 
     /** Send password reset code to email. Silently succeeds even if email not found. */

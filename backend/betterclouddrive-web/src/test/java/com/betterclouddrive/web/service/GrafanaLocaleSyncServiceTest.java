@@ -32,13 +32,13 @@ class GrafanaLocaleSyncServiceTest {
         server = MockRestServiceServer.bindTo(builder).build();
         service = new GrafanaLocaleSyncService(
                 properties,
-                new LocaleCatalog("zh-CN"),
+                new LocaleCatalog("zh-Hans"),
                 builder.build());
     }
 
     @Test
     void mapsApplicationLocalesToGrafanaLocales() {
-        assertThat(service.grafanaLocale("zh-CN")).isEqualTo("zh-Hans");
+        assertThat(service.grafanaLocale("zh-Hans")).isEqualTo("zh-Hans");
         assertThat(service.grafanaLocale("en-US")).isEqualTo("en-US");
         assertThat(service.grafanaLocale(null)).isEqualTo("zh-Hans");
     }
@@ -88,7 +88,7 @@ class GrafanaLocaleSyncServiceTest {
                 .username("admin")
                 .nickname("Administrator")
                 .email("admin@test.local")
-                .preferredLocale("zh-CN")
+                .preferredLocale("zh-Hans")
                 .role("ROLE_ADMIN")
                 .status(1)
                 .build();

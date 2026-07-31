@@ -21,7 +21,7 @@ const user = {
   status: 1,
   storageUsed: 25,
   storageQuota: 100,
-  preferredLocale: 'zh-CN',
+  preferredLocale: 'zh-Hans',
 }
 
 describe('auth store', () => {
@@ -89,7 +89,7 @@ describe('auth store', () => {
 
     await expect(store.updateLocale('en-US')).rejects.toThrow('offline')
 
-    expect(locale.value).toBe('zh-CN')
-    expect(localStorage.getItem('preferredLocale')).toBe('zh-CN')
+    expect(locale.value).toBe('zh-Hans')
+    expect(localStorage.getItem('preferredLocale')).toBe('zh-Hans')
   })
 })

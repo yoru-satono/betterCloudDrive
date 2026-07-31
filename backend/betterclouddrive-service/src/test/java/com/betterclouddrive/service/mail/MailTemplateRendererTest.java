@@ -9,13 +9,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class MailTemplateRendererTest {
 
-    private final LocaleCatalog localeCatalog = new LocaleCatalog("zh-CN");
+    private final LocaleCatalog localeCatalog = new LocaleCatalog("zh-Hans");
     private final MailTemplateRenderer renderer = new MailTemplateRenderer(localeCatalog);
 
     @Test
     void verificationRendersLocalizedMultipartBodies() {
         RenderedEmail english = renderer.render("verification", "en-US", Map.of("code", "123456"));
-        RenderedEmail chinese = renderer.render("verification", "zh-CN", Map.of("code", "654321"));
+        RenderedEmail chinese = renderer.render("verification", "zh-Hans", Map.of("code", "654321"));
 
         assertThat(english.subject()).isEqualTo("Verify your BetterCloudDrive email");
         assertThat(english.html()).contains("#f7f8fa", "#007a65", "123456", "BetterCloudDrive");
@@ -58,7 +58,7 @@ class MailTemplateRendererTest {
 
     @Test
     void passwordResetAndTeamInviteTemplatesRenderAllDynamicFields() {
-        RenderedEmail reset = renderer.render("password_reset", "zh-CN", Map.of("code", "112233"));
+        RenderedEmail reset = renderer.render("password_reset", "zh-Hans", Map.of("code", "112233"));
         RenderedEmail invite = renderer.render("team_invite", "en-US", Map.of(
                 "teamName", "Product", "role", "ROLE_EDITOR", "expiresAt", "2026-07-20 12:00",
                 "link", "https://cloud.example/team-invites/token",

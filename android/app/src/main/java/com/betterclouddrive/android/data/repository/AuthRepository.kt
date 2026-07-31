@@ -18,7 +18,7 @@ class AuthRepository @Inject constructor(
         password: String,
         email: String,
         verificationCode: String,
-        preferredLocale: String = "zh-CN",
+        preferredLocale: String = "zh-Hans",
     ): NetworkResult<RegisterResult> = apiCall {
         api.register(RegisterRequest(username, password, email, verificationCode, preferredLocale))
     }

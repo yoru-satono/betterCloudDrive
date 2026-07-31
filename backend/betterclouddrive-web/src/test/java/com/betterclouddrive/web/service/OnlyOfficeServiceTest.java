@@ -24,7 +24,7 @@ class OnlyOfficeServiceTest {
 
     private final OnlyOfficeProperties properties = new OnlyOfficeProperties();
     private final OnlyOfficeService service =
-            new OnlyOfficeService(properties, RestClient.builder(), new LocaleCatalog("zh-CN"));
+            new OnlyOfficeService(properties, RestClient.builder(), new LocaleCatalog("zh-Hans"));
 
     OnlyOfficeServiceTest() {
         properties.setJwtSecret("01234567890123456789012345678901");

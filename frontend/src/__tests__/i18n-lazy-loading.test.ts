@@ -11,14 +11,14 @@ describe('lazy locale loading', () => {
     const { i18n, initializeLocale, resolveSupportedLocale, setLocale, SUPPORTED_LOCALES } = await import('@/i18n')
 
     await initializeLocale()
-    expect([...SUPPORTED_LOCALES].sort()).toEqual(['en-US', 'zh-CN'])
+    expect([...SUPPORTED_LOCALES].sort()).toEqual(['en-US', 'zh-Hans'])
     expect(resolveSupportedLocale('en-us')).toBe('en-US')
-    expect(resolveSupportedLocale('zh-Hant')).toBe('zh-CN')
+    expect(resolveSupportedLocale('zh-Hant')).toBe('zh-Hans')
     expect(resolveSupportedLocale('fr-FR')).toBeUndefined()
-    expect(i18n.global.availableLocales).toEqual(['zh-CN'])
+    expect(i18n.global.availableLocales).toEqual(['zh-Hans'])
 
     await setLocale('en-US')
-    expect(i18n.global.availableLocales.sort()).toEqual(['en-US', 'zh-CN'])
+    expect(i18n.global.availableLocales.sort()).toEqual(['en-US', 'zh-Hans'])
   })
 
   it('keeps the active locale and persistence unchanged when loading fails', async () => {
@@ -31,9 +31,9 @@ describe('lazy locale loading', () => {
     await initializeLocale()
     await expect(setLocale('en-US')).rejects.toThrow()
 
-    expect(locale.value).toBe('zh-CN')
-    expect(i18n.global.locale.value).toBe('zh-CN')
-    expect(localStorage.getItem('preferredLocale')).toBe('zh-CN')
-    expect(document.documentElement.lang).toBe('zh-CN')
+    expect(locale.value).toBe('zh-Hans')
+    expect(i18n.global.locale.value).toBe('zh-Hans')
+    expect(localStorage.getItem('preferredLocale')).toBe('zh-Hans')
+    expect(document.documentElement.lang).toBe('zh-Hans')
   })
 })

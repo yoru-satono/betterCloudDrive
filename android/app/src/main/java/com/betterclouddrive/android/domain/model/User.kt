@@ -15,7 +15,7 @@ data class User(
     val status: Int = 1,
     val role: String = "ROLE_USER",
     @SerialName("emailVerified") val emailVerified: Boolean = false,
-    @SerialName("preferredLocale") val preferredLocale: String = "zh-CN",
+    @SerialName("preferredLocale") val preferredLocale: String = "zh-Hans",
     @SerialName("createdAt") val createdAt: String? = null,
     @SerialName("updatedAt") val updatedAt: String? = null,
 )

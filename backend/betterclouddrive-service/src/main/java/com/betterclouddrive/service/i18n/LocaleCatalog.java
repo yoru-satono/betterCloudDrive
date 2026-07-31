@@ -21,7 +21,7 @@ public class LocaleCatalog {
     private final String defaultLocale;
     private final Set<String> supportedLocales;
 
-    public LocaleCatalog(@Value("${drive.i18n.default-locale:zh-CN}") String defaultLocale) {
+    public LocaleCatalog(@Value("${drive.i18n.default-locale:zh-Hans}") String defaultLocale) {
         this.supportedLocales = discover();
         this.defaultLocale = canonicalTag(defaultLocale);
         if (!supportedLocales.contains(this.defaultLocale)) {

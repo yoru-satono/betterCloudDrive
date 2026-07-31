@@ -34,7 +34,7 @@ class AuthServiceImplTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private EmailService emailService;
-    @Spy private LocaleCatalog localeCatalog = new LocaleCatalog("zh-CN");
+    @Spy private LocaleCatalog localeCatalog = new LocaleCatalog("zh-Hans");
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -303,7 +303,7 @@ class AuthServiceImplTest {
 
         authService.sendRegistrationCode("U@Test.com ");
 
-        verify(emailService).sendVerificationCode(eq("u@test.com"), anyString(), eq("zh-CN"));
+        verify(emailService).sendVerificationCode(eq("u@test.com"), anyString(), eq("zh-Hans"));
         verify(valueOps).set(eq("email:register:u@test.com"), anyString(), eq(10L), eq(TimeUnit.MINUTES));
     }
 
