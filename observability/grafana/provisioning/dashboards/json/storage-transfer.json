@@ -1,120 +1,512 @@
 {
-  "annotations": {"list": []},
+  "annotations": {
+    "list": []
+  },
   "editable": false,
   "graphTooltip": 1,
   "id": null,
   "links": [
-    {"asDropdown": false, "icon": "doc", "includeVars": false, "keepTime": true, "tags": [], "targetBlank": false, "title": "Logs / Loki", "tooltip": "Open storage logs", "type": "link", "url": "/grafana/explore?schemaVersion=1&panes=%7B%22logs%22:%7B%22datasource%22:%22bcd-loki%22%7D%7D&orgId=1"},
-    {"asDropdown": false, "icon": "search", "includeVars": false, "keepTime": true, "tags": [], "targetBlank": false, "title": "Traces / Tempo", "tooltip": "Open storage traces", "type": "link", "url": "/grafana/explore?schemaVersion=1&panes=%7B%22traces%22:%7B%22datasource%22:%22bcd-tempo%22%7D%7D&orgId=1"},
-    {"asDropdown": false, "icon": "external link", "includeVars": false, "keepTime": false, "tags": [], "targetBlank": true, "title": "Observability runbook", "tooltip": "Open the operations guide", "type": "link", "url": "https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md"}
+    {
+      "asDropdown": false,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Logs / Loki",
+      "tooltip": "Open storage logs",
+      "type": "link",
+      "url": "/grafana/explore?schemaVersion=1&panes=%7B%22logs%22:%7B%22datasource%22:%22bcd-loki%22%7D%7D&orgId=1"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Observability runbook",
+      "tooltip": "Open the operations guide",
+      "type": "link",
+      "url": "https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md"
+    }
   ],
   "panels": [
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "red", "text": "DOWN"}, "1": {"color": "green", "text": "UP"}}, "type": "value"}], "noValue": "UNKNOWN", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
-      "gridPos": {"h": 4, "w": 8, "x": 0, "y": 0},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "UNKNOWN",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
-      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"expr": "min(probe_success{job=\"blackbox-http\",service=~\"seaweedfs-.*\"}) or vector(0)", "refId": "A"}],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "min(probe_success{job=\"blackbox-http\",service=~\"seaweedfs-.*\"}) or vector(0)",
+          "refId": "A"
+        }
+      ],
       "title": "Service status",
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]}}, "overrides": []},
-      "gridPos": {"h": 4, "w": 8, "x": 8, "y": 0},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
       "id": 2,
-      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"expr": "sum(ALERTS{alertstate=\"firing\",service=~\"seaweedfs-.*\"}) or vector(0)", "refId": "A"}],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(ALERTS{alertstate=\"firing\",service=~\"seaweedfs-.*\"}) or vector(0)",
+          "refId": "A"
+        }
+      ],
       "title": "Current storage alerts",
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "Bps"}, "overrides": []},
-      "gridPos": {"h": 4, "w": 8, "x": 16, "y": 0},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
       "id": 3,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"expr": "sum(rate(bcd_storage_bytes_total[5m])) or vector(0)", "refId": "A"}],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(bcd_storage_bytes_total[5m])) or vector(0)",
+          "refId": "A"
+        }
+      ],
       "title": "Storage transfer rate",
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "ops"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
       "id": 4,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (operation, outcome) (rate(bcd_storage_operations_total[5m]))", "legendFormat": "{{operation}} / {{outcome}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(bcd_storage_operations_total[5m]))",
+          "legendFormat": "{{operation}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
       "title": "Storage operation rate",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "percentunit"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
       "id": 5,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (operation) (rate(bcd_storage_operations_total{outcome=\"failure\"}[5m])) / clamp_min(sum by (operation) (rate(bcd_storage_operations_total[5m])), 0.001)", "legendFormat": "{{operation}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation) (rate(bcd_storage_operations_total{outcome=\"failure\"}[5m])) / clamp_min(sum by (operation) (rate(bcd_storage_operations_total[5m])), 0.001)",
+          "legendFormat": "{{operation}}",
+          "refId": "A"
+        }
+      ],
       "title": "Storage failure ratio",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
       "id": 6,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (operation, outcome) (rate(bcd_storage_operation_duration_seconds_sum[5m])) / clamp_min(sum by (operation, outcome) (rate(bcd_storage_operation_duration_seconds_count[5m])), 0.001)", "legendFormat": "{{operation}} / {{outcome}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(bcd_storage_operation_duration_seconds_sum[5m])) / clamp_min(sum by (operation, outcome) (rate(bcd_storage_operation_duration_seconds_count[5m])), 0.001)",
+          "legendFormat": "{{operation}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
       "title": "Mean storage operation duration",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "Bps"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
       "id": 7,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (direction) (rate(bcd_storage_bytes_total[5m]))", "legendFormat": "{{direction}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (direction) (rate(bcd_storage_bytes_total[5m]))",
+          "legendFormat": "{{direction}}",
+          "refId": "A"
+        }
+      ],
       "title": "Transfer throughput",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"max": 1, "min": 0, "noValue": "0"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 20},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
       "id": 8,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "probe_success{job=\"blackbox-http\",service=~\"seaweedfs-.*\"}", "legendFormat": "{{service}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "probe_success{job=\"blackbox-http\",service=~\"seaweedfs-.*\"}",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ],
       "title": "SeaweedFS HTTP probe success",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "s"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 20},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 20
+      },
       "id": 9,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "probe_duration_seconds{job=\"blackbox-http\",service=~\"seaweedfs-.*\"}", "legendFormat": "{{service}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "probe_duration_seconds{job=\"blackbox-http\",service=~\"seaweedfs-.*\"}",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ],
       "title": "SeaweedFS probe duration",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "No active alerts"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 20},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No active alerts"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 20
+      },
       "id": 10,
-      "options": {"cellHeight": "sm", "showHeader": true},
-      "targets": [{"expr": "ALERTS{alertstate=\"firing\",service=~\"seaweedfs-.*\"}", "format": "table", "instant": true, "refId": "A"}],
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "expr": "ALERTS{alertstate=\"firing\",service=~\"seaweedfs-.*\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
       "title": "Active storage alert details",
       "type": "table"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["betterclouddrive", "storage"],
-  "templating": {"list": []},
-  "time": {"from": "now-6h", "to": "now"},
+  "tags": [
+    "betterclouddrive",
+    "storage"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timezone": "browser",
   "title": "BetterCloudDrive / Storage & Transfer",
   "uid": "bcd-storage-transfer",

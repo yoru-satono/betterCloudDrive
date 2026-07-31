@@ -39,7 +39,7 @@ import java.util.regex.Pattern;
 @Slf4j
 @Component
 // Run after Spring's server observation filter so Tracer.currentSpan() is the
-// authoritative context exported to Tempo.
+// authoritative context used to correlate request, runtime, and audit logs.
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 @RequiredArgsConstructor
 public class TraceAuditFilter extends OncePerRequestFilter {

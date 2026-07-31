@@ -24,12 +24,10 @@ EXPECTED_DASHBOARDS = {
     "bcd-application-overview": "BetterCloudDrive / Service Overview",
     "bcd-storage-transfer": "BetterCloudDrive / Storage & Transfer",
     "bcd-business-operations": "BetterCloudDrive / Async & Collaboration",
-    "bcd-infrastructure": "BetterCloudDrive / Infrastructure",
 }
 EXPECTED_DATASOURCES = {
     "bcd-prometheus": "prometheus",
     "bcd-loki": "loki",
-    "bcd-tempo": "tempo",
     "bcd-alertmanager": "alertmanager",
 }
 GRAFANA_URL = "http://localhost:3000/grafana"
@@ -87,25 +85,6 @@ def test_request_id_reaches_loki_and_grafana_is_admin_only(client, auth_headers,
     assert denied.status_code in (401, 403) or denied.json().get("code") == 403
     allowed = client.post("/api/v1/admin/grafana/session", headers=admin_headers)
     assert allowed.status_code == 200 and allowed.json()["code"] == 200
-    deadline = time.time() + 30
-    tempo_status = None
-    while time.time() < deadline:
-        tempo_status = httpx.get("http://localhost:3200/ready", timeout=5)
-        if tempo_status.status_code == 200:
-            break
-        time.sleep(1)
-    assert tempo_status is not None and tempo_status.status_code == 200, tempo_status.text if tempo_status else "no response"
-
-    deadline = time.time() + 30
-    trace_found = False
-    while time.time() < deadline:
-        trace = httpx.get(f"http://localhost:3200/api/traces/{trace_id}", timeout=5)
-        if trace.status_code == 200:
-            trace_found = True
-            break
-        assert trace.status_code == 404, trace.text
-        time.sleep(1)
-    assert trace_found, f"trace ID {trace_id} from the response was not found in Tempo"
 
 
 def test_grafana_auth_proxy_end_to_end(auth_headers, admin_headers):
@@ -198,18 +177,17 @@ def test_prometheus_metrics_rules_and_observability_targets():
     assert targets is not None
     health_by_job = {target["labels"].get("job"): target["health"] for target in targets}
     for job in (
-        "better-cloud-drive", "prometheus", "loki", "tempo", "otel-collector", "alloy",
-        "blackbox-exporter", "node-exporter", "cadvisor",
+        "better-cloud-drive", "prometheus", "loki", "alloy", "alertmanager",
+        "blackbox-exporter", "rabbitmq",
     ):
         assert health_by_job.get(job) == "up", f"Prometheus target {job} is not up: {health_by_job}"
 
     probes = _wait_for_prometheus(
         'probe_success{job="blackbox-http"}',
-        lambda samples: len(samples) == 9 and all(float(sample["value"][1]) == 1 for sample in samples),
+        lambda samples: len(samples) == 4 and all(float(sample["value"][1]) == 1 for sample in samples),
     )
     assert {sample["metric"]["service"] for sample in probes} == {
-        "frontend", "backend", "onlyoffice", "seaweedfs-master", "seaweedfs-filer",
-        "seaweedfs-s3", "grafana", "loki", "tempo",
+        "frontend", "backend", "onlyoffice", "seaweedfs-s3",
     }
 
     assert _prometheus_query("bcd_queue_observation_available")
@@ -322,7 +300,7 @@ def test_dashboards_are_provisioned_and_all_promql_is_valid(client, admin_header
 
     for dashboard in definitions:
         assert {link["title"] for link in dashboard["links"]} == {
-            "Logs / Loki", "Traces / Tempo", "Observability runbook",
+            "Logs / Loki", "Observability runbook",
         }
         assert {"Service status"}.issubset({panel["title"] for panel in dashboard["panels"]})
         assert any("Current" in panel["title"] and "alert" in panel["title"] for panel in dashboard["panels"])

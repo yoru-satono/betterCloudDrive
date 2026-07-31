@@ -17,9 +17,10 @@
 | `mailpit` | 本地开发邮件服务 |
 | `loki` | 系统日志存储 |
 | `alloy` | 后端日志采集器，持久保存读取位置 |
-| `tempo` | Trace 存储 |
-| `otel-collector` | OpenTelemetry Collector |
-| `grafana` | 日志和 Trace 查询界面，通过前端 Nginx 同域代理并由后端管理员身份鉴权 |
+| `prometheus` | 应用、RabbitMQ 和关键 HTTP 端点指标 |
+| `alertmanager` | 核心告警的邮件和 Webhook 路由 |
+| `blackbox-exporter` | 前端、后端、SeaweedFS S3 和 OnlyOffice 探活 |
+| `grafana` | 指标与日志查询界面，通过前端 Nginx 同域代理并由后端管理员身份鉴权 |
 
 ## 配置文件位置
 
@@ -37,12 +38,12 @@
 | `config/env-files/backend.env` | 后端端口、日志目录 |
 | `config/env-files/frontend.env` | 前端 Nginx 代理、Web/Tauri/Android 构建与测试地址 |
 | `config/env-files/mail.env` | 邮件服务变量 |
-| `config/env-files/observability.env` | Loki、Tempo、OTel、Grafana、审计日志变量 |
+| `config/env-files/observability.env` | Prometheus、Loki、Alloy、Alertmanager、Grafana 和审计日志变量 |
 | `config/redis/redis.conf` | Redis 配置 |
 | `backend/betterclouddrive-start/src/main/resources/application.yml` | 后端默认配置 |
 | `backend/betterclouddrive-start/src/main/resources/application-prod.yml` | 后端生产 profile 配置 |
 | `frontend/nginx.conf` | 前端容器 Nginx 模板 |
-| `observability/*` | Loki、Tempo、Alloy、OTel Collector、Grafana provisioning 配置 |
+| `observability/*` | Prometheus、Loki、Alloy、Alertmanager、Blackbox 和 Grafana provisioning 配置 |
 
 `docker-compose.yml` 会自动读取根目录 `.env` 进行变量替换。服务运行时变量通过各服务的 `env_file` 注入。
 
@@ -118,7 +119,6 @@ docker compose logs -f backend
 | Mailpit | `http://localhost:8025` |
 | Grafana | 通过管理后台日志中心按钮进入，同域路径 `/grafana/` |
 | Loki | `http://localhost:3100` |
-| Tempo | `http://localhost:3200` |
 
 Grafana 不再直接暴露宿主机端口。前端 Nginx 会对 `/grafana/` 执行 `auth_request`，调用后端 `/api/v1/grafana/auth`。只有当前 Better Cloud Drive 用户仍是系统管理员时才会放行。
 
@@ -193,7 +193,7 @@ docker compose \
 | 消息队列 | RabbitMQ | 使用持久化队列、Publisher Confirm 和 DLQ |
 | 对象存储 | S3 兼容存储 | 可用 SeaweedFS、MinIO、AWS S3、阿里云 OSS S3 兼容网关等 |
 | 日志 | Loki / 其他日志平台 | Grafana Alloy 采集后端 JSON 日志 |
-| Trace | Tempo / 其他 OTLP 后端 | 后端通过 OTLP HTTP 上报 |
+| 请求关联 | 进程内 Micrometer/OpenTelemetry | 不导出完整 Trace，以 requestId/traceId 关联日志与审计 |
 | 看板 | Grafana | 推荐仍通过前端同域路径和后端管理员鉴权访问 |
 
 ### 后端单独部署
@@ -326,9 +326,6 @@ pnpm run build
 | `HOST_MAILPIT_SMTP_PORT` | `1025` | Mailpit SMTP 宿主机端口 |
 | `HOST_MAILPIT_UI_PORT` | `8025` | Mailpit Web UI 宿主机端口 |
 | `HOST_LOKI_PORT` | `3100` | Loki 宿主机端口 |
-| `HOST_TEMPO_PORT` | `3200` | Tempo HTTP 宿主机端口 |
-| `HOST_OTEL_GRPC_PORT` | `4317` | OTLP gRPC 宿主机端口 |
-| `HOST_OTEL_HTTP_PORT` | `4318` | OTLP HTTP 宿主机端口 |
 | `HOST_BACKEND_PORT` | `8080` | 后端宿主机端口 |
 | `HOST_FRONTEND_PORT` | `3000` | 前端宿主机端口 |
 | `HOST_ONLYOFFICE_PORT` | `8082` | OnlyOffice Document Server 宿主机端口 |
@@ -497,24 +494,15 @@ Web 前端地址解析顺序：
 | `GF_SECURITY_ADMIN_PASSWORD` | Grafana 内置管理员密码 |
 | `GRAFANA_LOKI_DATASOURCE` | 后端生成 Explore 链接使用的 Loki 数据源名称 |
 | `GRAFANA_DS_LOKI_URL` | Grafana provisioning 中 Loki 数据源地址 |
-| `GRAFANA_DS_TEMPO_URL` | Grafana provisioning 中 Tempo 数据源地址 |
 | `GRAFANA_DS_PROMETHEUS_URL` | Grafana provisioning 中 Prometheus 数据源地址 |
 | `GRAFANA_DS_ALERTMANAGER_URL` | Grafana provisioning 中 Alertmanager 数据源地址 |
 | `PROMETHEUS_RETENTION_TIME` | Prometheus 本地时序数据保留时间 |
 | `LOKI_PORT` | Loki 容器端口标记 |
 | `LOKI_BASE_URL` | 后端查询 Loki 的 HTTP 地址 |
-| `TEMPO_PORT` | Tempo HTTP 端口标记 |
-| `OTEL_GRPC_PORT` | OTel Collector gRPC 端口标记 |
-| `OTEL_HTTP_PORT` | OTel Collector HTTP 端口标记 |
 | `METRICS_EXPORT_OTLP_ENABLED` | 是否通过 OTLP 导出 metrics |
-| `TRACING_ENABLED` | 是否启用 tracing 导出 |
-| `TRACING_SAMPLING_PROBABILITY` | head sampling 采样率；dev 默认 `1.0`，prod 默认 `0.1`，完整验收显式使用 `1.0` |
-| `TRACING_EXPORT_OTLP_ENABLED` | 是否通过 OTLP 导出 traces |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | 通用 OTLP endpoint |
-| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | 后端 trace OTLP HTTP endpoint |
-| `OTEL_COLLECTOR_TEMPO_ENDPOINT` | Collector 转发到 Tempo 的 gRPC 地址 |
-| `OTEL_COLLECTOR_MEMORY_LIMIT_MIB` | Collector 软内存上限，默认 `384` MiB；达到上限时拒绝新遥测数据以保护进程 |
-| `OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB` | Collector 短时内存尖峰预留，默认 `96` MiB，必须小于内存上限 |
+| `TRACING_ENABLED` | 是否创建用于日志和审计关联的进程内 Trace 上下文 |
+| `TRACING_SAMPLING_PROBABILITY` | 进程内 Trace 采样率；dev 默认 `1.0`，prod 默认 `0.1` |
+| `TRACING_EXPORT_OTLP_ENABLED` | 固定为 `false`，默认部署不导出完整 Trace |
 | `ALLOY_LOKI_PUSH_URL` | Alloy 推送 Loki 的地址 |
 | `SYSTEM_LOG_DEFAULT_LIMIT` | 管理后台系统日志默认返回条数 |
 | `SYSTEM_LOG_MAX_LIMIT` | 管理后台系统日志最大返回条数 |
@@ -632,7 +620,6 @@ Docker Compose 使用这些 volume：
 | `seaweeddata` | SeaweedFS 对象存储数据 |
 | `backendlogs` | 后端运行日志和审计日志 |
 | `lokidata` | Loki 数据 |
-| `tempodata` | Tempo 数据 |
 | `grafanadata` | Grafana 数据 |
 | `onlyofficedata` | OnlyOffice Document Server 数据 |
 | `onlyofficelogs` | OnlyOffice Document Server 日志 |
@@ -644,7 +631,7 @@ Docker Compose 使用这些 volume：
 3. Redis：视业务数据重要性开启持久化和备份。
 4. OnlyOffice：如生产保留 Document Server 本地状态，需要备份 `onlyofficedata`。
 5. `security.env` 中的密钥：必须安全备份，尤其 `SHARE_PASSWORD_ENCRYPTION_KEY`。
-6. 日志和 Trace：按合规要求设置保留期。
+6. 日志和指标：按合规要求设置保留期。
 
 ## 安全建议
 
@@ -737,7 +724,7 @@ OnlyOffice 注意事项：
 | `security.env` | JWT 和分享密码密钥已替换并备份 |
 | `backend.env` | `LOG_DIR` 可写，OnlyOffice internal/public URL 和 JWT secret 与部署一致 |
 | `frontend.env` | `FRONTEND_BACKEND_PROXY_BASE` 指向后端内网地址 |
-| `observability.env` | Grafana、Loki、Tempo、OTel 地址正确 |
+| `observability.env` | Grafana、Loki、Prometheus 和 Alertmanager 地址正确 |
 | Grafana | `/grafana/` 未登录返回 401，管理员入口可进入 |
 | 后端 | `/actuator/health` 返回健康 |
 | 日志 | `runtime.log`、`audit.log` 正常写入 |

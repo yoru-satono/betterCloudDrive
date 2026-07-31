@@ -32,7 +32,7 @@ groups:
             clamp_min(sum(increase(bcd_onlyoffice_save_results_total[1h])), 1)
           )
 
-  - name: better-cloud-drive-availability
+  - name: better-cloud-drive-core
     rules:
       - alert: BetterCloudDriveHttpProbeFailed
         expr: probe_success{job="blackbox-http"} == 0
@@ -41,7 +41,7 @@ groups:
           severity: critical
         annotations:
           summary: BetterCloudDrive {{ $labels.service }} HTTP probe is failing
-          description: The {{ $labels.service }} endpoint {{ $labels.instance }} has failed from the application network for 2 minutes. Check the service health endpoint, container logs, and bcd-network connectivity.
+          description: The {{ $labels.service }} endpoint {{ $labels.instance }} has failed from the application network for 2 minutes.
 
       - alert: BetterCloudDriveBackendDown
         expr: up{job="better-cloud-drive"} == 0
@@ -54,19 +54,24 @@ groups:
 
       - alert: BetterCloudDriveHighServerErrorRate
         expr: |
-          (sum(rate(http_server_requests_seconds_count{job="better-cloud-drive",status=~"5.."}[5m])) or vector(0))
-          /
-          clamp_min(sum(rate(http_server_requests_seconds_count{job="better-cloud-drive"}[5m])), 0.001)
-          > 0.02
+          sum(increase(http_server_requests_seconds_count{job="better-cloud-drive"}[5m])) >= 20
+          and
+          (
+            sum(increase(http_server_requests_seconds_count{job="better-cloud-drive",status=~"5.."}[5m]))
+            /
+            clamp_min(sum(increase(http_server_requests_seconds_count{job="better-cloud-drive"}[5m])), 1)
+          ) > 0.05
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: Backend 5xx error rate is above 2%
-          description: More than 2% of backend requests have returned 5xx responses for 5 minutes.
+          summary: Backend 5xx error rate is above 5%
+          description: At least 20 requests occurred in five minutes and more than 5% returned 5xx responses.
 
       - alert: BetterCloudDriveHighP95Latency
         expr: |
+          sum(increase(http_server_requests_seconds_count{job="better-cloud-drive"}[10m])) >= 20
+          and
           histogram_quantile(0.95,
             sum by (le) (rate(http_server_requests_seconds_bucket{job="better-cloud-drive"}[5m]))
           ) > 2
@@ -75,7 +80,7 @@ groups:
           severity: warning
         annotations:
           summary: Backend p95 latency is above 2 seconds
-          description: The backend p95 HTTP latency has exceeded 2 seconds for 10 minutes.
+          description: With sufficient traffic, backend p95 latency has exceeded 2 seconds for 10 minutes.
 
       - alert: BetterCloudDriveJvmHeapPressure
         expr: |
@@ -90,8 +95,24 @@ groups:
           summary: Backend JVM heap pressure is high
           description: JVM heap usage has remained above 85% for 15 minutes.
 
-  - name: better-cloud-drive-business
-    rules:
+      - alert: BetterCloudDriveDatabasePoolSaturation
+        expr: hikaricp_connections_active / clamp_min(hikaricp_connections_max, 1) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Backend database pool is close to saturation
+          description: More than 85% of backend database connections have been active for 10 minutes.
+
+      - alert: BetterCloudDriveStorageFailures
+        expr: sum(increase(bcd_storage_operations_total{outcome="failure"}[10m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Object storage operations are repeatedly failing
+          description: More than five S3-compatible storage operations failed within ten minutes.
+
       - alert: BetterCloudDriveQueueBacklog
         expr: bcd_queue_messages_ready > 100 or bcd_queue_records_pending > 100
         for: 10m
@@ -109,7 +130,7 @@ groups:
           service: dead-letter-management
         annotations:
           summary: BetterCloudDrive has unresolved dead letters
-          description: Open dead letters from {{ $labels.queue }} with category {{ $labels.category }} require an administrator to replay or explicitly discard them.
+          description: Open dead letters from {{ $labels.queue }} with category {{ $labels.category }} require administrator action.
           runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md#死信处置
           dashboard_url: /admin/dead-letters
 
@@ -122,17 +143,6 @@ groups:
           summary: Queue metrics source is unavailable
           description: BetterCloudDrive cannot observe RabbitMQ or the durable queue tables.
 
-      - alert: BetterCloudDriveOnlyOfficeSaveFailures
-        expr: increase(bcd_onlyoffice_save_results_total{outcome="failure"}[10m]) > 2
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: OnlyOffice saves are repeatedly failing
-          description: More than two OnlyOffice save failures occurred within ten minutes.
-
-  - name: better-cloud-drive-observability
-    rules:
       - alert: BetterCloudDriveObservationDataStale
         expr: |
           (time() - bcd_observation_last_success_timestamp_seconds > 300)
@@ -148,59 +158,14 @@ groups:
           summary: BetterCloudDrive observation data is stale
           description: The {{ $labels.source }} observation source has not refreshed successfully for more than five minutes.
 
-      - alert: BetterCloudDriveObservabilityTargetDown
-        expr: up{job=~"loki|tempo|otel-collector|alloy|prometheus|alertmanager|blackbox-exporter"} == 0
+      - alert: BetterCloudDriveOnlyOfficeSaveFailures
+        expr: increase(bcd_onlyoffice_save_results_total{outcome="failure"}[10m]) > 2
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: An observability component is unavailable
-          description: Prometheus cannot scrape {{ $labels.job }} at {{ $labels.instance }}.
-
-      - alert: BetterCloudDriveInfrastructureExporterDown
-        expr: up{job=~"postgres|redis|rabbitmq|node-exporter|cadvisor"} == 0
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: An infrastructure metrics target is unavailable
-          description: Prometheus cannot scrape {{ $labels.job }} metrics at {{ $labels.instance }}.
-
-      - alert: BetterCloudDriveDatabasePoolSaturation
-        expr: hikaricp_connections_active / clamp_min(hikaricp_connections_max, 1) > 0.85
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: Backend database pool is close to saturation
-          description: More than 85% of the backend database connections have been active for 10 minutes.
-
-      - alert: BetterCloudDriveRedisMemoryPressure
-        expr: redis_memory_max_bytes > 0 and redis_memory_used_bytes / redis_memory_max_bytes > 0.85
-        for: 10m
-        labels:
-          severity: warning
-        annotations:
-          summary: Redis memory usage is above 85%
-          description: Redis is approaching its configured memory limit.
-
-      - alert: BetterCloudDriveRedisEvictions
-        expr: increase(redis_evicted_keys_total[15m]) > 0
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: Redis is evicting keys
-          description: Redis evicted one or more keys in the last 15 minutes.
-
-      - alert: BetterCloudDrivePostgresDeadlocks
-        expr: increase(pg_stat_database_deadlocks[15m]) > 0
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: PostgreSQL deadlocks detected
-          description: PostgreSQL reported one or more deadlocks in the last 15 minutes.
+          summary: OnlyOffice saves are repeatedly failing
+          description: More than two OnlyOffice save failures occurred within ten minutes.
 
       - alert: BetterCloudDriveRabbitMqResourceAlarm
         expr: rabbitmq_alarms_free_disk_space_watermark > 0 or rabbitmq_alarms_memory_used_watermark > 0
@@ -210,6 +175,17 @@ groups:
         annotations:
           summary: RabbitMQ resource alarm is active
           description: RabbitMQ has raised a disk or memory watermark alarm.
+
+  - name: better-cloud-drive-observability
+    rules:
+      - alert: BetterCloudDriveObservabilityTargetDown
+        expr: up{job=~"loki|alloy|prometheus|alertmanager|blackbox-exporter"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: An observability component is unavailable
+          description: Prometheus cannot scrape {{ $labels.job }} at {{ $labels.instance }}.
 
       - alert: BetterCloudDrivePrometheusStorageFailure
         expr: increase(prometheus_tsdb_wal_writes_failed_total[10m]) > 0 or increase(prometheus_tsdb_compactions_failed_total[10m]) > 0
@@ -228,188 +204,3 @@ groups:
         annotations:
           summary: Loki dropped log entries
           description: Loki dropped entries or could not write its WAL because storage was full.
-
-      - alert: BetterCloudDriveTempoFlushFailure
-        expr: increase(tempo_ingester_failed_flushes_total[10m]) > 0
-        for: 2m
-        labels:
-          severity: warning
-          service: tempo
-        annotations:
-          summary: Tempo trace flush failed
-          description: Tempo failed to flush trace blocks during the last 10 minutes.
-          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
-
-  - name: better-cloud-drive-host-and-containers
-    rules:
-      - alert: BetterCloudDriveHostDiskSpaceLow
-        expr: |
-          (
-            node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}
-            /
-            clamp_min(node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}, 1)
-          ) < 0.15
-          and on(instance, device, mountpoint)
-          node_filesystem_readonly{job="node-exporter"} == 0
-        for: 15m
-        labels:
-          severity: warning
-          service: host-storage
-        annotations:
-          summary: Host filesystem free space is below 15%
-          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is approaching capacity; database or object-storage writes may fail.
-          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
-
-      - alert: BetterCloudDriveHostDiskSpaceCritical
-        expr: |
-          (
-            node_filesystem_avail_bytes{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}
-            /
-            clamp_min(node_filesystem_size_bytes{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}, 1)
-          ) < 0.05
-          and on(instance, device, mountpoint)
-          node_filesystem_readonly{job="node-exporter"} == 0
-        for: 5m
-        labels:
-          severity: critical
-          service: host-storage
-        annotations:
-          summary: Host filesystem free space is below 5%
-          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is critically full.
-          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
-
-      - alert: BetterCloudDriveHostInodesLow
-        expr: |
-          (
-            node_filesystem_files_free{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}
-            /
-            clamp_min(node_filesystem_files{job="node-exporter",fstype!~"tmpfs|devtmpfs|squashfs|overlay"}, 1)
-          ) < 0.10
-          and on(instance, device, mountpoint)
-          node_filesystem_readonly{job="node-exporter"} == 0
-        for: 15m
-        labels:
-          severity: warning
-          service: host-storage
-        annotations:
-          summary: Host filesystem free inodes are below 10%
-          description: Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is approaching inode exhaustion.
-          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
-
-      - alert: BetterCloudDriveContainerRestartLoop
-        expr: |
-          changes(container_start_time_seconds{
-            job="cadvisor",
-            container_label_com_docker_compose_project="betterclouddrive",
-            container_label_com_docker_compose_service!=""
-          }[15m]) > 2
-        labels:
-          severity: warning
-          service: containers
-        annotations:
-          summary: BetterCloudDrive container is restarting repeatedly
-          description: Container {{ $labels.name }} restarted more than twice in fifteen minutes.
-          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
-
-      - alert: BetterCloudDriveContainerOomKilled
-        expr: |
-          increase(container_oom_events_total{
-            job="cadvisor",
-            container_label_com_docker_compose_project="betterclouddrive",
-            container_label_com_docker_compose_service!=""
-          }[15m]) > 0
-        labels:
-          severity: critical
-          service: containers
-        annotations:
-          summary: BetterCloudDrive container was OOM killed
-          description: Container {{ $labels.name }} recorded an out-of-memory event in the last fifteen minutes.
-          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
-
-      - alert: BetterCloudDriveContainerMemoryNearLimit
-        expr: |
-          (
-            container_memory_working_set_bytes{
-              job="cadvisor",
-              container_label_com_docker_compose_project="betterclouddrive",
-              container_label_com_docker_compose_service!=""
-            }
-            /
-            clamp_min(container_spec_memory_limit_bytes{
-              job="cadvisor",
-              container_label_com_docker_compose_project="betterclouddrive",
-              container_label_com_docker_compose_service!=""
-            }, 1)
-          ) > 0.90
-          and
-          container_spec_memory_limit_bytes{
-            job="cadvisor",
-            container_label_com_docker_compose_project="betterclouddrive",
-            container_label_com_docker_compose_service!=""
-          } < 9e18
-        for: 10m
-        labels:
-          severity: warning
-          service: containers
-        annotations:
-          summary: BetterCloudDrive container memory is near its limit
-          description: Container {{ $labels.name }} has used more than 90% of its memory limit for ten minutes.
-          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
-
-      - alert: BetterCloudDriveObservabilityDataGrowthHigh
-        expr: |
-          deriv(prometheus_tsdb_storage_blocks_bytes{job="prometheus"}[30m]) > 5242880
-          or rate(loki_distributor_bytes_received_total{job="loki"}[15m]) > 5242880
-          or rate(tempo_distributor_bytes_received_total{job="tempo"}[15m]) > 5242880
-        for: 30m
-        labels:
-          severity: warning
-          service: observability-storage
-        annotations:
-          summary: Observability data is growing unusually fast
-          description: Prometheus, Loki, or Tempo data has grown above the initial 5 MiB/s safety baseline for thirty minutes.
-          runbook_url: https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md
-
-  - name: better-cloud-drive-slo
-    rules:
-      - alert: BetterCloudDriveAvailabilityFastBurn
-        expr: bcd:sli:http_availability:ratio_5m < 0.95
-        for: 5m
-        labels:
-          severity: critical
-          slo: http-availability
-          window: fast
-        annotations:
-          summary: HTTP availability is rapidly consuming the error budget
-          description: Five-minute HTTP availability has remained below 95% for 5 minutes.
-
-      - alert: BetterCloudDriveAvailabilitySLOBreach
-        expr: bcd:sli:http_availability:ratio_5m < 0.99
-        for: 15m
-        labels:
-          severity: critical
-          slo: http-availability
-        annotations:
-          summary: HTTP availability is below the 99% objective
-          description: The rolling HTTP availability SLI has remained below 99% for 15 minutes.
-
-      - alert: BetterCloudDriveQueueSuccessFastBurn
-        expr: bcd:sli:queue_processing_success:ratio_15m < 0.90
-        for: 5m
-        labels:
-          severity: critical
-          slo: queue-processing
-          window: fast
-        annotations:
-          summary: Queue processing failures are rapidly consuming the error budget
-          description: Queue processing success has remained below 90% for 5 minutes.
-
-      - alert: BetterCloudDriveQueueSuccessSLOBreach
-        expr: bcd:sli:queue_processing_success:ratio_15m < 0.99
-        for: 15m
-        labels:
-          severity: warning
-          slo: queue-processing
-        annotations:
-          summary: Queue processing success is below the 99% objective
-          description: Background queue processing success has remained below 99% for 15 minutes.

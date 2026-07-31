@@ -1,180 +1,774 @@
 {
-  "annotations": {"list": []},
+  "annotations": {
+    "list": []
+  },
   "editable": false,
   "graphTooltip": 1,
   "id": null,
   "links": [
-    {"asDropdown": false, "icon": "doc", "includeVars": false, "keepTime": true, "tags": [], "targetBlank": false, "title": "Logs / Loki", "tooltip": "Open async logs", "type": "link", "url": "/grafana/explore?schemaVersion=1&panes=%7B%22logs%22:%7B%22datasource%22:%22bcd-loki%22%7D%7D&orgId=1"},
-    {"asDropdown": false, "icon": "search", "includeVars": false, "keepTime": true, "tags": [], "targetBlank": false, "title": "Traces / Tempo", "tooltip": "Open async traces", "type": "link", "url": "/grafana/explore?schemaVersion=1&panes=%7B%22traces%22:%7B%22datasource%22:%22bcd-tempo%22%7D%7D&orgId=1"},
-    {"asDropdown": false, "icon": "external link", "includeVars": false, "keepTime": false, "tags": [], "targetBlank": true, "title": "Observability runbook", "tooltip": "Open the operations guide", "type": "link", "url": "https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md"}
+    {
+      "asDropdown": false,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Logs / Loki",
+      "tooltip": "Open async logs",
+      "type": "link",
+      "url": "/grafana/explore?schemaVersion=1&panes=%7B%22logs%22:%7B%22datasource%22:%22bcd-loki%22%7D%7D&orgId=1"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Observability runbook",
+      "tooltip": "Open the operations guide",
+      "type": "link",
+      "url": "https://github.com/yoru-satono/betterCloudDrive/blob/main/docs/operations/OBSERVABILITY.md"
+    }
   ],
   "panels": [
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"mappings": [{"options": {"0": {"color": "red", "text": "DOWN"}, "1": {"color": "green", "text": "UP"}}, "type": "value"}], "noValue": "UNKNOWN", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
-      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "UNKNOWN",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
-      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"expr": "min(bcd_queue_observation_available) or vector(0)", "refId": "A"}],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "min(bcd_queue_observation_available) or vector(0)",
+          "refId": "A"
+        }
+      ],
       "title": "Service status",
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 3}]}}, "overrides": []},
-      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
       "id": 2,
-      "options": {"colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"expr": "sum(ALERTS{alertstate=\"firing\",alertname=~\".*Queue.*|.*OnlyOffice.*|.*Observation.*\"}) or vector(0)", "refId": "A"}],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(ALERTS{alertstate=\"firing\",alertname=~\".*Queue.*|.*OnlyOffice.*|.*Observation.*\"}) or vector(0)",
+          "refId": "A"
+        }
+      ],
       "title": "Current async alerts",
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "bytes"}, "overrides": []},
-      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
       "id": 3,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"expr": "bcd_team_quota_used_bytes or vector(0)", "refId": "A"}],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "bcd_team_quota_used_bytes or vector(0)",
+          "refId": "A"
+        }
+      ],
       "title": "Team quota used",
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"max": 1, "min": 0, "noValue": "0", "unit": "percentunit"}, "overrides": []},
-      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "noValue": "0",
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
       "id": 4,
-      "options": {"colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "targets": [{"expr": "bcd_team_quota_used_bytes / clamp_min(bcd_team_quota_limit_bytes, 1)", "refId": "A"}],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "bcd_team_quota_used_bytes / clamp_min(bcd_team_quota_limit_bytes, 1)",
+          "refId": "A"
+        }
+      ],
       "title": "Team quota utilization",
       "type": "stat"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
       "id": 5,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "bcd_queue_messages_ready", "legendFormat": "Rabbit ready / {{queue}}", "refId": "A"}, {"expr": "bcd_queue_records_pending", "legendFormat": "DB pending / {{source}}", "refId": "B"}, {"expr": "bcd_queue_records_retry", "legendFormat": "DB retry / {{source}}", "refId": "C"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "bcd_queue_messages_ready",
+          "legendFormat": "Rabbit ready / {{queue}}",
+          "refId": "A"
+        },
+        {
+          "expr": "bcd_queue_records_pending",
+          "legendFormat": "DB pending / {{source}}",
+          "refId": "B"
+        },
+        {
+          "expr": "bcd_queue_records_retry",
+          "legendFormat": "DB retry / {{source}}",
+          "refId": "C"
+        }
+      ],
       "title": "Queue backlog",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
       "id": 6,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "clamp_min(time() - bcd_observation_last_success_timestamp_seconds, 0)", "legendFormat": "{{source}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "clamp_min(time() - bcd_observation_last_success_timestamp_seconds, 0)",
+          "legendFormat": "{{source}}",
+          "refId": "A"
+        }
+      ],
       "title": "Observation freshness age",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "ops"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
       "id": 7,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (operation, outcome) (rate(bcd_queue_processing_results_total[5m]))", "legendFormat": "{{operation}} / {{outcome}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(bcd_queue_processing_results_total[5m]))",
+          "legendFormat": "{{operation}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
       "title": "Queue processing rate",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
       "id": 8,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (operation, outcome) (rate(bcd_queue_processing_duration_seconds_sum[5m])) / clamp_min(sum by (operation, outcome) (rate(bcd_queue_processing_duration_seconds_count[5m])), 0.001)", "legendFormat": "{{operation}} / {{outcome}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(bcd_queue_processing_duration_seconds_sum[5m])) / clamp_min(sum by (operation, outcome) (rate(bcd_queue_processing_duration_seconds_count[5m])), 0.001)",
+          "legendFormat": "{{operation}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
       "title": "Mean queue processing duration",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 20},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 20
+      },
       "id": 9,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "bcd_team_quota_teams", "legendFormat": "{{usage}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "bcd_team_quota_teams",
+          "legendFormat": "{{usage}}",
+          "refId": "A"
+        }
+      ],
       "title": "Team quota distribution",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 20},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 20
+      },
       "id": 10,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (threshold) (increase(bcd_team_quota_alerts_total[1h])) or vector(0)", "legendFormat": "{{threshold}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (threshold) (increase(bcd_team_quota_alerts_total[1h])) or vector(0)",
+          "legendFormat": "{{threshold}}",
+          "refId": "A"
+        }
+      ],
       "title": "Team quota alerts (1h)",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 20},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 20
+      },
       "id": 11,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (channel) (increase(bcd_team_quota_notification_failures_total[1h])) or vector(0)", "legendFormat": "{{channel}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (channel) (increase(bcd_team_quota_notification_failures_total[1h])) or vector(0)",
+          "legendFormat": "{{channel}}",
+          "refId": "A"
+        }
+      ],
       "title": "Quota notification failures (1h)",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 27},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 27
+      },
       "id": 12,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "increase(bcd_onlyoffice_save_results_total[1h])", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "increase(bcd_onlyoffice_save_results_total[1h])",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
       "title": "OnlyOffice save results (1h)",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0", "unit": "s"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 27},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 27
+      },
       "id": 13,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "rate(bcd_onlyoffice_save_duration_seconds_sum[5m]) / clamp_min(rate(bcd_onlyoffice_save_duration_seconds_count[5m]), 0.001)", "legendFormat": "{{outcome}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(bcd_onlyoffice_save_duration_seconds_sum[5m]) / clamp_min(rate(bcd_onlyoffice_save_duration_seconds_count[5m]), 0.001)",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
       "title": "OnlyOffice mean save duration",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 35},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 35
+      },
       "id": 15,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "bcd_queue_dead_letters", "legendFormat": "{{queue}} / {{category}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "bcd_queue_dead_letters",
+          "legendFormat": "{{queue}} / {{category}}",
+          "refId": "A"
+        }
+      ],
       "title": "Open dead letters by source and category",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "0"}, "overrides": []},
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 35},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 35
+      },
       "id": 16,
-      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
-      "targets": [{"expr": "sum by (action, outcome) (increase(bcd_queue_dead_letter_actions_total[1h])) or vector(0)", "legendFormat": "{{action}} / {{outcome}}", "refId": "A"}],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (action, outcome) (increase(bcd_queue_dead_letter_actions_total[1h])) or vector(0)",
+          "legendFormat": "{{action}} / {{outcome}}",
+          "refId": "A"
+        }
+      ],
       "title": "Dead-letter actions (1h)",
       "type": "timeseries"
     },
     {
-      "datasource": {"type": "prometheus", "uid": "bcd-prometheus"},
-      "fieldConfig": {"defaults": {"noValue": "No active alerts"}, "overrides": []},
-      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 43},
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "No active alerts"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
       "id": 14,
-      "options": {"cellHeight": "sm", "showHeader": true},
-      "targets": [{"expr": "ALERTS{alertstate=\"firing\",alertname=~\".*Queue.*|.*OnlyOffice.*|.*Observation.*\"}", "format": "table", "instant": true, "refId": "A"}],
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "expr": "ALERTS{alertstate=\"firing\",alertname=~\".*Queue.*|.*OnlyOffice.*|.*Observation.*\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
       "title": "Active async alert details",
       "type": "table"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["betterclouddrive", "async", "collaboration"],
-  "templating": {"list": []},
-  "time": {"from": "now-6h", "to": "now"},
+  "tags": [
+    "betterclouddrive",
+    "async",
+    "collaboration"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timezone": "browser",
   "title": "BetterCloudDrive / Async & Collaboration",
   "uid": "bcd-business-operations",

@@ -1,21 +1,21 @@
 x-observability-tiny: &observability-tiny
-  cpus: 0.20
-  mem_limit: 192m
+  cpus: 0.10
+  mem_limit: 128m
   pids_limit: 128
 
 x-observability-small: &observability-small
-  cpus: 0.35
-  mem_limit: 320m
+  cpus: 0.20
+  mem_limit: 192m
   pids_limit: 192
 
 x-observability-medium: &observability-medium
-  cpus: 0.60
-  mem_limit: 640m
+  cpus: 0.35
+  mem_limit: 384m
   pids_limit: 256
 
 x-observability-large: &observability-large
-  cpus: 0.80
-  mem_limit: 896m
+  cpus: 0.50
+  mem_limit: 512m
   pids_limit: 320
 
 services:
@@ -150,7 +150,7 @@ services:
     env_file:
       - ./config/env-files/observability.env
     environment:
-      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-30d}
+      LOKI_RETENTION_PERIOD: ${LOKI_RETENTION_PERIOD:-14d}
     command: -config.file=/etc/loki/config.yml -config.expand-env=true
     volumes:
       - ./observability/loki-config.yml:/etc/loki/config.yml:ro
@@ -161,53 +161,6 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-    networks:
-      - bcd-network
-
-  tempo:
-    <<: *observability-medium
-    image: grafana/tempo:2.9.4
-    container_name: bcd-tempo
-    restart: unless-stopped
-    env_file:
-      - ./config/env-files/observability.env
-    environment:
-      TEMPO_RETENTION_PERIOD: ${TEMPO_RETENTION_PERIOD:-168h}
-    command: ["-config.file=/etc/tempo/config.yml", "-config.expand-env=true"]
-    volumes:
-      - ./observability/tempo-config.yml:/etc/tempo/config.yml:ro
-      - tempodata:/var/tempo
-    healthcheck:
-      # Tempo 2.9 is distroless and no longer contains a shell or wget.
-      test: ["CMD", "/tempo", "-version"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-    networks:
-      - bcd-network
-
-  otel-collector:
-    <<: *observability-medium
-    image: otel/opentelemetry-collector-contrib:0.157.0
-    container_name: bcd-otel-collector
-    restart: unless-stopped
-    env_file:
-      - ./config/env-files/observability.env
-    environment:
-      OTEL_COLLECTOR_MEMORY_LIMIT_MIB: ${OTEL_COLLECTOR_MEMORY_LIMIT_MIB:-384}
-      OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB: ${OTEL_COLLECTOR_MEMORY_SPIKE_LIMIT_MIB:-96}
-      OTEL_COLLECTOR_QUEUE_SIZE: ${OTEL_COLLECTOR_QUEUE_SIZE:-4096}
-      OTEL_COLLECTOR_QUEUE_CONSUMERS: ${OTEL_COLLECTOR_QUEUE_CONSUMERS:-4}
-    command: ["--config=/etc/otel/config.yml"]
-    volumes:
-      - ./observability/otel-collector.yml:/etc/otel/config.yml:ro
-    depends_on:
-      - tempo
-    healthcheck:
-      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otel/config.yml"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
     networks:
       - bcd-network
 
@@ -271,7 +224,7 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-30d}
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}
       - --web.enable-lifecycle
     environment:
       PROMETHEUS_ENVIRONMENT: ${PROMETHEUS_ENVIRONMENT:-development}
@@ -301,7 +254,7 @@ services:
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
-      - --data.retention=${ALERTMANAGER_RETENTION_TIME:-120h}
+      - --data.retention=${ALERTMANAGER_RETENTION_TIME:-72h}
     volumes:
       - ${ALERTMANAGER_CONFIG_FILE:-./observability/alertmanager.yml}:/etc/alertmanager/alertmanager.yml:ro
       - alertmanagerdata:/alertmanager
@@ -313,75 +266,6 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-    networks:
-      - bcd-network
-
-  postgres-exporter:
-    <<: *observability-tiny
-    image: prometheuscommunity/postgres-exporter:v0.20.1
-    container_name: bcd-postgres-exporter
-    restart: unless-stopped
-    env_file:
-      - ./config/env-files/database.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - bcd-network
-
-  redis-exporter:
-    <<: *observability-tiny
-    image: oliver006/redis_exporter:v1.88.0-alpine
-    container_name: bcd-redis-exporter
-    restart: unless-stopped
-    env_file:
-      - ./config/env-files/database.env
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - bcd-network
-
-  node-exporter:
-    <<: *observability-tiny
-    image: prom/node-exporter:v1.10.2
-    container_name: bcd-node-exporter
-    restart: unless-stopped
-    command:
-      - --path.rootfs=/host
-      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/containers/storage/.+)($|/)
-    pid: host
-    volumes:
-      - /:/host:ro
-    healthcheck:
-      test: ["CMD", "/bin/node_exporter", "--version"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    networks:
-      - bcd-network
-
-  cadvisor:
-    <<: *observability-small
-    image: gcr.io/cadvisor/cadvisor:v0.52.1
-    container_name: bcd-cadvisor
-    restart: unless-stopped
-    privileged: true
-    command:
-      - --docker_only=true
-      - --housekeeping_interval=15s
-      - --storage_duration=2m
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker:/var/lib/docker:ro
-      - /dev/disk:/dev/disk:ro
-    healthcheck:
-      test: ["CMD", "/usr/bin/cadvisor", "-version"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
     networks:
       - bcd-network
 
@@ -423,8 +307,6 @@ services:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       loki:
-        condition: service_healthy
-      tempo:
         condition: service_healthy
       prometheus:
         condition: service_healthy
@@ -473,6 +355,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-0.1}
+      TRACING_EXPORT_OTLP_ENABLED: "false"
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
       MAIL_FROM: ${MAIL_FROM:-noreply@betterclouddrive.local}
       GRAFANA_AUTH_COOKIE_SECURE: ${GRAFANA_AUTH_COOKIE_SECURE:-false}
@@ -539,8 +422,6 @@ volumes:
   backendlogs:
     driver: local
   lokidata:
-    driver: local
-  tempodata:
     driver: local
   grafanadata:
     driver: local

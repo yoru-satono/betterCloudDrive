@@ -373,7 +373,7 @@ CREATE INDEX idx_oplog_status_created ON operation_logs(status_code, created_at)
 COMMENT ON TABLE operation_logs IS 'Monthly partitioned operation logs';
 COMMENT ON COLUMN operation_logs.detail IS 'Extensible JSONB data, for example {"from":"/a.txt","to":"/b.txt"}';
 COMMENT ON COLUMN operation_logs.request_id IS 'HTTP request ID correlating API responses, runtime logs, and audit logs';
-COMMENT ON COLUMN operation_logs.trace_id IS 'Distributed trace ID for OpenTelemetry and Tempo correlation';
+COMMENT ON COLUMN operation_logs.trace_id IS 'Trace ID for request, runtime log, and audit correlation';
 COMMENT ON COLUMN operation_logs.status_code IS 'HTTP status code';
 COMMENT ON COLUMN operation_logs.error_code IS 'Business error code; nullable when no business response was parsed';
 
