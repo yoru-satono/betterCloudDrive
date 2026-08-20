@@ -2,7 +2,7 @@
 
 ## 适用范围
 
-本文档说明 Better Cloud Drive 的部署方式、配置文件位置、环境变量含义，以及 Docker Compose 和生产环境拆分部署的配置建议。
+本文档说明 Better Cloud Drive 的配置文件位置、环境变量含义，以及 Docker Compose 和生产环境拆分部署的配置约束。生产上线顺序、升级回滚、备份和密钥轮换分别见[运维手册](../operations/README.md)。
 
 项目当前包含这些运行组件：
 
@@ -26,16 +26,20 @@
 
 | 路径 | 用途 |
 |------|------|
-| `.env` | Docker Compose 的宿主机端口和前端 Docker 构建参数 |
+| `.env` | 本地 Compose 插值：宿主机端口、共享应用地址、观测选项、限流和前端构建参数 |
 | `.env.example` | 根 `.env` 模板 |
+| `.env.production` | 本机忽略的生产 Compose 插值实际值 |
 | `.env.production.example` | 生产 Compose 插值变量模板，不包含真实密钥 |
+| `docker-compose.yml` | 完整基础服务拓扑 |
 | `docker-compose.production.yml` | 生产端口收紧 overlay |
+| `docker-compose.production-observability.yml` | 生产观测配置 overlay |
+| `docker-compose.diagnostics.yml` | 将诊断端口绑定到宿主机回环地址的 overlay |
 | `deploy/Caddyfile.production.example` | 宿主机 Caddy HTTPS 双域名反向代理示例 |
 | `config/env-files/database.env` | PostgreSQL、Redis 连接和容器变量 |
 | `config/env-files/rabbitmq.env` | RabbitMQ 容器与后端连接变量 |
 | `config/env-files/storage.env` | SeaweedFS / S3 存储变量 |
 | `config/env-files/security.env` | JWT 和分享密码加密密钥 |
-| `config/env-files/backend.env` | 后端端口、日志目录 |
+| `config/env-files/backend.env` | 后端日志、OnlyOffice、队列和后台任务变量 |
 | `config/env-files/frontend.env` | 前端 Nginx 代理、Web/Tauri/Android 构建与测试地址 |
 | `config/env-files/mail.env` | 邮件服务变量 |
 | `config/env-files/observability.env` | Prometheus、Loki、Alloy、Alertmanager、Grafana 和审计日志变量 |
@@ -51,18 +55,7 @@
 
 ### 1. 准备配置
 
-复制示例配置：
-
-```powershell
-Copy-Item .env.example .env
-Copy-Item config/env-files/database.env.example config/env-files/database.env
-Copy-Item config/env-files/storage.env.example config/env-files/storage.env
-Copy-Item config/env-files/security.env.example config/env-files/security.env
-Copy-Item config/env-files/backend.env.example config/env-files/backend.env
-Copy-Item config/env-files/frontend.env.example config/env-files/frontend.env
-Copy-Item config/env-files/mail.env.example config/env-files/mail.env
-Copy-Item config/env-files/observability.env.example config/env-files/observability.env
-```
+首次运行时按 [Quickstart 的本地配置步骤](../getting-started/QUICKSTART.md#1-创建本地配置)只创建缺失的根 `.env` 和八个模块 env 文件。已有实际配置不得用 example 模板覆盖；本页以下各表负责解释完整变量含义，不再维护第二份复制命令清单。
 
 生产或长期运行前必须替换这些密钥：
 
@@ -70,9 +63,11 @@ Copy-Item config/env-files/observability.env.example config/env-files/observabil
 |------|------|
 | `POSTGRES_PASSWORD` / `DB_PASSWORD` | 强随机数据库密码，两者应保持一致 |
 | `STORAGE_S3_SECRET_KEY` / `S3_SECRET_KEY` | 强随机对象存储密钥 |
+| `RABBITMQ_DEFAULT_PASS` / `RABBITMQ_PASSWORD` | 强随机 RabbitMQ 密码；初始化值与后端连接值应保持一致 |
 | `JWT_ACCESS_SECRET` | 独立随机 Base64 密钥，建议 32 字节以上 |
 | `JWT_REFRESH_SECRET` | 独立随机 Base64 密钥，不能和 access secret 相同 |
 | `SHARE_PASSWORD_ENCRYPTION_KEY` | 独立随机 Base64 32 字节密钥 |
+| `ONLYOFFICE_JWT_SECRET` | 独立随机密钥；根 Compose 插值值、后端值和 Document Server 值必须一致 |
 | `GRAFANA_AUTH_PROXY_SECRET` | 独立随机密钥，用于签名 Grafana 短期会话 cookie |
 | `GF_SECURITY_ADMIN_PASSWORD` | Grafana 管理员密码，虽然 Grafana 对外通过后端管理员鉴权，也应替换默认值 |
 
@@ -143,7 +138,7 @@ docker compose restart backend
 docker compose exec redis redis-cli ping
 ```
 
-清空并重建数据卷会删除数据库、Redis、RabbitMQ、对象存储和可观测性数据：
+仅在确认本地开发数据全部可以丢弃时，才可清空并重建数据卷。执行前应核对当前 Compose project 和命名卷；以下命令会永久删除数据库、Redis、RabbitMQ、对象存储和可观测性数据，生产环境禁止使用：
 
 ```powershell
 docker compose down -v
@@ -312,7 +307,7 @@ pnpm run build
 
 ### 根目录 `.env`
 
-这些变量只用于 Docker Compose 的宿主机端口映射和前端镜像构建参数。
+这些变量由 Docker Compose 用于宿主机端口映射、共享应用地址、观测配置选择和前端镜像构建参数。
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
@@ -326,10 +321,25 @@ pnpm run build
 | `HOST_MAILPIT_SMTP_PORT` | `1025` | Mailpit SMTP 宿主机端口 |
 | `HOST_MAILPIT_UI_PORT` | `8025` | Mailpit Web UI 宿主机端口 |
 | `HOST_LOKI_PORT` | `3100` | Loki 宿主机端口 |
+| `HOST_PROMETHEUS_PORT` | `9090` | 诊断 overlay 将 Prometheus 绑定到回环地址时使用的宿主机端口 |
+| `HOST_ALERTMANAGER_PORT` | `9093` | 诊断 overlay 将 Alertmanager 绑定到回环地址时使用的宿主机端口 |
+| `HOST_BLACKBOX_EXPORTER_PORT` | `9115` | 诊断 overlay 将 Blackbox Exporter 绑定到回环地址时使用的宿主机端口 |
+| `HOST_MANAGEMENT_PORT` | `8081` | 诊断 overlay 将生产 Actuator 管理端口绑定到回环地址时使用的宿主机端口 |
+| `HOST_ALLOY_PORT` | `12345` | 诊断 overlay 将 Alloy 管理端口绑定到回环地址时使用的宿主机端口 |
 | `HOST_BACKEND_PORT` | `8080` | 后端宿主机端口 |
 | `HOST_FRONTEND_PORT` | `3000` | 前端宿主机端口 |
 | `HOST_ONLYOFFICE_PORT` | `8082` | OnlyOffice Document Server 宿主机端口 |
+| `APP_PUBLIC_URL` | `http://localhost:3000` | 邮件链接等服务端生成的应用公开根地址；生产必须使用外部 HTTPS 地址 |
+| `MAIL_FROM` | `noreply@betterclouddrive.local` | 后端发送邮件时使用的 From 地址 |
 | `POSTGRES_LOG_MIN_DURATION_MS` | `500` | PostgreSQL 慢查询日志阈值，毫秒；`-1` 表示关闭 |
+| `ALERTMANAGER_CONFIG_FILE` | `./observability/alertmanager.yml` | 基础 Compose 挂载的 Alertmanager 配置文件 |
+| `ALERTMANAGER_PRODUCTION_CONFIG_FILE` | `./observability/alertmanager-production.yml` | 生产观测 overlay 挂载的已审查 Alertmanager 配置文件 |
+| `ALERTMANAGER_RETENTION_TIME` | `72h` | Alertmanager 状态数据保留时间 |
+| `PROMETHEUS_ENVIRONMENT` | `development` | Prometheus 外部 `environment` 标签；生产 overlay 通常设为 `production` |
+| `DRIVE_RATE_LIMIT_DEFAULT_PERMITS` | `100` | 默认接口在每个限流周期内允许的请求数；Compose 将其传给后端 |
+| `DRIVE_RATE_LIMIT_DEFAULT_PERIOD_SECONDS` | `60` | 默认接口限流周期，单位秒 |
+| `DRIVE_RATE_LIMIT_UPLOAD_PERMITS` | `10` | 上传接口在每个限流周期内允许的请求数 |
+| `DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS` | `60` | 上传接口限流周期，单位秒 |
 | `ONLYOFFICE_JWT_SECRET` | 本地开发密钥 | OnlyOffice Document Server 和后端共享的 JWT 密钥，生产必须替换 |
 | `VITE_API_BASE_URL` | 空 | Web 前端构建时 API 根地址。空值表示使用 `/api/v1` |
 | `VITE_WEB_BASE_URL` | 空 | Web 前端构建时 Web 根地址。空值表示使用当前 origin |
@@ -355,6 +365,22 @@ pnpm run build
 | `SPRING_DATA_REDIS_PORT` | Spring Boot 兼容变量，目前主要保留给运行环境覆盖 |
 
 注意：当前后端 `application.yml` 实际读取 `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD`。如果 Redis 设置了密码，需要补充 `REDIS_PASSWORD`。
+
+模板中的 `DATA_SOURCE_URI`、`DATA_SOURCE_USER`、`DATA_SOURCE_PASS` 和 `REDIS_ADDR` 当前没有 Compose、Spring 或脚本消费者，不属于有效运行配置。它们将在后续配置清理中删除，或在引入明确消费者后再纳入参考文档。
+
+### `rabbitmq.env`
+
+| 变量 | 说明 |
+|------|------|
+| `RABBITMQ_DEFAULT_USER` | RabbitMQ 官方镜像首次初始化时创建的管理员用户名 |
+| `RABBITMQ_DEFAULT_PASS` | RabbitMQ 官方镜像首次初始化时创建的管理员密码 |
+| `RABBITMQ_HOST` | 后端连接 RabbitMQ 的主机 |
+| `RABBITMQ_PORT` | 后端连接 RabbitMQ 的 AMQP 端口 |
+| `RABBITMQ_USERNAME` | 后端连接 RabbitMQ 的用户名，应与初始化用户或已有授权用户一致 |
+| `RABBITMQ_PASSWORD` | 后端连接 RabbitMQ 的密码 |
+| `RABBITMQ_VHOST` | 后端连接的 RabbitMQ virtual host，默认 `/` |
+
+`RABBITMQ_DEFAULT_USER`、`RABBITMQ_DEFAULT_PASS` 只影响空 RabbitMQ 数据卷的首次初始化；已有 `rabbitmqdata` 卷不会因修改这两个变量而自动重建用户。
 
 ### `storage.env`
 
@@ -404,6 +430,13 @@ pnpm run build
 | `RABBITMQ_HOST` / `RABBITMQ_PORT` | RabbitMQ 地址，默认 `localhost:5672` |
 | `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | RabbitMQ 登录凭据 |
 | `RABBITMQ_VHOST` | RabbitMQ virtual host，默认 `/` |
+| `QUEUE_RABBITMQ_EXCHANGE` | 业务事件 Topic Exchange 名称，默认 `bcd.events` |
+| `QUEUE_RABBITMQ_DEAD_LETTER_EXCHANGE` | 死信 Exchange 名称，默认 `bcd.dead-letter` |
+| `QUEUE_RABBITMQ_NOTIFICATIONS_QUEUE` | 通知队列名称，默认 `bcd.notifications` |
+| `QUEUE_RABBITMQ_TEAM_TASKS_QUEUE` | 团队任务队列名称，默认 `bcd.team-tasks` |
+| `QUEUE_RABBITMQ_DEAD_LETTER_QUEUE` | 死信队列名称，默认 `bcd.dead-letter` |
+| `QUEUE_RABBITMQ_NOTIFICATIONS_ROUTING_KEY` | 通知消息 routing key，默认 `notification.dispatch` |
+| `QUEUE_RABBITMQ_TEAM_TASKS_ROUTING_KEY` | 团队任务唤醒消息 routing key，默认 `team-task.wakeup` |
 | `QUEUE_RABBITMQ_PREFETCH` | 每个消费者预取消息数，默认 20 |
 | `QUEUE_RABBITMQ_CONCURRENCY` | Listener 初始并发数，默认 1 |
 | `QUEUE_RABBITMQ_MAX_CONCURRENCY` | Listener 最大并发数，默认 4 |
@@ -423,6 +456,9 @@ pnpm run build
 | `FOLDER_ZIP_TASK_BATCH_SIZE` | 单次处理团队文件夹 ZIP 任务数量，默认 5 |
 | `FOLDER_ZIP_TASK_INTERVAL_MS` | 团队文件夹 ZIP 数据库兜底扫描间隔，默认 60000 毫秒 |
 | `TEAM_TASK_RESULT_CLEANUP_INTERVAL_MS` | 团队任务结果文件过期清理间隔，默认 3600000 毫秒 |
+| `TEAM_TASK_RUNNING_TIMEOUT_SECONDS` | `RUNNING` 团队任务被视为超时并恢复为 `PENDING` 的时间，默认 1800 秒 |
+
+队列拓扑和任务超时变量由 `application.yml` 直接读取。它们当前没有写入 `backend.env.example`，未配置时使用上表默认值；如需覆盖，可将对应变量添加到实际的 `backend.env`。
 
 后端日志包含：
 
@@ -489,6 +525,7 @@ Web 前端地址解析顺序：
 | `GRAFANA_BASE_URL` | 后端生成 Grafana Explore 链接时使用的路径 |
 | `GRAFANA_AUTH_PROXY_SECRET` | Grafana 短期登录 cookie 签名密钥 |
 | `GRAFANA_AUTH_PROXY_TTL_SECONDS` | Grafana 短期登录 cookie 有效期 |
+| `GRAFANA_AUTH_COOKIE_SECURE` | 是否为 Grafana 短期 cookie 设置 `Secure`；dev 默认 `false`，prod 默认 `true` |
 | `GF_SERVER_ROOT_URL` | Grafana 外部根地址 |
 | `GF_SECURITY_ADMIN_USER` | Grafana 内置管理员用户名 |
 | `GF_SECURITY_ADMIN_PASSWORD` | Grafana 内置管理员密码 |
@@ -497,13 +534,20 @@ Web 前端地址解析顺序：
 | `GRAFANA_DS_PROMETHEUS_URL` | Grafana provisioning 中 Prometheus 数据源地址 |
 | `GRAFANA_DS_ALERTMANAGER_URL` | Grafana provisioning 中 Alertmanager 数据源地址 |
 | `PROMETHEUS_RETENTION_TIME` | Prometheus 本地时序数据保留时间 |
+| `PROMETHEUS_ENVIRONMENT` | Prometheus 写入所有时间序列的外部环境标签 |
+| `ALERTMANAGER_RETENTION_TIME` | Alertmanager 状态数据保留时间，默认 72 小时 |
+| `LOKI_RETENTION_PERIOD` | Loki 日志保留时间，默认 14 天 |
 | `LOKI_PORT` | Loki 容器端口标记 |
 | `LOKI_BASE_URL` | 后端查询 Loki 的 HTTP 地址 |
 | `METRICS_EXPORT_OTLP_ENABLED` | 是否通过 OTLP 导出 metrics |
+| `APP_ENV` | Micrometer 指标的 `environment` 公共标签，默认 `development` |
+| `OBSERVABILITY_ENABLED` | 是否启用请求 Trace 上下文和审计过滤器，默认 `true` |
 | `TRACING_ENABLED` | 是否创建用于日志和审计关联的进程内 Trace 上下文 |
 | `TRACING_SAMPLING_PROBABILITY` | 进程内 Trace 采样率；dev 默认 `1.0`，prod 默认 `0.1` |
 | `TRACING_EXPORT_OTLP_ENABLED` | 固定为 `false`，默认部署不导出完整 Trace |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | 启用 OTLP Trace 导出时的 HTTP endpoint，默认 `http://localhost:4318/v1/traces` |
 | `ALLOY_LOKI_PUSH_URL` | Alloy 推送 Loki 的地址 |
+| `MANAGEMENT_SERVER_PORT` | prod profile 的独立 Actuator 管理端口，默认 8081 |
 | `SYSTEM_LOG_DEFAULT_LIMIT` | 管理后台系统日志默认返回条数 |
 | `SYSTEM_LOG_MAX_LIMIT` | 管理后台系统日志最大返回条数 |
 | `AUDIT_LOG_ENABLED` | 是否启用审计日志 |
@@ -511,6 +555,8 @@ Web 前端地址解析顺序：
 | `AUDIT_CAPTURE_BODY` | 是否采集限长且脱敏的 JSON 请求正文，默认关闭 |
 | `OBSERVABILITY_TRUSTED_PROXY_CIDRS` | 允许提供客户端转发地址的代理 CIDR 列表 |
 | `AUDIT_MAX_BODY_BYTES` | 审计日志最多记录的请求体字节数 |
+
+`APP_ENV`、`OBSERVABILITY_ENABLED` 和 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 当前没有写入 `observability.env.example`，未配置时使用上表默认值；如需覆盖，可将它们添加到实际的 `observability.env`。默认 Compose 明确设置 `TRACING_EXPORT_OTLP_ENABLED=false`，因此只修改 OTLP endpoint 不会启用完整 Trace 导出。
 
 ## 后端配置项
 
@@ -544,10 +590,10 @@ Web 前端地址解析顺序：
 | `drive.download.folder-zip.max-size-bytes` | `1073741824` | 无直接占位 | 文件夹打包最大体积，默认 1GB |
 | `drive.version.max-versions` | `10` | 无直接占位 | 单文件最大版本数 |
 | `drive.storage.default-quota-bytes` | `10737418240` | 无直接占位 | 新用户默认配额，默认 10GB |
-| `drive.rate-limit.default-permits` | `100` | 无直接占位 | 默认限流许可数 |
-| `drive.rate-limit.default-period-seconds` | `60` | 无直接占位 | 默认限流周期 |
-| `drive.rate-limit.upload-permits` | `10` | 无直接占位 | 上传接口限流许可数 |
-| `drive.rate-limit.upload-period-seconds` | `60` | 无直接占位 | 上传接口限流周期 |
+| `drive.rate-limit.default-permits` | `100` | `DRIVE_RATE_LIMIT_DEFAULT_PERMITS` | 默认限流许可数 |
+| `drive.rate-limit.default-period-seconds` | `60` | `DRIVE_RATE_LIMIT_DEFAULT_PERIOD_SECONDS` | 默认限流周期 |
+| `drive.rate-limit.upload-permits` | `10` | `DRIVE_RATE_LIMIT_UPLOAD_PERMITS` | 上传接口限流许可数 |
+| `drive.rate-limit.upload-period-seconds` | `60` | `DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS` | 上传接口限流周期 |
 | `logging.file.path` | `./logs`，prod 为 `/var/log/cloud-drive` | `LOG_DIR` | 后端日志目录 |
 | `observability.system-logs.loki-base-url` | `http://localhost:3100` | `LOKI_BASE_URL` | 后端查询 Loki 地址 |
 | `observability.system-logs.grafana-base-url` | `/grafana` | `GRAFANA_BASE_URL` | Grafana Explore 链接前缀 |
@@ -649,68 +695,15 @@ Docker Compose 使用这些 volume：
 
 ## 完整验证
 
-项目提供 Windows PowerShell 7 一键验证脚本：
+完整验证入口为 `scripts/verify-all.ps1` 和 `scripts/verify-all.sh`。模块选择、工具依赖、Android 设备、OnlyOffice、测试数据清理和报告路径统一维护在[开发测试策略](../development/TESTING.md)，本配置参考不复制这些易变化的执行细节。
 
-```powershell
-.\scripts\verify-all.ps1
+配置变更至少应先验证 Compose 能解析：
+
+```bash
+docker compose config --quiet
 ```
 
-默认流程：
-
-| 阶段 | 行为 |
-|------|------|
-| 环境文件 | 复制缺失的 `.env` 和 `config/env-files/*.env` 模板，不覆盖已有文件 |
-| Docker | 执行 `docker compose up -d --build`，启动后端、前端、PostgreSQL、Redis、RabbitMQ、SeaweedFS、Mailpit、OnlyOffice 和可观测性组件 |
-| 健康检查 | 等待后端 `/actuator/health`、前端、Mailpit、OnlyOffice `/healthcheck` 可达 |
-| 后端 | 执行 `backend/mvn test` |
-| 黑盒 API | 执行 `backend-test` pytest；admin 测试会自动创建用户并提升为 `ROLE_ADMIN` |
-| Web | 执行前端单测和 Docker Web E2E；默认开启 `E2E_ONLYOFFICE=1` |
-| Office | 通过 `-Module office` 单独执行 OnlyOffice Web E2E |
-| WebDAV | 通过 `-Module webdav` 使用 rclone 执行 WebDAV 黑盒测试 |
-| 可观测性 | 通过 `-Module observability` 验证指标、日志和告警链路 |
-| 韧性 | 通过 `-Module resilience` 执行依赖故障与恢复场景测试 |
-| Tauri | 构建 Tauri release 测试包并运行 WebDriver E2E |
-| Android | 执行 Android 单元测试和连接设备 E2E |
-| 清理 | 默认在脚本结束时调用 `scripts/cleanup-e2e-data.ps1` 清理 E2E/黑盒测试数据 |
-
-常用参数：
-
-| 参数 | 说明 |
-|------|------|
-| `-Module <name[]>` | 按模块运行，支持 `all`、`backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`android-unit`、`android`、`office`、`webdav`、`observability`、`resilience`，默认 `all` |
-| `-SkipDockerBuild` | 启动 Docker 栈但不重新 build 镜像 |
-| `-SkipTauri` | 跳过 Tauri 构建和 E2E |
-| `-SkipAndroid` | 跳过 Android 单元测试和 Android E2E |
-| `-SkipOnlyOffice` | 不等待 OnlyOffice，Web E2E 不设置 `E2E_ONLYOFFICE=1` |
-| `-SkipE2ECleanup` | 验证结束后保留 E2E/黑盒测试数据，便于调试 |
-| `-AndroidSerial <serial>` | 指定 Android E2E 设备，默认 `localhost:16416` |
-| `-KeepGoing` | 单个阶段失败后继续执行剩余阶段，最后汇总失败并返回非零退出码 |
-
-分层验证示例：
-
-```powershell
-.\scripts\verify-all.ps1 -Module web
-.\scripts\verify-all.ps1 -Module backend,blackbox
-.\scripts\verify-all.ps1 -Module office -SkipDockerBuild
-```
-
-Android 注意事项：
-
-- 默认 Android 15 设备 serial 是 `localhost:16416`。
-- 如果 ADB 同时显示 `emulator-*` 和 `localhost:16416`，必须通过 `ANDROID_SERIAL` 限定单设备，否则 Gradle 可能对同一模拟器并发安装测试 APK，导致 instrumentation 启动即崩溃。
-- 使用脚本时默认会执行 `adb connect localhost:16416` 并设置 `ANDROID_SERIAL=localhost:16416`。
-
-OnlyOffice 注意事项：
-
-- 完整验证默认要求 `onlyoffice-documentserver` 容器可用，宿主机地址为 `http://127.0.0.1:8082`。
-- Web E2E 会验证个人 docx/pptx/xlsx 只读预览，以及团队 docx 真实编辑保存后创建版本。
-- 如当前环境不需要跑 OnlyOffice，可使用 `-SkipOnlyOffice`。
-
-后端黑盒 admin 测试：
-
-- 默认不再需要手工 `ADMIN_TOKEN`。
-- 测试会注册独立用户，并通过 `docker compose exec -T postgres psql` 将该用户更新为 `ROLE_ADMIN` 后重新登录。
-- 在非 Docker Compose 数据库环境中，可设置 `ADMIN_TOKEN` 使用已有管理员 JWT 覆盖自动提权流程。
+涉及运行时地址、代理、密钥或观测组件时，再按测试策略选择相应专项模块。
 
 ## 配置检查清单
 

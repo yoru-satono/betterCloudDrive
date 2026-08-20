@@ -4,7 +4,7 @@
 
 Better Cloud Drive 不在前端或后端进程内解析 Office 文档。`onlyoffice/documentserver` 镜像提供浏览器编辑器 SDK、文档转换和渲染、协同编辑状态，以及保存回调。没有 Document Server 镜像时，普通上传和下载仍可用，但 `docx`、`xlsx`、`pptx` 等文件不能在线预览或编辑。
 
-Compose 服务名是 `onlyoffice-documentserver`，容器名是 `bcd-onlyoffice`，默认使用镜像 `onlyoffice/documentserver:latest`。本地端口为 `8082 -> 80`。生产环境应将 `latest` 改为经过验证的固定版本标签，并在升级前跑 OnlyOffice E2E。
+Compose 服务名是 `onlyoffice-documentserver`，容器名是 `bcd-onlyoffice`，当前固定使用镜像 `onlyoffice/documentserver:9.3.0.1`。本地端口为 `8082 -> 80`。生产升级镜像前应先确认版本兼容性，并运行 OnlyOffice E2E；发布和回滚顺序见[升级与回滚](UPGRADE_ROLLBACK.md)。
 
 ## 地址和 JWT
 

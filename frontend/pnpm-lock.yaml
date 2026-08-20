@@ -58,7 +58,7 @@ importers:
         specifier: ^1.62.0
         version: 1.62.0
       '@tauri-apps/cli':
-        specifier: ^2.11.4
+        specifier: 2.11.4
         version: 2.11.4
       '@types/mocha':
         specifier: ^10.0.10

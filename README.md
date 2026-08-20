@@ -1,6 +1,6 @@
 # BetterCloudDrive
 
-全栈云盘系统，支持 Web 端和 Android 端访问。
+全栈云盘系统，支持 Web、Tauri 桌面端、Android 和 WebDAV 访问。
 
 ## 技术栈
 
@@ -14,7 +14,7 @@
 | **邮件** | Mailpit（开发环境邮件模拟） |
 | **可观测性** | Actuator/Micrometer + Prometheus + Alertmanager + Loki + Grafana Alloy + Grafana |
 | **Web 前端** | Vue 3.5.40 + Vite 8.1.5 + Pinia 4.0.2 + Vue Router 5.2.0 |
-| **桌面端** | Tauri 2.11.5 + Rust 1.88.0 |
+| **桌面端** | Tauri 2.11.4 + Rust 1.88.0 |
 | **Android** | Kotlin 2.3.21 + Jetpack Compose 2026.06.00 + Android SDK 37 + Hilt + Retrofit |
 | **测试** | JUnit 5 + Mockito（后端）、pytest + httpx（黑盒）、Vitest + Playwright（前端） |
 | **部署** | Docker Compose 一键编排 |
@@ -48,7 +48,7 @@ betterCloudDrive/
 │   ├── betterclouddrive-web/        # Controller、Security
 │   ├── betterclouddrive-scheduler/  # 定时任务
 │   └── betterclouddrive-start/      # 启动入口 + Flyway 迁移
-├── frontend/                # Vue 3 Web 前端
+├── frontend/                # Vue 3 Web 前端与 Tauri 桌面壳
 ├── android/                 # Kotlin Android 应用
 ├── backend-test/            # Python 黑盒 API 测试
 ├── observability/           # Prometheus/Loki/Alloy/Alertmanager/Grafana 配置
@@ -62,35 +62,17 @@ betterCloudDrive/
 
 ### 方式一：Docker Compose 启动全栈
 
-环境变量按模块拆分在 `config/env-files/` 下，并由 `docker-compose.yml` 的服务级 `env_file` 显式注入。复制各模块模板并设置密钥后，可直接使用 Docker Compose 启动；根目录 `.env` 只保留宿主机端口和前端 Docker 构建参数：
+环境变量按模块拆分在 `config/env-files/` 下，并由 `docker-compose.yml` 的服务级 `env_file` 显式注入。根目录 `.env` 负责 Compose 插值，包括宿主机端口、共享应用地址、观测选项和前端构建参数。首次启动请先按 [Docker Compose 快速启动](docs/getting-started/QUICKSTART.md#1-创建本地配置)创建缺失配置并替换本地密钥；已有实际配置不得用模板覆盖。
+
+配置完成后启动全栈：
 
 ```bash
-cp config/env-files/database.env.example config/env-files/database.env
-cp config/env-files/storage.env.example config/env-files/storage.env
-cp config/env-files/security.env.example config/env-files/security.env
-cp config/env-files/backend.env.example config/env-files/backend.env
-cp config/env-files/frontend.env.example config/env-files/frontend.env
-cp config/env-files/observability.env.example config/env-files/observability.env
-cp config/env-files/mail.env.example config/env-files/mail.env
-# 编辑 config/env-files/security.env，设置 JWT_*_SECRET 和 SHARE_PASSWORD_ENCRYPTION_KEY
-docker compose up -d --build
-```
-
-Windows PowerShell 可使用：
-
-```powershell
-Copy-Item config/env-files/database.env.example config/env-files/database.env
-Copy-Item config/env-files/storage.env.example config/env-files/storage.env
-Copy-Item config/env-files/security.env.example config/env-files/security.env
-Copy-Item config/env-files/backend.env.example config/env-files/backend.env
-Copy-Item config/env-files/frontend.env.example config/env-files/frontend.env
-Copy-Item config/env-files/observability.env.example config/env-files/observability.env
-Copy-Item config/env-files/mail.env.example config/env-files/mail.env
-# 编辑 config/env-files/security.env，设置 JWT_*_SECRET 和 SHARE_PASSWORD_ENCRYPTION_KEY
 docker compose up -d --build
 ```
 
 `SHARE_PASSWORD_ENCRYPTION_KEY` 用于加密分享链接密码，建议使用 32 字节随机密钥的 Base64 字符串生成，例如 `openssl rand -base64 32`。该值必须长期保持稳定，否则已加密的分享密码无法解密。
+
+完整健康检查和首次注册步骤仍以 [Docker Compose 快速启动](docs/getting-started/QUICKSTART.md)为准。
 
 默认访问地址：
 
@@ -102,7 +84,7 @@ docker compose up -d --build
 - Prometheus、Alertmanager、Loki：默认仅容器网络可访问；使用诊断 overlay 后分别开放在本机 `9090`、`9093`、`3100`
 - Grafana：通过管理后台日志中心的 Grafana 链接访问，同域路径为 `/grafana/`，仅系统管理员可进入。
 
-部署细节见 [OnlyOffice 部署与排障](docs/operations/ONLYOFFICE_DEPLOYMENT.md) 和 [团队数据备份与恢复](docs/operations/BACKUP_RESTORE.md)。
+部署细节见 [OnlyOffice 部署与排障](docs/operations/ONLYOFFICE_DEPLOYMENT.md) 和 [数据备份与恢复](docs/operations/BACKUP_RESTORE.md)。
 
 前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Tauri 默认地址可用 `VITE_DESKTOP_API_BASE_URL`、`VITE_DESKTOP_WEB_BASE_URL` 覆盖；Android 默认服务器地址可用 `ANDROID_DEFAULT_SERVER_BASE_URL` 覆盖，Android E2E 可用 `ANDROID_E2E_SERVER_BASE_URL`、`ANDROID_E2E_MAILPIT_BASE_URL` 覆盖，用户仍可在登录页设置自己的服务器地址。
 
@@ -130,6 +112,8 @@ Grafana 通过 Nginx `auth_request` 接入 BetterCloudDrive 管理员身份。�
 - 系统日志：后端通过 `LOKI_BASE_URL` 代理查询 Loki，只返回概要；每条记录按 traceId/requestId/时间戳生成 ID，并提供 Grafana Explore 链接。后端生成的 Grafana 链接路径由 `GRAFANA_BASE_URL` 控制，默认是同域 `/grafana`；Grafana 自身根地址由 `GF_SERVER_ROOT_URL` 控制。Loki 数据源标识由 `GRAFANA_LOKI_DATASOURCE` 控制，默认使用数据源名称 `Loki`。
 
 ### 方式二：本地开发启动
+
+按后端、Web、Tauri 或 Android 组合本地环境的完整说明见[开发环境准备](docs/getting-started/DEVELOPMENT_SETUP.md)和[专项开发指南](docs/development/README.md)。下面仅保留最短 Web 联调入口。
 
 启动依赖和后端：
 
@@ -163,113 +147,41 @@ APK 输出在 `android/app/build/outputs/apk/debug/`。
 
 ## API 文档
 
-完整 API 文档见 [API 文档](docs/reference/API.md)，涵盖认证、文件管理、上传下载、回收站、分享、收藏、标签、版本管理、团队协作、通知、OnlyOffice、注册验证码、密码重置、管理员面板。
+完整 API 参考从 [API 总入口](docs/reference/API.md)进入；通用响应和错误码保留在总入口，具体端点按认证、文件管理、传输、分享、团队、通知、OnlyOffice 和管理员等业务域组织。
 
 客户端展示文案采用后端语义 key + 结构化参数协议，详见 [客户端本地化与语义文案协议](docs/reference/LOCALIZATION.md)。此协议不包含自然语言兜底字段，旧客户端不能与当前后端混用。
 
 Web、Tauri 与 Android 支持“跟随系统、浅色、深色”三种主题模式。首次启动默认跟随系统，用户可在个人设置的“外观”区域选择固定主题；偏好仅保存在当前设备并跨登录状态保留。
 
-## 配置文档
+## 文档
 
-- [文档索引](docs/README.md)
-- [配置与部署文档](docs/reference/CONFIGURATION.md)
+- [统一文档入口](docs/README.md)
+- [入门指南](docs/getting-started/README.md)
+- [架构文档](docs/architecture/README.md)
+- [开发指南](docs/development/README.md)
+- [参考资料](docs/reference/README.md)
+- [运维手册](docs/operations/README.md)
 
-### 公开端点
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/auth/register-code/send` | 发送注册验证码 |
-| POST | `/api/v1/auth/register` | 注册 |
-| POST | `/api/v1/auth/login` | 登录 |
-| POST | `/api/v1/auth/refresh` | 刷新令牌 |
-| POST | `/api/v1/auth/forgot-password` | 忘记密码 |
-| POST | `/api/v1/auth/reset-password` | 重置密码 |
-| POST | `/api/v1/shares/access/{code}` | 访问分享 |
-| GET | `/api/v1/shares/access/{code}/files` | 分享文件列表 |
-
-其余端点需 `Authorization: Bearer <accessToken>`。
-
-## 管理员
-
-首个管理员通过数据库手动创建：
-
-```sql
-UPDATE users SET role = 'ROLE_ADMIN' WHERE username = 'admin';
-```
-
-或直接注册后执行上述 SQL。
-
-管理员可访问 `/api/v1/admin/**` 端点进行用户管理、配额调整、日志查看和系统统计。
+公开端点、Bearer Token 例外、下载 ticket、OnlyOffice token 和 WebDAV Basic Auth 的精确定义见 [API 通用认证约定](docs/reference/API.md#71-认证)。管理员接口和权限要求见[管理员 API](docs/reference/api/ADMIN.md)。
 
 ## 邮件测试
 
-开发环境使用 Mailpit 模拟邮件：
-
-- SMTP：`localhost:1025`（无需认证）
-- Web UI：`http://localhost:8025`（查看已发送邮件）
+开发环境使用 Mailpit 接收验证码、邀请和密码重置邮件。端口与使用方式见 [Quickstart](docs/getting-started/QUICKSTART.md)；生产 SMTP 配置见[配置参考](docs/reference/CONFIGURATION.md)。
 
 ## 测试
 
-测试分层、独立命令、Testcontainers 依赖和覆盖率报告位置见 [测试策略](docs/reference/TESTING.md)。完整验证包含独立的 `integration`、`security` 和 Tauri Rust 单元测试阶段；Java 与 Web 覆盖率用于生成基线报告，Android JVM 业务代码执行 80% 覆盖率门禁。
+测试分层、独立命令、最低验证矩阵、Testcontainers 依赖和报告位置见[测试策略](docs/development/TESTING.md)。Android 测试只按行为和场景断言验收，不生成或检查代码行覆盖率。
 
-推荐在 Windows PowerShell 7 中使用一键验证脚本：
+Windows PowerShell：
 
 ```powershell
 .\scripts\verify-all.ps1
 ```
 
-默认行为：
+Linux/macOS：
 
-- 自动复制缺失的 `.env` / `config/env-files/*.env` 模板文件，但不会覆盖已有配置。
-- 自动执行 `docker compose up -d --build` 启动全栈，包括 OnlyOffice Document Server。
-- 依次运行后端单元测试、Python 黑盒 API 测试、前端单元测试、Web E2E、Tauri E2E、Android 单元测试和 Android E2E。
-- Web E2E 默认开启 `E2E_ONLYOFFICE=1`，会覆盖 OnlyOffice 真实预览和编辑保存。
-- Android E2E 默认使用 `ANDROID_SERIAL=localhost:16416`，对应当前 Android 15 设备；如需旧设备可通过 `-AndroidSerial` 覆盖。
-- Python 黑盒 admin 测试会自动创建测试用户并通过 Docker Compose PostgreSQL 提升为 `ROLE_ADMIN`；非 Compose 环境可设置 `ADMIN_TOKEN` 覆盖。
-
-常用参数：
-
-```powershell
-.\scripts\verify-all.ps1 -SkipTauri -SkipAndroid
-.\scripts\verify-all.ps1 -SkipDockerBuild
-.\scripts\verify-all.ps1 -AndroidSerial localhost:16416
-.\scripts\verify-all.ps1 -KeepGoing
-.\scripts\verify-all.ps1 -Module web
-.\scripts\verify-all.ps1 -Module backend,blackbox
-.\scripts\verify-all.ps1 -Module office -SkipDockerBuild
+```bash
+./scripts/verify-all.sh
 ```
 
-`-Module` 可选 `all`、`backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`android-unit`、`android`、`office`、`webdav`、`observability`、`resilience`。默认是 `all`，保持完整验证；`web` 子集只跑前端单测和非 OnlyOffice Web E2E，`office` 子集单独跑 OnlyOffice Web E2E，`android-unit` 不依赖设备，`android` 会运行设备测试并包含 JVM 快速门禁。除非传入 `-SkipE2ECleanup`，脚本结束时会自动调用 E2E 数据清理。
-
-当前完整验证基线（2026-07-15）：所有阶段通过，包括后端 Maven 全模块单元测试、Testcontainers 集成测试 4 项、黑盒 139 项、安全验收 7 项、前端单元 156 项、Web Core E2E 30 项、OnlyOffice E2E 7 项、Tauri Rust 单元 14 项、Tauri 桌面 E2E 3 个 spec、WebDAV 4 项、可观测性 3 项、韧性 2 项、Android JVM 单元 48 项和设备 instrumentation 30 项。Android JVM 业务代码覆盖率为 80.36%，通过 80% 门禁。
-
-清理 E2E 和黑盒测试数据：
-
-```powershell
-.\scripts\cleanup-e2e-data.ps1 -DryRun
-.\scripts\cleanup-e2e-data.ps1
-```
-
-清理脚本通过 Docker Compose 连接 PostgreSQL，只会匹配 `@test.local` / `@test.com` 测试邮箱域和已知自动化测试用户名前缀。`-DryRun` 只输出匹配数量，不删除数据。
-
-分项命令仍可单独运行：
-
-```powershell
-cd backend
-mvn test
-
-cd ..\backend-test
-.\.venv\Scripts\pytest.exe -v
-
-cd ..\frontend
-pnpm run test
-$env:E2E_ONLYOFFICE = '1'
-pnpm run test:e2e:docker
-pnpm run tauri:e2e:build
-pnpm run test:e2e:tauri
-
-cd ..\android
-.\gradlew.bat testDebugUnitTest
-$env:ANDROID_SERIAL = 'localhost:16416'
-.\gradlew.bat connectedDebugAndroidTest
-```
+完整运行包含需要 Docker、Rust、rclone 和 Android 设备的阶段；开发时应按[最低验证矩阵](docs/development/TESTING.md#修改范围到最低验证)选择子集。

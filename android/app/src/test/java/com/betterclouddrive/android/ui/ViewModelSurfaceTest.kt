@@ -90,7 +90,7 @@ class ViewModelSurfaceTest {
                 advanceUntilIdle()
             }
         }
-        assertTrue("Expected broad ViewModel coverage, invoked $invoked actions", invoked >= 70)
+        assertTrue("Expected registered ViewModel actions to be exercised, invoked $invoked actions", invoked >= 70)
     }
 
     private fun isAction(method: Method): Boolean =

@@ -40,7 +40,7 @@ class RepositorySurfaceTest {
                     invoked++
                 }
         }
-        assertTrue("Expected broad repository coverage, invoked $invoked methods", invoked >= 100)
+        assertTrue("Expected repository endpoint wrappers to be exercised, invoked $invoked methods", invoked >= 100)
     }
 
     private fun isPublicSuspendMethod(method: Method): Boolean =

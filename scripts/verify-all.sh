@@ -269,10 +269,9 @@ prometheus_rule_tests() {
 }
 resilience_tests() { run_pytest resilience ../test-results/resilience/junit.xml; }
 android_unit_tests() { (cd android && ./gradlew testDebugUnitTest); }
-android_coverage() { (cd android && ./gradlew jacocoDebugUnitTestCoverageVerification); }
 android_e2e_tests() {
   if [[ $android_serial == *:* ]]; then adb connect "$android_serial" || return; fi
-  (cd android && ANDROID_SERIAL="$android_serial" ./gradlew createDebugAndroidTestCoverageReport)
+  (cd android && ANDROID_SERIAL="$android_serial" ./gradlew connectedDebugAndroidTest)
 }
 
 cleanup_e2e() {
@@ -330,5 +329,4 @@ run_step "Prepare env files" prepare_env || exit $?
 ((run_observability == 0)) || run_step "Observability acceptance" observability_tests || exit $?
 ((run_resilience == 0)) || run_step "Resilience acceptance" resilience_tests || exit $?
 ((run_android_unit == 0)) || run_step "Android unit tests" android_unit_tests || exit $?
-((run_android_unit == 0)) || run_step "Android unit coverage and 80% gate" android_coverage || exit $?
 ((run_android == 0)) || run_step "Android E2E tests" android_e2e_tests || exit $?

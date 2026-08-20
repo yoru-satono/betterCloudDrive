@@ -2,6 +2,14 @@
 
 Vue 3 + Vite web client for BetterCloudDrive. The same app is also used by the Tauri desktop shell.
 
+Current development documentation:
+
+- [Web development](../docs/development/WEB.md)
+- [Tauri development](../docs/development/TAURI.md)
+- [Shared testing strategy](../docs/development/TESTING.md)
+
+This module README keeps only the fastest local commands and compatibility notes. The documents above are authoritative for structure, debugging, and required validation.
+
 ## Web Development
 
 ```bash

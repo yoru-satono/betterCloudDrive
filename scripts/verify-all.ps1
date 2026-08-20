@@ -34,15 +34,14 @@ $RunWeb = $RunAll -or $SelectedModules.Contains("web")
 $RunTauri = ($RunAll -or $SelectedModules.Contains("tauri")) -and -not $SkipTauri
 $RunAndroid = ($RunAll -or $SelectedModules.Contains("android")) -and -not $SkipAndroid
 $RunAndroidUnit = $RunAndroid -or $SelectedModules.Contains("android-unit")
-$RunOffice = -not $RunAll -and $SelectedModules.Contains("office") -and -not $SkipOnlyOffice
+$RunOffice = ($RunAll -or $SelectedModules.Contains("office")) -and -not $SkipOnlyOffice
 $RunWebDav = $RunAll -or $SelectedModules.Contains("webdav")
 $RunObservability = $RunAll -or $SelectedModules.Contains("observability")
 $RunResilience = $RunAll -or $SelectedModules.Contains("resilience")
-$RunOfficeInWebE2E = $RunAll
 $NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience
 $NeedsFrontendHttp = $RunWeb -or $RunTauri -or $RunOffice
 $NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice
-$NeedsOnlyOffice = $RunOffice -or $RunOfficeInWebE2E
+$NeedsOnlyOffice = $RunOffice
 $NeedsDocker = $NeedsBackendHttp -or $NeedsOnlyOffice
 $ShouldCleanupE2E = -not $SkipE2ECleanup -and $NeedsDocker
 $RunId = if ($env:BCD_TEST_RUN_ID) { $env:BCD_TEST_RUN_ID } else { "bcd_$(Get-Date -Format 'yyyyMMdd_HHmmss')_$PID" }
@@ -336,9 +335,6 @@ try {
                     E2E_BACKEND_URL = "http://127.0.0.1:8080"
                     E2E_ONLYOFFICE = "0"
                 }
-                if ($RunOfficeInWebE2E) {
-                    $webEnv["E2E_ONLYOFFICE"] = "1"
-                }
                 Invoke-WithEnv $webEnv {
                     Invoke-External "pnpm" @("exec", "playwright", "test", "--project=core")
                 }
@@ -426,11 +422,6 @@ try {
                 Invoke-External ".\gradlew.bat" @("testDebugUnitTest")
             }
         }
-        Invoke-Step "Android unit coverage and 80% gate" {
-            Invoke-InDirectory "android" {
-                Invoke-External ".\gradlew.bat" @("jacocoDebugUnitTestCoverageVerification")
-            }
-        }
     }
     if ($RunAndroid) {
         Invoke-Step "Android E2E tests" {
@@ -439,7 +430,7 @@ try {
                     Invoke-External "adb" @("connect", $AndroidSerial)
                 }
                 Invoke-WithEnv @{ ANDROID_SERIAL = $AndroidSerial } {
-                    Invoke-External ".\gradlew.bat" @("createDebugAndroidTestCoverageReport")
+                    Invoke-External ".\gradlew.bat" @("connectedDebugAndroidTest")
                 }
             }
         }

@@ -101,6 +101,8 @@ RabbitMQ 死信由单并发消费者持久化到 `dead_letter_records`，成功�
 - 审计事实以 PostgreSQL 为准；Loki 日志按保留期自动淘汰。
 - 从旧版升级不会自动删除历史 `tempodata` 等 Docker 卷。确认不再需要旧 Trace 后，可先用 `docker volume ls` 确认项目卷名，再人工删除对应孤立卷；部署或升级脚本不得自动执行该操作。
 
+告警触发后的保守处置顺序见[生产故障 Runbook](INCIDENT_RUNBOOK.md)，组件或应用版本变更见[升级与回滚](UPGRADE_ROLLBACK.md)。
+
 完整验收：
 
 ```powershell

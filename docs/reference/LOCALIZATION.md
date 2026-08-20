@@ -1,6 +1,6 @@
 # 客户端本地化与语义文案协议
 
-BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务端只传递稳定的文案键和结构化参数，由 Web/Tauri 与 Android 使用本地简体中文或英文资源渲染。
+BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务端只传递稳定的文案键和结构化参数，由 Web/Tauri 与 Android 使用本地简体中文或英文资源渲染；选择原因见[语义本地化 ADR](../decisions/008-semantic-localization.md)。
 
 客户端支持 `zh-Hans` 和 `en-US`。未登录时使用当前设备已保存的选择，首次访问按系统语言选择；注册会保存当前语言。登录后以账号的 `preferredLocale` 为准，并同步到当前设备。全新数据库实例中的账号默认使用 `zh-Hans`。
 

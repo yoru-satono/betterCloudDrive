@@ -4,7 +4,7 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.util.TimeZone
 
-class UtilityCoverageTest {
+class UtilityBehaviorTest {
     @Test fun serverUrlsAreNormalizedAndBuiltSafely() {
         assertEquals("https://example.com", ServerUrlUtil.normalizeBaseUrl(" https://example.com/path/ ").getOrThrow())
         assertTrue(ServerUrlUtil.normalizeBaseUrl("").isFailure)
@@ -14,7 +14,7 @@ class UtilityCoverageTest {
         assertEquals("http://localhost:8080/api/v1/teams/7/preview/12", ServerUrlUtil.teamPreviewUrl("http://localhost:8080", 7, 12))
     }
 
-    @Test fun fileTypesCoverKnownAndUnknownExtensions() {
+    @Test fun fileTypesHandleKnownAndUnknownExtensions() {
         assertEquals("jpg", FileTypeHelper.getExtension("PHOTO.JPG"))
         assertEquals("", FileTypeHelper.getExtension("README"))
         assertTrue(FileTypeHelper.isImage("a.heic"))
@@ -32,7 +32,7 @@ class UtilityCoverageTest {
         assertNotEquals(FileTypeHelper.getColorForExtension("a.pdf"), FileTypeHelper.getColorForExtension("a.unknown"))
     }
 
-    @Test fun sizesAndDatesCoverBoundariesAndFallbacks() {
+    @Test fun sizesAndDatesHandleBoundariesAndFallbacks() {
         assertEquals("0 B", FormatUtil.formatFileSize(-1))
         assertEquals("1 B", FormatUtil.formatFileSize(1))
         assertEquals("1 KB", FormatUtil.formatFileSize(1024))

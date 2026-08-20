@@ -41,7 +41,7 @@
     "@vue/compiler-dom": "^3.5.40",
     "@vue/compiler-sfc": "^3.5.40",
     "@playwright/test": "^1.62.0",
-    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/cli": "2.11.4",
     "@types/mocha": "^10.0.10",
     "@types/node": "^24.12.3",
     "@vitejs/plugin-vue": "^6.0.8",
