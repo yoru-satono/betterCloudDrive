@@ -4,14 +4,21 @@
 
 ## 十八、OnlyOffice 文档 `/api/v1/office` 和 `/api/v1/teams/{teamId}/office`
 
-OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只读预览；团队文件根据团队角色和文件级有效权限返回只读或可编辑配置，保存通过 Document Server callback 入队，再由后台 worker 下载编辑结果并写入新版本。
+OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只读预览；团队文件根据团队角色和文件级有效权限返回只读或可编辑配置，保存通过 Document Server callback 入队，再由后台 worker 下载编辑结果并写入新版本。移动端当前采用只读产品策略，配置请求携带 `mobile=true` 时，即使用户具有团队写权限，后端也只签发移动查看配置。
 
 ### 18.1 配置接口
 
 | 方法 | 路径 | 权限 | 响应 |
 |------|------|------|------|
-| GET | `/api/v1/office/files/{fileId}/config` | 文件所有者 | 个人只读 `OfficeConfigResponse` |
-| GET | `/api/v1/teams/{teamId}/office/files/{fileId}/config` | 团队成员 | 团队 `OfficeConfigResponse`，OWNER/ADMIN/EDITOR 为可编辑 |
+| GET | `/api/v1/office/files/{fileId}/config?mobile=` | 文件所有者 | 个人只读 `OfficeConfigResponse`；`mobile=true` 返回移动查看配置 |
+| GET | `/api/v1/teams/{teamId}/office/files/{fileId}/config?mobile=` | 团队成员 | 默认按有效权限返回配置；`mobile=true` 强制只读移动查看 |
+
+`mobile` 缺省为 `false`，Web/Tauri 的现有编辑行为不变。`mobile=true` 时，响应具有以下固定语义：
+
+- `config.type` 为 `mobile`，`editable` 为 `false`，`editorConfig.mode` 为 `view`。
+- `document.permissions.edit/review/comment/fillForms` 均为 `false`，下载和打印权限保持启用。
+- `editorConfig.customization.mobile.forceView` 和 `disableForceDesktop` 为 `true`。
+- 不生成 `callbackUrl` 或 callback token；所有字段完成后再签发配置 JWT，客户端不得自行扩大权限。
 
 **OfficeConfigResponse:**
 ```json
@@ -19,6 +26,7 @@ OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只�
   "documentServerUrl": "http://localhost:8082",
   "editable": false,
   "config": {
+    "type": "mobile",
     "documentType": "word",
     "document": {
       "fileType": "docx",
@@ -28,7 +36,12 @@ OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只�
     },
     "editorConfig": {
       "mode": "view",
-      "callbackUrl": null
+      "customization": {
+        "mobile": {
+          "forceView": true,
+          "disableForceDesktop": true
+        }
+      }
     }
   }
 }
@@ -54,7 +67,7 @@ OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只�
 }
 ```
 
-`status` 为 `2` 或 `6` 时，后端验证 callback token、团队写权限和幂等记录后立即创建 `ONLYOFFICE_SAVE` 团队任务并返回 `{ "error": 0 }`；后台 worker 再从 `url` 下载编辑结果并调用团队版本服务保存为新版本。其他状态返回 `{ "error": 0 }` 但不写版本。个人文件没有 callback，始终只读。
+`status` 为 `2` 或 `6` 时，后端验证 callback token、团队写权限和幂等记录后立即创建 `ONLYOFFICE_SAVE` 团队任务并返回 `{ "error": 0 }`；后台 worker 再从 `url` 下载编辑结果并调用团队版本服务保存为新版本。其他状态返回 `{ "error": 0 }` 但不写版本。个人文件和 `mobile=true` 配置没有 callback，始终只读。
 
 保存回调具有幂等保护：
 

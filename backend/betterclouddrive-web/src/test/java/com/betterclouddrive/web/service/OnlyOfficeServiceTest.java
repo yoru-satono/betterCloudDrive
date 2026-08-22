@@ -5,12 +5,16 @@ import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.web.config.OnlyOfficeProperties;
 import com.betterclouddrive.web.dto.response.OfficeConfigResponse;
 import com.betterclouddrive.service.i18n.LocaleCatalog;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.web.client.RestClient;
 
 import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -114,6 +118,57 @@ class OnlyOfficeServiceTest {
         assertThat((String) firstEditorConfig.get("callbackUrl"))
                 .startsWith("http://backend:8080/api/v1/teams/10/office/files/7/callback?token=");
         assertThat(firstDocument.get("key")).isNotEqualTo(secondDocument.get("key"));
+    }
+
+    @Test
+    void buildTeamConfig_shouldForceSignedMobileConfigToReadOnly() {
+        OfficeConfigResponse response = service.buildTeamConfig(
+                2L, 10L, officeFile("document.docx"), true, "zh-Hans", true);
+
+        assertThat(response.isEditable()).isFalse();
+        assertThat(response.getConfig()).containsEntry("type", "mobile");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> document = (Map<String, Object>) response.getConfig().get("document");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> permissions = (Map<String, Object>) document.get("permissions");
+        assertThat(permissions)
+                .containsEntry("download", true)
+                .containsEntry("print", true)
+                .containsEntry("edit", false)
+                .containsEntry("review", false)
+                .containsEntry("comment", false)
+                .containsEntry("fillForms", false);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> editorConfig = (Map<String, Object>) response.getConfig().get("editorConfig");
+        assertThat(editorConfig).containsEntry("mode", "view").doesNotContainKey("callbackUrl");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> customization = (Map<String, Object>) editorConfig.get("customization");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> mobile = (Map<String, Object>) customization.get("mobile");
+        assertThat(mobile)
+                .containsEntry("forceView", true)
+                .containsEntry("disableForceDesktop", true);
+
+        Claims signedConfig = Jwts.parser()
+                .verifyWith(Keys.hmacShaKeyFor(properties.getJwtSecret().getBytes(StandardCharsets.UTF_8)))
+                .build()
+                .parseSignedClaims((String) response.getConfig().get("token"))
+                .getPayload();
+        assertThat(signedConfig.get("type")).isEqualTo("mobile");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> signedEditorConfig = signedConfig.get("editorConfig", Map.class);
+        assertThat(signedEditorConfig).containsEntry("mode", "view").doesNotContainKey("callbackUrl");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> signedDocument = signedConfig.get("document", Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> signedPermissions = (Map<String, Object>) signedDocument.get("permissions");
+        assertThat(signedPermissions)
+                .containsEntry("edit", false)
+                .containsEntry("review", false)
+                .containsEntry("comment", false)
+                .containsEntry("fillForms", false);
     }
 
     @Test

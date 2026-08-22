@@ -41,7 +41,11 @@ public class OnlyOfficeService {
     }
 
     public OfficeConfigResponse buildPersonalConfig(Long userId, FileEntity file, String locale) {
-        return buildConfig(userId, null, file, false, locale);
+        return buildPersonalConfig(userId, file, locale, false);
+    }
+
+    public OfficeConfigResponse buildPersonalConfig(Long userId, FileEntity file, String locale, boolean mobile) {
+        return buildConfig(userId, null, file, false, locale, mobile);
     }
 
     public OfficeConfigResponse buildTeamConfig(Long userId, Long teamId, FileEntity file, boolean editable) {
@@ -50,7 +54,12 @@ public class OnlyOfficeService {
 
     public OfficeConfigResponse buildTeamConfig(Long userId, Long teamId, FileEntity file, boolean editable,
                                                 String locale) {
-        return buildConfig(userId, teamId, file, editable, locale);
+        return buildTeamConfig(userId, teamId, file, editable, locale, false);
+    }
+
+    public OfficeConfigResponse buildTeamConfig(Long userId, Long teamId, FileEntity file, boolean editable,
+                                                String locale, boolean mobile) {
+        return buildConfig(userId, teamId, file, editable, locale, mobile);
     }
 
     public boolean isOfficeFile(FileEntity file) {
@@ -124,11 +133,12 @@ public class OnlyOfficeService {
     }
 
     private OfficeConfigResponse buildConfig(Long userId, Long teamId, FileEntity file, boolean editable,
-                                             String locale) {
+                                             String locale, boolean mobile) {
+        boolean effectiveEditable = editable && !mobile;
         String documentType = documentType(file);
         String documentKey = documentKey(file);
         String contentToken = createResourceToken("content", userId, file.getId(), teamId, documentKey);
-        String callbackToken = teamId != null && editable
+        String callbackToken = teamId != null && effectiveEditable
                 ? createResourceToken("callback", userId, file.getId(), teamId, documentKey)
                 : null;
         String contentUrl = resourceUrl(teamId, file.getId(), "content", contentToken);
@@ -137,9 +147,12 @@ public class OnlyOfficeService {
         Map<String, Object> permissions = new LinkedHashMap<>();
         permissions.put("download", true);
         permissions.put("print", true);
-        permissions.put("edit", editable);
-        permissions.put("review", editable);
-        permissions.put("comment", editable);
+        permissions.put("edit", effectiveEditable);
+        permissions.put("review", effectiveEditable);
+        permissions.put("comment", effectiveEditable);
+        if (mobile) {
+            permissions.put("fillForms", false);
+        }
 
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("fileType", extension(file.getFileName()).orElseThrow());
@@ -149,7 +162,7 @@ public class OnlyOfficeService {
         document.put("permissions", permissions);
 
         Map<String, Object> editorConfig = new LinkedHashMap<>();
-        editorConfig.put("mode", editable ? "edit" : "view");
+        editorConfig.put("mode", effectiveEditable ? "edit" : "view");
         editorConfig.put("lang", localeCatalog.resolveOrDefault(locale));
         editorConfig.put("user", Map.of(
                 "id", String.valueOf(userId),
@@ -159,6 +172,12 @@ public class OnlyOfficeService {
         customization.put("plugins", false);
         customization.put("macros", false);
         customization.put("macrosMode", "disable");
+        if (mobile) {
+            customization.put("mobile", Map.of(
+                    "forceView", true,
+                    "disableForceDesktop", true
+            ));
+        }
         editorConfig.put("customization", customization);
         editorConfig.put("plugins", disabledPluginsConfig());
         if (callbackUrl != null) {
@@ -166,7 +185,7 @@ public class OnlyOfficeService {
         }
 
         Map<String, Object> config = new LinkedHashMap<>();
-        config.put("type", "desktop");
+        config.put("type", mobile ? "mobile" : "desktop");
         config.put("documentType", documentType);
         config.put("document", document);
         config.put("editorConfig", editorConfig);
@@ -176,7 +195,7 @@ public class OnlyOfficeService {
 
         return OfficeConfigResponse.builder()
                 .documentServerUrl(properties.normalizedPublicUrl())
-                .editable(editable)
+                .editable(effectiveEditable)
                 .config(config)
                 .build();
     }

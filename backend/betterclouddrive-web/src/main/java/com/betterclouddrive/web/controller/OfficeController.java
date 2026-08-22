@@ -48,24 +48,27 @@ public class OfficeController {
     @GetMapping("/api/v1/office/files/{fileId}/config")
     public ApiResponse<OfficeConfigResponse> personalConfig(
             @CurrentUser UserPrincipal user,
-            @PathVariable Long fileId) {
+            @PathVariable Long fileId,
+            @RequestParam(defaultValue = "false") boolean mobile) {
         FileEntity file = fileService.getFile(user.getUserId(), fileId);
         validateOfficeFile(file);
         String locale = authService.getCurrentUser(user.getUserId()).getPreferredLocale();
-        return ApiResponse.success(onlyOfficeService.buildPersonalConfig(user.getUserId(), file, locale));
+        return ApiResponse.success(onlyOfficeService.buildPersonalConfig(user.getUserId(), file, locale, mobile));
     }
 
     @GetMapping("/api/v1/teams/{teamId}/office/files/{fileId}/config")
     public ApiResponse<OfficeConfigResponse> teamConfig(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
-            @PathVariable Long fileId) {
+            @PathVariable Long fileId,
+            @RequestParam(defaultValue = "false") boolean mobile) {
         teamPermissionService.requireRead(user.getUserId(), teamId, fileId);
         FileEntity file = fileService.getTeamFile(teamId, fileId);
         validateOfficeFile(file);
         boolean editable = teamPermissionService.effectivePermissions(user.getUserId(), teamId, fileId).canWrite();
         String locale = authService.getCurrentUser(user.getUserId()).getPreferredLocale();
-        return ApiResponse.success(onlyOfficeService.buildTeamConfig(user.getUserId(), teamId, file, editable, locale));
+        return ApiResponse.success(
+                onlyOfficeService.buildTeamConfig(user.getUserId(), teamId, file, editable, locale, mobile));
     }
 
     @GetMapping("/api/v1/office/files/{fileId}/content")
