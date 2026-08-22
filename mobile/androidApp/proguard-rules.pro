@@ -1,0 +1,3 @@
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keepclassmembers class **$$serializer { *; }
+-keep,includedescriptorclasses class com.betterclouddrive.mobile.core.model.** { *; }
