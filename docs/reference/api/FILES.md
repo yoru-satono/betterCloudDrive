@@ -18,8 +18,8 @@ Authorization: Bearer <accessToken>
 | parentId | Long | 否 | null | 父文件夹 ID，null 表示根目录 |
 | page | int | 否 | 1 | 页码，从 1 开始 |
 | size | int | 否 | 20 | 每页条数 |
-| sortBy | String | 否 | fileName | 排序字段 |
-| order | String | 否 | asc | asc/desc |
+| sortBy | String | 否 | fileName | `fileName`、`updatedAt` 或 `fileSize`；未知值回退 `fileName` |
+| order | String | 否 | asc | `asc` 或 `desc`；未知值回退 `asc` |
 
 **Response `200`:**
 ```json
@@ -68,7 +68,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> 文件夹始终排在文件前面，按 fileName 升序排列。
+> 文件夹始终排在文件前面，随后按请求字段和方向排序。排序值相同时再按 `fileName` 升序、ID 升序，因此连续分页不会因同值记录而重复或遗漏；`updatedAt` 为空的记录始终位于该组末尾。
 
 ---
 

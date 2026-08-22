@@ -21,6 +21,47 @@ class TestListFiles:
         r = client.get("/api/v1/files?sortBy=fileName&order=asc", headers=auth_headers)
         assert_api_ok(r)
 
+    def test_folder_first_sort_is_stable_across_more_than_two_pages(
+        self, client, auth_headers, created_folder, uploaded_file,
+    ):
+        prefix = uuid.uuid4().hex[:6]
+        folder_names = [f"{prefix}_{suffix}" for suffix in ("z", "a", "m", "b", "c")]
+        for name in folder_names:
+            assert_api_ok(client.post(
+                "/api/v1/files/folder",
+                json={"parentId": created_folder["id"], "folderName": name},
+                headers=auth_headers,
+            ))
+
+        records = []
+        for page in range(1, 5):
+            data = assert_paginated(client.get(
+                "/api/v1/files",
+                params={
+                    "parentId": created_folder["id"], "page": page, "size": 2,
+                    "sortBy": "fileName", "order": "desc",
+                },
+                headers=auth_headers,
+            ), expected_page=page)
+            records.extend(data["records"])
+            if page >= data["pages"]:
+                break
+
+        assert len(records) == 6
+        assert len({item["id"] for item in records}) == len(records)
+        assert [item["fileType"] for item in records] == ["folder"] * 5 + ["file"]
+        assert [item["fileName"] for item in records[:5]] == sorted(folder_names, reverse=True)
+
+        fallback = assert_paginated(client.get(
+            "/api/v1/files",
+            params={
+                "parentId": created_folder["id"], "page": 1, "size": 100,
+                "sortBy": "storagePath", "order": "sideways",
+            },
+            headers=auth_headers,
+        ))["records"]
+        assert [item["fileName"] for item in fallback[:5]] == sorted(folder_names)
+
     def test_list_with_parent_id(self, client, auth_headers, created_folder):
         r = client.get(f"/api/v1/files?parentId={created_folder['id']}", headers=auth_headers)
         assert_paginated(r)

@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
@@ -74,6 +75,46 @@ class FileServiceImplTest {
 
         assertThat(result.getRecords()).hasSize(2);
         assertThat(result.getTotal()).isEqualTo(2);
+    }
+
+    @Test
+    void listFiles_shouldUseStableFolderFirstRequestedSort() {
+        when(fileRepository.findAll(any(Specification.class), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(1, 50), 120));
+
+        fileService.listFiles(1L, 9L, 2, 50, "updatedAt", "desc");
+
+        ArgumentCaptor<PageRequest> captor = ArgumentCaptor.forClass(PageRequest.class);
+        verify(fileRepository).findAll(any(Specification.class), captor.capture());
+        PageRequest request = captor.getValue();
+        assertThat(request.getPageNumber()).isEqualTo(1);
+        assertThat(request.getPageSize()).isEqualTo(50);
+        assertThat(request.getSort().stream())
+                .extracting(Sort.Order::getProperty, Sort.Order::getDirection)
+                .containsExactly(
+                        tuple("fileType", Sort.Direction.DESC),
+                        tuple("updatedAt", Sort.Direction.DESC),
+                        tuple("fileName", Sort.Direction.ASC),
+                        tuple("id", Sort.Direction.ASC));
+        assertThat(request.getSort().getOrderFor("updatedAt").getNullHandling())
+                .isEqualTo(Sort.NullHandling.NULLS_LAST);
+    }
+
+    @Test
+    void listFiles_shouldFallBackToNameAscendingForUnknownSortParameters() {
+        when(fileRepository.findAll(any(Specification.class), any(PageRequest.class)))
+                .thenReturn(Page.empty());
+
+        fileService.listFiles(1L, null, 1, 20, null, null);
+
+        ArgumentCaptor<PageRequest> captor = ArgumentCaptor.forClass(PageRequest.class);
+        verify(fileRepository).findAll(any(Specification.class), captor.capture());
+        assertThat(captor.getValue().getSort().stream())
+                .extracting(Sort.Order::getProperty, Sort.Order::getDirection)
+                .containsExactly(
+                        tuple("fileType", Sort.Direction.DESC),
+                        tuple("fileName", Sort.Direction.ASC),
+                        tuple("id", Sort.Direction.ASC));
     }
 
     @Test

@@ -44,6 +44,7 @@ public class FileServiceImpl implements FileService {
 
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
     private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
+    private static final String DEFAULT_FILE_SORT = "fileName";
 
     @Override
     public PageResult<FileEntity> listFiles(Long userId, Long parentId, int page, int size, String sortBy, String order) {
@@ -60,10 +61,29 @@ public class FileServiceImpl implements FileService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
 
-        PageRequest pageable = PageRequest.of(page - 1, size,
-                Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()));
+        PageRequest pageable = PageRequest.of(page - 1, size, personalFileSort(sortBy, order));
         Page<FileEntity> result = fileRepository.findAll(spec, pageable);
         return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
+    }
+
+    private Sort personalFileSort(String requestedSortBy, String requestedOrder) {
+        String safeSortBy = switch (requestedSortBy == null ? "" : requestedSortBy) {
+            case "updatedAt", "fileSize" -> requestedSortBy;
+            default -> DEFAULT_FILE_SORT;
+        };
+        Sort.Direction direction = "desc".equalsIgnoreCase(requestedOrder)
+                ? Sort.Direction.DESC
+                : Sort.Direction.ASC;
+        Sort.Order selected = new Sort.Order(direction, safeSortBy);
+        if ("updatedAt".equals(safeSortBy)) {
+            selected = selected.nullsLast();
+        }
+
+        Sort sort = Sort.by(Sort.Order.desc("fileType"), selected);
+        if (!DEFAULT_FILE_SORT.equals(safeSortBy)) {
+            sort = sort.and(Sort.by(Sort.Order.asc(DEFAULT_FILE_SORT)));
+        }
+        return sort.and(Sort.by(Sort.Order.asc("id")));
     }
 
     @Override
