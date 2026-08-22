@@ -1,13 +1,13 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "backend", "integration", "blackbox", "security", "web", "tauri", "android-unit", "android", "office", "webdav", "observability", "resilience")]
+    [ValidateSet("all", "backend", "integration", "blackbox", "security", "web", "tauri", "android-unit", "android", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience")]
     [string[]]$Module = @("all"),
     [switch]$SkipDockerBuild,
     [switch]$SkipTauri,
     [switch]$SkipAndroid,
     [switch]$SkipOnlyOffice,
     [switch]$SkipE2ECleanup,
-    [string]$AndroidSerial = "localhost:16416",
+    [string]$AndroidSerial = "emulator-5556",
     [switch]$KeepGoing
 )
 
@@ -34,6 +34,8 @@ $RunWeb = $RunAll -or $SelectedModules.Contains("web")
 $RunTauri = ($RunAll -or $SelectedModules.Contains("tauri")) -and -not $SkipTauri
 $RunAndroid = ($RunAll -or $SelectedModules.Contains("android")) -and -not $SkipAndroid
 $RunAndroidUnit = $RunAndroid -or $SelectedModules.Contains("android-unit")
+$RunMobileUnit = $RunAll -or $SelectedModules.Contains("mobile-unit")
+$RunMobileAndroid = ($RunAll -or $SelectedModules.Contains("mobile-android")) -and -not $SkipAndroid
 $RunOffice = ($RunAll -or $SelectedModules.Contains("office")) -and -not $SkipOnlyOffice
 $RunWebDav = $RunAll -or $SelectedModules.Contains("webdav")
 $RunObservability = $RunAll -or $SelectedModules.Contains("observability")
@@ -464,6 +466,31 @@ try {
                 }
                 Invoke-WithEnv @{ ANDROID_SERIAL = $AndroidSerial } {
                     Invoke-External ".\gradlew.bat" @("connectedDebugAndroidTest")
+                }
+            }
+        }
+    }
+    if ($RunMobileUnit) {
+        Invoke-Step "KMP mobile host tests and production builds" {
+            Invoke-InDirectory "mobile" {
+                Invoke-External ".\gradlew.bat" @(
+                    ":shared:testAndroidHostTest",
+                    ":androidApp:assembleDebug",
+                    ":androidApp:assembleRelease",
+                    "-PenableIos=true",
+                    ":shared:compileIosMainKotlinMetadata"
+                )
+            }
+        }
+    }
+    if ($RunMobileAndroid) {
+        Invoke-Step "KMP mobile Android device tests" {
+            Invoke-InDirectory "mobile" {
+                if ($AndroidSerial -match ":") {
+                    Invoke-External "adb" @("connect", $AndroidSerial)
+                }
+                Invoke-WithEnv @{ ANDROID_SERIAL = $AndroidSerial } {
+                    Invoke-External ".\gradlew.bat" @(":androidApp:connectedDebugAndroidTest")
                 }
             }
         }

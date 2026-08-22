@@ -8,14 +8,14 @@ Usage: scripts/verify-all.sh [options]
 
 Options:
   -m, --module NAME          Module to run; repeatable (default: all)
-                            all, backend, blackbox, web, tauri, android-unit, android,
+                            all, backend, blackbox, web, tauri, android-unit, android, mobile-unit, mobile-android,
                             integration, security, office, webdav, observability, resilience
       --skip-docker-build   Start Compose without rebuilding images
       --skip-tauri          Skip Tauri (not allowed with --module all)
       --skip-android        Skip Android (not allowed with --module all)
       --skip-onlyoffice     Skip OnlyOffice (not allowed with --module all)
       --skip-e2e-cleanup    Do not remove this run's E2E data
-      --android-serial ID   adb device serial (default: localhost:16416)
+      --android-serial ID   adb device serial (default: emulator-5556)
       --keep-going          Continue after a failed module
   -h, --help                Show this help
 EOF
@@ -32,7 +32,7 @@ skip_tauri=0
 skip_android=0
 skip_onlyoffice=0
 skip_e2e_cleanup=0
-android_serial="localhost:16416"
+android_serial="emulator-5556"
 keep_going=0
 
 while (($#)); do
@@ -61,7 +61,7 @@ done
 ((${#modules[@]})) || modules=(all)
 
 declare -A valid_modules=(
-  [all]=1 [backend]=1 [blackbox]=1 [web]=1 [tauri]=1 [android-unit]=1 [android]=1
+  [all]=1 [backend]=1 [blackbox]=1 [web]=1 [tauri]=1 [android-unit]=1 [android]=1 [mobile-unit]=1 [mobile-android]=1
   [integration]=1 [security]=1 [office]=1 [webdav]=1 [observability]=1 [resilience]=1
 )
 declare -A selected=()
@@ -81,6 +81,8 @@ run_web=0; { ((run_all)) || has_module web; } && run_web=1
 run_tauri=0; { ((run_all)) || has_module tauri; } && ((!skip_tauri)) && run_tauri=1
 run_android=0; { ((run_all)) || has_module android; } && ((!skip_android)) && run_android=1
 run_android_unit=$run_android; has_module android-unit && run_android_unit=1
+run_mobile_unit=0; { ((run_all)) || has_module mobile-unit; } && run_mobile_unit=1
+run_mobile_android=0; { ((run_all)) || has_module mobile-android; } && ((!skip_android)) && run_mobile_android=1
 run_office=0; { ((run_all)) || has_module office; } && ((!skip_onlyoffice)) && run_office=1
 run_webdav=0; { ((run_all)) || has_module webdav; } && run_webdav=1
 run_observability=0; { ((run_all)) || has_module observability; } && run_observability=1
@@ -108,7 +110,7 @@ fi
 
 command -v docker >/dev/null || ((needs_docker == 0)) || die "docker was not found on PATH"
 command -v rclone >/dev/null || ((run_webdav == 0)) || die "rclone is required by the webdav module"
-command -v adb >/dev/null || ((run_android == 0)) || die "adb is required by the android module"
+command -v adb >/dev/null || ((run_android == 0 && run_mobile_android == 0)) || die "adb is required by Android device modules"
 
 declare -a result_names=() result_statuses=() result_seconds=() result_messages=()
 had_failure=0
@@ -284,6 +286,13 @@ android_e2e_tests() {
   if [[ $android_serial == *:* ]]; then adb connect "$android_serial" || return; fi
   (cd android && ANDROID_SERIAL="$android_serial" ./gradlew connectedDebugAndroidTest)
 }
+mobile_unit_tests() {
+  (cd mobile && ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug :androidApp:assembleRelease -PenableIos=true :shared:compileIosMainKotlinMetadata)
+}
+mobile_android_tests() {
+  if [[ $android_serial == *:* ]]; then adb connect "$android_serial" || return; fi
+  (cd mobile && ANDROID_SERIAL="$android_serial" ./gradlew :androidApp:connectedDebugAndroidTest)
+}
 
 cleanup_e2e() {
   local env_file=config/env-files/database.env
@@ -341,3 +350,5 @@ run_step "Prepare env files" prepare_env || exit $?
 ((run_resilience == 0)) || run_step "Resilience acceptance" resilience_tests || exit $?
 ((run_android_unit == 0)) || run_step "Android unit tests" android_unit_tests || exit $?
 ((run_android == 0)) || run_step "Android E2E tests" android_e2e_tests || exit $?
+((run_mobile_unit == 0)) || run_step "KMP mobile host tests and production builds" mobile_unit_tests || exit $?
+((run_mobile_android == 0)) || run_step "KMP mobile Android device tests" mobile_android_tests || exit $?
