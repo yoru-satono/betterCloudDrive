@@ -1,6 +1,19 @@
 # Android 开发指南
 
-本文面向修改 Android 客户端的开发者，说明工程结构、服务地址、数据流、设备调试和测试约定。Android 使用后端同一 REST 协议，不在本地复制服务端权限规则。
+本文面向修改 Android 客户端的开发者，说明旧版 `android/` 与 KMP 重写 `mobile/` 的工程结构、服务地址、设备调试和测试约定。两者使用同一后端 REST 协议，不在本地复制服务端权限规则。新应用达到功能对等前不得删除旧应用。
+
+## KMP 阶段 4 快速入口
+
+KMP 工程使用 Kotlin 2.4.10、Compose Multiplatform 1.11.1、AGP 9.1.1、Gradle 9.3.1、Ktor 3.5.1、Room 2.8.4、DataStore 1.2.1 和 WorkManager 2.11.2。Android 14+ 的长传输由 UIDT 执行，Android 13 及以下回退 WorkManager。
+
+```powershell
+.\mobile\gradlew.bat -p mobile :shared:testAndroidHostTest :androidApp:assembleDebug
+$env:ANDROID_SERIAL = '<adb 设备序列号>'
+.\mobile\gradlew.bat -p mobile :androidApp:connectedDebugAndroidTest
+.\mobile\gradlew.bat -p mobile :androidApp:assembleRelease
+```
+
+KMP 当前个人文件浏览实现见[阶段 4 个人文件浏览](../../mobile/docs/stage-4-personal-browser.md)，产品外壳基线见[阶段 3 产品应用外壳](../../mobile/docs/stage-3-product-shell.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
 
 ## 工具与构建
 
@@ -42,6 +55,8 @@ debug 默认服务器地址来自 `ANDROID_DEFAULT_SERVER_BASE_URL`，未设置�
 
 修改环境变量后需要重新构建应用。生产服务器应使用 HTTPS；不要把个人开发 IP 或凭据提交到源码。
 
+KMP 登录页直接保存规范化服务器地址。标准 Android Emulator 使用 `http://10.0.2.2:8080`；部分第三方模拟器没有该宿主别名，此时使用开发机局域网地址。KMP 不把个人开发地址编译进生产状态，也不得记录密码、Token、请求正文或 SAF URI。
+
 ## API 与认证
 
 `data/remote/ApiService.kt` 是 Android 路径和请求形式的集中入口。新增协议时：
@@ -66,6 +81,12 @@ Navigation Compose 的 route 集中在 `ui/navigation`。新增页面应使用�
 - 图片使用 Coil，音视频使用 Media3，文本/Office 使用对应预览页面。
 - 大文件不得整体读入 UI 层内存；取消、重试和进程重建应保留明确状态。
 - Android 模拟器访问 OnlyOffice 和 Mailpit 时同样使用 `10.0.2.2` 地址。
+
+KMP 端完整任务状态保存在 Room；上传源和下载目标使用可持久化 SAF 权限，不能把整个文件读入内存。下载使用 Ktor 受控流式响应直接写入应用私有 `.part`，只有 Range、长度和可选 MD5 校验成功后才复制到用户目标。WorkManager 与 UIDT 的系统通知最多每秒更新一次，应用内进度保持实时。退出登录和切换服务器会取消平台任务、清除传输记录及临时文件。OnlyOffice 仅位于 Debug 诊断页，必须原样使用后端签名的移动只读配置。
+
+KMP 登录后的共享产品外壳使用 Navigation Compose 类型安全路由。个人、团队、传输和我的始终具有固定顶层位置；团队页在接入团队业务前不得请求接口。窗口宽度小于 600dp 时使用底部导航栏，宽窗口使用侧边导航栏。页面 Composable 只接收状态和事件，不持有 `NavController` 或完整 `AppContainer`。
+
+个人文件夹同样使用类型安全路由。目录请求固定每页 50 条，接近列表或网格末尾时加载下一页；请求必须携带白名单排序字段和方向。快速切换目录、排序或刷新时取消旧任务并忽略迟到响应。目录返回栈缓存仅保留当前面包屑分支，滚动位置使用首个可见文件 ID 作为锚点。根目录可上传，子目录暂不显示上传入口。
 
 ## 测试
 
@@ -102,3 +123,9 @@ Android 测试以 Repository 协议、ViewModel 状态转换、错误处理、Co
 | 服务器共同协议 | Android 测试 + Web/Tauri/后端契约测试 |
 
 完整测试策略见 [TESTING.md](TESTING.md)。
+
+KMP 设备测试必须显式选择序列号。阶段 2 必须在 Android 9/API 28 和 Android 14/API 34 上各运行一次，以分别覆盖 WorkManager 与 UIDT；真实 OkHttp 测试还会验证限速响应在结束前写出 `.part`，并以非零 `Range` 恢复。设备测试报告位于 `mobile/androidApp/build/reports/androidTests/connected/`，主机测试报告位于 `mobile/shared/build/reports/tests/testAndroidHostTest/`。
+
+阶段 3 继续使用 API 28/API 34 设备矩阵，新增四个顶层入口、返回栈、窄屏底栏、宽屏侧栏以及 Debug/Release 诊断隔离测试。真实后端旅程必须使用完整默认 Compose 栈，包括可观测性服务。
+
+阶段 4 在同一设备矩阵增加多级目录、面包屑与系统返回、滚动分页、排序、列表/网格和响应式文件详情测试。API 34 的真实旅程需使用包含至少三级目录和超过 100 个文件的测试目录，并验证跨页无重复、下载正确和强制停止后回到个人根目录。

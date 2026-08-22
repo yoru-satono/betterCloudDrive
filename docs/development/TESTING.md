@@ -32,7 +32,7 @@ Linux/macOS：
 ./scripts/verify-all.sh
 ```
 
-`all` 选择 backend、integration、blackbox、security、web、tauri、android、office、webdav、observability 和 resilience。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。
+`all` 选择 backend、integration、blackbox、security、web、tauri、旧 Android、KMP 移动端、office、webdav、observability 和 resilience。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。
 
 脚本会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。`all` 是完整验收，不能再配合跳过 Tauri、Android 或 OnlyOffice 的参数。
 
@@ -44,6 +44,8 @@ Linux/macOS：
 .\scripts\verify-all.ps1 -Module web -SkipDockerBuild
 .\scripts\verify-all.ps1 -Module android-unit
 .\scripts\verify-all.ps1 -Module android -AndroidSerial localhost:16416
+.\scripts\verify-all.ps1 -Module mobile-unit
+.\scripts\verify-all.ps1 -Module mobile-android -AndroidSerial emulator-5556
 .\scripts\verify-all.ps1 -Module observability -KeepGoing
 ```
 
@@ -52,6 +54,8 @@ Linux/macOS：
 ./scripts/verify-all.sh --module web --skip-docker-build
 ./scripts/verify-all.sh --module android-unit
 ./scripts/verify-all.sh --module android --android-serial localhost:16416
+./scripts/verify-all.sh --module mobile-unit
+./scripts/verify-all.sh --module mobile-android --android-serial emulator-5556
 ./scripts/verify-all.sh --module observability --keep-going
 ```
 
@@ -70,6 +74,13 @@ Linux/macOS：
 | Tauri 桌面 | `cd frontend && pnpm run tauri:e2e:build && pnpm run test:e2e:tauri` | 真实桌面窗口 |
 | Android JVM | `cd android && ./gradlew testDebugUnitTest` | Repository、ViewModel、工具和协议行为 |
 | Android 设备 | `cd android && ./gradlew connectedDebugAndroidTest` | Compose/instrumentation 场景 |
+| KMP 移动端主机 | `cd mobile && ./gradlew :shared:testAndroidHostTest` | 认证、并发刷新、语义错误与传输状态机 |
+| KMP Android 设备 | `cd mobile && ./gradlew :androidApp:connectedDebugAndroidTest` | 产品导航、Keystore、平台调度和设备 I/O |
+| KMP Android Release | `cd mobile && ./gradlew :androidApp:assembleRelease` | Release、R8 与 lint vital |
+
+KMP 传输改动必须在 Android 9/API 28 与 Android 14/API 34 上分别运行设备测试。API 28 用例不得跳过 WorkManager 集成测试；API 34 允许该低版本专用用例按条件跳过，但必须通过 UIDT 选择、通知和真实 OkHttp 流式 Range 恢复测试。每次运行都显式传入 `AndroidSerial`，不能依赖当前默认设备。
+
+KMP 产品外壳测试覆盖四个顶层入口、返回行为、页面状态保留、窄屏底部导航、宽屏侧边导航以及 Release 诊断不可达。个人文件浏览改动还必须覆盖多级目录和路径重建、50 条分页去重与尾部重试、排序失败回滚、列表/网格锚点、手机底部详情和宽屏详情栏。涉及真实登录、文件或传输旅程时先启动完整默认 Compose 栈；仅启动 backend 不能作为完整环境验收结果。
 
 Windows Android 使用 `gradlew.bat`。完整专项命令优先通过验证脚本运行，因为脚本还会设置运行 ID、报告位置、服务健康和数据清理。
 
@@ -91,6 +102,8 @@ Windows Android 使用 `gradlew.bat`。完整专项命令优先通过验证脚�
 | Android util/model | JVM 行为测试 |
 | Android Repository/ViewModel | JVM 协议和状态测试 |
 | Android Compose/导航/设备 I/O | JVM 相关测试 + instrumentation |
+| `mobile/shared` 会话或传输状态机 | `:shared:testAndroidHostTest`；涉及 Keystore、SAF 或调度再加 KMP Android 设备测试 |
+| `mobile/androidApp`、Manifest 或 R8 | KMP Android 设备测试 + `:androidApp:assembleRelease` |
 | API 或本地化共同协议 | 后端测试 + Web、Tauri、Android 受影响契约/场景 |
 | Compose/生产代理/观测配置 | 配置渲染/健康检查 + observability；故障路径加 resilience |
 | OnlyOffice 回调或编辑 | 后端单元 + office E2E + 保存失败/重试场景 |

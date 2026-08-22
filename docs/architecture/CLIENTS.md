@@ -47,7 +47,7 @@ Rust 边界位于 `frontend/src-tauri/src`：
 
 前端通过运行时判断调用桌面 API；普通业务请求仍走共享 REST client。不要在 Rust 层复制团队权限或文件状态机。Tauri 的价值是平台 I/O 与长时间传输，不是建立第二套业务后端。
 
-## Android
+## Android（旧版）
 
 Android 位于 `android/app`，使用 Jetpack Compose、Navigation Compose、Hilt、Retrofit/OkHttp、DataStore、Coroutines、Coil 和 Media3。
 
@@ -64,7 +64,29 @@ Compose Screen
 - ViewModel 暴露界面状态与动作，Composable 负责渲染和用户交互。
 - Navigation 定义登录、个人文件、团队、分享、收藏、标签、版本、通知、传输和个人资料等页面。
 - DataStore 保存适合本地持久化的设置/token；客户端不能把它当作服务器状态副本。
-- Android 支持团队文件、成员、邀请、任务、权限、版本和 OnlyOffice 入口，但全局管理功能范围受 [Android 管理范围 ADR](../decisions/001-android-admin-scope.md)约束。
+- Android 支持团队文件、成员、邀请、任务、权限、版本和 OnlyOffice 入口，但全局管理功能范围受 [Android 管理范围 ADR](../decisions/001-android-admin-scope.md)约束。移动端 OnlyOffice 当前只提供查看：客户端请求后端签发的 `mobile=true` 只读配置，不在 WebView 中修改已签名权限，也不产生保存回调。
+
+## KMP 移动端
+
+新移动端位于 `mobile/`，采用 Kotlin Multiplatform、Compose Multiplatform、Ktor、Room 和手动 `AppContainer`。Android 是当前交付目标；iOS 只保留公共代码编译能力，不实现平台服务。
+
+```text
+Compose Screen / StateFlow holder
+  -> Repository / TransferEngine
+  -> Ktor / Room / narrow platform interfaces
+  -> Android Keystore、SAF、UIDT 或 WorkManager
+```
+
+- DataStore 保存服务器设置，完整 Token 对由 Android Keystore AES-256-GCM 加密后原子保存。
+- 认证层合并并发刷新，旋转 Token 后最多重放原请求一次；登出或切换服务器会清除服务器绑定的令牌、任务和临时文件。
+- Room 是传输状态事实来源。Android 14+ 使用 UIDT，较低版本回退 WorkManager；平台调度只携带任务 ID。
+- 上传按 5 MiB 流式分片并通过 `missingChunks` 恢复；下载通过受控流式响应先写私有 `.part`，校验 Range、长度和可选 MD5 后再提交到 SAF 目标。Android 9 WorkManager 与 Android 14 UIDT 的进程重建续传均已验收。
+- 共享 Navigation Compose 产品外壳固定提供个人、团队、传输和我的四个顶层入口；团队入口当前只显示占位状态，不调用团队接口。
+- 个人文件分支使用类型安全文件夹路由。每个目录按 50 条滚动分页，固定文件夹优先并支持名称、修改时间和大小升降序；目录返回栈分别保留内容、分页与滚动锚点。
+- 普通文件详情只展示服务端元数据和单文件下载：手机使用底部页，宽度不小于 600dp 时使用右侧详情栏。根目录保留单文件上传，子目录上传和文件管理尚未开放。
+- OnlyOffice 只在独立 Debug 诊断页出现，继续原样加载后端签名的 `mobile=true` 只读配置；Release 不注册诊断入口和路由。
+
+在新应用达到业务功能对等前，`android/` 旧应用不删除、不替换。当前个人文件浏览实现与验收见[阶段 4 个人文件浏览](../../mobile/docs/stage-4-personal-browser.md)。
 
 ## 能力矩阵
 
@@ -72,8 +94,8 @@ Compose Screen
 |------|-----|-------|---------|
 | 认证、个人文件、回收站、分享、标签、收藏、版本 | 是 | 复用 Web | 是 |
 | 团队文件、成员、邀请、权限与任务 | 是 | 复用 Web | 是 |
-| 浏览器在线预览/OnlyOffice | 是 | 复用 WebView 页面 | 通过 Android 页面/WebView 入口 |
-| 原生目录上传与持久传输队列 | 受浏览器能力限制 | 是，Rust 实现 | 是，Android Repository/设备存储 |
+| 浏览器在线预览/OnlyOffice | 按权限查看或编辑 | 复用 Web 页面 | Android WebView 只读查看 |
+| 原生目录上传与持久传输队列 | 受浏览器能力限制 | 是，Rust 实现 | 旧版与 KMP 均支持；KMP 使用 Room + UIDT/WorkManager |
 | 全局管理员界面 | 是 | 复用 Web | 非当前完整支持范围 |
 | WebDAV | 外部 WebDAV 客户端使用 | 外部客户端使用 | 外部客户端使用 |
 
