@@ -20,6 +20,7 @@ kotlin {
         namespace = "com.betterclouddrive.mobile.shared"
         compileSdk = 37
         minSdk = 26
+        androidResources.enable = true
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }

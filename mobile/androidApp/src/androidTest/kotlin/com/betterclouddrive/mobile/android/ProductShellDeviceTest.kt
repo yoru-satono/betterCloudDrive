@@ -1,6 +1,11 @@
 package com.betterclouddrive.mobile.android
 
 import androidx.activity.ComponentActivity
+import android.app.LocaleConfig
+import android.app.Notification
+import android.content.res.Configuration
+import android.os.Build
+import android.os.LocaleList
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -11,15 +16,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.betterclouddrive.mobile.app.AppPhase
 import com.betterclouddrive.mobile.app.AppUiState
 import com.betterclouddrive.mobile.app.DirectoryPageState
@@ -29,21 +37,64 @@ import com.betterclouddrive.mobile.app.ProductShellActions
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.UserProfile
+import com.betterclouddrive.mobile.core.localization.UiMessage
+import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
+import com.betterclouddrive.mobile.core.localization.mobileStringsFor
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
 import com.betterclouddrive.mobile.core.platform.PickedDestination
 import com.betterclouddrive.mobile.core.platform.PickedDocument
+import com.betterclouddrive.mobile.platform.transferNotification
 import com.betterclouddrive.mobile.designsystem.BetterCloudDriveTheme
 import com.betterclouddrive.mobile.feature.files.BreadcrumbEntry
 import com.betterclouddrive.mobile.feature.files.FileViewMode
 import org.junit.Rule
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.Assert.assertEquals
+import java.util.Locale
 
 @RunWith(AndroidJUnit4::class)
 class ProductShellDeviceTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun android13LanguageSettingsExposeOnlySupportedLocales() {
+        if (Build.VERSION.SDK_INT < 33) return
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val config = LocaleConfig(context)
+        assertEquals(LocaleConfig.STATUS_SUCCESS, config.status)
+        val locales = requireNotNull(config.supportedLocales)
+        assertEquals(setOf("en-US", "zh-CN", "zh-SG"), (0 until locales.size()).map { locales[it].toLanguageTag() }.toSet())
+    }
+
+    @Test
+    fun transferNotificationUsesCurrentApplicationLanguage() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        fun localized(tag: String) = context.createConfigurationContext(
+            Configuration(context.resources.configuration).apply { setLocales(LocaleList.forLanguageTags(tag)) },
+        )
+
+        val english = transferNotification(localized("en-US"), "i18n-en", "Progress")
+        assertEquals("BetterCloudDrive file transfer", english.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(listOf("Pause", "Cancel"), english.actions.map { it.title.toString() })
+
+        val chinese = transferNotification(localized("zh-CN"), "i18n-zh", "进度")
+        assertEquals("BetterCloudDrive 文件传输", chinese.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(listOf("暂停", "取消"), chinese.actions.map { it.title.toString() })
+
+        val singapore = transferNotification(localized("zh-SG"), "i18n-zh-sg", "进度")
+        assertEquals("BetterCloudDrive 文件传输", singapore.extras.getString(Notification.EXTRA_TITLE))
+        assertEquals(listOf("暂停", "取消"), singapore.actions.map { it.title.toString() })
+
+        listOf("zh", "zh-Hans", "zh-Hant", "zh-TW", "zh-HK", "zh-MO").forEach { tag ->
+            val fallback = transferNotification(localized(tag), "i18n-fallback-$tag", "Progress")
+            assertEquals("BetterCloudDrive file transfer", fallback.extras.getString(Notification.EXTRA_TITLE))
+            assertEquals(listOf("Pause", "Cancel"), fallback.actions.map { it.title.toString() })
+        }
+    }
 
     @Test
     fun compactShellNavigatesFourDestinationsAndDebugDetail() {
@@ -146,6 +197,55 @@ class ProductShellDeviceTest {
         composeRule.onNodeWithTag("personal-file-10").assertIsDisplayed()
     }
 
+    @Test
+    fun englishCatalogRendersWithoutSimplifiedChineseFallback() {
+        setActivityLocale("en-US")
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(false) } }
+        composeRule.onNodeWithText("Personal").assertIsDisplayed()
+        composeRule.onNodeWithText("Personal space is empty").assertIsDisplayed()
+    }
+
+    @Test
+    fun simplifiedChineseCatalogRendersForMainlandLocale() {
+        setActivityLocale("zh-CN")
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(false) } }
+        composeRule.onNodeWithText("个人").assertIsDisplayed()
+        composeRule.onNodeWithText("个人空间为空").assertIsDisplayed()
+    }
+
+    @Test
+    fun simplifiedChineseCatalogRendersForSingaporeLocale() {
+        setActivityLocale("zh-SG")
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(false) } }
+        composeRule.onNodeWithText("个人").assertIsDisplayed()
+        composeRule.onNodeWithText("个人空间为空").assertIsDisplayed()
+    }
+
+    @Test
+    fun traditionalChineseCatalogFallsBackToEnglish() {
+        setActivityLocale("zh-TW")
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(false) } }
+        composeRule.onNodeWithText("Personal").assertIsDisplayed()
+        composeRule.onNodeWithText("Personal space is empty").assertIsDisplayed()
+    }
+
+    @After
+    fun resetActivityLocale() {
+        setActivityLocale("en-US")
+    }
+
+    @Suppress("DEPRECATION")
+    private fun setActivityLocale(languageTag: String) {
+        composeRule.activityRule.scenario.onActivity { activity ->
+            val locale = Locale.forLanguageTag(languageTag)
+            Locale.setDefault(locale)
+            val configuration = Configuration(activity.resources.configuration).apply {
+                setLocales(LocaleList(locale))
+            }
+            activity.resources.updateConfiguration(configuration, activity.resources.displayMetrics)
+        }
+    }
+
     private fun setShell(debugToolsEnabled: Boolean) {
         composeRule.setContent {
             BetterCloudDriveTheme { TestShell(debugToolsEnabled) }
@@ -164,7 +264,10 @@ private fun TestShell(
         DirectoryPageState(items = rootItems, hasLoaded = true, page = 1, pages = 1, total = rootItems.size.toLong())
     }
     var personal by remember(files) { mutableStateOf(PersonalFilesUiState(current = root)) }
-    ProductShell(
+    val locales = LocalConfiguration.current.locales
+    val strings = mobileStringsFor((0 until locales.size()).map { locales[it].toLanguageTag() })
+    CompositionLocalProvider(LocalMobileStrings provides strings) {
+      ProductShell(
         state = AppUiState(
             phase = AppPhase.LOGGED_IN,
             server = "https://drive.example.com",
@@ -230,7 +333,8 @@ private fun TestShell(
             updateDiagnosticStatus = {},
         ),
         debugToolsEnabled = debugToolsEnabled,
-    )
+      )
+    }
 }
 
 private object TestDocumentPicker : DocumentPicker {
@@ -251,7 +355,7 @@ private object TestDocumentPicker : DocumentPicker {
 
 private object TestOfficeRenderer : OfficeRenderer {
     @Composable
-    override fun Render(config: OfficeConfig, modifier: Modifier, onStatus: (String) -> Unit) {
+    override fun Render(config: OfficeConfig, modifier: Modifier, onStatus: (UiMessage) -> Unit) {
         Text("OnlyOffice", modifier)
     }
 }

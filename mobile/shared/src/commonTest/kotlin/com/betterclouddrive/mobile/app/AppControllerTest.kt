@@ -6,6 +6,8 @@ import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
 import com.betterclouddrive.mobile.core.model.UserProfile
+import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
@@ -71,7 +73,7 @@ class AppControllerTest {
         controller.start()
         runCurrent()
         assertFalse(controller.state.value.personalFiles.current.hasLoaded)
-        assertEquals("网络或服务暂时不可用", controller.state.value.personalFiles.current.error)
+        assertEquals(UiMessage(MobileString.ErrorNetwork), controller.state.value.personalFiles.current.error)
 
         controller.refreshFiles()
         runCurrent()
@@ -82,7 +84,7 @@ class AppControllerTest {
         runCurrent()
         assertEquals(listOf(FILE), controller.state.value.personalFiles.current.items)
         assertTrue(controller.state.value.personalFiles.current.hasLoaded)
-        assertEquals("网络或服务暂时不可用", controller.state.value.personalFiles.current.error)
+        assertEquals(UiMessage(MobileString.ErrorNetwork), controller.state.value.personalFiles.current.error)
     }
 
     @Test
@@ -104,7 +106,7 @@ class AppControllerTest {
         auth.invalidations.emit(SessionInvalidationReason.REVOKED)
         runCurrent()
         assertEquals(AppPhase.LOGGED_OUT, controller.state.value.phase)
-        assertEquals("登录状态已失效，请重新登录", controller.state.value.sessionError)
+        assertEquals(UiMessage(MobileString.ErrorSessionExpired), controller.state.value.sessionError)
 
         controller.logout()
         runCurrent()
@@ -138,7 +140,7 @@ class AppControllerTest {
         controller.openPersonalFolder(folder)
         runCurrent()
         assertEquals(10L, controller.state.value.personalFiles.current.folderId)
-        assertEquals(listOf("根目录", "一级"), controller.state.value.personalFiles.breadcrumb.map { it.name })
+        assertEquals(listOf("", "一级"), controller.state.value.personalFiles.breadcrumb.map { it.name })
 
         controller.activatePersonalRoute(null)
         runCurrent()
@@ -164,7 +166,7 @@ class AppControllerTest {
         runCurrent()
 
         assertEquals(listOf(first), controller.state.value.personalFiles.current.items)
-        assertEquals("网络或服务暂时不可用", controller.state.value.personalFiles.current.loadMoreError)
+        assertEquals(UiMessage(MobileString.ErrorNetwork), controller.state.value.personalFiles.current.loadMoreError)
 
         controller.loadMoreFiles()
         runCurrent()
@@ -194,7 +196,7 @@ class AppControllerTest {
         controller.activatePersonalRoute(child.id)
         runCurrent()
 
-        assertEquals(listOf("根目录", "一级", "二级"), controller.state.value.personalFiles.breadcrumb.map { it.name })
+        assertEquals(listOf("", "一级", "二级"), controller.state.value.personalFiles.breadcrumb.map { it.name })
         assertEquals(child.id, controller.state.value.personalFiles.current.folderId)
         assertEquals(listOf(FILE), controller.state.value.personalFiles.current.items)
     }
@@ -216,7 +218,7 @@ class AppControllerTest {
         assertEquals(PersonalFileSort.NAME, controller.state.value.personalFiles.sort)
         assertEquals(SortDirection.ASCENDING, controller.state.value.personalFiles.direction)
         assertEquals(listOf(FILE), controller.state.value.personalFiles.current.items)
-        assertEquals("网络或服务暂时不可用", controller.state.value.personalFiles.current.error)
+        assertEquals(UiMessage(MobileString.ErrorNetwork), controller.state.value.personalFiles.current.error)
     }
 
     @Test

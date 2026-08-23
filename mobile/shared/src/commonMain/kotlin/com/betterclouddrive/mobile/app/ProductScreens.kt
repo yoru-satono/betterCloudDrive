@@ -39,6 +39,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.UserProfile
+import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
+import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
@@ -46,10 +49,11 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun TeamsPlaceholderScreen() {
+    val strings = LocalMobileStrings.current
     EmptyPane(
         icon = Icons.Default.Groups,
-        title = "团队空间",
-        detail = "团队功能将在后续阶段提供",
+        title = strings[MobileString.TeamsTitle],
+        detail = strings[MobileString.TeamsComingSoon],
         modifier = Modifier.fillMaxSize().padding(24.dp).testTag("teams-placeholder"),
     )
 }
@@ -62,11 +66,12 @@ fun TransferQueueScreen(
     onCancel: (String) -> Unit,
     onRetry: (String) -> Unit,
 ) {
+    val strings = LocalMobileStrings.current
     if (tasks.isEmpty()) {
         EmptyPane(
             icon = Icons.Default.Cloud,
-            title = "暂无传输任务",
-            detail = "上传和下载任务会显示在这里",
+            title = strings[MobileString.TransfersEmpty],
+            detail = strings[MobileString.TransfersEmptyDetail],
             modifier = Modifier.fillMaxSize().padding(24.dp).testTag("transfers-empty"),
         )
         return
@@ -91,13 +96,14 @@ private fun TransferRow(
     onCancel: (String) -> Unit,
     onRetry: (String) -> Unit,
 ) {
+    val strings = LocalMobileStrings.current
     Card(Modifier.fillMaxWidth().testTag("transfer-task-${task.id}")) {
         Column(
             Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(task.fileName)
-            Text(statusLabel(task.status), style = MaterialTheme.typography.bodySmall)
+            Text(strings[statusKey(task.status)], style = MaterialTheme.typography.bodySmall)
             if (task.bytesTotal > 0) {
                 LinearProgressIndicator(
                     progress = { (task.bytesDone.toFloat() / task.bytesTotal).coerceIn(0f, 1f) },
@@ -105,7 +111,7 @@ private fun TransferRow(
                 )
             }
             task.errorKey?.let {
-                Text(transferError(it), color = MaterialTheme.colorScheme.error)
+                Text(strings[transferErrorKey(it)], color = MaterialTheme.colorScheme.error)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 when (task.status) {
@@ -114,23 +120,23 @@ private fun TransferRow(
                     TransferStatus.RUNNING -> OutlinedButton(
                         onClick = { onPause(task.id) },
                         modifier = Modifier.testTag("transfer-pause-${task.id}"),
-                    ) { Text("暂停") }
+                    ) { Text(strings[MobileString.Pause]) }
                     TransferStatus.PAUSED,
                     TransferStatus.WAITING_FOR_LOGIN -> OutlinedButton(
                         onClick = { onResume(task.id) },
                         modifier = Modifier.testTag("transfer-resume-${task.id}"),
-                    ) { Text("继续") }
+                    ) { Text(strings[MobileString.Resume]) }
                     TransferStatus.FAILED -> OutlinedButton(
                         onClick = { onRetry(task.id) },
                         modifier = Modifier.testTag("transfer-retry-${task.id}"),
-                    ) { Text("重试") }
+                    ) { Text(strings[MobileString.Retry]) }
                     else -> Unit
                 }
                 if (task.status !in setOf(TransferStatus.SUCCEEDED, TransferStatus.CANCELED)) {
                     OutlinedButton(
                         onClick = { onCancel(task.id) },
                         modifier = Modifier.testTag("transfer-cancel-${task.id}"),
-                    ) { Text("取消") }
+                    ) { Text(strings[MobileString.Cancel]) }
                 }
             }
         }
@@ -145,6 +151,7 @@ fun ProfileScreen(
     onOpenDiagnostics: () -> Unit,
     onLogout: () -> Unit,
 ) {
+    val strings = LocalMobileStrings.current
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).testTag("profile-content"),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
@@ -153,11 +160,11 @@ fun ProfileScreen(
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("账号", style = MaterialTheme.typography.titleMedium)
-                    InfoRow("用户名", user?.username.orEmpty())
-                    InfoRow("邮箱", user?.email?.ifBlank { "未设置" } ?: "未设置")
+                    Text(strings[MobileString.Account], style = MaterialTheme.typography.titleMedium)
+                    InfoRow(strings[MobileString.Username], user?.username.orEmpty())
+                    InfoRow(strings[MobileString.Email], user?.email?.ifBlank { strings[MobileString.NotSet] } ?: strings[MobileString.NotSet])
                     HorizontalDivider()
-                    InfoRow("当前服务器", server)
+                    InfoRow(strings[MobileString.CurrentServer], server)
                 }
             }
         }
@@ -169,7 +176,7 @@ fun ProfileScreen(
                 ) {
                     Icon(Icons.Default.BugReport, contentDescription = null)
                     Spacer(Modifier.padding(horizontal = 4.dp))
-                    Text("Debug 诊断")
+                    Text(strings[MobileString.Diagnostics])
                 }
             }
         }
@@ -180,7 +187,7 @@ fun ProfileScreen(
             ) {
                 Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
                 Spacer(Modifier.padding(horizontal = 4.dp))
-                Text("退出登录")
+                Text(strings[MobileString.Logout])
             }
         }
     }
@@ -200,12 +207,13 @@ fun DiagnosticsScreen(
     officeRenderer: OfficeRenderer,
     roomTaskCount: suspend () -> Int,
     onLoadOffice: (Long, Long) -> Unit,
-    onOfficeStatus: (String) -> Unit,
+    onOfficeStatus: (UiMessage) -> Unit,
 ) {
+    val strings = LocalMobileStrings.current
     var teamId by remember { mutableStateOf("") }
     var fileId by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
-    var databaseStatus by remember { mutableStateOf("Room v1 尚未检查") }
+    var databaseStatus by remember(strings.locale) { mutableStateOf(strings[MobileString.RoomUnchecked]) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).testTag("diagnostics-content"),
@@ -215,18 +223,18 @@ fun DiagnosticsScreen(
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Room 数据库", style = MaterialTheme.typography.titleMedium)
+                    Text(strings[MobileString.RoomDatabase], style = MaterialTheme.typography.titleMedium)
                     Button(
                         onClick = {
                             scope.launch {
                                 databaseStatus = runCatching {
                                     val count = roomTaskCount()
-                                    "Room v1 正常，当前任务 $count 个"
-                                }.getOrElse { "Room 检查失败：${it.message ?: "未知错误"}" }
+                                    strings.format(MobileString.RoomHealthy, count)
+                                }.getOrElse { strings.format(MobileString.RoomCheckFailed, it.message ?: strings[MobileString.UnknownError]) }
                             }
                         },
                         modifier = Modifier.testTag("diagnostics-room-check"),
-                    ) { Text("检查 Room") }
+                    ) { Text(strings[MobileString.CheckRoom]) }
                     Text(databaseStatus, modifier = Modifier.testTag("diagnostics-room-status"))
                 }
             }
@@ -234,19 +242,19 @@ fun DiagnosticsScreen(
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("OnlyOffice 移动只读诊断", style = MaterialTheme.typography.titleMedium)
+                    Text(strings[MobileString.OfficeDiagnostics], style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = teamId,
                             onValueChange = { teamId = it.filter(Char::isDigit) },
-                            label = { Text("teamId") },
+                            label = { Text(strings[MobileString.TeamId]) },
                             modifier = Modifier.weight(1f).testTag("diagnostics-team-id"),
                             singleLine = true,
                         )
                         OutlinedTextField(
                             value = fileId,
                             onValueChange = { fileId = it.filter(Char::isDigit) },
-                            label = { Text("fileId") },
+                            label = { Text(strings[MobileString.FileId]) },
                             modifier = Modifier.weight(1f).testTag("diagnostics-file-id"),
                             singleLine = true,
                         )
@@ -255,7 +263,7 @@ fun DiagnosticsScreen(
                         enabled = teamId.isNotBlank() && fileId.isNotBlank(),
                         onClick = { onLoadOffice(teamId.toLong(), fileId.toLong()) },
                         modifier = Modifier.testTag("diagnostics-office-load"),
-                    ) { Text("加载只读文档") }
+                    ) { Text(strings[MobileString.LoadReadOnlyDocument]) }
                     state.diagnostics.office?.let { office ->
                         Box(Modifier.fillMaxWidth().height(480.dp).testTag("diagnostics-office-renderer")) {
                             officeRenderer.Render(
@@ -265,8 +273,8 @@ fun DiagnosticsScreen(
                             )
                         }
                     }
-                    Text(state.diagnostics.status, modifier = Modifier.testTag("diagnostics-office-status"))
-                    Text("当前用户：${state.user?.username.orEmpty()}")
+                    Text(strings.resolve(state.diagnostics.status).orEmpty(), modifier = Modifier.testTag("diagnostics-office-status"))
+                    Text(strings.format(MobileString.CurrentUser, state.user?.username.orEmpty()))
                 }
             }
         }
@@ -311,37 +319,40 @@ private fun ErrorPane(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
+    val strings = LocalMobileStrings.current
     Card(modifier) {
         Column(
             Modifier.fillMaxWidth().padding(if (compact) 12.dp else 24.dp),
             horizontalAlignment = if (compact) Alignment.Start else Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("加载失败", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+            Text(strings[MobileString.LoadingFailed], style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
             Text(message)
             OutlinedButton(onClick = onRetry, modifier = Modifier.testTag("content-retry")) {
-                Text("重试")
+                Text(strings[MobileString.Retry])
             }
         }
     }
 }
 
-private fun statusLabel(status: TransferStatus): String = when (status) {
-    TransferStatus.QUEUED -> "排队中"
-    TransferStatus.PREPARING -> "准备中"
-    TransferStatus.RUNNING -> "传输中"
-    TransferStatus.PAUSED -> "已暂停"
-    TransferStatus.WAITING_FOR_LOGIN -> "等待重新登录"
-    TransferStatus.SUCCEEDED -> "已完成"
-    TransferStatus.FAILED -> "失败"
-    TransferStatus.CANCELED -> "已取消"
+private fun statusKey(status: TransferStatus): MobileString = when (status) {
+    TransferStatus.QUEUED -> MobileString.Queued
+    TransferStatus.PREPARING -> MobileString.Preparing
+    TransferStatus.RUNNING -> MobileString.Running
+    TransferStatus.PAUSED -> MobileString.Paused
+    TransferStatus.WAITING_FOR_LOGIN -> MobileString.WaitingForLogin
+    TransferStatus.SUCCEEDED -> MobileString.Succeeded
+    TransferStatus.FAILED -> MobileString.Failed
+    TransferStatus.CANCELED -> MobileString.Canceled
 }
 
-private fun transferError(key: String): String = when (key) {
-    "error.unauthorized" -> "需要重新登录后继续"
-    "error.storageQuotaExceeded" -> "存储空间不足"
-    "error.fileNameExists" -> "目标位置已存在同名文件"
-    "error.network" -> "网络暂时不可用，将自动重试"
-    "error.serverChanged" -> "服务器已经切换"
-    else -> "传输失败"
+private fun transferErrorKey(key: String): MobileString = when (key) {
+    "error.unauthorized" -> MobileString.ErrorUnauthorized
+    "error.storageQuotaExceeded" -> MobileString.ErrorQuota
+    "error.fileNameExists" -> MobileString.ErrorNameConflict
+    "error.network", "error.interrupted" -> MobileString.ErrorNetworkRetry
+    "error.serverChanged" -> MobileString.ErrorServerChanged
+    "error.invalidTransfer" -> MobileString.ErrorInvalidTransfer
+    "error.fileUnavailable" -> MobileString.ErrorFileUnavailable
+    else -> MobileString.ErrorTransfer
 }

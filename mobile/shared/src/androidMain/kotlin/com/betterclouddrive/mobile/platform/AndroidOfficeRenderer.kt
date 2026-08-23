@@ -12,12 +12,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
+import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import kotlinx.serialization.json.JsonObject
 
 internal class AndroidOfficeRenderer : OfficeRenderer {
     @SuppressLint("SetJavaScriptEnabled")
     @Composable
-    override fun Render(config: OfficeConfig, modifier: Modifier, onStatus: (String) -> Unit) {
+    override fun Render(config: OfficeConfig, modifier: Modifier, onStatus: (UiMessage) -> Unit) {
         val server = androidReachableUrl(config.documentServerUrl)
         val html = officeHtml(server, config.config.toString().replace("<", "\\u003c"))
         AndroidView(
@@ -50,8 +52,8 @@ private fun androidReachableUrl(input: String): String {
         .replace("http://localhost", "http://10.0.2.2")
         .replace("http://127.0.0.1", "http://10.0.2.2")
     val uri = Uri.parse(normalized)
-    require(uri.scheme == "http" || uri.scheme == "https") { "OnlyOffice 地址协议无效" }
-    require(!uri.host.isNullOrBlank()) { "OnlyOffice 地址缺少主机" }
+    require(uri.scheme == "http" || uri.scheme == "https") { "office.invalidScheme" }
+    require(!uri.host.isNullOrBlank()) { "office.hostMissing" }
     return normalized
 }
 
@@ -78,8 +80,8 @@ private fun officeHtml(server: String, configJson: String): String = """
     </script></body></html>
 """.trimIndent()
 
-private class OfficeBridge(private val onStatus: (String) -> Unit) {
-    @JavascriptInterface fun appReady() = onStatus("OnlyOffice 应用已就绪")
-    @JavascriptInterface fun documentReady() = onStatus("OnlyOffice 文档已就绪")
-    @JavascriptInterface fun error(message: String) = onStatus("OnlyOffice 错误：$message")
+private class OfficeBridge(private val onStatus: (UiMessage) -> Unit) {
+    @JavascriptInterface fun appReady() = onStatus(UiMessage(MobileString.OfficeAppReady))
+    @JavascriptInterface fun documentReady() = onStatus(UiMessage(MobileString.OfficeDocumentReady))
+    @JavascriptInterface fun error(message: String) = onStatus(UiMessage(MobileString.OfficeError, listOf(message)))
 }

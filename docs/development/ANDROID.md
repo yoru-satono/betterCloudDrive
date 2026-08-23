@@ -2,7 +2,7 @@
 
 本文面向修改 Android 客户端的开发者，说明旧版 `android/` 与 KMP 重写 `mobile/` 的工程结构、服务地址、设备调试和测试约定。两者使用同一后端 REST 协议，不在本地复制服务端权限规则。新应用达到功能对等前不得删除旧应用。
 
-## KMP 阶段 4 快速入口
+## KMP 阶段 5 快速入口
 
 KMP 工程使用 Kotlin 2.4.10、Compose Multiplatform 1.11.1、AGP 9.1.1、Gradle 9.3.1、Ktor 3.5.1、Room 2.8.4、DataStore 1.2.1 和 WorkManager 2.11.2。Android 14+ 的长传输由 UIDT 执行，Android 13 及以下回退 WorkManager。
 
@@ -13,7 +13,7 @@ $env:ANDROID_SERIAL = '<adb 设备序列号>'
 .\mobile\gradlew.bat -p mobile :androidApp:assembleRelease
 ```
 
-KMP 当前个人文件浏览实现见[阶段 4 个人文件浏览](../../mobile/docs/stage-4-personal-browser.md)，产品外壳基线见[阶段 3 产品应用外壳](../../mobile/docs/stage-3-product-shell.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
+KMP 当前国际化实现见[阶段 5 国际化基础](../../mobile/docs/stage-5-localization.md)，个人文件浏览基线见[阶段 4 个人文件浏览](../../mobile/docs/stage-4-personal-browser.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
 
 ## 工具与构建
 
@@ -129,3 +129,5 @@ KMP 设备测试必须显式选择序列号。阶段 2 必须在 Android 9/API 2
 阶段 3 继续使用 API 28/API 34 设备矩阵，新增四个顶层入口、返回栈、窄屏底栏、宽屏侧栏以及 Debug/Release 诊断隔离测试。真实后端旅程必须使用完整默认 Compose 栈，包括可观测性服务。
 
 阶段 4 在同一设备矩阵增加多级目录、面包屑与系统返回、滚动分页、排序、列表/网格和响应式文件详情测试。API 34 的真实旅程需使用包含至少三级目录和超过 100 个文件的测试目录，并验证跨页无重复、下载正确和强制停止后回到个人根目录。
+
+阶段 5 在同一矩阵验证默认英语、CN/SG 简体中文资源、繁体与无地区中文回退英语、Android 13+ 系统应用语言入口，以及 WorkManager/UIDT 通知文案。新增用户可见文本必须进入共享资源；`checkMobileI18n` 会阻止生产 Kotlin 源码中的界面字符串字面量，并要求三个资源目录的键集合和格式参数一致。

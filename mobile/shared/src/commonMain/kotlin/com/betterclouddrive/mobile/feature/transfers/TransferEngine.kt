@@ -63,7 +63,7 @@ class TransferEngine(
     }
 
     private suspend fun runUpload(initial: TransferTask) {
-        val source = initial.sourceHandle ?: error("上传源不可用")
+        val source = initial.sourceHandle ?: error("transfer.sourceUnavailable")
         repository.updateActive(initial.id) { it.copy(status = TransferStatus.PREPARING, errorKey = null) }
         ensureRunnable(initial.id)
         files.validateReadable(source)
@@ -72,7 +72,7 @@ class TransferEngine(
         if (initial.sessionId != null &&
             (initial.bytesTotal != digest.size || !initial.md5Hash.equals(digest.md5, ignoreCase = true))
         ) {
-            throw IllegalStateException("上传会话创建后源文件已改变")
+            throw IllegalStateException("transfer.sourceChanged")
         }
         val md5 = digest.md5
         var task = repository.updateActive(initial.id) {
@@ -95,8 +95,8 @@ class TransferEngine(
         task = repository.find(initial.id) ?: return
         if (task.sessionId == null) {
             val session = backend.initUpload(task.scope, task.fileName, task.bytesTotal, md5, task.totalChunks)
-            check(session.chunkSize == DEFAULT_CHUNK_SIZE) { "服务端分片大小与客户端基线不一致" }
-            check(session.totalChunks == task.totalChunks) { "服务端分片数量与客户端不一致" }
+            check(session.chunkSize == DEFAULT_CHUNK_SIZE) { "transfer.chunkSizeMismatch" }
+            check(session.totalChunks == task.totalChunks) { "transfer.chunkCountMismatch" }
             task = repository.updateActive(task.id) {
                 it.copy(sessionId = session.sessionId, chunkSize = session.chunkSize, totalChunks = session.totalChunks)
             } ?: return
@@ -104,11 +104,11 @@ class TransferEngine(
 
         val sessionId = requireNotNull(task.sessionId)
         val status = backend.uploadStatus(task.scope, sessionId)
-        check(status.sessionId == sessionId) { "上传会话不匹配" }
-        check(status.totalChunks == task.totalChunks) { "上传状态分片数量不匹配" }
-        check(status.missingChunks.all { it in 0 until task.totalChunks }) { "上传状态包含无效分片" }
+        check(status.sessionId == sessionId) { "transfer.sessionMismatch" }
+        check(status.totalChunks == task.totalChunks) { "transfer.statusChunkCountMismatch" }
+        check(status.missingChunks.all { it in 0 until task.totalChunks }) { "transfer.invalidMissingChunk" }
         val missing = status.missingChunks.toSet()
-        check(missing.size == status.missingChunks.size) { "上传状态包含重复分片" }
+        check(missing.size == status.missingChunks.size) { "transfer.duplicateMissingChunk" }
         val completedBytes = (0 until task.totalChunks)
             .filterNot(missing::contains)
             .sumOf { chunkLength(it, task.totalChunks, task.bytesTotal, task.chunkSize) }
@@ -157,8 +157,8 @@ class TransferEngine(
     }
 
     private suspend fun runDownload(initial: TransferTask) {
-        val fileId = initial.remoteFileId ?: error("下载文件不存在")
-        val destination = initial.destinationHandle ?: error("下载目标不可用")
+        val fileId = initial.remoteFileId ?: error("transfer.remoteFileMissing")
+        val destination = initial.destinationHandle ?: error("transfer.destinationUnavailable")
         repository.updateActive(initial.id) { it.copy(status = TransferStatus.RUNNING, errorKey = null) }
         ensureRunnable(initial.id)
         files.validateWritable(destination)

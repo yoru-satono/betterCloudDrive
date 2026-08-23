@@ -59,6 +59,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.betterclouddrive.mobile.core.model.FileItem
+import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
+import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.MobileStrings
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
 import com.betterclouddrive.mobile.core.platform.PickedDocument
@@ -83,22 +87,22 @@ data class ProductShellActions(
     val retry: (String) -> Unit,
     val logout: () -> Unit,
     val loadDiagnosticOffice: (Long, Long) -> Unit,
-    val updateDiagnosticStatus: (String) -> Unit,
+    val updateDiagnosticStatus: (UiMessage) -> Unit,
 )
 
 private data class TopLevelItem(
     val route: AppRoute,
-    val label: String,
+    val label: MobileString,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
     val testTag: String,
 )
 
 private val topLevelItems = listOf(
-    TopLevelItem(PersonalRoute, "个人", Icons.Filled.Folder, Icons.Outlined.Folder, "nav-personal"),
-    TopLevelItem(TeamsRoute, "团队", Icons.Filled.Groups, Icons.Outlined.Groups, "nav-teams"),
-    TopLevelItem(TransfersRoute, "传输", Icons.Filled.Sync, Icons.Outlined.Sync, "nav-transfers"),
-    TopLevelItem(ProfileRoute, "我的", Icons.Filled.Person, Icons.Outlined.Person, "nav-profile"),
+    TopLevelItem(PersonalRoute, MobileString.Personal, Icons.Filled.Folder, Icons.Outlined.Folder, "nav-personal"),
+    TopLevelItem(TeamsRoute, MobileString.Teams, Icons.Filled.Groups, Icons.Outlined.Groups, "nav-teams"),
+    TopLevelItem(TransfersRoute, MobileString.Transfers, Icons.Filled.Sync, Icons.Outlined.Sync, "nav-transfers"),
+    TopLevelItem(ProfileRoute, MobileString.Profile, Icons.Filled.Person, Icons.Outlined.Person, "nav-profile"),
 )
 
 @Composable
@@ -208,6 +212,7 @@ private fun ShellScaffold(
     bottomBar: @Composable () -> Unit = {},
     content: @Composable (Modifier) -> Unit,
 ) {
+    val strings = LocalMobileStrings.current
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -216,13 +221,13 @@ private fun ShellScaffold(
                     if (destination.isPersonal()) {
                         BreadcrumbBar(state.personalFiles, onBreadcrumb)
                     } else {
-                        Text(destination.title())
+                        Text(destination.title(strings))
                     }
                 },
                 navigationIcon = {
                     when {
-                        destination.matches(DiagnosticsRoute) -> BackButton(onBack, "返回个人设置", "diagnostics-back")
-                        destination.isPersonalFolder() -> BackButton(onBack, "返回上级目录", "personal-parent")
+                        destination.matches(DiagnosticsRoute) -> BackButton(onBack, strings[MobileString.BackToProfile], "diagnostics-back")
+                        destination.isPersonalFolder() -> BackButton(onBack, strings[MobileString.BackToParent], "personal-parent")
                     }
                 },
                 actions = {
@@ -243,6 +248,7 @@ private fun BackButton(onClick: () -> Unit, description: String, tag: String) {
 
 @Composable
 private fun BreadcrumbBar(state: PersonalFilesUiState, onClick: (Long?) -> Unit) {
+    val strings = LocalMobileStrings.current
     val scrollState = rememberScrollState()
     LaunchedEffect(state.breadcrumb.size, scrollState.maxValue) {
         scrollState.animateScrollTo(scrollState.maxValue)
@@ -253,7 +259,7 @@ private fun BreadcrumbBar(state: PersonalFilesUiState, onClick: (Long?) -> Unit)
         state.breadcrumb.forEachIndexed { index, item ->
             if (index > 0) Text(" / ")
             Text(
-                item.name,
+                item.name.ifEmpty { if (item.id == null) strings[MobileString.RootDirectory] else strings[MobileString.FolderPlaceholder] },
                 color = if (index == state.breadcrumb.lastIndex) {
                     androidx.compose.material3.MaterialTheme.colorScheme.onSurface
                 } else {
@@ -272,16 +278,20 @@ private fun BreadcrumbBar(state: PersonalFilesUiState, onClick: (Long?) -> Unit)
 
 @Composable
 private fun PersonalTopActions(state: PersonalFilesUiState, actions: ProductShellActions) {
+    val strings = LocalMobileStrings.current
     var sortExpanded by remember { mutableStateOf(false) }
     Box {
         IconButton(
             onClick = { sortExpanded = true },
             modifier = Modifier.testTag("personal-sort"),
-        ) { Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "排序") }
+        ) { Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = strings[MobileString.Sort]) }
         DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
             PersonalFileSort.entries.forEach { sort ->
                 DropdownMenuItem(
-                    text = { Text(if (sort == state.sort) "✓ ${sort.label}" else sort.label) },
+                    text = {
+                        val label = strings[sort.stringKey()]
+                        Text(if (sort == state.sort) "✓ $label" else label)
+                    },
                     onClick = {
                         actions.changeFileSort(sort, state.direction)
                         sortExpanded = false
@@ -290,7 +300,7 @@ private fun PersonalTopActions(state: PersonalFilesUiState, actions: ProductShel
                 )
             }
             DropdownMenuItem(
-                text = { Text(state.direction.label) },
+                text = { Text(strings[state.direction.stringKey()]) },
                 leadingIcon = {
                     Icon(
                         if (state.direction == SortDirection.ASCENDING) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
@@ -318,14 +328,14 @@ private fun PersonalTopActions(state: PersonalFilesUiState, actions: ProductShel
     ) {
         Icon(
             if (state.viewMode == FileViewMode.LIST) Icons.Default.GridView else Icons.AutoMirrored.Filled.List,
-            contentDescription = "切换列表或网格视图",
+            contentDescription = strings[MobileString.SwitchView],
         )
     }
     IconButton(
         onClick = actions.refreshFiles,
         enabled = !state.current.initialLoading && !state.current.refreshing,
         modifier = Modifier.testTag("personal-refresh"),
-    ) { Icon(Icons.Default.Refresh, contentDescription = "刷新当前目录") }
+    ) { Icon(Icons.Default.Refresh, contentDescription = strings[MobileString.RefreshDirectory]) }
 }
 
 @Composable
@@ -374,14 +384,15 @@ private fun AppNavHost(
 
 @Composable
 private fun MainNavigationBar(destination: NavDestination?, onNavigate: (AppRoute) -> Unit) {
+    val strings = LocalMobileStrings.current
     NavigationBar(modifier = Modifier.testTag("main-navigation-bar")) {
         topLevelItems.forEach { item ->
             val selected = destination.matches(item.route)
             NavigationBarItem(
                 selected = selected,
                 onClick = { if (!selected || (item.route == PersonalRoute && destination.isPersonalFolder())) onNavigate(item.route) },
-                icon = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, item.label) },
-                label = { Text(item.label) },
+                icon = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, strings[item.label]) },
+                label = { Text(strings[item.label]) },
                 modifier = Modifier.testTag(item.testTag),
             )
         }
@@ -390,6 +401,7 @@ private fun MainNavigationBar(destination: NavDestination?, onNavigate: (AppRout
 
 @Composable
 private fun MainNavigationRail(destination: NavDestination?, onNavigate: (AppRoute) -> Unit) {
+    val strings = LocalMobileStrings.current
     NavigationRail(modifier = Modifier.fillMaxHeight().testTag("main-navigation-rail")) {
         Spacer(Modifier.height(16.dp))
         topLevelItems.forEach { item ->
@@ -397,8 +409,8 @@ private fun MainNavigationRail(destination: NavDestination?, onNavigate: (AppRou
             NavigationRailItem(
                 selected = selected,
                 onClick = { if (!selected || (item.route == PersonalRoute && destination.isPersonalFolder())) onNavigate(item.route) },
-                icon = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, item.label) },
-                label = { Text(item.label) },
+                icon = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, strings[item.label]) },
+                label = { Text(strings[item.label]) },
                 modifier = Modifier.testTag(item.testTag),
             )
         }
@@ -419,10 +431,21 @@ private fun NavDestination?.isPersonal(): Boolean =
 
 private fun NavDestination?.isPersonalFolder(): Boolean = this?.hasRoute<PersonalFolderRoute>() == true
 
-private fun NavDestination?.title(): String = when {
-    matches(TeamsRoute) -> "团队空间"
-    matches(TransfersRoute) -> "传输队列"
-    matches(ProfileRoute) -> "我的"
-    matches(DiagnosticsRoute) -> "Debug 诊断"
-    else -> "BetterCloudDrive"
+private fun NavDestination?.title(strings: MobileStrings): String = when {
+    matches(TeamsRoute) -> strings[MobileString.TeamsTitle]
+    matches(TransfersRoute) -> strings[MobileString.TransferQueueTitle]
+    matches(ProfileRoute) -> strings[MobileString.Profile]
+    matches(DiagnosticsRoute) -> strings[MobileString.Diagnostics]
+    else -> strings[MobileString.AppName]
+}
+
+private fun PersonalFileSort.stringKey(): MobileString = when (this) {
+    PersonalFileSort.NAME -> MobileString.SortName
+    PersonalFileSort.UPDATED_AT -> MobileString.SortUpdated
+    PersonalFileSort.SIZE -> MobileString.SortSize
+}
+
+private fun SortDirection.stringKey(): MobileString = when (this) {
+    SortDirection.ASCENDING -> MobileString.SortAscending
+    SortDirection.DESCENDING -> MobileString.SortDescending
 }

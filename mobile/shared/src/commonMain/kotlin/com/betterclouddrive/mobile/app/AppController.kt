@@ -7,6 +7,8 @@ import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
 import com.betterclouddrive.mobile.core.model.UserProfile
+import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
 import com.betterclouddrive.mobile.feature.files.BreadcrumbEntry
@@ -111,8 +113,8 @@ data class DirectoryPageState(
     val initialLoading: Boolean = false,
     val refreshing: Boolean = false,
     val loadingMore: Boolean = false,
-    val error: String? = null,
-    val loadMoreError: String? = null,
+    val error: UiMessage? = null,
+    val loadMoreError: UiMessage? = null,
     val page: Int = 0,
     val pages: Int = 1,
     val total: Long = 0,
@@ -122,7 +124,7 @@ data class DirectoryPageState(
 }
 
 data class PersonalFilesUiState(
-    val breadcrumb: List<BreadcrumbEntry> = listOf(BreadcrumbEntry(null, "根目录")),
+    val breadcrumb: List<BreadcrumbEntry> = listOf(BreadcrumbEntry(null, "")),
     val current: DirectoryPageState = DirectoryPageState(),
     val sort: PersonalFileSort = PersonalFileSort.NAME,
     val direction: SortDirection = SortDirection.ASCENDING,
@@ -132,7 +134,7 @@ data class PersonalFilesUiState(
 
 data class DiagnosticUiState(
     val office: OfficeConfig? = null,
-    val status: String = "Debug 诊断就绪",
+    val status: UiMessage = UiMessage(MobileString.OfficeReady),
 )
 
 data class AppUiState(
@@ -140,7 +142,7 @@ data class AppUiState(
     val server: String = com.betterclouddrive.mobile.core.network.BackendClient.DEFAULT_SERVER,
     val user: UserProfile? = null,
     val loginBusy: Boolean = false,
-    val sessionError: String? = null,
+    val sessionError: UiMessage? = null,
     val personalFiles: PersonalFilesUiState = PersonalFilesUiState(),
     val transfers: List<TransferTask> = emptyList(),
     val diagnostics: DiagnosticUiState = DiagnosticUiState(),
@@ -187,7 +189,7 @@ class AppController internal constructor(
                             phase = AppPhase.LOGGED_OUT,
                             server = auth.serverBaseUrl,
                             transfers = it.transfers,
-                            sessionError = "登录状态已失效，请重新登录",
+                            sessionError = UiMessage(MobileString.ErrorSessionExpired),
                         )
                     }
                 }
@@ -243,7 +245,7 @@ class AppController internal constructor(
 
         directoryJob?.cancel()
         if (folderId == null) {
-            val path = listOf(BreadcrumbEntry(null, "根目录"))
+            val path = listOf(BreadcrumbEntry(null, ""))
             retainPathCache(path)
             showDirectory(null, path)
             loadIfNeeded(null)
@@ -261,7 +263,7 @@ class AppController internal constructor(
 
         showDirectory(
             folderId,
-            listOf(BreadcrumbEntry(null, "根目录"), BreadcrumbEntry(folderId, "目录")),
+            listOf(BreadcrumbEntry(null, ""), BreadcrumbEntry(folderId, "")),
             DirectoryPageState(folderId = folderId, initialLoading = true),
         )
         directoryJob = scope.launch {
@@ -408,11 +410,11 @@ class AppController internal constructor(
     fun retry(taskId: String) = scope.launch { transfers.retry(taskId) }
 
     fun loadDiagnosticOffice(teamId: Long, fileId: Long) = scope.launch {
-        mutableState.update { it.copy(diagnostics = it.diagnostics.copy(status = "正在加载 OnlyOffice 配置")) }
+        mutableState.update { it.copy(diagnostics = it.diagnostics.copy(status = UiMessage(MobileString.OfficeConfigLoading))) }
         runCatching { files.loadTeamOffice(teamId, fileId) }
             .onSuccess { config ->
                 mutableState.update {
-                    it.copy(diagnostics = DiagnosticUiState(config, "OnlyOffice 配置加载成功"))
+                    it.copy(diagnostics = DiagnosticUiState(config, UiMessage(MobileString.OfficeConfigLoaded)))
                 }
             }
             .onFailure { error ->
@@ -421,7 +423,7 @@ class AppController internal constructor(
             }
     }
 
-    fun updateDiagnosticStatus(value: String) {
+    fun updateDiagnosticStatus(value: UiMessage) {
         mutableState.update { it.copy(diagnostics = it.diagnostics.copy(status = value)) }
     }
 
@@ -488,14 +490,14 @@ class AppController internal constructor(
         var currentId: Long? = folderId
         while (currentId != null) {
             if (!seen.add(currentId) || seen.size > MAX_BREADCRUMB_DEPTH) {
-                throw IllegalArgumentException("文件夹路径无效")
+                throw IllegalArgumentException("invalid folder path")
             }
             val item = files.getPersonalFile(currentId)
-            if (!item.isFolder) throw IllegalArgumentException("目标不是文件夹")
+            if (!item.isFolder) throw IllegalArgumentException("target is not a folder")
             reversed += BreadcrumbEntry(item.id, item.fileName)
             currentId = item.parentId
         }
-        return listOf(BreadcrumbEntry(null, "根目录")) + reversed.asReversed()
+        return listOf(BreadcrumbEntry(null, "")) + reversed.asReversed()
     }
 
     private fun showDirectory(
@@ -579,7 +581,7 @@ class AppController internal constructor(
                 it.copy(
                     phase = AppPhase.RESTORE_FAILED,
                     server = auth.serverBaseUrl,
-                    sessionError = "无法连接服务器，会话已安全保留",
+                    sessionError = UiMessage(MobileString.ErrorSessionPreserved),
                 )
             }
             is SessionRestoreResult.Restored -> {
@@ -596,20 +598,26 @@ class AppController internal constructor(
         }
     }
 
-    private fun friendly(error: Throwable): String = when (error) {
+    private fun friendly(error: Throwable): UiMessage = when (error) {
         is ApiException -> when (error.messageKey) {
-            "error.unauthorized" -> "用户名或密码错误"
-            "error.storageQuotaExceeded" -> "存储空间不足"
-            "error.fileNameExists" -> "目标位置已存在同名文件"
-            "error.fileNotFound" -> "文件或文件夹不存在"
+            "error.unauthorized" -> UiMessage(MobileString.ErrorCredentials)
+            "error.storageQuotaExceeded" -> UiMessage(MobileString.ErrorQuota)
+            "error.fileNameExists" -> UiMessage(MobileString.ErrorNameConflict)
+            "error.fileNotFound", "error.notFound" -> UiMessage(MobileString.ErrorNotFound)
             else -> if (error.requestId.isNullOrBlank()) {
-                "请求失败，请稍后重试"
+                UiMessage(MobileString.ErrorRequest)
             } else {
-                "请求失败（请求 ID：${error.requestId}）"
+                UiMessage(MobileString.ErrorRequestWithId, listOf(error.requestId))
             }
         }
-        is IllegalArgumentException -> error.message ?: "输入内容无效"
-        else -> "网络或服务暂时不可用"
+        is IllegalArgumentException -> when (error.message) {
+            "server.empty" -> UiMessage(MobileString.ErrorServerEmpty)
+            "server.scheme" -> UiMessage(MobileString.ErrorServerScheme)
+            "server.httpsRequired" -> UiMessage(MobileString.ErrorServerHttps)
+            "server.hostMissing" -> UiMessage(MobileString.ErrorServerHost)
+            else -> UiMessage(MobileString.ErrorInvalidInput)
+        }
+        else -> UiMessage(MobileString.ErrorNetwork)
     }
 
     private fun PageResult<FileItem>.toSnapshot(folderId: Long?) = DirectoryPageState(

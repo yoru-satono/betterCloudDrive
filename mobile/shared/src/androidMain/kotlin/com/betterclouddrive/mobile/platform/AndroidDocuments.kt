@@ -22,6 +22,8 @@ import com.betterclouddrive.mobile.core.platform.FileDigest
 import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.core.platform.PickedDestination
 import com.betterclouddrive.mobile.core.platform.TransferFileAccess
+import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
+import com.betterclouddrive.mobile.core.localization.MobileString
 import io.ktor.client.request.forms.InputProvider
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
@@ -37,6 +39,7 @@ import java.security.MessageDigest
 internal class AndroidDocumentPicker(private val context: Context) : DocumentPicker {
     @Composable
     override fun UploadButton(enabled: Boolean, onPicked: (PickedDocument) -> Unit) {
+        val strings = LocalMobileStrings.current
         var pendingDocument by remember { mutableStateOf<PickedDocument?>(null) }
         val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
             pendingDocument?.let(onPicked)
@@ -55,11 +58,12 @@ internal class AndroidDocumentPicker(private val context: Context) : DocumentPic
         }
         Button(enabled = enabled, onClick = {
             launcher.launch(arrayOf("*/*"))
-        }) { Text("选择文件") }
+        }) { Text(strings[MobileString.ChooseFile]) }
     }
 
     @Composable
     override fun DownloadButton(fileName: String, enabled: Boolean, onPicked: (PickedDestination) -> Unit) {
+        val strings = LocalMobileStrings.current
         var pendingDestination by remember { mutableStateOf<PickedDestination?>(null) }
         val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
             pendingDestination?.let(onPicked)
@@ -79,7 +83,7 @@ internal class AndroidDocumentPicker(private val context: Context) : DocumentPic
         }
         Button(enabled = enabled, onClick = {
             launcher.launch(fileName)
-        }) { Text("下载") }
+        }) { Text(strings[MobileString.Download]) }
     }
 
     private fun describe(uri: Uri, read: Boolean): PickedDocument {
@@ -105,15 +109,15 @@ class AndroidTransferFileAccess(private val context: Context) : TransferFileAcce
 
     override suspend fun validateReadable(sourceHandle: String) = withContext(Dispatchers.IO) {
         val uri = Uri.parse(sourceHandle)
-        check(hasPersistedPermission(uri, read = true)) { "文件提供方未授予持久读取权限" }
+        check(hasPersistedPermission(uri, read = true)) { "document.readPermissionMissing" }
         open(sourceHandle).use { }
     }
 
     override suspend fun validateWritable(destinationHandle: String) = withContext(Dispatchers.IO) {
         val uri = Uri.parse(destinationHandle)
-        check(hasPersistedPermission(uri, read = false)) { "文件提供方未授予持久写入权限" }
+        check(hasPersistedPermission(uri, read = false)) { "document.writePermissionMissing" }
         context.contentResolver.openOutputStream(uri, "wa")?.use { }
-            ?: error("无法写入下载目标")
+            ?: error("document.destinationWriteFailed")
     }
 
     override suspend fun computeDigest(sourceHandle: String): FileDigest = withContext(Dispatchers.IO) {
@@ -179,7 +183,7 @@ class AndroidTransferFileAccess(private val context: Context) : TransferFileAcce
         val destination = Uri.parse(destinationHandle)
         context.contentResolver.openOutputStream(destination, "wt")?.use { output ->
             temp(taskId).inputStream().buffered().use { it.copyTo(output) }
-        } ?: error("无法写入下载目标")
+        } ?: error("document.destinationWriteFailed")
         Unit
     }
 
@@ -190,7 +194,7 @@ class AndroidTransferFileAccess(private val context: Context) : TransferFileAcce
         Unit
     }
 
-    private fun open(handle: String): InputStream = context.contentResolver.openInputStream(Uri.parse(handle)) ?: error("无法读取所选文件")
+    private fun open(handle: String): InputStream = context.contentResolver.openInputStream(Uri.parse(handle)) ?: error("document.sourceReadFailed")
     private fun temp(taskId: String): File = File(tempDirectory, "$taskId.part")
 
     private fun hasPersistedPermission(uri: Uri, read: Boolean): Boolean =
@@ -202,7 +206,7 @@ class AndroidTransferFileAccess(private val context: Context) : TransferFileAcce
         var remaining = offset
         while (remaining > 0) {
             val skipped = input.skip(remaining)
-            if (skipped > 0) remaining -= skipped else if (input.read() == -1) error("文件长度不足") else remaining--
+            if (skipped > 0) remaining -= skipped else if (input.read() == -1) error("document.unexpectedEnd") else remaining--
         }
     }
 }

@@ -111,10 +111,10 @@ class TransferRepository(
 }
 
 fun chunkCount(size: Long): Int {
-    require(size >= 0) { "文件大小不能为负数" }
+    require(size >= 0) { "transfer.negativeSize" }
     if (size == 0L) return 0
     val count = ((size - 1) / DEFAULT_CHUNK_SIZE) + 1
-    require(count <= Int.MAX_VALUE) { "文件分片数量超出支持范围" }
+    require(count <= Int.MAX_VALUE) { "transfer.chunkCountOverflow" }
     return count.toInt()
 }
 

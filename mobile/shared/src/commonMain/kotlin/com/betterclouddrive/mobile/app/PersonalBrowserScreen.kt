@@ -45,6 +45,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.betterclouddrive.mobile.core.model.FileItem
+import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
+import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.feature.files.FileViewMode
@@ -111,6 +114,7 @@ private fun PersonalDirectoryContent(
     onGoRoot: () -> Unit,
     modifier: Modifier,
 ) {
+    val strings = LocalMobileStrings.current
     val directory = state.current
     Column(modifier.padding(horizontal = 16.dp).testTag("personal-folder-${directory.folderId ?: "root"}")) {
         if (directory.refreshing) {
@@ -119,7 +123,7 @@ private fun PersonalDirectoryContent(
         if (directory.folderId == null) {
             Card(Modifier.fillMaxWidth().padding(top = 12.dp).testTag("personal-root-upload-card")) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("上传到个人根目录", style = MaterialTheme.typography.titleMedium)
+                    Text(strings[MobileString.UploadToRoot], style = MaterialTheme.typography.titleMedium)
                     Box(Modifier.testTag("personal-upload")) {
                         documentPicker.UploadButton(enabled = true, onPicked = onUpload)
                     }
@@ -133,8 +137,8 @@ private fun PersonalDirectoryContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(message, Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
-                    OutlinedButton(onClick = onRetry) { Text("重试") }
+                    Text(strings.resolve(message).orEmpty(), Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                    OutlinedButton(onClick = onRetry) { Text(strings[MobileString.Retry]) }
                 }
             }
         }
@@ -228,6 +232,7 @@ private fun PersonalGrid(
 
 @Composable
 private fun PersonalFileRow(file: FileItem, onClick: () -> Unit) {
+    val strings = LocalMobileStrings.current
     Card(Modifier.fillMaxWidth().testTag("personal-file-${file.id}").clickable(onClick = onClick)) {
         Row(
             Modifier.fillMaxWidth().padding(12.dp),
@@ -236,12 +241,12 @@ private fun PersonalFileRow(file: FileItem, onClick: () -> Unit) {
         ) {
             Icon(
                 if (file.isFolder) Icons.Default.Folder else Icons.Default.Description,
-                contentDescription = if (file.isFolder) "文件夹" else "文件",
+                contentDescription = strings[if (file.isFolder) MobileString.Folder else MobileString.File],
             )
             Column(Modifier.weight(1f)) {
                 Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    if (file.isFolder) "文件夹" else "${formatFileSize(file.fileSize)} · ${formatDate(file.updatedAt)}",
+                    if (file.isFolder) strings[MobileString.Folder] else "${formatFileSize(file.fileSize)} · ${formatDate(file.updatedAt)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -252,6 +257,7 @@ private fun PersonalFileRow(file: FileItem, onClick: () -> Unit) {
 
 @Composable
 private fun PersonalFileCard(file: FileItem, onClick: () -> Unit) {
+    val strings = LocalMobileStrings.current
     Card(Modifier.testTag("personal-file-${file.id}").clickable(onClick = onClick)) {
         Column(
             Modifier.fillMaxWidth().padding(12.dp),
@@ -260,11 +266,11 @@ private fun PersonalFileCard(file: FileItem, onClick: () -> Unit) {
         ) {
             Icon(
                 if (file.isFolder) Icons.Default.Folder else Icons.Default.Description,
-                contentDescription = if (file.isFolder) "文件夹" else "文件",
+                contentDescription = strings[if (file.isFolder) MobileString.Folder else MobileString.File],
             )
             Text(file.fileName, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                if (file.isFolder) "文件夹" else formatFileSize(file.fileSize),
+                if (file.isFolder) strings[MobileString.Folder] else formatFileSize(file.fileSize),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -274,6 +280,7 @@ private fun PersonalFileCard(file: FileItem, onClick: () -> Unit) {
 
 @Composable
 private fun PagingFooter(state: DirectoryPageState, onRetry: () -> Unit) {
+    val strings = LocalMobileStrings.current
     when {
         state.loadingMore -> Box(
             Modifier.fillMaxWidth().padding(12.dp).testTag("personal-loading-more"),
@@ -283,13 +290,13 @@ private fun PagingFooter(state: DirectoryPageState, onRetry: () -> Unit) {
             Modifier.fillMaxWidth().padding(12.dp).testTag("personal-load-more-error"),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(state.loadMoreError, color = MaterialTheme.colorScheme.error)
+            Text(strings.resolve(state.loadMoreError).orEmpty(), color = MaterialTheme.colorScheme.error)
             OutlinedButton(onClick = onRetry, modifier = Modifier.testTag("personal-load-more-retry")) {
-                Text("重试加载更多")
+                Text(strings[MobileString.RetryLoadMore])
             }
         }
         !state.hasMore -> Text(
-            "共 ${state.total} 项",
+            strings.format(MobileString.TotalItems, state.total),
             Modifier.fillMaxWidth().padding(12.dp).testTag("personal-page-end"),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -299,42 +306,45 @@ private fun PagingFooter(state: DirectoryPageState, onRetry: () -> Unit) {
 
 @Composable
 private fun EmptyDirectory(isRoot: Boolean) {
+    val strings = LocalMobileStrings.current
     Column(
         Modifier.fillMaxSize().testTag("personal-empty"),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(Icons.Default.Folder, contentDescription = null)
-        Text(if (isRoot) "个人空间为空" else "此目录为空", style = MaterialTheme.typography.titleMedium)
-        Text(if (isRoot) "上传文件后会显示在这里" else "返回上级目录继续浏览")
+        Text(strings[if (isRoot) MobileString.PersonalEmpty else MobileString.DirectoryEmpty], style = MaterialTheme.typography.titleMedium)
+        Text(strings[if (isRoot) MobileString.PersonalEmptyDetail else MobileString.DirectoryEmptyDetail])
     }
 }
 
 @Composable
-private fun DirectoryError(message: String, nested: Boolean, onRetry: () -> Unit, onGoRoot: () -> Unit) {
+private fun DirectoryError(message: UiMessage, nested: Boolean, onRetry: () -> Unit, onGoRoot: () -> Unit) {
+    val strings = LocalMobileStrings.current
     Column(
         Modifier.fillMaxSize().padding(24.dp).testTag("personal-error"),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("目录加载失败", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
-        Text(message)
-        Button(onClick = onRetry, modifier = Modifier.testTag("personal-error-retry")) { Text("重试") }
+        Text(strings[MobileString.DirectoryLoadFailed], style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+        Text(strings.resolve(message).orEmpty())
+        Button(onClick = onRetry, modifier = Modifier.testTag("personal-error-retry")) { Text(strings[MobileString.Retry]) }
         if (nested) OutlinedButton(onClick = onGoRoot, modifier = Modifier.testTag("personal-error-root")) {
-            Text("返回根目录")
+            Text(strings[MobileString.BackToRoot])
         }
     }
 }
 
 @Composable
 private fun EmptyDetail() {
+    val strings = LocalMobileStrings.current
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Icon(Icons.Default.Info, contentDescription = null)
-        Text("选择文件查看详情")
+        Text(strings[MobileString.SelectFileForDetails])
     }
 }
 
@@ -344,18 +354,19 @@ private fun FileDetailContent(
     documentPicker: DocumentPicker,
     onDownload: (FileItem, String) -> Unit,
 ) {
+    val strings = LocalMobileStrings.current
     Column(
         Modifier.fillMaxWidth().padding(24.dp).testTag("personal-file-detail-${file.id}"),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(Icons.Default.Description, contentDescription = "文件", tint = MaterialTheme.colorScheme.primary)
+        Icon(Icons.Default.Description, contentDescription = strings[MobileString.File], tint = MaterialTheme.colorScheme.primary)
         Text(file.fileName, style = MaterialTheme.typography.headlineSmall)
-        DetailRow("类型", file.mimeType ?: "文件")
-        DetailRow("大小", formatFileSize(file.fileSize))
-        DetailRow("修改时间", formatDate(file.updatedAt))
-        DetailRow("创建时间", formatDate(file.createdAt))
+        DetailRow(strings[MobileString.Type], file.mimeType ?: strings[MobileString.File])
+        DetailRow(strings[MobileString.Size], formatFileSize(file.fileSize))
+        DetailRow(strings[MobileString.UpdatedAt], formatDate(file.updatedAt))
+        DetailRow(strings[MobileString.CreatedAt], formatDate(file.createdAt))
         DetailRow("MD5", file.md5Hash ?: "—")
-        DetailRow("版本数", file.versionCount.toString())
+        DetailRow(strings[MobileString.VersionCount], file.versionCount.toString())
         Box(Modifier.testTag("personal-detail-download-${file.id}")) {
             documentPicker.DownloadButton(file.fileName, enabled = true) { target ->
                 onDownload(file, target.handle)

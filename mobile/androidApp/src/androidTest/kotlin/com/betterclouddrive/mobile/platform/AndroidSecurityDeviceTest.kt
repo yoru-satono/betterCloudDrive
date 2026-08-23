@@ -118,7 +118,12 @@ class AndroidSecurityDeviceTest {
 
     @Test
     fun transferNotificationExposesPauseAndCancelActions() {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val base = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val context = base.createConfigurationContext(
+            android.content.res.Configuration(base.resources.configuration).apply {
+                setLocales(android.os.LocaleList.forLanguageTags("zh-CN"))
+            },
+        )
         val notification = transferNotification(context, "notification-task", "正在传输")
         assertEquals(2, notification.actions.size)
         assertEquals("暂停", notification.actions[0].title.toString())

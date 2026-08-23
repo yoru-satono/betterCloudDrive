@@ -32,6 +32,8 @@ import androidx.work.WorkInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.betterclouddrive.mobile.app.AppContainer
+import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.MobileStrings
 import com.betterclouddrive.mobile.core.platform.TransferScheduler
 import com.betterclouddrive.mobile.core.platform.TransferScheduleSpec
 import com.betterclouddrive.mobile.feature.transfers.DEFAULT_CHUNK_SIZE
@@ -91,7 +93,7 @@ internal class TransferProgressLimiter(
     private var lastPublishedTask: TransferTask? = null
 
     init {
-        require(minimumIntervalMillis >= 0) { "通知刷新间隔不能为负数" }
+        require(minimumIntervalMillis >= 0) { "notification.negativeInterval" }
     }
 
     fun shouldPublish(task: TransferTask): Boolean {
@@ -202,9 +204,10 @@ fun transferRuntimeForSdk(sdk: Int): AndroidTransferRuntime =
 class AndroidTransferWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val taskId = inputData.getString(AndroidTransferScheduler.TASK_ID) ?: return Result.failure()
-        setForeground(transferForegroundInfo(applicationContext, taskId, "正在准备传输"))
+        val strings = androidMobileStrings(applicationContext)
+        setForeground(transferForegroundInfo(applicationContext, taskId, strings[MobileString.NotificationPreparing]))
         return when (AndroidRuntime.execute(taskId) { task ->
-            setForeground(transferForegroundInfo(applicationContext, taskId, task.notificationText(), task))
+            setForeground(transferForegroundInfo(applicationContext, taskId, task.notificationText(strings), task))
         }) {
             TransferRunResult.RETRY -> Result.retry()
             else -> Result.success()
@@ -218,11 +221,12 @@ class AndroidTransferJobService : JobService() {
 
     override fun onStartJob(params: JobParameters): Boolean {
         val taskId = params.extras.getString(AndroidTransferScheduler.TASK_ID) ?: return false
+        val strings = androidMobileStrings(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             setNotification(
                 params,
                 AndroidTransferScheduler.jobId(taskId),
-                transferNotification(this, taskId, "正在传输"),
+                transferNotification(this, taskId, strings[MobileString.NotificationTransferring]),
                 JOB_END_NOTIFICATION_POLICY_REMOVE,
             )
         }
@@ -231,7 +235,7 @@ class AndroidTransferJobService : JobService() {
                 setNotification(
                     params,
                     params.jobId,
-                    transferNotification(this@AndroidTransferJobService, taskId, task.notificationText(), task),
+                    transferNotification(this@AndroidTransferJobService, taskId, task.notificationText(strings), task),
                     JOB_END_NOTIFICATION_POLICY_REMOVE,
                 )
                 val downloaded = if (task.direction == TransferDirection.DOWNLOAD) task.bytesDone else 0
@@ -287,22 +291,23 @@ private fun transferForegroundInfo(context: Context, taskId: String, text: Strin
 
 fun transferNotification(context: Context, taskId: String, text: String, task: TransferTask? = null): Notification {
     createTransferChannel(context)
+    val strings = androidMobileStrings(context)
     val progress = task?.takeIf { it.bytesTotal > 0 }?.progressPercent() ?: 0
     return NotificationCompat.Builder(context, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.stat_sys_upload)
-        .setContentTitle("BetterCloudDrive 文件传输")
+        .setContentTitle(strings[MobileString.NotificationTransferTitle])
         .setContentText(text)
         .setProgress(100, progress, task?.bytesTotal?.let { it <= 0 } ?: true)
         .setOngoing(true)
-        .addAction(0, "暂停", actionIntent(context, taskId, TransferActionReceiver.ACTION_PAUSE, 1))
-        .addAction(0, "取消", actionIntent(context, taskId, TransferActionReceiver.ACTION_CANCEL, 2))
+        .addAction(0, strings[MobileString.Pause], actionIntent(context, taskId, TransferActionReceiver.ACTION_PAUSE, 1))
+        .addAction(0, strings[MobileString.Cancel], actionIntent(context, taskId, TransferActionReceiver.ACTION_CANCEL, 2))
         .build()
 }
 
 private fun createTransferChannel(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "文件传输", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CHANNEL_ID, androidMobileStrings(context)[MobileString.NotificationChannel], NotificationManager.IMPORTANCE_LOW),
         )
     }
 }
@@ -321,9 +326,10 @@ private fun actionIntent(context: Context, taskId: String, action: String, offse
 private const val CHANNEL_ID = "bcd_transfers"
 private const val DEFAULT_NOTIFICATION_INTERVAL_MILLIS = 1_000L
 
-private fun TransferTask.notificationText(): String {
-    val action = if (direction == TransferDirection.UPLOAD) "正在上传" else "正在下载"
-    return if (bytesTotal > 0) "$action $fileName（${progressPercent()}%）" else "$action $fileName"
+private fun TransferTask.notificationText(strings: MobileStrings): String {
+    val progress = if (bytesTotal > 0) " (${progressPercent()}%)" else ""
+    val key = if (direction == TransferDirection.UPLOAD) MobileString.NotificationUploading else MobileString.NotificationDownloading
+    return strings.format(key, fileName, progress)
 }
 
 private fun TransferTask.progressPercent(): Int =

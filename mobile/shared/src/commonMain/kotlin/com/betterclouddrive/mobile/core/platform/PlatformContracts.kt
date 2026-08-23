@@ -3,6 +3,7 @@ package com.betterclouddrive.mobile.core.platform
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.betterclouddrive.mobile.core.model.OfficeConfig
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.model.StoredSession
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import io.ktor.client.HttpClient
@@ -77,5 +78,5 @@ interface TransferScheduler {
 
 interface OfficeRenderer {
     @Composable
-    fun Render(config: OfficeConfig, modifier: Modifier, onStatus: (String) -> Unit)
+    fun Render(config: OfficeConfig, modifier: Modifier, onStatus: (UiMessage) -> Unit)
 }

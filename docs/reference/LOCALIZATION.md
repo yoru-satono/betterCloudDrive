@@ -60,6 +60,14 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 - `MessageResolver` 集中映射服务端 key，并负责参数格式化和未知键降级。
 - 网络错误模型只携带 `code/messageKey/messageParams/requestId`。
 
+### KMP 移动端
+
+- KMP 默认英语资源位于 `mobile/shared/src/commonMain/composeResources/values`，简体中文资源分别位于 `values-zh-rCN` 和 `values-zh-rSG`；所有目录使用相同且不带语言前缀的稳定资源键。生产 Kotlin 源码不得硬编码用户可见文本。
+- 当前支持 `en-US`、`zh-CN` 与 `zh-SG`。`zh-CN`、`zh-Hans-CN`、`zh-SG`、`zh-Hans-SG` 选择对应简体资源；`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO`、无限定 `zh`、无地区 `zh-Hans` 和其他语言回退英语，不能把繁体中文区域误映射为简体。
+- Compose Multiplatform 1.11.1 尚不支持 `Hans/Hant` 脚本资源限定符，因此 KMP 当前使用明确地区目录。未来繁体中文通过增加 TW、HK、MO 地区目录实现，不修改资源键或业务调用。
+- Android 13+ 通过系统应用语言页面选择英语、中国大陆简体中文或新加坡简体中文；Android 12 及以下跟随系统。阶段 9 前不提供应用内语言入口，也不读取或写入账号 `preferredLocale`。
+- 控制器和持久化任务只保存稳定消息描述或语义键，在 Compose 显示和 Android 发通知时按当前语言解析，因此语言变化不会把旧语言固化进状态或 Room。
+
 ## 服务端文本边界
 
 - 固定日志、内部诊断和数据库注释使用英文。
