@@ -769,6 +769,54 @@
       ],
       "title": "Mean JVM GC pause",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bcd-prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40.0
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (bucket, subject_type) (rate(drive_rate_limit_rejected_total{job=\"better-cloud-drive\"}[5m])) or vector(0)",
+          "legendFormat": "rejected {{bucket}} / {{subject_type}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (bucket) (rate(drive_rate_limit_redis_fail_open_total{job=\"better-cloud-drive\"}[5m])) or vector(0)",
+          "legendFormat": "redis fail-open {{bucket}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Rate limiting decisions",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",

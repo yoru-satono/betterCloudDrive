@@ -7,6 +7,8 @@ import static org.mockito.Mockito.*;
 import com.betterclouddrive.common.context.RequestTraceContext;
 import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.service.OperationLogService;
+import com.betterclouddrive.web.config.ClientIpProperties;
+import com.betterclouddrive.web.security.ClientIpResolver;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletRequest;
@@ -40,7 +42,7 @@ class TraceAuditFilterTest {
         TraceAuditFilter filter = new TraceAuditFilter(
                 properties,
                 new AuditSanitizer(properties),
-                operationLogService, null);
+                operationLogService, null, clientIpResolver());
 
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/files");
         request.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -94,7 +96,7 @@ class TraceAuditFilterTest {
         TraceAuditFilter filter = new TraceAuditFilter(
                 properties,
                 new AuditSanitizer(properties),
-                operationLogService, null);
+                operationLogService, null, clientIpResolver());
 
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/upload/session-1/chunk");
         request.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -126,7 +128,7 @@ class TraceAuditFilterTest {
         TraceAuditFilter filter = new TraceAuditFilter(
                 properties,
                 new AuditSanitizer(properties),
-                operationLogService, null);
+                operationLogService, null, clientIpResolver());
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/files");
         request.addHeader(RequestTraceContext.HEADER_TRACE_ID, "4bf92f3577b34da6a3ce929d0e0e4736");
@@ -158,7 +160,8 @@ class TraceAuditFilterTest {
                 properties,
                 new AuditSanitizer(properties),
                 operationLogService,
-                tracer);
+                tracer,
+                clientIpResolver());
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/files");
         request.addHeader("traceparent", "00-11111111111111111111111111111111-2222222222222222-01");
@@ -176,8 +179,10 @@ class TraceAuditFilterTest {
     @Test
     void shouldTrustForwardedAddressOnlyFromConfiguredProxy() throws Exception {
         ObservabilityProperties properties = new ObservabilityProperties();
+        ClientIpProperties clientIpProperties = new ClientIpProperties();
         TraceAuditFilter filter = new TraceAuditFilter(
-                properties, new AuditSanitizer(properties), operationLogService, null);
+                properties, new AuditSanitizer(properties), operationLogService, null,
+                new ClientIpResolver(clientIpProperties));
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/files");
         request.setRemoteAddr("203.0.113.5");
         request.addHeader("X-Forwarded-For", "198.51.100.7");
@@ -188,10 +193,14 @@ class TraceAuditFilterTest {
                 eq(1), anyInt(), anyString(), anyString(), eq(200), isNull());
 
         reset(operationLogService);
-        properties.getAudit().setTrustedProxyCidrs(java.util.List.of("203.0.113.0/24"));
+        clientIpProperties.setTrustedProxyCidrs(java.util.List.of("203.0.113.0/24"));
         filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> { });
         verify(operationLogService).logRequestAudit(
                 isNull(), eq("READ"), eq("FILE"), isNull(), anyString(), eq("198.51.100.7"), isNull(),
                 eq(1), anyInt(), anyString(), anyString(), eq(200), isNull());
+    }
+
+    private ClientIpResolver clientIpResolver() {
+        return new ClientIpResolver(new ClientIpProperties());
     }
 }

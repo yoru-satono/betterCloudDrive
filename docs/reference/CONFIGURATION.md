@@ -336,10 +336,15 @@ pnpm run build
 | `ALERTMANAGER_PRODUCTION_CONFIG_FILE` | `./observability/alertmanager-production.yml` | 生产观测 overlay 挂载的已审查 Alertmanager 配置文件 |
 | `ALERTMANAGER_RETENTION_TIME` | `72h` | Alertmanager 状态数据保留时间 |
 | `PROMETHEUS_ENVIRONMENT` | `development` | Prometheus 外部 `environment` 标签；生产 overlay 通常设为 `production` |
-| `DRIVE_RATE_LIMIT_DEFAULT_PERMITS` | `100` | 默认接口在每个限流周期内允许的请求数；Compose 将其传给后端 |
+| `TRUSTED_PROXY_CIDRS` | `172.16.0.0/12` | 允许提供客户端转发地址的代理 CIDR 列表；应收窄为实际反向代理网络 |
+| `DRIVE_RATE_LIMIT_DEFAULT_PERMITS` | `300` | 已登录用户的普通 API 在每个限流周期内允许的请求数；Compose 将其传给后端 |
 | `DRIVE_RATE_LIMIT_DEFAULT_PERIOD_SECONDS` | `60` | 默认接口限流周期，单位秒 |
-| `DRIVE_RATE_LIMIT_UPLOAD_PERMITS` | `10` | 上传接口在每个限流周期内允许的请求数 |
+| `DRIVE_RATE_LIMIT_AUTH_PERMITS` | `30` | 登录、注册、验证码、刷新和密码恢复接口按客户端 IP 计算的许可数 |
+| `DRIVE_RATE_LIMIT_AUTH_PERIOD_SECONDS` | `60` | 匿名认证接口限流周期，单位秒 |
+| `DRIVE_RATE_LIMIT_UPLOAD_PERMITS` | `120` | 上传初始化、状态、完成和取消等控制请求按用户计算的许可数 |
 | `DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS` | `60` | 上传接口限流周期，单位秒 |
+| `DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERMITS` | `600` | 上传分片请求按用户计算的许可数 |
+| `DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERIOD_SECONDS` | `60` | 上传分片限流周期，单位秒 |
 | `ONLYOFFICE_JWT_SECRET` | 本地开发密钥 | OnlyOffice Document Server 和后端共享的 JWT 密钥，生产必须替换 |
 | `VITE_API_BASE_URL` | 空 | Web 前端构建时 API 根地址。空值表示使用 `/api/v1` |
 | `VITE_WEB_BASE_URL` | 空 | Web 前端构建时 Web 根地址。空值表示使用当前 origin |
@@ -553,7 +558,7 @@ Web 前端地址解析顺序：
 | `AUDIT_LOG_ENABLED` | 是否启用审计日志 |
 | `AUDIT_EVENT_ENABLED` | 是否写入完整审计事件；兼容旧变量 `AUDIT_FULL_EVENT_ENABLED` |
 | `AUDIT_CAPTURE_BODY` | 是否采集限长且脱敏的 JSON 请求正文，默认关闭 |
-| `OBSERVABILITY_TRUSTED_PROXY_CIDRS` | 允许提供客户端转发地址的代理 CIDR 列表 |
+| `OBSERVABILITY_TRUSTED_PROXY_CIDRS` | 已弃用的兼容变量；仅在根配置未设置 `TRUSTED_PROXY_CIDRS` 时作为回退 |
 | `AUDIT_MAX_BODY_BYTES` | 审计日志最多记录的请求体字节数 |
 
 `APP_ENV`、`OBSERVABILITY_ENABLED` 和 `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 当前没有写入 `observability.env.example`，未配置时使用上表默认值；如需覆盖，可将它们添加到实际的 `observability.env`。默认 Compose 明确设置 `TRACING_EXPORT_OTLP_ENABLED=false`，因此只修改 OTLP endpoint 不会启用完整 Trace 导出。
@@ -590,10 +595,15 @@ Web 前端地址解析顺序：
 | `drive.download.folder-zip.max-size-bytes` | `1073741824` | 无直接占位 | 文件夹打包最大体积，默认 1GB |
 | `drive.version.max-versions` | `10` | 无直接占位 | 单文件最大版本数 |
 | `drive.storage.default-quota-bytes` | `10737418240` | 无直接占位 | 新用户默认配额，默认 10GB |
-| `drive.rate-limit.default-permits` | `100` | `DRIVE_RATE_LIMIT_DEFAULT_PERMITS` | 默认限流许可数 |
+| `drive.client-ip.trusted-proxy-cidrs` | 空 | `TRUSTED_PROXY_CIDRS`，旧变量作为回退 | 允许采用 `X-Forwarded-For` / `X-Real-IP` 的直接代理 CIDR |
+| `drive.rate-limit.default-permits` | `300` | `DRIVE_RATE_LIMIT_DEFAULT_PERMITS` | 普通 API 每用户许可数 |
 | `drive.rate-limit.default-period-seconds` | `60` | `DRIVE_RATE_LIMIT_DEFAULT_PERIOD_SECONDS` | 默认限流周期 |
-| `drive.rate-limit.upload-permits` | `10` | `DRIVE_RATE_LIMIT_UPLOAD_PERMITS` | 上传接口限流许可数 |
+| `drive.rate-limit.auth-permits` | `30` | `DRIVE_RATE_LIMIT_AUTH_PERMITS` | 匿名认证接口每 IP 许可数 |
+| `drive.rate-limit.auth-period-seconds` | `60` | `DRIVE_RATE_LIMIT_AUTH_PERIOD_SECONDS` | 匿名认证接口限流周期 |
+| `drive.rate-limit.upload-permits` | `120` | `DRIVE_RATE_LIMIT_UPLOAD_PERMITS` | 上传控制接口每用户许可数 |
 | `drive.rate-limit.upload-period-seconds` | `60` | `DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS` | 上传接口限流周期 |
+| `drive.rate-limit.upload-chunk-permits` | `600` | `DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERMITS` | 上传分片接口每用户许可数 |
+| `drive.rate-limit.upload-chunk-period-seconds` | `60` | `DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERIOD_SECONDS` | 上传分片限流周期 |
 | `logging.file.path` | `./logs`，prod 为 `/var/log/cloud-drive` | `LOG_DIR` | 后端日志目录 |
 | `observability.system-logs.loki-base-url` | `http://localhost:3100` | `LOKI_BASE_URL` | 后端查询 Loki 地址 |
 | `observability.system-logs.grafana-base-url` | `/grafana` | `GRAFANA_BASE_URL` | Grafana Explore 链接前缀 |

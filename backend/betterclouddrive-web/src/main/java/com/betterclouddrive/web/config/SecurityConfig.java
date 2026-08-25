@@ -2,10 +2,12 @@ package com.betterclouddrive.web.config;
 
 import com.betterclouddrive.dal.repository.UserTokenRepository;
 import com.betterclouddrive.web.security.BasicAuthFilter;
+import com.betterclouddrive.web.security.ClientIpResolver;
 import com.betterclouddrive.web.security.JwtAuthenticationFilter;
 import com.betterclouddrive.web.security.JwtTokenProvider;
 import com.betterclouddrive.web.security.RateLimitFilter;
 import jakarta.servlet.DispatcherType;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -20,11 +22,13 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.web.firewall.StrictHttpFirewall;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -54,8 +58,11 @@ public class SecurityConfig {
 
     @Bean
     public RateLimitFilter rateLimitFilter(StringRedisTemplate redisTemplate,
-                                            RateLimitProperties properties) {
-        return new RateLimitFilter(redisTemplate, properties);
+                                            RateLimitProperties properties,
+                                            ClientIpResolver clientIpResolver,
+                                            MeterRegistry meterRegistry,
+                                            ObjectMapper objectMapper) {
+        return new RateLimitFilter(redisTemplate, properties, clientIpResolver, meterRegistry, objectMapper);
     }
 
     @Bean
@@ -88,8 +95,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/**").authenticated()
                 .anyRequest().permitAll()
             )
-            .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(rateLimitFilter, BasicAuthenticationFilter.class);
 
         return http.build();
     }

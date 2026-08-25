@@ -97,7 +97,8 @@ RabbitMQ 死信由单并发消费者持久化到 `dead_letter_records`，成功�
 
 - Loki、Prometheus、Alertmanager、Blackbox 和 Alloy 默认只在容器网络内访问；诊断 overlay 也只绑定 `127.0.0.1`。
 - 请求正文默认不采集。开启审计正文后仍只接受限长、可解析并脱敏的 JSON。
-- 只有来自 `OBSERVABILITY_TRUSTED_PROXY_CIDRS` 的请求才采用转发客户端地址。
+- 只有来自 `TRUSTED_PROXY_CIDRS` 的直接代理请求才采用转发客户端地址；解析会从代理链右侧逐跳排除受信代理，防止客户端伪造最左侧地址。旧变量 `OBSERVABILITY_TRUSTED_PROXY_CIDRS` 仅作为兼容回退。
+- `drive_rate_limit_rejected_total` 按固定的 `bucket`、`subject_type` 标签记录拒绝，`drive_rate_limit_redis_fail_open_total` 记录 Redis 故障时的放行；两者均不包含用户 ID 或 IP。
 - 审计事实以 PostgreSQL 为准；Loki 日志按保留期自动淘汰。
 - 从旧版升级不会自动删除历史 `tempodata` 等 Docker 卷。确认不再需要旧 Trace 后，可先用 `docker volume ls` 确认项目卷名，再人工删除对应孤立卷；部署或升级脚本不得自动执行该操作。
 

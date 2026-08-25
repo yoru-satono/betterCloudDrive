@@ -1,94 +1,149 @@
 package com.betterclouddrive.web.security;
 
+import com.betterclouddrive.web.config.ClientIpProperties;
 import com.betterclouddrive.web.config.RateLimitProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.List;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import tools.jackson.databind.ObjectMapper;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class RateLimitFilterTest {
     private StringRedisTemplate redis;
-    private ZSetOperations<String, String> zset;
     private RateLimitProperties properties;
+    private ClientIpProperties clientIpProperties;
+    private SimpleMeterRegistry registry;
+    private RateLimitFilter filter;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() {
         redis = mock(StringRedisTemplate.class);
-        zset = mock(ZSetOperations.class);
-        when(redis.opsForZSet()).thenReturn(zset);
         properties = new RateLimitProperties();
         properties.setDefaultPermits(2);
-        properties.setUploadPermits(1);
+        properties.setAuthPermits(3);
+        properties.setUploadPermits(4);
+        properties.setUploadChunkPermits(5);
+        clientIpProperties = new ClientIpProperties();
+        registry = new SimpleMeterRegistry();
+        filter = new RateLimitFilter(
+                redis,
+                properties,
+                new ClientIpResolver(clientIpProperties),
+                registry,
+                new ObjectMapper());
+        allowRequest();
     }
 
     @AfterEach
     void clearSecurityContext() {
-        SecurityContextHolder.clearContext();
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        registry.close();
     }
 
     @Test
-    void skipsNonApiAndGrafanaAuthenticationRequests() throws Exception {
-        assertPasses(new MockHttpServletRequest("GET", "/actuator/health"));
-        assertPasses(new MockHttpServletRequest("GET", "/api/v1/grafana/auth"));
+    void skipsOptionsNonApiAndGrafanaAuthenticationRequests() throws Exception {
+        filter.doFilter(new MockHttpServletRequest("OPTIONS", "/api/v1/files"),
+                new MockHttpServletResponse(), (req, res) -> { });
+        filter.doFilter(new MockHttpServletRequest("GET", "/actuator/health"),
+                new MockHttpServletResponse(), (req, res) -> { });
+        filter.doFilter(new MockHttpServletRequest("GET", "/api/v1/grafana/auth"),
+                new MockHttpServletResponse(), (req, res) -> { });
+
         verifyNoInteractions(redis);
     }
 
     @Test
-    void returnsSemantic429WhenUploadWindowIsFull() throws Exception {
-        when(zset.zCard("ratelimit:ip:127.0.0.1:upload")).thenReturn(1L);
-        var request = new MockHttpServletRequest("POST", "/api/v1/upload/init");
-        request.setRemoteAddr("127.0.0.1");
-        var response = new MockHttpServletResponse();
-        var called = new AtomicBoolean();
+    void separatesAuthenticationControlChunkAndDefaultBuckets() throws Exception {
+        assertKey(new MockHttpServletRequest("POST", "/api/v1/auth/forgot-password"), ":auth");
+        assertKey(new MockHttpServletRequest("POST", "/api/v1/upload/init"), ":upload-control");
+        assertKey(new MockHttpServletRequest("POST", "/api/v1/upload/session/chunk"), ":upload-chunk");
+        assertKey(new MockHttpServletRequest("POST", "/api/v1/teams/7/upload/session/chunk"), ":upload-chunk");
+        assertKey(new MockHttpServletRequest("GET", "/api/v1/files"), ":default");
+    }
 
-        new RateLimitFilter(redis, properties).doFilter(request, response, (req, res) -> called.set(true));
+    @Test
+    void returnsSemantic429RetryAfterAndLowCardinalityMetric() throws Exception {
+        doReturn(List.of(0L, 17L)).when(redis)
+                .execute(any(RedisScript.class), anyList(), anyString(), anyString(), anyString(), anyString());
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/upload/init");
+        request.setRemoteAddr("192.0.2.10");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicBoolean called = new AtomicBoolean();
+
+        filter.doFilter(request, response, (req, res) -> called.set(true));
 
         assertThat(called).isFalse();
         assertThat(response.getStatus()).isEqualTo(429);
-        assertThat(response.getContentAsString()).contains("error.rateLimited").doesNotContain("\"message\"");
+        assertThat(response.getHeader("Retry-After")).isEqualTo("17");
+        assertThat(response.getContentAsString())
+                .contains("error.rateLimited")
+                .doesNotContain("192.0.2.10");
+        assertThat(registry.get("drive.rate_limit.rejected")
+                .tags("bucket", "upload-control", "subject_type", "ip")
+                .counter().count()).isEqualTo(1);
     }
 
     @Test
     void usesAuthenticatedUserInsteadOfForwardedAddress() throws Exception {
         var principal = new UserPrincipal(42L, "alice", "jti", "ROLE_USER");
-        SecurityContextHolder.getContext().setAuthentication(
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null,
                         List.of(new SimpleGrantedAuthority("ROLE_USER"))));
-        when(zset.zCard("ratelimit:user:42:default")).thenReturn(0L);
-        var request = new MockHttpServletRequest("GET", "/api/v1/files");
-        request.addHeader("X-Forwarded-For", "203.0.113.10");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/files");
+        request.setRemoteAddr("203.0.113.5");
+        request.addHeader("X-Forwarded-For", "198.51.100.7");
 
-        assertPasses(request);
-
-        verify(zset).add(eq("ratelimit:user:42:default"), anyString(), anyDouble());
+        assertKey(request, "ratelimit:v2:user:42:default");
     }
 
     @Test
-    void failsOpenWhenRedisIsUnavailable() throws Exception {
-        when(zset.removeRangeByScore(anyString(), anyDouble(), anyDouble()))
-                .thenThrow(new IllegalStateException("redis unavailable"));
-        assertPasses(new MockHttpServletRequest("GET", "/api/v1/files"));
+    void failsOpenAndRecordsMetricWhenRedisIsUnavailable() throws Exception {
+        doReturn(null).when(redis)
+                .execute(any(RedisScript.class), anyList(), anyString(), anyString(), anyString(), anyString());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/files");
+        AtomicBoolean called = new AtomicBoolean();
+
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> called.set(true));
+
+        assertThat(called).isTrue();
+        assertThat(registry.get("drive.rate_limit.redis_fail_open")
+                .tag("bucket", "default").counter().count()).isEqualTo(1);
     }
 
-    private void assertPasses(MockHttpServletRequest request) throws Exception {
-        var response = new MockHttpServletResponse();
-        var called = new AtomicBoolean();
-        new RateLimitFilter(redis, properties).doFilter(request, response, (req, res) -> called.set(true));
-        assertThat(called).isTrue();
-        assertThat(response.getStatus()).isEqualTo(200);
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void assertKey(MockHttpServletRequest request, String expectedSuffix) throws Exception {
+        if (request.getRemoteAddr() == null) {
+            request.setRemoteAddr("127.0.0.1");
+        }
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> { });
+        var keys = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(redis).execute(
+                any(RedisScript.class), keys.capture(), anyString(), anyString(), anyString(), anyString());
+        assertThat((String) keys.getValue().getFirst()).endsWith(expectedSuffix);
+        org.mockito.Mockito.clearInvocations(redis);
+        allowRequest();
+    }
+
+    private void allowRequest() {
+        doReturn(List.of(1L, 0L)).when(redis)
+                .execute(any(RedisScript.class), anyList(), anyString(), anyString(), anyString(), anyString());
     }
 }

@@ -221,8 +221,15 @@ run_pytest() {
 }
 
 backend_tests() { (cd backend && mvn test -Dsurefire.reportNameSuffix=backend); }
-integration_tests() { (cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service -am); }
-blackbox_tests() { run_pytest 'not webdav and not office and not observability and not resilience and not security' ../test-results/blackbox/junit.xml; }
+integration_tests() { (cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service,betterclouddrive-web -am); }
+blackbox_tests() {
+  local rc=0 restore_rc=0
+  set_functional_test_rate_limits || return
+  run_pytest 'not webdav and not office and not observability and not resilience and not security' ../test-results/blackbox/junit.xml || rc=$?
+  restore_default_rate_limits || restore_rc=$?
+  ((rc != 0)) && return "$rc"
+  return "$restore_rc"
+}
 security_tests() { run_pytest security ../test-results/security/junit.xml; }
 web_unit_tests() { (cd frontend && pnpm run test:coverage); }
 web_e2e_tests() {
@@ -235,11 +242,15 @@ office_tests() {
 }
 tauri_build() { (cd frontend && pnpm run tauri:e2e:build); }
 tauri_unit_tests() { (cd frontend/src-tauri && cargo test --locked); }
-set_tauri_test_rate_limits() {
+set_functional_test_rate_limits() {
   DRIVE_RATE_LIMIT_DEFAULT_PERMITS=10000 \
     DRIVE_RATE_LIMIT_DEFAULT_PERIOD_SECONDS=1 \
+    DRIVE_RATE_LIMIT_AUTH_PERMITS=10000 \
+    DRIVE_RATE_LIMIT_AUTH_PERIOD_SECONDS=1 \
     DRIVE_RATE_LIMIT_UPLOAD_PERMITS=10000 \
     DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS=1 \
+    DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERMITS=10000 \
+    DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERIOD_SECONDS=1 \
     docker compose up -d --no-deps --force-recreate backend &&
     wait_docker_service_healthy backend
 }
@@ -249,7 +260,7 @@ restore_default_rate_limits() {
 }
 tauri_tests() {
   local rc=0 restore_rc=0
-  set_tauri_test_rate_limits || return
+  set_functional_test_rate_limits || return
   (cd frontend && pnpm run test:e2e:tauri) || rc=$?
   restore_default_rate_limits || restore_rc=$?
   ((rc != 0)) && return "$rc"

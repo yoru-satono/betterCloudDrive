@@ -278,6 +278,19 @@ def test_dashboards_are_provisioned_and_all_promql_is_valid(client, admin_header
         for path in sorted(DASHBOARD_DIR.glob("*.json"))
     ]
     assert {dashboard["uid"]: dashboard["title"] for dashboard in definitions} == EXPECTED_DASHBOARDS
+    application_overview = next(
+        dashboard for dashboard in definitions
+        if dashboard["uid"] == "bcd-application-overview"
+    )
+    rate_limit_panel = next(
+        panel for panel in application_overview["panels"]
+        if panel["title"] == "Rate limiting decisions"
+    )
+    rate_limit_promql = " ".join(
+        target["expr"] for target in rate_limit_panel["targets"]
+    )
+    assert "drive_rate_limit_rejected_total" in rate_limit_promql
+    assert "drive_rate_limit_redis_fail_open_total" in rate_limit_promql
 
     required_metrics = {
         "bcd_team_quota_used_bytes",

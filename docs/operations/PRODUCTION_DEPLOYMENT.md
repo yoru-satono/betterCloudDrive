@@ -43,6 +43,8 @@ Get-ChildItem config/env-files -Filter '*.env.example' | ForEach-Object {
 
 `.env.production` 只负责 Compose 插值和生产公开地址，后端依赖的数据库、队列、对象存储、安全、邮件和观测值仍来自 `config/env-files/*.env`。两处出现的 `ONLYOFFICE_JWT_SECRET` 必须保持一致。
 
+将 `TRUSTED_PROXY_CIDRS` 收窄为实际反向代理或容器网络。只有直接来源命中该列表时，后端才采用 `X-Forwarded-For` 或 `X-Real-IP`；配置过宽会允许同网段不受信主机影响匿名认证限流。默认限流为普通 API 每用户 300 次/60 秒、匿名认证每 IP 30 次/60 秒、上传控制每用户 120 次/60 秒、上传分片每用户 600 次/60 秒，可按容量测试结果显式覆盖。
+
 为后续命令固定同一组 Compose 参数：
 
 ```powershell
@@ -114,6 +116,7 @@ Invoke-WebRequest "https://office.example.com/healthcheck" -UseBasicParsing
 - 未登录访问应用首页正常；未认证 API 返回 401，而不是 502 或静态页。
 - 注册验证码能通过真实 SMTP 到达；生产库不存在开发种子账号。
 - 普通文件上传、下载和 Range 请求正常。
+- 连续触发匿名认证限流时返回 HTTP 429、稳定业务错误和 `Retry-After`；已登录用户互不共享普通 API 与上传额度。
 - 创建并保存一份 Office 文档，OnlyOffice 回调成功。
 - 管理员可从应用入口进入 `/grafana/`，直接绕过应用身份访问被拒绝。
 - PostgreSQL、对象存储、队列、日志和告警均出现当前部署数据。

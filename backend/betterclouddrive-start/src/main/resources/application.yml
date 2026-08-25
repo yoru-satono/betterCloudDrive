@@ -178,10 +178,16 @@ drive:
     result-cleanup-interval-ms: ${TEAM_TASK_RESULT_CLEANUP_INTERVAL_MS:3600000}
     running-timeout-seconds: ${TEAM_TASK_RUNNING_TIMEOUT_SECONDS:1800}
   rate-limit:
-    default-permits: 100
-    default-period-seconds: 60
-    upload-permits: 10
-    upload-period-seconds: 60
+    default-permits: ${DRIVE_RATE_LIMIT_DEFAULT_PERMITS:300}
+    default-period-seconds: ${DRIVE_RATE_LIMIT_DEFAULT_PERIOD_SECONDS:60}
+    auth-permits: ${DRIVE_RATE_LIMIT_AUTH_PERMITS:30}
+    auth-period-seconds: ${DRIVE_RATE_LIMIT_AUTH_PERIOD_SECONDS:60}
+    upload-permits: ${DRIVE_RATE_LIMIT_UPLOAD_PERMITS:120}
+    upload-period-seconds: ${DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS:60}
+    upload-chunk-permits: ${DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERMITS:600}
+    upload-chunk-period-seconds: ${DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERIOD_SECONDS:60}
+  client-ip:
+    trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:${OBSERVABILITY_TRUSTED_PROXY_CIDRS:}}
 
 # Observability
 management:
@@ -254,4 +260,3 @@ observability:
     event-enabled: ${AUDIT_EVENT_ENABLED:${AUDIT_FULL_EVENT_ENABLED:true}}
     capture-body: ${AUDIT_CAPTURE_BODY:false}
     max-body-bytes: ${AUDIT_MAX_BODY_BYTES:8192}
-    trusted-proxy-cidrs: ${OBSERVABILITY_TRUSTED_PROXY_CIDRS:}

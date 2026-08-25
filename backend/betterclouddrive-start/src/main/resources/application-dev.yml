@@ -9,8 +9,12 @@ drive:
   rate-limit:
     default-permits: 10000
     default-period-seconds: 1
+    auth-permits: 10000
+    auth-period-seconds: 1
     upload-permits: 10000
     upload-period-seconds: 1
+    upload-chunk-permits: 10000
+    upload-chunk-period-seconds: 1
 
 logging:
   level:

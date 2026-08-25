@@ -182,8 +182,10 @@ function Wait-DockerServiceHealthy {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastStatus = "container not found"
     while ((Get-Date) -lt $deadline) {
-        $containerId = (& docker compose ps -q $Service 2>$null | Select-Object -First 1)
-        if ($LASTEXITCODE -eq 0 -and $containerId) {
+        $containerIds = @(& docker compose ps -q $Service 2>$null)
+        $composeExitCode = $LASTEXITCODE
+        $containerId = $containerIds | Select-Object -First 1
+        if ($composeExitCode -eq 0 -and $containerId) {
             $lastStatus = (& docker inspect --format "{{.State.Health.Status}}" $containerId 2>$null)
             if ($LASTEXITCODE -eq 0 -and $lastStatus -eq "healthy") {
                 Write-Host "$Service container is healthy"
@@ -193,6 +195,27 @@ function Wait-DockerServiceHealthy {
         Start-Sleep -Seconds 2
     }
     throw "$Service did not become healthy within ${TimeoutSeconds}s. Last status: $lastStatus"
+}
+
+function Set-BackendFunctionalTestRateLimits {
+    Invoke-WithEnv @{
+        DRIVE_RATE_LIMIT_DEFAULT_PERMITS = "10000"
+        DRIVE_RATE_LIMIT_DEFAULT_PERIOD_SECONDS = "1"
+        DRIVE_RATE_LIMIT_AUTH_PERMITS = "10000"
+        DRIVE_RATE_LIMIT_AUTH_PERIOD_SECONDS = "1"
+        DRIVE_RATE_LIMIT_UPLOAD_PERMITS = "10000"
+        DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS = "1"
+        DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERMITS = "10000"
+        DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERIOD_SECONDS = "1"
+    } {
+        Invoke-External "docker" @("compose", "up", "-d", "--no-deps", "--force-recreate", "backend")
+    }
+    Wait-DockerServiceHealthy "backend"
+}
+
+function Restore-BackendDefaultRateLimits {
+    Invoke-External "docker" @("compose", "up", "-d", "--no-deps", "--force-recreate", "backend")
+    Wait-DockerServiceHealthy "backend"
 }
 
 function Invoke-InDirectory {
@@ -286,24 +309,29 @@ try {
     if ($RunIntegration) {
         Invoke-Step "Backend Testcontainers integration tests" {
             Invoke-InDirectory "backend" {
-                Invoke-External "mvn" @("verify", "-Pintegration", "-DskipUnitTests", "-pl", "betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service", "-am")
+                Invoke-External "mvn" @("verify", "-Pintegration", "-DskipUnitTests", "-pl", "betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service,betterclouddrive-web", "-am")
             }
         }
     }
 
     if ($RunBlackbox) {
         Invoke-Step "Backend black-box tests" {
-            Invoke-InDirectory "backend-test" {
-                $pytest = Join-Path (Get-Location) ".venv/Scripts/pytest.exe"
-                if (Test-Path $pytest) {
-                        Invoke-External $pytest @("-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
-                } elseif (Get-Command "uv" -ErrorAction SilentlyContinue) {
-                    Invoke-WithEnv @{ UV_CACHE_DIR = "../.uv-cache" } {
-                        Invoke-External "uv" @("run", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
+            Set-BackendFunctionalTestRateLimits
+            try {
+                Invoke-InDirectory "backend-test" {
+                    $pytest = Join-Path (Get-Location) ".venv/Scripts/pytest.exe"
+                    if (Test-Path $pytest) {
+                            Invoke-External $pytest @("-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
+                    } elseif (Get-Command "uv" -ErrorAction SilentlyContinue) {
+                        Invoke-WithEnv @{ UV_CACHE_DIR = "../.uv-cache" } {
+                            Invoke-External "uv" @("run", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
+                        }
+                    } else {
+                        Invoke-External "python" @("-m", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
                     }
-                } else {
-                    Invoke-External "python" @("-m", "pytest", "-v", "-m", "not webdav and not office and not observability and not resilience and not security", "--junitxml=../test-results/blackbox/junit.xml")
                 }
+            } finally {
+                Restore-BackendDefaultRateLimits
             }
         }
     }
@@ -311,7 +339,7 @@ try {
     if ($RunSecurity) {
         Invoke-Step "Security acceptance tests" {
             Invoke-InDirectory "backend-test" {
-                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
+                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId; UV_CACHE_DIR = "../.uv-cache" } {
                     Invoke-External "uv" @("run", "pytest", "-v", "-m", "security", "--junitxml=../test-results/security/junit.xml")
                 }
             }
@@ -370,8 +398,13 @@ try {
         }
 
         Invoke-Step "Tauri E2E tests" {
-            Invoke-InDirectory "frontend" {
-                Invoke-External "pnpm" @("run", "test:e2e:tauri")
+            Set-BackendFunctionalTestRateLimits
+            try {
+                Invoke-InDirectory "frontend" {
+                    Invoke-External "pnpm" @("run", "test:e2e:tauri")
+                }
+            } finally {
+                Restore-BackendDefaultRateLimits
             }
         }
     }
@@ -379,7 +412,7 @@ try {
     if ($RunWebDav) {
         Invoke-Step "WebDAV protocol and rclone acceptance" {
             Invoke-InDirectory "backend-test" {
-                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
+                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId; UV_CACHE_DIR = "../.uv-cache" } {
                     Invoke-External "uv" @("run", "pytest", "-v", "-m", "webdav", "--junitxml=../test-results/webdav/junit.xml")
                 }
             }
@@ -399,7 +432,7 @@ try {
         }
         Invoke-Step "Observability acceptance" {
             Invoke-InDirectory "backend-test" {
-                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
+                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId; UV_CACHE_DIR = "../.uv-cache" } {
                     Invoke-External "uv" @("run", "pytest", "-v", "-m", "observability", "--junitxml=../test-results/observability/junit.xml")
                 }
             }
@@ -409,7 +442,7 @@ try {
     if ($RunResilience) {
         Invoke-Step "Resilience acceptance" {
             Invoke-InDirectory "backend-test" {
-                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId } {
+                Invoke-WithEnv @{ BCD_TEST_RUN_ID = $RunId; UV_CACHE_DIR = "../.uv-cache" } {
                     Invoke-External "uv" @("run", "pytest", "-v", "-m", "resilience", "--junitxml=../test-results/resilience/junit.xml")
                 }
             }

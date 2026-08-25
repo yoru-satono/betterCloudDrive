@@ -2,6 +2,7 @@ package com.betterclouddrive.web.observability;
 
 import com.betterclouddrive.common.context.RequestTraceContext;
 import com.betterclouddrive.service.OperationLogService;
+import com.betterclouddrive.web.security.ClientIpResolver;
 import com.betterclouddrive.web.security.UserPrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
@@ -21,7 +22,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.util.matcher.IpAddressMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -53,6 +53,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final OperationLogService operationLogService;
     private final Tracer tracer;
+    private final ClientIpResolver clientIpResolver;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -102,7 +103,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
         putMdc(RequestTraceContext.MDC_SPAN_ID, traceIds.spanId());
         putMdc(RequestTraceContext.MDC_METHOD, request.getMethod());
         putMdc(RequestTraceContext.MDC_PATH, request.getRequestURI());
-        putMdc(RequestTraceContext.MDC_CLIENT_IP, clientIp(request));
+        putMdc(RequestTraceContext.MDC_CLIENT_IP, clientIpResolver.resolve(request));
 
         putMdc("requestId", requestId);
         putMdc("traceId", traceIds.traceId());
@@ -135,7 +136,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
                 targetType,
                 null,
                 detail,
-                clientIp(request),
+                clientIpResolver.resolve(request),
                 request.getHeader("User-Agent"),
                 failure == null && status < 400 ? 1 : 0,
                 (int) Math.min(durationMs, Integer.MAX_VALUE),
@@ -168,7 +169,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
         event.put("status", response.getStatus());
         event.put("result", failure == null && response.getStatus() < 400 ? "success" : "failure");
         event.put("duration_ms", durationMs);
-        event.put("client_ip", clientIp(request));
+        event.put("client_ip", clientIpResolver.resolve(request));
         event.put("user_agent", request.getHeader("User-Agent"));
         event.put("headers", auditSanitizer.sanitizeHeaders(headers(request)));
         event.put("request_body", requestBody(request));
@@ -330,36 +331,6 @@ public class TraceAuditFilter extends OncePerRequestFilter {
             headers.put(name, request.getHeader(name));
         }
         return headers;
-    }
-
-    private String clientIp(HttpServletRequest request) {
-        if (!isTrustedProxy(request.getRemoteAddr())) {
-            return request.getRemoteAddr();
-        }
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            return forwarded.split(",")[0].trim();
-        }
-        String realIp = request.getHeader("X-Real-IP");
-        if (StringUtils.hasText(realIp)) {
-            return realIp;
-        }
-        return request.getRemoteAddr();
-    }
-
-    private boolean isTrustedProxy(String remoteAddress) {
-        if (!StringUtils.hasText(remoteAddress)) {
-            return false;
-        }
-        return properties.getAudit().getTrustedProxyCidrs().stream()
-                .filter(StringUtils::hasText)
-                .anyMatch(cidr -> {
-                    try {
-                        return new IpAddressMatcher(cidr.trim()).matches(remoteAddress);
-                    } catch (IllegalArgumentException ignored) {
-                        return false;
-                    }
-                });
     }
 
     private void putMdc(String key, String value) {
