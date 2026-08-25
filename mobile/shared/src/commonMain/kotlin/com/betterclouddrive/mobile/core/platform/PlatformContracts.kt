@@ -3,9 +3,9 @@ package com.betterclouddrive.mobile.core.platform
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.betterclouddrive.mobile.core.model.OfficeConfig
+import com.betterclouddrive.mobile.core.model.PreviewKind
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.model.StoredSession
-import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.InputProvider
 import io.ktor.utils.io.ByteReadChannel
@@ -39,20 +39,32 @@ data class PickedDestination(
     val displayName: String,
 )
 
+data class UploadPickResult(
+    val documents: List<PickedDocument>,
+    val rejectedCount: Int = 0,
+    val overflowCount: Int = 0,
+)
+
+data class DownloadRequest(
+    val fileName: String,
+    val mimeType: String? = null,
+)
+
 data class FileDigest(val md5: String, val size: Long)
 
 data class TransferScheduleSpec(
-    val taskId: String,
-    val direction: TransferDirection,
-    val remainingBytes: Long,
+    val batchId: String,
+    val taskIds: List<String>,
+    val uploadBytes: Long,
+    val downloadBytes: Long,
 )
 
 interface DocumentPicker {
     @Composable
-    fun UploadButton(enabled: Boolean, onPicked: (PickedDocument) -> Unit)
+    fun rememberUploadLauncher(maxItems: Int, onPicked: (UploadPickResult) -> Unit): () -> Unit
 
     @Composable
-    fun DownloadButton(fileName: String, enabled: Boolean, onPicked: (PickedDestination) -> Unit)
+    fun rememberDownloadLauncher(onPicked: (PickedDestination) -> Unit): (DownloadRequest) -> Unit
 }
 
 interface TransferFileAccess {
@@ -67,11 +79,12 @@ interface TransferFileAccess {
     suspend fun commitTemp(taskId: String, destinationHandle: String)
     suspend fun deleteTemp(taskId: String)
     suspend fun deleteAllTemps()
+    suspend fun releaseReadable(sourceHandle: String)
+    suspend fun releaseWritable(destinationHandle: String)
 }
 
 interface TransferScheduler {
     suspend fun schedule(spec: TransferScheduleSpec): Boolean
-    suspend fun cancel(taskId: String)
     suspend fun cancelAll()
     suspend fun scheduledTaskIds(): Set<String>
 }
@@ -79,4 +92,21 @@ interface TransferScheduler {
 interface OfficeRenderer {
     @Composable
     fun Render(config: OfficeConfig, modifier: Modifier, onStatus: (UiMessage) -> Unit)
+}
+
+data class MediaPreviewRequest(
+    val kind: PreviewKind,
+    val url: String,
+    val fileKey: String,
+    val initialPositionMillis: Long = 0,
+)
+
+interface MediaPreviewRenderer {
+    @Composable
+    fun Render(
+        request: MediaPreviewRequest,
+        modifier: Modifier,
+        onPositionChanged: (Long) -> Unit,
+        onError: (UiMessage) -> Unit,
+    )
 }

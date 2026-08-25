@@ -47,7 +47,7 @@ internal class AndroidOfficeRenderer : OfficeRenderer {
     }
 }
 
-private fun androidReachableUrl(input: String): String {
+internal fun androidReachableUrl(input: String): String {
     val normalized = input.trimEnd('/')
         .replace("http://localhost", "http://10.0.2.2")
         .replace("http://127.0.0.1", "http://10.0.2.2")

@@ -47,7 +47,10 @@ object AndroidAppContainerFactory {
             .setQueryCoroutineContext(Dispatchers.IO)
             .build()
         val fileAccess = AndroidTransferFileAccess(appContext)
-        val repository = TransferRepository(database.transferTaskDao())
+        val repository = TransferRepository(
+            database.transferTaskDao(),
+            purgeDeletedContent = database::purgeDeletedTransferContent,
+        )
         val scheduler = AndroidTransferScheduler(appContext)
         val engine = TransferEngine(backend, repository, fileAccess)
         val manager = TransferManager(backend, repository, scheduler, fileAccess)
@@ -60,6 +63,7 @@ object AndroidAppContainerFactory {
             transferEngine = engine,
             documentPicker = AndroidDocumentPicker(appContext),
             officeRenderer = AndroidOfficeRenderer(),
+            mediaPreviewRenderer = AndroidMediaPreviewRenderer(),
             localeProvider = AndroidLocaleProvider(appContext),
             applicationScope = applicationScope,
         )

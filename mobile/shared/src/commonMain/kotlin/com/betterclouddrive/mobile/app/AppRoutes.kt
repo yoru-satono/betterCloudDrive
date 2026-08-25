@@ -12,6 +12,12 @@ data object PersonalRoute : AppRoute
 data class PersonalFolderRoute(val folderId: Long) : AppRoute
 
 @Serializable
+data object PersonalSearchRoute : AppRoute
+
+@Serializable
+data class PersonalPreviewRoute(val fileId: Long) : AppRoute
+
+@Serializable
 data object TeamsRoute : AppRoute
 
 @Serializable

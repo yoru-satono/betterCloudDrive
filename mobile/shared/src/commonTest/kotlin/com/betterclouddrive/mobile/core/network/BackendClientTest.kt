@@ -362,6 +362,46 @@ class BackendClientTest {
     }
 
     @Test
+    fun searchTicketTextRangeAndPersonalOfficeUseStableContracts() = runTest {
+        val observed = mutableListOf<Pair<String, String?>>()
+        val engine = MockEngine { request ->
+            observed += request.url.toString() to request.headers[HttpHeaders.Range]
+            when (request.url.encodedPath) {
+                "/api/v1/files/search" -> jsonResponse(
+                    """{"code":200,"data":{"records":[{"id":7,"fileName":"note.txt"}],"total":1,"page":2,"size":50,"pages":2}}""",
+                )
+                "/api/v1/download/7/ticket" -> jsonResponse(
+                    """{"code":200,"data":{"url":"/api/v1/download/7?ticket=secret"}}""",
+                )
+                "/api/v1/office/files/7/config" -> jsonResponse(
+                    """{"code":200,"data":{"documentServerUrl":"https://office.example.com","editable":false,"config":{"type":"mobile"}}}""",
+                )
+                "/api/v1/download/7" -> respond(
+                    "hello",
+                    HttpStatusCode.PartialContent,
+                    headersOf(HttpHeaders.ContentType, ContentType.Text.Plain.toString()),
+                )
+                else -> error("unexpected ${request.url}")
+            }
+        }
+        val client = BackendClient(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals(7, client.searchPersonalFiles("note", 2, 50).records.single().id)
+        assertEquals("https://drive.example.com/api/v1/download/7?ticket=secret", client.createPersonalDownloadTicket(7))
+        assertFalse(client.loadPersonalOffice(7).editable)
+        assertEquals("hello", client.readPersonalText(7, 512 * 1024).decodeToString())
+
+        assertTrue(observed.any { it.first.endsWith("/files/search?q=note&page=2&size=50") })
+        assertTrue(observed.any { it.first.endsWith("/office/files/7/config?mobile=true") })
+        assertTrue(observed.any { it.first.endsWith("/download/7") && it.second == "bytes=0-524287" })
+    }
+
+    @Test
     fun restoreRefreshesExpiringSessionBeforeLoadingUser() = runTest {
         val store = FakeSessionStore(StoredSession("old", "refresh-1", 1, "https://drive.example.com"))
         val engine = MockEngine { request ->

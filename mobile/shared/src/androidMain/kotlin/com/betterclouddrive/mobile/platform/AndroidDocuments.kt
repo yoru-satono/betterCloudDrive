@@ -9,8 +9,7 @@ import android.os.Build
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,12 +17,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
+import com.betterclouddrive.mobile.core.platform.DownloadRequest
 import com.betterclouddrive.mobile.core.platform.FileDigest
 import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.core.platform.PickedDestination
 import com.betterclouddrive.mobile.core.platform.TransferFileAccess
-import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
-import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.platform.UploadPickResult
 import io.ktor.client.request.forms.InputProvider
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
@@ -38,52 +37,65 @@ import java.security.MessageDigest
 
 internal class AndroidDocumentPicker(private val context: Context) : DocumentPicker {
     @Composable
-    override fun UploadButton(enabled: Boolean, onPicked: (PickedDocument) -> Unit) {
-        val strings = LocalMobileStrings.current
-        var pendingDocument by remember { mutableStateOf<PickedDocument?>(null) }
+    override fun rememberUploadLauncher(maxItems: Int, onPicked: (UploadPickResult) -> Unit): () -> Unit {
+        require(maxItems > 0) { "document.invalidSelectionLimit" }
+        var pendingResult by remember { mutableStateOf<UploadPickResult?>(null) }
         val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-            pendingDocument?.let(onPicked)
-            pendingDocument = null
+            pendingResult?.let(onPicked)
+            pendingResult = null
         }
-        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let {
-                val document = describe(it, read = true)
-                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    pendingDocument = document
-                    notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else {
-                    onPicked(document)
+        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+            if (uris.isEmpty()) return@rememberLauncherForActivityResult
+            val unique = uris.distinctBy(Uri::toString)
+            val selected = unique.take(maxItems)
+            var rejected = 0
+            val documents = selected.mapNotNull { uri ->
+                runCatching { describe(uri, read = true) }.getOrElse {
+                    release(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    rejected++
+                    null
                 }
             }
+            val result = UploadPickResult(
+                documents = documents,
+                rejectedCount = rejected,
+                overflowCount = (unique.size - maxItems).coerceAtLeast(0),
+            )
+            if (documents.isNotEmpty() && needsNotificationPermission()) {
+                pendingResult = result
+                notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                onPicked(result)
+            }
         }
-        Button(enabled = enabled, onClick = {
-            launcher.launch(arrayOf("*/*"))
-        }) { Text(strings[MobileString.ChooseFile]) }
+        return { launcher.launch(arrayOf("*/*")) }
     }
 
     @Composable
-    override fun DownloadButton(fileName: String, enabled: Boolean, onPicked: (PickedDestination) -> Unit) {
-        val strings = LocalMobileStrings.current
+    override fun rememberDownloadLauncher(onPicked: (PickedDestination) -> Unit): (DownloadRequest) -> Unit {
+        var pendingRequest by remember { mutableStateOf<DownloadRequest?>(null) }
         var pendingDestination by remember { mutableStateOf<PickedDestination?>(null) }
         val notifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
             pendingDestination?.let(onPicked)
             pendingDestination = null
         }
-        val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val launcher = rememberLauncherForActivityResult(CreateDownloadDocument()) { uri ->
             uri?.let {
                 persist(it, Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                val destination = PickedDestination(it.toString(), fileName)
-                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                val destination = PickedDestination(it.toString(), pendingRequest?.fileName ?: "download")
+                if (needsNotificationPermission()) {
                     pendingDestination = destination
                     notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else {
                     onPicked(destination)
                 }
             }
+            pendingRequest = null
         }
-        Button(enabled = enabled, onClick = {
-            launcher.launch(fileName)
-        }) { Text(strings[MobileString.Download]) }
+        return { request ->
+            pendingRequest = request
+            launcher.launch(request)
+        }
     }
 
     private fun describe(uri: Uri, read: Boolean): PickedDocument {
@@ -102,6 +114,25 @@ internal class AndroidDocumentPicker(private val context: Context) : DocumentPic
     private fun persist(uri: Uri, flags: Int) {
         runCatching { context.contentResolver.takePersistableUriPermission(uri, flags) }
     }
+
+    private fun release(uri: Uri, flags: Int) {
+        runCatching { context.contentResolver.releasePersistableUriPermission(uri, flags) }
+    }
+
+    private fun needsNotificationPermission(): Boolean =
+        Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+}
+
+private class CreateDownloadDocument : ActivityResultContract<DownloadRequest, Uri?>() {
+    override fun createIntent(context: Context, input: DownloadRequest): Intent =
+        Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType(input.mimeType?.takeIf(String::isNotBlank) ?: "application/octet-stream")
+            .putExtra(Intent.EXTRA_TITLE, input.fileName)
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
+        if (resultCode == android.app.Activity.RESULT_OK) intent?.data else null
 }
 
 class AndroidTransferFileAccess(private val context: Context) : TransferFileAccess {
@@ -191,6 +222,24 @@ class AndroidTransferFileAccess(private val context: Context) : TransferFileAcce
 
     override suspend fun deleteAllTemps() = withContext(Dispatchers.IO) {
         tempDirectory.listFiles()?.filter { it.isFile && it.name.endsWith(".part") }?.forEach { it.delete() }
+        Unit
+    }
+
+    override suspend fun releaseReadable(sourceHandle: String) = withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.releasePersistableUriPermission(
+                Uri.parse(sourceHandle), Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        Unit
+    }
+
+    override suspend fun releaseWritable(destinationHandle: String) = withContext(Dispatchers.IO) {
+        runCatching {
+            context.contentResolver.releasePersistableUriPermission(
+                Uri.parse(destinationHandle), Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
         Unit
     }
 

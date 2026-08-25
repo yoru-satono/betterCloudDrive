@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP mobile · Stage 6</string>
+    <string name="stage_label">KMP mobile · Stage 8</string>
     <string name="restore_title">Can&apos;t connect to the server</string>
     <string name="session_preserved">Your local session remains encrypted</string>
     <string name="retry">Retry</string>
@@ -104,7 +104,23 @@
     <string name="created_at">Created</string>
     <string name="version_count">Versions</string>
     <string name="choose_file">Choose file</string>
+    <string name="choose_files">Choose files</string>
+    <string name="upload">Upload</string>
     <string name="download">Download</string>
+    <string name="upload_to_current_folder">Upload to current folder</string>
+    <string name="upload_queued_summary">Queued {0} file(s); skipped {1} unreadable and {2} over the limit</string>
+    <string name="upload_nothing_queued">No files queued; {0} unreadable and {1} over the limit</string>
+    <string name="view_transfers">View transfers</string>
+    <string name="uploads">Uploads {0}</string>
+    <string name="downloads">Downloads {0}</string>
+    <string name="uploads_empty">No upload tasks</string>
+    <string name="downloads_empty">No download tasks</string>
+    <string name="transfer_bytes">{0} / {1} · {2}%</string>
+    <string name="clear_finished">Clear finished</string>
+    <string name="clear_finished_title">Clear finished tasks?</string>
+    <string name="clear_finished_message">Remove {0} succeeded, failed, or canceled task(s). Failed tasks can no longer be retried.</string>
+    <string name="clear">Clear</string>
+    <string name="error_background_scheduling">The background transfer could not be scheduled. Try again while the app is open.</string>
     <string name="create_folder">New folder</string>
     <string name="rename">Rename</string>
     <string name="move">Move</string>
@@ -139,4 +155,21 @@
     <string name="notification_transferring">Transferring</string>
     <string name="notification_uploading">Uploading {0}{1}</string>
     <string name="notification_downloading">Downloading {0}{1}</string>
+    <string name="search">Search</string>
+    <string name="search_files">Search personal files</string>
+    <string name="search_hint">Enter a file or folder name</string>
+    <string name="search_initial">Search all files in your personal space</string>
+    <string name="search_no_results">No results for “{0}”</string>
+    <string name="search_failed">Search failed</string>
+    <string name="search_result_count">{0} result(s)</string>
+    <string name="open_location">Open file location</string>
+    <string name="preview">Preview</string>
+    <string name="preview_loading">Loading preview</string>
+    <string name="preview_truncated">Only the first 512 KiB is shown. Download the file to view all content.</string>
+    <string name="preview_unsupported">Preview unavailable</string>
+    <string name="preview_unsupported_detail">This file type is not supported for inline preview.</string>
+    <string name="preview_empty_text">This text file is empty.</string>
+    <string name="preview_read_only">Read-only preview</string>
+    <string name="error_preview_failed">Preview could not be loaded. Try again.</string>
+    <string name="retry_preview">Retry preview</string>
 </resources>

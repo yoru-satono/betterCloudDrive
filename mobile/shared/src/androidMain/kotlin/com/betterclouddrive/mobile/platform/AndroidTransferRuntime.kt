@@ -38,20 +38,26 @@ import com.betterclouddrive.mobile.core.platform.TransferScheduler
 import com.betterclouddrive.mobile.core.platform.TransferScheduleSpec
 import com.betterclouddrive.mobile.feature.transfers.DEFAULT_CHUNK_SIZE
 import com.betterclouddrive.mobile.feature.transfers.TransferRunResult
+import com.betterclouddrive.mobile.feature.transfers.TransferBatchExecutor
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
@@ -62,9 +68,18 @@ object AndroidRuntime {
 
     fun install(value: AppContainer) { container = value }
 
-    suspend fun execute(taskId: String, onProgress: suspend (TransferTask) -> Unit = {}): TransferRunResult = coroutineScope {
+    suspend fun executeBatch(taskIds: List<String>, onProgress: suspend (TransferTask) -> Unit = {}): TransferRunResult {
         container.backend.initialize()
+        return TransferBatchExecutor(
+            findTask = container.transfers::find,
+            runTask = { taskId -> executeTask(taskId, onProgress) },
+            onTaskSettled = container.transfers::onTaskSettled,
+        ).execute(taskIds)
+    }
+
+    private suspend fun executeTask(taskId: String, onProgress: suspend (TransferTask) -> Unit): TransferRunResult = coroutineScope {
         val progressLimiter = TransferProgressLimiter()
+        val execution = async { container.transferEngine.run(taskId) }
         val observer = launch {
             container.transfers.tasks
                 .map { tasks -> tasks.firstOrNull { it.id == taskId } }
@@ -72,10 +87,19 @@ object AndroidRuntime {
                 .distinctUntilChanged()
                 .collect { task ->
                     if (progressLimiter.shouldPublish(task)) onProgress(task)
+                    if (task.status == TransferStatus.PAUSED || task.status == TransferStatus.CANCELED) execution.cancel()
                 }
         }
         try {
-            container.transferEngine.run(taskId)
+            execution.await()
+        } catch (cancelled: CancellationException) {
+            currentCoroutineContext().ensureActive()
+            val status = container.transfers.tasks.valueOrNull(taskId)?.status
+            if (status in setOf(TransferStatus.PAUSED, TransferStatus.CANCELED)) {
+                TransferRunResult.COMPLETE
+            } else {
+                throw cancelled
+            }
         } finally {
             observer.cancel()
         }
@@ -84,6 +108,9 @@ object AndroidRuntime {
     fun pause(taskId: String) { scope.launch { container.transfers.pause(taskId) } }
     fun cancel(taskId: String) { scope.launch { container.transfers.cancel(taskId) } }
 }
+
+private suspend fun kotlinx.coroutines.flow.Flow<List<TransferTask>>.valueOrNull(taskId: String): TransferTask? =
+    first().firstOrNull { it.id == taskId }
 
 internal class TransferProgressLimiter(
     private val minimumIntervalMillis: Long = DEFAULT_NOTIFICATION_INTERVAL_MILLIS,
@@ -119,17 +146,11 @@ internal class TransferProgressLimiter(
 
 class AndroidTransferScheduler(private val context: Context) : TransferScheduler {
     override suspend fun schedule(spec: TransferScheduleSpec): Boolean {
+        if (spec.taskIds.isEmpty()) return false
         if (transferRuntimeForSdk(Build.VERSION.SDK_INT) == AndroidTransferRuntime.UIDT) {
             return runCatching { scheduleUidt(spec) }.getOrDefault(false)
         }
-        return scheduleWorker(spec.taskId)
-    }
-
-    override suspend fun cancel(taskId: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            context.getSystemService(JobScheduler::class.java).cancel(jobId(taskId))
-        }
-        WorkManager.getInstance(context).cancelUniqueWork(workName(taskId)).result.get()
+        return scheduleWorker(spec)
     }
 
     override suspend fun cancelAll() {
@@ -146,37 +167,41 @@ class AndroidTransferScheduler(private val context: Context) : TransferScheduler
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             context.getSystemService(JobScheduler::class.java).allPendingJobs
                 .filter { it.service.className == AndroidTransferJobService::class.java.name }
-                .mapNotNullTo(result) { it.extras.getString(TASK_ID) }
+                .flatMap { it.extras.getStringArray(TASK_IDS)?.asList().orEmpty() }
+                .toCollection(result)
         }
         WorkManager.getInstance(context).getWorkInfosByTag(WORK_TAG).get()
             .filterNot { it.state.isFinished }
-            .mapNotNullTo(result) { it.tags.firstOrNull { tag -> tag.startsWith(TASK_TAG_PREFIX) }?.removePrefix(TASK_TAG_PREFIX) }
+            .flatMap { info -> info.tags.filter { it.startsWith(TASK_TAG_PREFIX) }.map { it.removePrefix(TASK_TAG_PREFIX) } }
+            .toCollection(result)
         result
     }
 
-    private suspend fun scheduleWorker(taskId: String): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun scheduleWorker(spec: TransferScheduleSpec): Boolean = withContext(Dispatchers.IO) {
         val manager = WorkManager.getInstance(context)
-        val existing = manager.getWorkInfosForUniqueWork(workName(taskId)).get()
+        val existing = manager.getWorkInfosForUniqueWork(workName(spec.batchId)).get()
         if (existing.any { !it.state.isFinished }) return@withContext true
-        val work = OneTimeWorkRequestBuilder<AndroidTransferWorker>()
-            .setInputData(workDataOf(TASK_ID to taskId))
+        val builder = OneTimeWorkRequestBuilder<AndroidTransferWorker>()
+            .setInputData(workDataOf(BATCH_ID to spec.batchId, TASK_IDS to spec.taskIds.toTypedArray()))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresStorageNotLow(true).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag(WORK_TAG)
-            .addTag("$TASK_TAG_PREFIX$taskId")
-            .build()
-        manager.enqueueUniqueWork(workName(taskId), ExistingWorkPolicy.REPLACE, work).result.get()
+        spec.taskIds.forEach { builder.addTag("$TASK_TAG_PREFIX$it") }
+        manager.enqueueUniqueWork(workName(spec.batchId), ExistingWorkPolicy.KEEP, builder.build()).result.get()
         true
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun scheduleUidt(spec: TransferScheduleSpec): Boolean {
-        val extras = PersistableBundle().apply { putString(TASK_ID, spec.taskId) }
+        val extras = PersistableBundle().apply {
+            putString(BATCH_ID, spec.batchId)
+            putStringArray(TASK_IDS, spec.taskIds.toTypedArray())
+        }
         val network = NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build()
-        val bytes = spec.remainingBytes.coerceAtLeast(0)
-        val downloadBytes = if (spec.direction == TransferDirection.DOWNLOAD) bytes else 0
-        val uploadBytes = if (spec.direction == TransferDirection.UPLOAD) bytes else 0
-        val builder = JobInfo.Builder(jobId(spec.taskId), ComponentName(context, AndroidTransferJobService::class.java))
+        val downloadBytes = spec.downloadBytes.coerceAtLeast(0)
+        val uploadBytes = spec.uploadBytes.coerceAtLeast(0)
+        val bytes = if (Long.MAX_VALUE - downloadBytes < uploadBytes) Long.MAX_VALUE else downloadBytes + uploadBytes
+        val builder = JobInfo.Builder(jobId(spec.batchId), ComponentName(context, AndroidTransferJobService::class.java))
             .setExtras(extras)
             .setRequiredNetwork(network)
             .setPersisted(true)
@@ -189,11 +214,12 @@ class AndroidTransferScheduler(private val context: Context) : TransferScheduler
     }
 
     companion object {
-        const val TASK_ID = "transfer_task_id"
+        const val BATCH_ID = "transfer_batch_id"
+        const val TASK_IDS = "transfer_task_ids"
         const val WORK_TAG = "bcd-transfers"
         const val TASK_TAG_PREFIX = "bcd-transfer-task:"
-        fun workName(taskId: String) = "bcd-transfer-$taskId"
-        fun jobId(taskId: String): Int = ((taskId.hashCode() and Int.MAX_VALUE) % 900_000) + 10_000
+        fun workName(batchId: String) = "bcd-transfer-batch-$batchId"
+        fun jobId(batchId: String): Int = ((batchId.hashCode() and Int.MAX_VALUE) % 900_000) + 10_000
     }
 }
 
@@ -203,11 +229,13 @@ fun transferRuntimeForSdk(sdk: Int): AndroidTransferRuntime =
 
 class AndroidTransferWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val taskId = inputData.getString(AndroidTransferScheduler.TASK_ID) ?: return Result.failure()
+        val batchId = inputData.getString(AndroidTransferScheduler.BATCH_ID) ?: return Result.failure()
+        val taskIds = inputData.getStringArray(AndroidTransferScheduler.TASK_IDS)?.asList().orEmpty()
+        if (taskIds.isEmpty()) return Result.failure()
         val strings = androidMobileStrings(applicationContext)
-        setForeground(transferForegroundInfo(applicationContext, taskId, strings[MobileString.NotificationPreparing]))
-        return when (AndroidRuntime.execute(taskId) { task ->
-            setForeground(transferForegroundInfo(applicationContext, taskId, task.notificationText(strings), task))
+        setForeground(transferForegroundInfo(applicationContext, batchId, strings[MobileString.NotificationPreparing]))
+        return when (AndroidRuntime.executeBatch(taskIds) { task ->
+            setForeground(transferForegroundInfo(applicationContext, batchId, task.notificationText(strings), task))
         }) {
             TransferRunResult.RETRY -> Result.retry()
             else -> Result.success()
@@ -220,26 +248,30 @@ class AndroidTransferJobService : JobService() {
     private val jobs = mutableMapOf<Int, Job>()
 
     override fun onStartJob(params: JobParameters): Boolean {
-        val taskId = params.extras.getString(AndroidTransferScheduler.TASK_ID) ?: return false
+        val batchId = params.extras.getString(AndroidTransferScheduler.BATCH_ID) ?: return false
+        val taskIds = params.extras.getStringArray(AndroidTransferScheduler.TASK_IDS)?.asList().orEmpty()
+        if (taskIds.isEmpty()) return false
         val strings = androidMobileStrings(this)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             setNotification(
                 params,
-                AndroidTransferScheduler.jobId(taskId),
-                transferNotification(this, taskId, strings[MobileString.NotificationTransferring]),
+                AndroidTransferScheduler.jobId(batchId),
+                transferNotification(this, batchId, strings[MobileString.NotificationTransferring]),
                 JOB_END_NOTIFICATION_POLICY_REMOVE,
             )
         }
         jobs[params.jobId] = scope.launch {
-            val result = AndroidRuntime.execute(taskId) { task ->
+            val transferred = mutableMapOf<String, Pair<TransferDirection, Long>>()
+            val result = AndroidRuntime.executeBatch(taskIds) { task ->
                 setNotification(
                     params,
                     params.jobId,
-                    transferNotification(this@AndroidTransferJobService, taskId, task.notificationText(strings), task),
+                    transferNotification(this@AndroidTransferJobService, batchId, task.notificationText(strings), task),
                     JOB_END_NOTIFICATION_POLICY_REMOVE,
                 )
-                val downloaded = if (task.direction == TransferDirection.DOWNLOAD) task.bytesDone else 0
-                val uploaded = if (task.direction == TransferDirection.UPLOAD) task.bytesDone else 0
+                transferred[task.id] = task.direction to task.bytesDone.coerceAtLeast(0)
+                val downloaded = transferred.values.filter { it.first == TransferDirection.DOWNLOAD }.sumBytes()
+                val uploaded = transferred.values.filter { it.first == TransferDirection.UPLOAD }.sumBytes()
                 updateTransferredNetworkBytes(params, downloaded, uploaded)
             }
             jobs.remove(params.jobId)
@@ -250,8 +282,6 @@ class AndroidTransferJobService : JobService() {
 
     override fun onStopJob(params: JobParameters): Boolean {
         jobs.remove(params.jobId)?.cancel()
-        val taskId = params.extras.getString(AndroidTransferScheduler.TASK_ID)
-        if (params.stopReason == JobParameters.STOP_REASON_USER && taskId != null) AndroidRuntime.pause(taskId)
         return params.stopReason !in setOf(JobParameters.STOP_REASON_USER, JobParameters.STOP_REASON_CANCELLED_BY_APP)
     }
 
@@ -263,7 +293,7 @@ class AndroidTransferJobService : JobService() {
 
 class TransferActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val taskId = intent.getStringExtra(AndroidTransferScheduler.TASK_ID) ?: return
+        val taskId = intent.getStringExtra(TASK_ID) ?: return
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
@@ -280,28 +310,31 @@ class TransferActionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_PAUSE = "com.betterclouddrive.mobile.PAUSE_TRANSFER"
         const val ACTION_CANCEL = "com.betterclouddrive.mobile.CANCEL_TRANSFER"
+        const val TASK_ID = "transfer_action_task_id"
     }
 }
 
-private fun transferForegroundInfo(context: Context, taskId: String, text: String, task: TransferTask? = null): ForegroundInfo = ForegroundInfo(
-    AndroidTransferScheduler.jobId(taskId),
-    transferNotification(context, taskId, text, task),
+private fun transferForegroundInfo(context: Context, batchId: String, text: String, task: TransferTask? = null): ForegroundInfo = ForegroundInfo(
+    AndroidTransferScheduler.jobId(batchId),
+    transferNotification(context, batchId, text, task),
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
 )
 
-fun transferNotification(context: Context, taskId: String, text: String, task: TransferTask? = null): Notification {
+fun transferNotification(context: Context, batchId: String, text: String, task: TransferTask? = null): Notification {
     createTransferChannel(context)
     val strings = androidMobileStrings(context)
     val progress = task?.takeIf { it.bytesTotal > 0 }?.progressPercent() ?: 0
-    return NotificationCompat.Builder(context, CHANNEL_ID)
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.stat_sys_upload)
         .setContentTitle(strings[MobileString.NotificationTransferTitle])
         .setContentText(text)
         .setProgress(100, progress, task?.bytesTotal?.let { it <= 0 } ?: true)
         .setOngoing(true)
-        .addAction(0, strings[MobileString.Pause], actionIntent(context, taskId, TransferActionReceiver.ACTION_PAUSE, 1))
-        .addAction(0, strings[MobileString.Cancel], actionIntent(context, taskId, TransferActionReceiver.ACTION_CANCEL, 2))
-        .build()
+    task?.takeIf { it.status in setOf(TransferStatus.QUEUED, TransferStatus.PREPARING, TransferStatus.RUNNING) }?.let {
+        builder.addAction(0, strings[MobileString.Pause], actionIntent(context, batchId, it.id, TransferActionReceiver.ACTION_PAUSE, 1))
+        builder.addAction(0, strings[MobileString.Cancel], actionIntent(context, batchId, it.id, TransferActionReceiver.ACTION_CANCEL, 2))
+    }
+    return builder.build()
 }
 
 private fun createTransferChannel(context: Context) {
@@ -312,12 +345,12 @@ private fun createTransferChannel(context: Context) {
     }
 }
 
-private fun actionIntent(context: Context, taskId: String, action: String, offset: Int): PendingIntent {
+private fun actionIntent(context: Context, batchId: String, taskId: String, action: String, offset: Int): PendingIntent {
     val intent = Intent(context, TransferActionReceiver::class.java).setAction(action)
-        .putExtra(AndroidTransferScheduler.TASK_ID, taskId)
+        .putExtra(TransferActionReceiver.TASK_ID, taskId)
     return PendingIntent.getBroadcast(
         context,
-        AndroidTransferScheduler.jobId(taskId) + offset,
+        AndroidTransferScheduler.jobId(batchId) + offset,
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
@@ -334,3 +367,8 @@ private fun TransferTask.notificationText(strings: MobileStrings): String {
 
 private fun TransferTask.progressPercent(): Int =
     ((bytesDone.coerceIn(0, bytesTotal).toDouble() / bytesTotal.toDouble()) * 100).toInt()
+
+private fun List<Pair<TransferDirection, Long>>.sumBytes(): Long = fold(0L) { total, value ->
+    val bytes = value.second
+    if (Long.MAX_VALUE - total < bytes) Long.MAX_VALUE else total + bytes
+}

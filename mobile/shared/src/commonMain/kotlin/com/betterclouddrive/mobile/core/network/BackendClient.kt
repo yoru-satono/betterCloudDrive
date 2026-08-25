@@ -6,6 +6,7 @@ import com.betterclouddrive.mobile.core.model.AuthTokens
 import com.betterclouddrive.mobile.core.model.CompleteResult
 import com.betterclouddrive.mobile.core.model.CreatePersonalFolderRequest
 import com.betterclouddrive.mobile.core.model.DeletePersonalFilesRequest
+import com.betterclouddrive.mobile.core.model.DownloadTicketResponse
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.InitUploadRequest
 import com.betterclouddrive.mobile.core.model.InitUploadResult
@@ -60,6 +61,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.readAvailable
 
 class BackendClient(
     engineClient: HttpClient,
@@ -254,6 +256,56 @@ class BackendClient(
         return page.records
     }
 
+    suspend fun searchPersonalFiles(query: String, page: Int, size: Int): PageResult<FileItem> =
+        authenticatedEnvelope { token ->
+            client.get(url("files/search")) {
+                bearer(token)
+                url {
+                    parameters.append("q", query)
+                    parameters.append("page", page.toString())
+                    parameters.append("size", size.toString())
+                }
+            }
+        }
+
+    suspend fun createPersonalDownloadTicket(fileId: Long): String {
+        val response: DownloadTicketResponse = authenticatedEnvelope { token ->
+            client.post(url("download/$fileId/ticket")) { bearer(token) }
+        }
+        return when {
+            response.url.startsWith("http://") || response.url.startsWith("https://") -> response.url
+            response.url.startsWith("/") -> serverBaseUrl.trimEnd('/') + response.url
+            else -> ServerAddress.apiUrl(serverBaseUrl, response.url, allowCleartextServer)
+        }
+    }
+
+    suspend fun loadPersonalOffice(fileId: Long): OfficeConfig = authenticatedEnvelope { token ->
+        client.get(url("office/files/$fileId/config")) {
+            bearer(token)
+            url { parameters.append("mobile", "true") }
+        }
+    }
+
+    suspend fun readPersonalText(fileId: Long, maxBytes: Int): ByteArray {
+        require(maxBytes > 0) { "preview.invalidTextLimit" }
+        return authenticatedStream("download/$fileId", "bytes=0-${maxBytes - 1}") { status, headers, channel ->
+            if (status == HttpStatusCode.RequestedRangeNotSatisfiable &&
+                headers[HttpHeaders.ContentRange]?.endsWith("/0") == true
+            ) return@authenticatedStream ByteArray(0)
+            if (status != HttpStatusCode.OK && status != HttpStatusCode.PartialContent) {
+                throw ApiException(status.value, "error.previewFailed")
+            }
+            val output = ByteArray(maxBytes)
+            var offset = 0
+            while (offset < output.size) {
+                val count = channel.readAvailable(output, offset, output.size - offset)
+                if (count < 0) break
+                offset += count
+            }
+            output.copyOf(offset)
+        }
+    }
+
     suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig = authenticatedEnvelope { token ->
         client.get(url("teams/$teamId/office/files/$fileId/config")) {
             bearer(token)
@@ -330,13 +382,23 @@ class BackendClient(
         fileId: Long,
         rangeStart: Long,
         consume: suspend (HttpStatusCode, Headers, ByteReadChannel) -> T,
+    ): T = authenticatedStream(
+        scope.downloadPath(fileId),
+        if (rangeStart > 0) "bytes=$rangeStart-" else null,
+        consume,
+    )
+
+    private suspend fun <T> authenticatedStream(
+        path: String,
+        range: String?,
+        consume: suspend (HttpStatusCode, Headers, ByteReadChannel) -> T,
     ): T {
         var used = ensureFreshSession()
         var refreshed = false
         while (true) {
-            val attempt = client.prepareGet(url(scope.downloadPath(fileId))) {
+            val attempt = client.prepareGet(url(path)) {
                 bearer(used.accessToken)
-                if (rangeStart > 0) header(HttpHeaders.Range, "bytes=$rangeStart-")
+                range?.let { header(HttpHeaders.Range, it) }
             }.execute { response ->
                 if (response.status == HttpStatusCode.Unauthorized) {
                     StreamingAttempt.Unauthorized(response.unauthorizedCode())

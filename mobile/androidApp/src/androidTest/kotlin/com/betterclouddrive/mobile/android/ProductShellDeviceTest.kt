@@ -6,7 +6,6 @@ import android.app.Notification
 import android.content.res.Configuration
 import android.os.Build
 import android.os.LocaleList
-import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -24,6 +23,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollToNode
@@ -34,6 +34,8 @@ import com.betterclouddrive.mobile.app.AppPhase
 import com.betterclouddrive.mobile.app.AppUiState
 import com.betterclouddrive.mobile.app.DirectoryPageState
 import com.betterclouddrive.mobile.app.PersonalFilesUiState
+import com.betterclouddrive.mobile.app.PersonalSearchUiState
+import com.betterclouddrive.mobile.app.PersonalPreviewUiState
 import com.betterclouddrive.mobile.app.ProductShell
 import com.betterclouddrive.mobile.app.ProductShellActions
 import com.betterclouddrive.mobile.app.FileMutationKind
@@ -47,18 +49,30 @@ import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.mobileStringsFor
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
+import com.betterclouddrive.mobile.core.platform.DownloadRequest
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
+import com.betterclouddrive.mobile.core.platform.MediaPreviewRenderer
+import com.betterclouddrive.mobile.core.platform.MediaPreviewRequest
 import com.betterclouddrive.mobile.core.platform.PickedDestination
-import com.betterclouddrive.mobile.core.platform.PickedDocument
+import com.betterclouddrive.mobile.core.platform.UploadPickResult
+import com.betterclouddrive.mobile.core.platform.TransferScheduleSpec
+import com.betterclouddrive.mobile.platform.AndroidTransferScheduler
 import com.betterclouddrive.mobile.platform.transferNotification
 import com.betterclouddrive.mobile.designsystem.BetterCloudDriveTheme
 import com.betterclouddrive.mobile.feature.files.BreadcrumbEntry
+import com.betterclouddrive.mobile.feature.transfers.TransferDirection
+import com.betterclouddrive.mobile.feature.transfers.TransferScope
+import com.betterclouddrive.mobile.feature.transfers.TransferStatus
+import com.betterclouddrive.mobile.feature.transfers.TransferTask
 import com.betterclouddrive.mobile.feature.files.FileViewMode
+import com.betterclouddrive.mobile.feature.files.previewKind
 import org.junit.Rule
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import kotlinx.coroutines.runBlocking
 import java.util.Locale
 
 @RunWith(AndroidJUnit4::class)
@@ -79,24 +93,29 @@ class ProductShellDeviceTest {
     @Test
     fun transferNotificationUsesCurrentApplicationLanguage() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val task = TransferTask(
+            id = "i18n", direction = TransferDirection.UPLOAD, status = TransferStatus.RUNNING,
+            serverBaseUrl = "https://drive.example.com", scope = TransferScope.Personal(), fileName = "file.bin",
+            bytesTotal = 1, createdAt = 1, updatedAt = 1,
+        )
         fun localized(tag: String) = context.createConfigurationContext(
             Configuration(context.resources.configuration).apply { setLocales(LocaleList.forLanguageTags(tag)) },
         )
 
-        val english = transferNotification(localized("en-US"), "i18n-en", "Progress")
+        val english = transferNotification(localized("en-US"), "i18n-en", "Progress", task)
         assertEquals("BetterCloudDrive file transfer", english.extras.getString(Notification.EXTRA_TITLE))
         assertEquals(listOf("Pause", "Cancel"), english.actions.map { it.title.toString() })
 
-        val chinese = transferNotification(localized("zh-CN"), "i18n-zh", "进度")
+        val chinese = transferNotification(localized("zh-CN"), "i18n-zh", "进度", task)
         assertEquals("BetterCloudDrive 文件传输", chinese.extras.getString(Notification.EXTRA_TITLE))
         assertEquals(listOf("暂停", "取消"), chinese.actions.map { it.title.toString() })
 
-        val singapore = transferNotification(localized("zh-SG"), "i18n-zh-sg", "进度")
+        val singapore = transferNotification(localized("zh-SG"), "i18n-zh-sg", "进度", task)
         assertEquals("BetterCloudDrive 文件传输", singapore.extras.getString(Notification.EXTRA_TITLE))
         assertEquals(listOf("暂停", "取消"), singapore.actions.map { it.title.toString() })
 
         listOf("zh", "zh-Hans", "zh-Hant", "zh-TW", "zh-HK", "zh-MO").forEach { tag ->
-            val fallback = transferNotification(localized(tag), "i18n-fallback-$tag", "Progress")
+            val fallback = transferNotification(localized(tag), "i18n-fallback-$tag", "Progress", task)
             assertEquals("BetterCloudDrive file transfer", fallback.extras.getString(Notification.EXTRA_TITLE))
             assertEquals(listOf("Pause", "Cancel"), fallback.actions.map { it.title.toString() })
         }
@@ -124,6 +143,48 @@ class ProductShellDeviceTest {
         composeRule.onNodeWithTag("main-navigation-bar").assertIsNotDisplayed()
         composeRule.onNodeWithTag("diagnostics-back").performClick()
         composeRule.onNodeWithTag("profile-content").assertIsDisplayed()
+    }
+
+    @Test
+    fun api34AcceptsVisibleUserInitiatedBatchJob() = runBlocking {
+        if (Build.VERSION.SDK_INT < 34) return@runBlocking
+        composeRule.setContent { Text("UIDT") }
+        composeRule.waitForIdle()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val scheduler = AndroidTransferScheduler(context)
+        val batchId = "device-uidt-${System.nanoTime()}"
+        try {
+            assertTrue(scheduler.schedule(TransferScheduleSpec(batchId, listOf("one", "two"), 1024, 2048)))
+        } finally {
+            scheduler.cancelAll()
+        }
+    }
+
+    @Test
+    fun transferTabsBadgeProgressAndTerminalCleanupAreAvailable() {
+        val tasks = listOf(
+            TransferTask(
+                id = "upload-active", direction = TransferDirection.UPLOAD, status = TransferStatus.RUNNING,
+                serverBaseUrl = "https://drive.example.com", scope = TransferScope.Personal(), fileName = "large.bin",
+                bytesDone = 25, bytesTotal = 100, createdAt = 1, updatedAt = 2,
+            ),
+            TransferTask(
+                id = "download-done", direction = TransferDirection.DOWNLOAD, status = TransferStatus.SUCCEEDED,
+                serverBaseUrl = "https://drive.example.com", scope = TransferScope.Personal(), fileName = "saved.bin",
+                bytesDone = 200, bytesTotal = 200, createdAt = 3, updatedAt = 4,
+            ),
+        )
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(debugToolsEnabled = true, transfers = tasks) } }
+
+        composeRule.onNodeWithTag("nav-transfers-badge", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag("nav-transfers").performClick()
+        composeRule.onNodeWithTag("transfer-task-upload-active").assertIsDisplayed()
+        composeRule.onNodeWithText("25 B / 100 B · 25%").assertIsDisplayed()
+        composeRule.onNodeWithTag("transfer-tab-download").performClick()
+        composeRule.onNodeWithTag("transfer-task-download-done").assertIsDisplayed()
+        composeRule.onNodeWithTag("transfer-clear-finished").performClick()
+        composeRule.onNodeWithTag("transfer-clear-confirm").performClick()
+        composeRule.onNodeWithTag("transfer-task-download-done").assertIsNotDisplayed()
     }
 
     @Test
@@ -165,6 +226,22 @@ class ProductShellDeviceTest {
         composeRule.onNodeWithTag("nav-teams").performClick()
         composeRule.onNodeWithTag("nav-personal").performClick()
         composeRule.onNodeWithTag("personal-file-40").assertIsDisplayed()
+    }
+
+    @Test
+    fun personalSearchOpensTextPreviewAndReturnsToResults() {
+        val file = FileItem(id = 71, fileName = "search-note.txt", mimeType = "text/plain", fileSize = 5)
+        composeRule.setContent {
+            BetterCloudDriveTheme { TestShell(debugToolsEnabled = false, files = listOf(file)) }
+        }
+
+        composeRule.onNodeWithTag("personal-search").performClick()
+        composeRule.onNodeWithTag("personal-search-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("search-input").performTextInput("note")
+        composeRule.onNodeWithTag("search-result-71").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("text-preview-content").assertIsDisplayed()
+        composeRule.onNodeWithTag("preview-back").performClick()
+        composeRule.onNodeWithTag("search-result-71").assertIsDisplayed()
     }
 
     @Test
@@ -310,12 +387,16 @@ private fun TestShell(
     debugToolsEnabled: Boolean,
     files: List<FileItem> = emptyList(),
     tree: Map<Long?, List<FileItem>> = emptyMap(),
+    transfers: List<TransferTask> = emptyList(),
 ) {
     val rootItems = tree[null] ?: files
     val root = remember(rootItems) {
         DirectoryPageState(items = rootItems, hasLoaded = true, page = 1, pages = 1, total = rootItems.size.toLong())
     }
     var personal by remember(files) { mutableStateOf(PersonalFilesUiState(current = root)) }
+    var search by remember { mutableStateOf(PersonalSearchUiState()) }
+    var preview by remember { mutableStateOf(PersonalPreviewUiState()) }
+    var transferTasks by remember(transfers) { mutableStateOf(transfers) }
     val locales = LocalConfiguration.current.locales
     val strings = mobileStringsFor((0 until locales.size()).map { locales[it].toLanguageTag() })
     CompositionLocalProvider(LocalMobileStrings provides strings) {
@@ -325,9 +406,13 @@ private fun TestShell(
             server = "https://drive.example.com",
             user = UserProfile(id = 1, username = "test-user", email = "test@example.com"),
             personalFiles = personal,
+            search = search,
+            preview = preview,
+            transfers = transferTasks,
         ),
         documentPicker = TestDocumentPicker,
         officeRenderer = TestOfficeRenderer,
+        mediaPreviewRenderer = TestMediaPreviewRenderer,
         roomTaskCount = { 0 },
         actions = ProductShellActions(
             activatePersonalRoute = { folderId ->
@@ -414,12 +499,43 @@ private fun TestShell(
             confirmFolderPicker = { personal = personal.copy(folderPicker = null) },
             consumeFileFeedback = { personal = personal.copy(feedback = null) },
             updatePersonalScrollAnchor = {},
-            upload = {},
+            updateSearchQuery = { query ->
+                search = search.copy(
+                    query = query,
+                    submittedQuery = query.trim(),
+                    items = if (query.isBlank()) emptyList() else rootItems.filter { it.fileName.contains(query.trim(), true) },
+                    page = if (query.isBlank()) 0 else 1,
+                    pages = 1,
+                )
+            },
+            submitSearch = {},
+            retrySearch = {},
+            loadMoreSearch = {},
+            updateSearchScrollAnchor = { search = search.copy(scrollAnchorId = it) },
+            prepareOpenSearchLocation = {},
+            openPreview = { id ->
+                val file = rootItems.firstOrNull { it.id == id }
+                preview = PersonalPreviewUiState(
+                    fileId = id,
+                    file = file,
+                    kind = file?.previewKind(),
+                    text = if (file?.previewKind() == com.betterclouddrive.mobile.core.model.PreviewKind.TEXT) "hello" else null,
+                )
+            },
+            retryPreview = {},
+            closePreview = { preview = PersonalPreviewUiState() },
+            updatePreviewPosition = { preview = preview.copy(playbackPositionMillis = it) },
+            reportPreviewError = { preview = preview.copy(error = it) },
+            upload = { _, _ -> },
             download = { _, _ -> },
-            pause = {},
-            resume = {},
-            cancel = {},
-            retry = {},
+            pause = { id -> transferTasks = transferTasks.map { if (it.id == id) it.copy(status = TransferStatus.PAUSED) else it } },
+            resume = { id -> transferTasks = transferTasks.map { if (it.id == id) it.copy(status = TransferStatus.QUEUED) else it } },
+            cancel = { id -> transferTasks = transferTasks.map { if (it.id == id) it.copy(status = TransferStatus.CANCELED) else it } },
+            retry = { id -> transferTasks = transferTasks.map { if (it.id == id) it.copy(status = TransferStatus.QUEUED) else it } },
+            consumeTransferFeedback = {},
+            clearFinishedTransfers = { transferTasks = transferTasks.filterNot {
+                it.status in setOf(TransferStatus.SUCCEEDED, TransferStatus.FAILED, TransferStatus.CANCELED)
+            } },
             logout = {},
             loadDiagnosticOffice = { _, _ -> },
             updateDiagnosticStatus = {},
@@ -431,23 +547,27 @@ private fun TestShell(
 
 private object TestDocumentPicker : DocumentPicker {
     @Composable
-    override fun UploadButton(enabled: Boolean, onPicked: (PickedDocument) -> Unit) {
-        Button(onClick = {}, enabled = enabled) { Text("选择上传文件") }
-    }
+    override fun rememberUploadLauncher(maxItems: Int, onPicked: (UploadPickResult) -> Unit): () -> Unit = { }
 
     @Composable
-    override fun DownloadButton(
-        fileName: String,
-        enabled: Boolean,
-        onPicked: (PickedDestination) -> Unit,
-    ) {
-        Button(onClick = {}, enabled = enabled) { Text("下载") }
-    }
+    override fun rememberDownloadLauncher(onPicked: (PickedDestination) -> Unit): (DownloadRequest) -> Unit = { }
 }
 
 private object TestOfficeRenderer : OfficeRenderer {
     @Composable
     override fun Render(config: OfficeConfig, modifier: Modifier, onStatus: (UiMessage) -> Unit) {
         Text("OnlyOffice", modifier)
+    }
+}
+
+private object TestMediaPreviewRenderer : MediaPreviewRenderer {
+    @Composable
+    override fun Render(
+        request: MediaPreviewRequest,
+        modifier: Modifier,
+        onPositionChanged: (Long) -> Unit,
+        onError: (UiMessage) -> Unit,
+    ) {
+        Text("Media preview", modifier)
     }
 }

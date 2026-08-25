@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -52,6 +53,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,8 +75,10 @@ import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
-import com.betterclouddrive.mobile.core.platform.PickedDocument
+import com.betterclouddrive.mobile.core.platform.DownloadRequest
+import com.betterclouddrive.mobile.core.platform.UploadPickResult
 import com.betterclouddrive.mobile.feature.files.FileViewMode
+import com.betterclouddrive.mobile.feature.transfers.MAX_UPLOAD_SELECTION
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -82,7 +86,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun PersonalSpaceScreen(
     state: PersonalFilesUiState,
     documentPicker: DocumentPicker,
-    onUpload: (PickedDocument) -> Unit,
+    onUpload: (Long?, UploadPickResult) -> Unit,
     onDownload: (FileItem, String) -> Unit,
     onOpenFolder: (FileItem) -> Unit,
     onSelectFile: (FileItem?) -> Unit,
@@ -102,12 +106,32 @@ fun PersonalSpaceScreen(
     onClosePicker: () -> Unit,
     onConfirmPicker: () -> Unit,
     onConsumeFeedback: () -> Unit,
+    onConsumeTransferFeedback: () -> Unit,
+    onOpenTransfers: () -> Unit,
+    onPreview: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
     var createDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<FileItem?>(null) }
     var deleteTargets by remember { mutableStateOf<List<FileItem>>(emptyList()) }
+    var uploadParentId by remember { mutableStateOf<Long?>(null) }
+    var pendingDownload by remember { mutableStateOf<FileItem?>(null) }
+    val uploadLauncher = documentPicker.rememberUploadLauncher(MAX_UPLOAD_SELECTION) { result ->
+        onUpload(uploadParentId, result)
+    }
+    val downloadLauncher = documentPicker.rememberDownloadLauncher { target ->
+        pendingDownload?.let { onDownload(it, target.handle) }
+        pendingDownload = null
+    }
+    fun launchUpload() {
+        uploadParentId = state.current.folderId
+        uploadLauncher()
+    }
+    fun launchDownload(file: FileItem) {
+        pendingDownload = file
+        downloadLauncher(DownloadRequest(file.fileName, file.mimeType))
+    }
     BackHandler(enabled = state.folderPicker != null || state.selectedIds.isNotEmpty()) {
         if (state.folderPicker != null) onClosePicker() else onClearSelection()
     }
@@ -122,32 +146,44 @@ fun PersonalSpaceScreen(
             onConsumeFeedback()
         }
     }
+    LaunchedEffect(state.transferFeedback?.id) {
+        state.transferFeedback?.let { feedback ->
+            val result = snackbar.showSnackbar(
+                message = strings.resolve(feedback.message).orEmpty(),
+                actionLabel = strings[MobileString.ViewTransfers].takeIf { feedback.canOpenTransfers },
+            )
+            onConsumeTransferFeedback()
+            if (result == SnackbarResult.ActionPerformed) onOpenTransfers()
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize().testTag("personal-content")) {
         val wide = maxWidth >= 600.dp
         if (wide) {
             Row(Modifier.fillMaxSize()) {
                 PersonalDirectoryContent(
-                    state, documentPicker, onUpload, onOpenFolder, onSelectFile,
+                    state, ::launchUpload, ::launchDownload, onOpenFolder, onSelectFile,
                     onLoadMore, onScrollAnchor, onRetry, onGoRoot,
                     onToggleSelection, onClearSelection, { createDialog = true },
                     { renameTarget = it }, { deleteTargets = listOf(it) }, onOpenPicker,
                     { deleteTargets = state.current.items.filter { item -> item.id in state.selectedIds } },
+                    onPreview,
                     Modifier.weight(0.58f),
                 )
                 VerticalDivider(Modifier.fillMaxHeight())
                 Box(Modifier.weight(0.42f).fillMaxHeight().testTag("personal-detail-pane")) {
                     state.selectedFile?.let { file ->
-                        FileDetailContent(file, documentPicker, onDownload)
+                        FileDetailContent(file, ::launchDownload, onPreview)
                     } ?: EmptyDetail()
                 }
             }
         } else {
             PersonalDirectoryContent(
-                state, documentPicker, onUpload, onOpenFolder, onSelectFile,
+                state, ::launchUpload, ::launchDownload, onOpenFolder, onSelectFile,
                 onLoadMore, onScrollAnchor, onRetry, onGoRoot,
                 onToggleSelection, onClearSelection, { createDialog = true },
                 { renameTarget = it }, { deleteTargets = listOf(it) }, onOpenPicker,
                 { deleteTargets = state.current.items.filter { item -> item.id in state.selectedIds } },
+                onPreview,
                 Modifier.fillMaxSize(),
             )
             state.selectedFile?.let { file ->
@@ -155,7 +191,7 @@ fun PersonalSpaceScreen(
                     onDismissRequest = { onSelectFile(null) },
                     modifier = Modifier.testTag("personal-detail-sheet"),
                 ) {
-                    FileDetailContent(file, documentPicker, onDownload)
+                    FileDetailContent(file, ::launchDownload, onPreview)
                 }
             }
         }
@@ -199,8 +235,8 @@ fun PersonalSpaceScreen(
 @Composable
 private fun PersonalDirectoryContent(
     state: PersonalFilesUiState,
-    documentPicker: DocumentPicker,
-    onUpload: (PickedDocument) -> Unit,
+    onUpload: () -> Unit,
+    onDownload: (FileItem) -> Unit,
     onOpenFolder: (FileItem) -> Unit,
     onSelectFile: (FileItem?) -> Unit,
     onLoadMore: () -> Unit,
@@ -214,6 +250,7 @@ private fun PersonalDirectoryContent(
     onDeleteOne: (FileItem) -> Unit,
     onOpenPicker: (FileItem, FileMutationKind) -> Unit,
     onDeleteSelected: () -> Unit,
+    onPreview: (FileItem) -> Unit,
     modifier: Modifier,
 ) {
     val strings = LocalMobileStrings.current
@@ -235,16 +272,14 @@ private fun PersonalDirectoryContent(
         if (directory.refreshing) {
             LinearProgressIndicator(Modifier.fillMaxWidth().testTag("personal-refreshing"))
         }
-        if (directory.folderId == null) {
-            Card(Modifier.fillMaxWidth().padding(top = 12.dp).testTag("personal-root-upload-card")) {
+        Card(Modifier.fillMaxWidth().padding(top = 12.dp).testTag("personal-upload-card")) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(strings[MobileString.UploadToRoot], style = MaterialTheme.typography.titleMedium)
-                    Box(Modifier.testTag("personal-upload")) {
-                        documentPicker.UploadButton(enabled = true, onPicked = onUpload)
+                    Text(strings[MobileString.UploadToCurrentFolder], style = MaterialTheme.typography.titleMedium)
+                    Button(onClick = onUpload, modifier = Modifier.testTag("personal-upload")) {
+                        Text(strings[MobileString.ChooseFiles])
                     }
                 }
             }
-        }
         directory.error?.takeIf { directory.hasLoaded }?.let { message ->
             Card(Modifier.fillMaxWidth().padding(top = 8.dp).testTag("personal-inline-error")) {
                 Row(
@@ -267,11 +302,11 @@ private fun PersonalDirectoryContent(
             directory.items.isEmpty() -> EmptyDirectory(directory.folderId == null)
             state.viewMode == FileViewMode.LIST -> PersonalList(
                 state, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
-                onToggleSelection, onRename, onDeleteOne, onOpenPicker,
+                onToggleSelection, onRename, onDeleteOne, onOpenPicker, onDownload, onPreview,
             )
             else -> PersonalGrid(
                 state, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
-                onToggleSelection, onRename, onDeleteOne, onOpenPicker,
+                onToggleSelection, onRename, onDeleteOne, onOpenPicker, onDownload, onPreview,
             )
         }
     }
@@ -288,6 +323,8 @@ private fun PersonalList(
     onRename: (FileItem) -> Unit,
     onDelete: (FileItem) -> Unit,
     onOpenPicker: (FileItem, FileMutationKind) -> Unit,
+    onDownload: (FileItem) -> Unit,
+    onPreview: (FileItem) -> Unit,
 ) {
     val items = state.current.items
     val initialIndex = items.indexOfFirst { it.id == state.current.scrollAnchorId }.coerceAtLeast(0)
@@ -322,6 +359,8 @@ private fun PersonalList(
                 onMove = { onOpenPicker(file, FileMutationKind.MOVE) },
                 onCopy = { onOpenPicker(file, FileMutationKind.COPY) },
                 onDelete = { onDelete(file) },
+                onDownload = { onDownload(file) },
+                onPreview = { onPreview(file) },
             )
         }
         item { PagingFooter(state.current, onLoadMore) }
@@ -339,6 +378,8 @@ private fun PersonalGrid(
     onRename: (FileItem) -> Unit,
     onDelete: (FileItem) -> Unit,
     onOpenPicker: (FileItem, FileMutationKind) -> Unit,
+    onDownload: (FileItem) -> Unit,
+    onPreview: (FileItem) -> Unit,
 ) {
     val items = state.current.items
     val initialIndex = items.indexOfFirst { it.id == state.current.scrollAnchorId }.coerceAtLeast(0)
@@ -375,6 +416,8 @@ private fun PersonalGrid(
                 onMove = { onOpenPicker(file, FileMutationKind.MOVE) },
                 onCopy = { onOpenPicker(file, FileMutationKind.COPY) },
                 onDelete = { onDelete(file) },
+                onDownload = { onDownload(file) },
+                onPreview = { onPreview(file) },
             )
         }
         item { PagingFooter(state.current, onLoadMore) }
@@ -393,6 +436,8 @@ private fun PersonalFileRow(
     onMove: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
+    onDownload: () -> Unit,
+    onPreview: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     Card(
@@ -418,7 +463,7 @@ private fun PersonalFileRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (!selectionMode) FileActionsMenu(file.id, onRename, onMove, onCopy, onDelete)
+            if (!selectionMode) FileActionsMenu(file, onRename, onMove, onCopy, onDelete, onDownload, onPreview)
         }
     }
 }
@@ -435,6 +480,8 @@ private fun PersonalFileCard(
     onMove: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
+    onDownload: () -> Unit,
+    onPreview: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     Card(
@@ -458,41 +505,55 @@ private fun PersonalFileCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!selectionMode) FileActionsMenu(file.id, onRename, onMove, onCopy, onDelete)
+            if (!selectionMode) FileActionsMenu(file, onRename, onMove, onCopy, onDelete, onDownload, onPreview)
         }
     }
 }
 
 @Composable
 private fun FileActionsMenu(
-    fileId: Long,
+    file: FileItem,
     onRename: () -> Unit,
     onMove: () -> Unit,
     onCopy: () -> Unit,
     onDelete: () -> Unit,
+    onDownload: () -> Unit,
+    onPreview: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }, modifier = Modifier.testTag("personal-more-$fileId")) {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.testTag("personal-more-${file.id}")) {
             Icon(Icons.Default.MoreVert, contentDescription = strings[MobileString.MoreActions])
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (!file.isFolder) DropdownMenuItem(
+                text = { Text(strings[MobileString.Preview]) },
+                leadingIcon = { Icon(Icons.Default.Visibility, null) },
+                onClick = { expanded = false; onPreview() },
+                modifier = Modifier.testTag("personal-preview-${file.id}"),
+            )
             DropdownMenuItem(
                 text = { Text(strings[MobileString.Rename]) }, leadingIcon = { Icon(Icons.Default.Edit, null) },
-                onClick = { expanded = false; onRename() }, modifier = Modifier.testTag("personal-rename-$fileId"),
+                onClick = { expanded = false; onRename() }, modifier = Modifier.testTag("personal-rename-${file.id}"),
             )
             DropdownMenuItem(
                 text = { Text(strings[MobileString.Move]) }, leadingIcon = { Icon(Icons.Default.DriveFileMove, null) },
-                onClick = { expanded = false; onMove() }, modifier = Modifier.testTag("personal-move-$fileId"),
+                onClick = { expanded = false; onMove() }, modifier = Modifier.testTag("personal-move-${file.id}"),
             )
             DropdownMenuItem(
                 text = { Text(strings[MobileString.Copy]) }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) },
-                onClick = { expanded = false; onCopy() }, modifier = Modifier.testTag("personal-copy-$fileId"),
+                onClick = { expanded = false; onCopy() }, modifier = Modifier.testTag("personal-copy-${file.id}"),
+            )
+            if (!file.isFolder) DropdownMenuItem(
+                text = { Text(strings[MobileString.Download]) },
+                leadingIcon = { Icon(Icons.Default.Description, null) },
+                onClick = { expanded = false; onDownload() },
+                modifier = Modifier.testTag("personal-download-${file.id}"),
             )
             DropdownMenuItem(
                 text = { Text(strings[MobileString.Delete]) }, leadingIcon = { Icon(Icons.Default.Delete, null) },
-                onClick = { expanded = false; onDelete() }, modifier = Modifier.testTag("personal-delete-$fileId"),
+                onClick = { expanded = false; onDelete() }, modifier = Modifier.testTag("personal-delete-${file.id}"),
             )
         }
     }
@@ -782,8 +843,8 @@ private fun EmptyDetail() {
 @Composable
 private fun FileDetailContent(
     file: FileItem,
-    documentPicker: DocumentPicker,
-    onDownload: (FileItem, String) -> Unit,
+    onDownload: (FileItem) -> Unit,
+    onPreview: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     Column(
@@ -798,11 +859,14 @@ private fun FileDetailContent(
         DetailRow(strings[MobileString.CreatedAt], formatDate(file.createdAt))
         DetailRow("MD5", file.md5Hash ?: "—")
         DetailRow(strings[MobileString.VersionCount], file.versionCount.toString())
-        Box(Modifier.testTag("personal-detail-download-${file.id}")) {
-            documentPicker.DownloadButton(file.fileName, enabled = true) { target ->
-                onDownload(file, target.handle)
-            }
-        }
+        OutlinedButton(
+            onClick = { onPreview(file) },
+            modifier = Modifier.testTag("personal-detail-preview-${file.id}"),
+        ) { Text(strings[MobileString.Preview]) }
+        Button(
+            onClick = { onDownload(file) },
+            modifier = Modifier.testTag("personal-detail-download-${file.id}"),
+        ) { Text(strings[MobileString.Download]) }
         Spacer(Modifier.height(12.dp))
     }
 }

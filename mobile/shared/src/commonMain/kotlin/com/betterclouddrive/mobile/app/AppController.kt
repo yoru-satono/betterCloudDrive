@@ -4,23 +4,31 @@ import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
+import com.betterclouddrive.mobile.core.model.PreviewKind
+import com.betterclouddrive.mobile.core.model.TextPreview
 import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
 import com.betterclouddrive.mobile.core.model.UserProfile
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.UiMessage
-import com.betterclouddrive.mobile.core.platform.PickedDocument
+import com.betterclouddrive.mobile.core.platform.UploadPickResult
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
 import com.betterclouddrive.mobile.feature.files.BreadcrumbEntry
 import com.betterclouddrive.mobile.feature.files.FileRepository
 import com.betterclouddrive.mobile.feature.files.FileViewMode
 import com.betterclouddrive.mobile.feature.files.PersonalFileSort
 import com.betterclouddrive.mobile.feature.files.SortDirection
+import com.betterclouddrive.mobile.feature.files.previewKind
 import com.betterclouddrive.mobile.feature.transfers.TransferManager
+import com.betterclouddrive.mobile.feature.transfers.TransferDirection
+import com.betterclouddrive.mobile.feature.transfers.TransferScope
+import com.betterclouddrive.mobile.feature.transfers.TransferStatus
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
+import com.betterclouddrive.mobile.feature.transfers.UploadEnqueueResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,12 +56,16 @@ internal interface AppFileOperations {
     suspend fun movePersonalFile(fileId: Long, targetParentId: Long?)
     suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?)
     suspend fun deletePersonalFiles(fileIds: List<Long>)
+    suspend fun searchPersonalFiles(query: String, page: Int, size: Int): PageResult<FileItem>
+    suspend fun createPersonalDownloadTicket(fileId: Long): String
+    suspend fun loadPersonalText(file: FileItem): TextPreview
+    suspend fun loadPersonalOffice(fileId: Long): OfficeConfig
     suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig
 }
 
 internal interface AppTransferOperations {
     val tasks: kotlinx.coroutines.flow.Flow<List<TransferTask>>
-    suspend fun enqueueUpload(document: PickedDocument)
+    suspend fun enqueueUploads(result: UploadPickResult, parentId: Long?): UploadEnqueueResult
     suspend fun enqueueDownload(
         fileId: Long,
         fileName: String,
@@ -66,6 +78,7 @@ internal interface AppTransferOperations {
     suspend fun resume(taskId: String)
     suspend fun cancel(taskId: String)
     suspend fun retry(taskId: String)
+    suspend fun clearFinished(): Int
     suspend fun resumeWaitingForLogin()
     suspend fun clearForLogout()
 }
@@ -94,12 +107,22 @@ private class RepositoryFileOperations(private val repository: FileRepository) :
     override suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) =
         repository.copyPersonalFile(fileId, targetParentId)
     override suspend fun deletePersonalFiles(fileIds: List<Long>) = repository.deletePersonalFiles(fileIds)
+    override suspend fun searchPersonalFiles(query: String, page: Int, size: Int) =
+        repository.searchPersonalFiles(query, page, size)
+    override suspend fun createPersonalDownloadTicket(fileId: Long) = repository.createPersonalDownloadTicket(fileId)
+    override suspend fun loadPersonalText(file: FileItem) = repository.loadPersonalText(file)
+    override suspend fun loadPersonalOffice(fileId: Long) = repository.loadPersonalOffice(fileId)
     override suspend fun loadTeamOffice(teamId: Long, fileId: Long) = repository.loadTeamOffice(teamId, fileId)
 }
 
 private class ManagerTransferOperations(private val manager: TransferManager) : AppTransferOperations {
     override val tasks = manager.tasks
-    override suspend fun enqueueUpload(document: PickedDocument) { manager.enqueueUpload(document) }
+    override suspend fun enqueueUploads(result: UploadPickResult, parentId: Long?) = manager.enqueueUploads(
+        result.documents,
+        TransferScope.Personal(parentId),
+        result.rejectedCount,
+        result.overflowCount,
+    )
     override suspend fun enqueueDownload(
         fileId: Long,
         fileName: String,
@@ -114,6 +137,7 @@ private class ManagerTransferOperations(private val manager: TransferManager) : 
     override suspend fun resume(taskId: String) = manager.resume(taskId)
     override suspend fun cancel(taskId: String) = manager.cancel(taskId)
     override suspend fun retry(taskId: String) = manager.retry(taskId)
+    override suspend fun clearFinished() = manager.clearFinished()
     override suspend fun resumeWaitingForLogin() = manager.resumeWaitingForLogin()
     override suspend fun clearForLogout() = manager.clearForLogout()
 }
@@ -150,6 +174,13 @@ data class PersonalFilesUiState(
     val mutationErrorKind: FileMutationKind? = null,
     val feedback: FileMutationFeedback? = null,
     val folderPicker: FolderPickerState? = null,
+    val transferFeedback: TransferEnqueueFeedback? = null,
+)
+
+data class TransferEnqueueFeedback(
+    val id: Long,
+    val message: UiMessage,
+    val canOpenTransfers: Boolean,
 )
 
 enum class FileMutationKind { CREATE_FOLDER, RENAME, MOVE, COPY, DELETE }
@@ -177,6 +208,36 @@ data class DiagnosticUiState(
     val status: UiMessage = UiMessage(MobileString.OfficeReady),
 )
 
+data class PersonalSearchUiState(
+    val query: String = "",
+    val submittedQuery: String = "",
+    val items: List<FileItem> = emptyList(),
+    val searching: Boolean = false,
+    val loadingMore: Boolean = false,
+    val error: UiMessage? = null,
+    val loadMoreError: UiMessage? = null,
+    val page: Int = 0,
+    val pages: Int = 1,
+    val total: Long = 0,
+    val scrollAnchorId: Long? = null,
+) {
+    val hasMore: Boolean get() = submittedQuery.isNotEmpty() && page < pages
+}
+
+data class PersonalPreviewUiState(
+    val fileId: Long? = null,
+    val file: FileItem? = null,
+    val kind: PreviewKind? = null,
+    val loading: Boolean = false,
+    val error: UiMessage? = null,
+    val mediaUrl: String? = null,
+    val text: String? = null,
+    val textTruncated: Boolean = false,
+    val office: OfficeConfig? = null,
+    val playbackPositionMillis: Long = 0,
+    val ticketRetryCount: Int = 0,
+)
+
 data class AppUiState(
     val phase: AppPhase = AppPhase.LOADING,
     val server: String = com.betterclouddrive.mobile.core.network.BackendClient.DEFAULT_SERVER,
@@ -184,6 +245,8 @@ data class AppUiState(
     val loginBusy: Boolean = false,
     val sessionError: UiMessage? = null,
     val personalFiles: PersonalFilesUiState = PersonalFilesUiState(),
+    val search: PersonalSearchUiState = PersonalSearchUiState(),
+    val preview: PersonalPreviewUiState = PersonalPreviewUiState(),
     val transfers: List<TransferTask> = emptyList(),
     val diagnostics: DiagnosticUiState = DiagnosticUiState(),
 )
@@ -211,12 +274,51 @@ class AppController internal constructor(
     private var detailJob: Job? = null
     private var mutationJob: Job? = null
     private var pickerJob: Job? = null
+    private var uploadRefreshJob: Job? = null
+    private var searchJob: Job? = null
+    private var previewJob: Job? = null
     private var feedbackSequence = 0L
+    private var previousTransfers = emptyMap<String, TransferTask>()
+    private var hasObservedTransfers = false
+    private val dirtyUploadFolders = mutableSetOf<Long?>()
     private var started = false
 
     init {
         scope.launch {
-            transfers.tasks.collectLatest { tasks -> mutableState.update { it.copy(transfers = tasks) } }
+            transfers.tasks.collectLatest { tasks ->
+                tasks.filter { task ->
+                    hasObservedTransfers &&
+                    task.direction == TransferDirection.UPLOAD &&
+                        task.scope is TransferScope.Personal &&
+                        task.status == TransferStatus.SUCCEEDED &&
+                        previousTransfers[task.id]?.status != TransferStatus.SUCCEEDED
+                }.forEach { dirtyUploadFolders += it.scope.parentId }
+                hasObservedTransfers = true
+                previousTransfers = tasks.associateBy(TransferTask::id)
+                mutableState.update { it.copy(transfers = tasks) }
+                val ready = dirtyUploadFolders.filter { folderId ->
+                    tasks.none { task ->
+                        task.direction == TransferDirection.UPLOAD && task.scope is TransferScope.Personal &&
+                            task.scope.parentId == folderId && task.status in ACTIVE_UPLOAD_STATUSES
+                    }
+                }
+                ready.forEach { folderId ->
+                    dirtyUploadFolders.remove(folderId)
+                    directoryCache.remove(folderId)
+                    if (mutableState.value.personalFiles.current.folderId == folderId) {
+                        uploadRefreshJob?.cancel()
+                        uploadRefreshJob = scope.launch {
+                            try {
+                                reloadCurrentLoadedPages()
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (error: Throwable) {
+                                updateCurrent(folderId) { it.copy(error = friendly(error)) }
+                            }
+                        }
+                    }
+                }
+            }
         }
         scope.launch {
             auth.sessionInvalidations.collectLatest { reason ->
@@ -523,6 +625,125 @@ class AppController internal constructor(
         updateCurrent(folderId) { it.copy(scrollAnchorId = fileId) }
     }
 
+    fun updateSearchQuery(value: String) {
+        searchJob?.cancel()
+        val query = value
+        if (query.trim().isEmpty()) {
+            mutableState.update { it.copy(search = PersonalSearchUiState(query = query)) }
+            return
+        }
+        mutableState.update { it.copy(search = it.search.copy(query = query, error = null, loadMoreError = null)) }
+        searchJob = scope.launch {
+            delay(SEARCH_DEBOUNCE_MILLIS)
+            searchPage(query.trim(), 1)
+        }
+    }
+
+    fun submitSearch() {
+        val query = mutableState.value.search.query.trim()
+        searchJob?.cancel()
+        if (query.isEmpty()) {
+            mutableState.update { it.copy(search = PersonalSearchUiState(query = it.search.query)) }
+            return
+        }
+        searchJob = scope.launch { searchPage(query, 1) }
+    }
+
+    fun retrySearch() = submitSearch()
+
+    fun loadMoreSearch() {
+        val search = mutableState.value.search
+        if (!search.hasMore || search.searching || search.loadingMore) return
+        searchJob?.cancel()
+        searchJob = scope.launch { searchPage(search.submittedQuery, search.page + 1) }
+    }
+
+    fun updateSearchScrollAnchor(fileId: Long?) {
+        mutableState.update { it.copy(search = it.search.copy(scrollAnchorId = fileId)) }
+    }
+
+    fun prepareOpenSearchLocation(file: FileItem) {
+        val parentId = file.parentId
+        directoryCache[parentId]?.let { snapshot ->
+            if (snapshot.items.any { it.id == file.id }) {
+                directoryCache[parentId] = snapshot.copy(scrollAnchorId = file.id)
+            }
+        }
+    }
+
+    fun openPreview(fileId: Long) {
+        val existing = mutableState.value.preview
+        if (existing.fileId == fileId && (existing.loading || existing.file != null) && existing.error == null) return
+        previewJob?.cancel()
+        val position = if (existing.fileId == fileId) existing.playbackPositionMillis else 0
+        mutableState.update {
+            it.copy(preview = PersonalPreviewUiState(fileId = fileId, loading = true, playbackPositionMillis = position))
+        }
+        previewJob = scope.launch {
+            try {
+                val file = files.getPersonalFile(fileId)
+                loadPreviewContent(file, position, ticketRetryCount = 0)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                updatePreviewFailure(fileId, friendlyPreview(error))
+            }
+        }
+    }
+
+    fun retryPreview() {
+        val preview = mutableState.value.preview
+        val fileId = preview.fileId ?: return
+        previewJob?.cancel()
+        mutableState.update { it.copy(preview = preview.copy(loading = true, error = null, mediaUrl = null)) }
+        previewJob = scope.launch {
+            try {
+                val file = preview.file ?: files.getPersonalFile(fileId)
+                loadPreviewContent(file, preview.playbackPositionMillis, ticketRetryCount = 0)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                updatePreviewFailure(fileId, friendlyPreview(error))
+            }
+        }
+    }
+
+    fun reportPreviewError(message: UiMessage) {
+        val preview = mutableState.value.preview
+        val file = preview.file ?: return
+        if (preview.kind in setOf(PreviewKind.IMAGE, PreviewKind.VIDEO) && preview.ticketRetryCount == 0) {
+            previewJob?.cancel()
+            mutableState.update {
+                it.copy(preview = preview.copy(loading = true, error = null, mediaUrl = null, ticketRetryCount = 1))
+            }
+            previewJob = scope.launch {
+                try {
+                    loadPreviewContent(file, preview.playbackPositionMillis, ticketRetryCount = 1)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    updatePreviewFailure(file.id, friendlyPreview(error))
+                }
+            }
+        } else {
+            updatePreviewFailure(file.id, message)
+        }
+    }
+
+    fun updatePreviewPosition(positionMillis: Long) {
+        mutableState.update {
+            if (it.preview.kind == PreviewKind.VIDEO) {
+                it.copy(preview = it.preview.copy(playbackPositionMillis = positionMillis.coerceAtLeast(0)))
+            } else it
+        }
+    }
+
+    fun closePreview() {
+        previewJob?.cancel()
+        previewJob = null
+        mutableState.update { it.copy(preview = PersonalPreviewUiState()) }
+    }
+
     fun logout() = scope.launch {
         mutableState.update { it.copy(loginBusy = true, sessionError = null) }
         auth.logout()
@@ -533,8 +754,36 @@ class AppController internal constructor(
         }
     }
 
-    fun upload(document: PickedDocument) = scope.launch {
-        runPersonalAction { transfers.enqueueUpload(document) }
+    fun upload(parentId: Long?, result: UploadPickResult) = scope.launch {
+        val outcome = try {
+            transfers.enqueueUploads(result, parentId)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { state -> state.copy(personalFiles = state.personalFiles.copy(
+                transferFeedback = TransferEnqueueFeedback(
+                    ++feedbackSequence, friendly(error), canOpenTransfers = false,
+                ),
+            )) }
+            return@launch
+        }
+        val message = if (outcome.tasks.isEmpty()) {
+            UiMessage(MobileString.UploadNothingQueued, listOf(outcome.rejectedCount, outcome.overflowCount))
+        } else {
+            UiMessage(
+                MobileString.UploadQueuedSummary,
+                listOf(outcome.tasks.size, outcome.rejectedCount, outcome.overflowCount),
+            )
+        }
+        mutableState.update { state -> state.copy(personalFiles = state.personalFiles.copy(
+            transferFeedback = TransferEnqueueFeedback(
+                ++feedbackSequence, message, canOpenTransfers = outcome.tasks.isNotEmpty(),
+            ),
+        )) }
+    }
+
+    fun consumeTransferFeedback() {
+        mutableState.update { it.copy(personalFiles = it.personalFiles.copy(transferFeedback = null)) }
     }
 
     fun download(file: FileItem, destinationHandle: String) = scope.launch {
@@ -550,6 +799,7 @@ class AppController internal constructor(
     fun resume(taskId: String) = scope.launch { transfers.resume(taskId) }
     fun cancel(taskId: String) = scope.launch { transfers.cancel(taskId) }
     fun retry(taskId: String) = scope.launch { transfers.retry(taskId) }
+    fun clearFinishedTransfers() = scope.launch { transfers.clearFinished() }
 
     fun loadDiagnosticOffice(teamId: Long, fileId: Long) = scope.launch {
         mutableState.update { it.copy(diagnostics = it.diagnostics.copy(status = UiMessage(MobileString.OfficeConfigLoading))) }
@@ -684,7 +934,96 @@ class AppController internal constructor(
         mutationJob = null
         pickerJob?.cancel()
         pickerJob = null
+        searchJob?.cancel()
+        searchJob = null
+        previewJob?.cancel()
+        previewJob = null
         directoryCache.clear()
+    }
+
+    private suspend fun searchPage(query: String, page: Int) {
+        val normalized = query.trim()
+        if (normalized.isEmpty()) return
+        val existing = mutableState.value.search
+        mutableState.update {
+            it.copy(search = it.search.copy(
+                submittedQuery = normalized,
+                searching = page == 1,
+                loadingMore = page > 1,
+                error = if (page == 1) null else it.search.error,
+                loadMoreError = null,
+            ))
+        }
+        try {
+            val result = files.searchPersonalFiles(normalized, page, SEARCH_PAGE_SIZE)
+            val latest = mutableState.value.search
+            if (latest.query.trim() != normalized || latest.submittedQuery != normalized) return
+            val items = if (page == 1) result.records.distinctBy(FileItem::id)
+            else (existing.items + result.records).distinctBy(FileItem::id)
+            mutableState.update {
+                it.copy(search = it.search.copy(
+                    items = items,
+                    searching = false,
+                    loadingMore = false,
+                    error = null,
+                    loadMoreError = null,
+                    page = result.page,
+                    pages = result.pages.coerceAtLeast(result.page),
+                    total = result.total,
+                    scrollAnchorId = if (page == 1) null else existing.scrollAnchorId,
+                ))
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            if (mutableState.value.search.query.trim() != normalized) return
+            mutableState.update {
+                it.copy(search = it.search.copy(
+                    searching = false,
+                    loadingMore = false,
+                    error = if (page == 1) friendly(error) else it.search.error,
+                    loadMoreError = if (page > 1) friendly(error) else null,
+                ))
+            }
+        }
+    }
+
+    private suspend fun loadPreviewContent(file: FileItem, position: Long, ticketRetryCount: Int) {
+        val kind = file.previewKind()
+        val base = PersonalPreviewUiState(
+            fileId = file.id,
+            file = file,
+            kind = kind,
+            loading = true,
+            playbackPositionMillis = position,
+            ticketRetryCount = ticketRetryCount,
+        )
+        mutableState.update { if (it.preview.fileId == file.id) it.copy(preview = base) else it }
+        val loaded = when (kind) {
+            PreviewKind.IMAGE, PreviewKind.VIDEO -> base.copy(
+                loading = false,
+                mediaUrl = files.createPersonalDownloadTicket(file.id),
+            )
+            PreviewKind.TEXT -> files.loadPersonalText(file).let { text ->
+                base.copy(loading = false, text = text.content, textTruncated = text.truncated)
+            }
+            PreviewKind.OFFICE -> base.copy(loading = false, office = files.loadPersonalOffice(file.id))
+            PreviewKind.UNSUPPORTED -> base.copy(loading = false)
+        }
+        mutableState.update { if (it.preview.fileId == file.id) it.copy(preview = loaded) else it }
+    }
+
+    private fun updatePreviewFailure(fileId: Long, message: UiMessage) {
+        mutableState.update {
+            if (it.preview.fileId == fileId) {
+                it.copy(preview = it.preview.copy(loading = false, error = message, mediaUrl = null))
+            } else it
+        }
+    }
+
+    private fun friendlyPreview(error: Throwable): UiMessage = when (error) {
+        is CancellationException -> throw error
+        else -> UiMessage(MobileString.ErrorPreviewFailed)
     }
 
     private suspend fun runSessionAction(block: suspend () -> Unit) {
@@ -899,7 +1238,12 @@ class AppController internal constructor(
 
     private companion object {
         const val PAGE_SIZE = 50
+        const val SEARCH_PAGE_SIZE = 50
+        const val SEARCH_DEBOUNCE_MILLIS = 300L
         const val PICKER_PAGE_SIZE = 100
         const val MAX_BREADCRUMB_DEPTH = 128
+        val ACTIVE_UPLOAD_STATUSES = setOf(
+            TransferStatus.QUEUED, TransferStatus.PREPARING, TransferStatus.RUNNING,
+        )
     }
 }

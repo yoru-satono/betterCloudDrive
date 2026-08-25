@@ -1,13 +1,13 @@
 # BetterCloudDrive KMP 移动端
 
-这是 Android 优先的 Kotlin Multiplatform 重写工程。阶段 6 已在个人文件浏览器上加入新建文件夹、重命名、移动、递归复制、当前目录多选和批量移入回收站；共享国际化资源继续完整支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
+这是 Android 优先的 Kotlin Multiplatform 重写工程。阶段 8 已在阶段 7 的可恢复传输基础上加入个人全局搜索，以及图片、UTF-8 文本、视频和 OnlyOffice 只读预览。共享国际化资源继续完整支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
 
 ## 目标与范围
 
 - Android 是当前唯一可运行、可交付的平台。
 - `iosArm64` 和 `iosSimulatorArm64` 通过 `-PenableIos=true` 保留公共代码与 Framework 编译能力，阶段 1 不提供 iOS 平台服务或宿主应用。
 - 不配置桌面、JVM 应用、JS、Wasm 或 Web 目标。
-- 当前可见功能包括启动恢复、登录、个人目录浏览与管理、分页与排序、列表/网格、只读文件详情、根目录上传、单文件下载、独立传输队列、个人设置和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
+- 当前可见功能包括启动恢复、登录、个人目录浏览与管理、分页与排序、列表/网格、全局文件名搜索、只读文件详情与预览、任意目录多文件上传、单文件下载、独立传输队列、个人设置和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
 
 ## 工程结构
 
@@ -22,7 +22,7 @@ mobile/
     └── androidMain/.../platform/       # Keystore、SAF、UIDT/WorkManager、WebView
 ```
 
-依赖由手动 `AppContainer` 创建，不引入第三方 DI。共享 UI 使用 Navigation Compose 2.9.2 类型安全路由；Activity 只提供 Compose 入口和 Android 平台服务。传输任务完整保存到 Room，平台调度只传任务 ID。Android 14+ 使用 UIDT，Android 13 及以下使用 WorkManager。下载通过 Ktor `prepareGet().execute {}` 在响应作用域内直接写入应用私有 `.part`，通知进度最多每秒投递一次，Compose 和 Room 进度不受影响。
+依赖由手动 `AppContainer` 创建，不引入第三方 DI。共享 UI 使用 Navigation Compose 2.9.2 类型安全路由；Activity 只提供 Compose 入口和 Android 平台服务。传输任务完整保存到 Room；一次用户操作最多形成一个包含 100 个任务 ID 的系统批次，批次执行器仍通过全局互斥逐项传输。Android 14+ 使用 UIDT，Android 13 及以下使用 WorkManager。下载通过 Ktor `prepareGet().execute {}` 在响应作用域内直接写入应用私有 `.part`，通知进度最多每秒投递一次，Compose 和 Room 进度不受影响。完成或取消的任务会释放 SAF 权限，传输页可确认后清除全部终态任务。
 
 共享文案按 Compose Multiplatform 标准目录组织：`values` 保存默认英语，`values-zh-rCN` 与 `values-zh-rSG` 保存两套同名简体中文资源。当前仅 `zh-CN`、`zh-SG` 及带对应地区的 `zh-Hans` 标签选择简体中文；无地区 `zh-Hans`、繁体中文及其他语言回退英语。Android 13+ 的系统“应用语言”页面提供英语、中国大陆简体中文和新加坡简体中文入口；阶段 9 前不提供应用内选择或账号语言同步。`checkMobileI18n` 同时阻止生产 Kotlin 界面硬编码，并校验各翻译目录的键和格式参数一致。
 
@@ -53,6 +53,8 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 .\scripts\verify-all.ps1 -Module mobile-android -AndroidSerial '<adb 设备序列号>'
 ```
 
-阶段 6 继续在 Android 9/API 28 和 Android 14/API 34 上运行设备测试，覆盖个人文件修改、选择模式、中英文界面以及既有 WorkManager/UIDT 回归。标准 Android Emulator 可使用 `http://10.0.2.2:8080` 访问宿主机；若模拟器厂商没有该别名，则在登录页使用开发机局域网地址。Debug 允许本地 HTTP，Release 强制 HTTPS。
+阶段 8 继续在 Android 9/API 28 和 Android 14/API 34 上运行设备测试，覆盖搜索导航、文本与媒体预览、OnlyOffice 只读加载，并继续回归多文件选择、批次 WorkManager/UIDT、进程恢复和 SAF 权限生命周期。标准 Android Emulator 可使用 `http://10.0.2.2:8080` 访问宿主机；若模拟器厂商没有该别名，则在登录页使用开发机局域网地址。Debug 允许本地 HTTP，Release 强制 HTTPS。
 
-当前实现与验收结果见[阶段 6 个人文件管理](docs/stage-6-file-management.md)，国际化基线见[阶段 5 国际化基础](docs/stage-5-localization.md)，个人文件浏览基线见[阶段 4 个人文件浏览](docs/stage-4-personal-browser.md)。
+截至 2026-08-25，阶段 7/8 已完成 API 34 的 64 MiB 分片续传、非零 Range 下载与 MD5 联合旅程，以及三页搜索、图片、文本、视频和 OnlyOffice 只读预览旅程；API 28/34 自动化、完整 Docker 栈、黑盒与可观测性门槛均通过。
+
+当前实现与验收边界见[阶段 8 个人预览与搜索](docs/stage-8-personal-preview-search.md)，传输基线见[阶段 7 个人传输体验](docs/stage-7-personal-transfers.md)，文件管理基线见[阶段 6 个人文件管理](docs/stage-6-file-management.md)。

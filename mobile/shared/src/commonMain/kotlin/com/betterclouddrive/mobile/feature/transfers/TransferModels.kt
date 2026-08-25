@@ -44,6 +44,13 @@ data class TransferTask(
     val updatedAt: Long,
 )
 
+data class UploadEnqueueResult(
+    val tasks: List<TransferTask>,
+    val rejectedCount: Int,
+    val overflowCount: Int,
+)
+
 enum class TransferRunResult { COMPLETE, RETRY, PAUSED }
 
 const val DEFAULT_CHUNK_SIZE: Long = 5L * 1024 * 1024
+const val MAX_UPLOAD_SELECTION: Int = 100

@@ -64,6 +64,13 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             implementation(libs.androidx.datastore.preferences)
             implementation(libs.androidx.work.runtime.ktx)
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.okhttp)
+            implementation(libs.coil.gif)
+            implementation(libs.coil.svg)
+            implementation(libs.androidx.media3.exoplayer)
+            implementation(libs.androidx.media3.ui)
+            implementation(libs.androidx.lifecycle.runtime.compose)
         }
         if (enableIos) {
             iosMain.dependencies {

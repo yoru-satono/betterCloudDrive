@@ -11,14 +11,19 @@ import kotlin.random.Random
 
 class TransferRepository(
     private val dao: TransferTaskDao,
+    private val purgeDeletedContent: suspend () -> Unit = {},
     private val now: () -> Long = { kotlin.time.Clock.System.now().toEpochMilliseconds() },
 ) {
     private val updateMutex = Mutex()
     val tasks: Flow<List<TransferTask>> = dao.observeAll().map { rows -> rows.map(TransferTaskEntity::toModel) }
 
     suspend fun enqueueUpload(server: String, document: PickedDocument, scope: TransferScope): TransferTask {
+        return enqueueUploads(server, listOf(document), scope).single()
+    }
+
+    suspend fun enqueueUploads(server: String, documents: List<PickedDocument>, scope: TransferScope): List<TransferTask> {
         val timestamp = now()
-        val task = TransferTask(
+        val tasks = documents.mapIndexed { index, document -> TransferTask(
             id = newId(timestamp),
             direction = TransferDirection.UPLOAD,
             status = TransferStatus.QUEUED,
@@ -29,11 +34,11 @@ class TransferRepository(
             bytesTotal = document.size,
             sourceHandle = document.handle,
             totalChunks = chunkCount(document.size),
-            createdAt = timestamp,
-            updatedAt = timestamp,
-        )
-        dao.upsert(task.toEntity())
-        return task
+            createdAt = timestamp + index,
+            updatedAt = timestamp + index,
+        ) }
+        dao.upsertAll(tasks.map(TransferTask::toEntity))
+        return tasks
     }
 
     suspend fun enqueueDownload(
@@ -79,7 +84,15 @@ class TransferRepository(
         else current
     }
 
-    suspend fun clear() = updateMutex.withLock { dao.deleteAll() }
+    suspend fun clear() = updateMutex.withLock {
+        dao.deleteAll()
+        purgeDeletedContent()
+    }
+
+    suspend fun delete(ids: List<String>) = updateMutex.withLock {
+        dao.deleteAllById(ids.distinct())
+        purgeDeletedContent()
+    }
 
     suspend fun markActiveWaitingForLogin() {
         dao.all().map(TransferTaskEntity::toModel)

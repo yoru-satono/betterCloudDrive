@@ -8,8 +8,11 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.RoomDatabase
 import androidx.room.RoomDatabaseConstructor
+import androidx.room.execSQL
+import androidx.room.useWriterConnection
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "transfer_tasks")
@@ -55,8 +58,18 @@ interface TransferTaskDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(value: TransferTaskEntity)
 
+    @Transaction
+    suspend fun upsertAll(values: List<TransferTaskEntity>) {
+        values.forEach { upsert(it) }
+    }
+
     @Query("DELETE FROM transfer_tasks WHERE id = :id")
     suspend fun delete(id: String)
+
+    @Transaction
+    suspend fun deleteAllById(ids: List<String>) {
+        ids.forEach { delete(it) }
+    }
 
     @Query("DELETE FROM transfer_tasks")
     suspend fun deleteAll()
@@ -66,6 +79,13 @@ interface TransferTaskDao {
 @ConstructedBy(MobileDatabaseConstructor::class)
 abstract class MobileDatabase : RoomDatabase() {
     abstract fun transferTaskDao(): TransferTaskDao
+
+    suspend fun purgeDeletedTransferContent() {
+        useWriterConnection { connection ->
+            connection.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
+            connection.execSQL("VACUUM")
+        }
+    }
 }
 
 @Suppress("NO_ACTUAL_FOR_EXPECT")

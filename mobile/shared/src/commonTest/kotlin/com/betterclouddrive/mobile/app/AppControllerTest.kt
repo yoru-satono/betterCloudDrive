@@ -4,22 +4,27 @@ import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
+import com.betterclouddrive.mobile.core.model.TextPreview
 import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
 import com.betterclouddrive.mobile.core.model.UserProfile
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.PickedDocument
+import com.betterclouddrive.mobile.core.platform.UploadPickResult
+import com.betterclouddrive.mobile.feature.transfers.UploadEnqueueResult
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferScope
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
 import com.betterclouddrive.mobile.feature.files.PersonalFileSort
 import com.betterclouddrive.mobile.feature.files.SortDirection
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -324,11 +329,167 @@ class AppControllerTest {
         assertEquals(listOf(1, 1, 2), files.requests.map { it.page })
     }
 
+    @Test
+    fun multiUploadFeedbackPreservesTargetFolderAndReportsPartialSelection() = runTest {
+        val transfers = FakeTransfers().apply {
+            enqueueResult = UploadEnqueueResult(
+                tasks = listOf(transferTask("queued", TransferStatus.QUEUED, parentId = 44)),
+                rejectedCount = 2,
+                overflowCount = 3,
+            )
+        }
+        val files = FakeFiles().apply { responses += Result.success(page()) }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, transfers, backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.upload(
+            44,
+            UploadPickResult(listOf(PickedDocument("uri:one", "one.bin", 8, null)), rejectedCount = 1, overflowCount = 1),
+        )
+        runCurrent()
+
+        assertEquals(listOf<Long?>(44L), transfers.uploadParents)
+        assertEquals(
+            UiMessage(MobileString.UploadQueuedSummary, listOf(1, 2, 3)),
+            controller.state.value.personalFiles.transferFeedback?.message,
+        )
+        assertTrue(controller.state.value.personalFiles.transferFeedback?.canOpenTransfers == true)
+    }
+
+    @Test
+    fun visibleDirectoryRefreshesOnceAfterItsUploadBatchFinishes() = runTest {
+        val uploaded = FileItem(id = 99, fileName = "uploaded.bin", fileSize = 10)
+        val files = FakeFiles().apply {
+            responses += Result.success(page(FILE))
+            responses += Result.success(page(FILE, uploaded))
+        }
+        val transfers = FakeTransfers()
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, transfers, backgroundScope)
+        controller.start()
+        runCurrent()
+
+        transfers.mutableTasks.value = listOf(transferTask("batch", TransferStatus.RUNNING))
+        runCurrent()
+        transfers.mutableTasks.value = listOf(transferTask("batch", TransferStatus.SUCCEEDED))
+        runCurrent()
+
+        assertEquals(2, files.requests.size)
+        assertEquals(listOf(FILE, uploaded), controller.state.value.personalFiles.current.items)
+    }
+
+    @Test
+    fun searchDebouncesPagesAndDeduplicatesWithoutLosingResults() = runTest {
+        val second = FileItem(id = 9, fileName = "sample-two.txt")
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            searchResponses += Result.success(PageResult(listOf(FILE), 2, 1, 50, 2))
+            searchResponses += Result.success(PageResult(listOf(FILE, second), 2, 2, 50, 2))
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.updateSearchQuery(" sample ")
+        advanceTimeBy(299)
+        runCurrent()
+        assertTrue(files.searchRequests.isEmpty())
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(listOf(Triple("sample", 1, 50)), files.searchRequests)
+
+        controller.loadMoreSearch()
+        runCurrent()
+        assertEquals(listOf(8L, 9L), controller.state.value.search.items.map(FileItem::id))
+        assertFalse(controller.state.value.search.hasMore)
+    }
+
+    @Test
+    fun searchCancelsStaleQueryAndKeepsItemsWhenLoadMoreRetryIsNeeded() = runTest {
+        val fresh = FileItem(id = 20, fileName = "fresh.txt")
+        val next = FileItem(id = 21, fileName = "fresh-next.txt")
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            searchHandler = { query, page, _ ->
+                when {
+                    query == "stale" -> {
+                        delay(1_000)
+                        PageResult(listOf(FILE), 1, 1, 50, 1)
+                    }
+                    page == 1 -> PageResult(listOf(fresh), 2, 1, 50, 2)
+                    searchPageTwoFailures++ == 0 -> throw IllegalStateException("offline")
+                    else -> PageResult(listOf(next), 2, 2, 50, 2)
+                }
+            }
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.updateSearchQuery("stale")
+        advanceTimeBy(300)
+        runCurrent()
+        controller.updateSearchQuery("fresh")
+        advanceTimeBy(300)
+        runCurrent()
+
+        assertEquals(listOf(fresh), controller.state.value.search.items)
+        controller.loadMoreSearch()
+        runCurrent()
+        assertEquals(listOf(fresh), controller.state.value.search.items)
+        assertEquals(UiMessage(MobileString.ErrorNetwork), controller.state.value.search.loadMoreError)
+
+        controller.loadMoreSearch()
+        runCurrent()
+        assertEquals(listOf(fresh, next), controller.state.value.search.items)
+        assertNull(controller.state.value.search.loadMoreError)
+        assertFalse(controller.state.value.search.hasMore)
+    }
+
+    @Test
+    fun previewLoadsBoundedTextAndRefreshesMediaTicketOnceAfterRendererFailure() = runTest {
+        val image = FileItem(id = 10, fileName = "photo.png", mimeType = "image/png")
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            metadata[FILE.id] = FILE
+            metadata[image.id] = image
+            textPreview = TextPreview("hello", true)
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.openPreview(FILE.id)
+        runCurrent()
+        assertEquals("hello", controller.state.value.preview.text)
+        assertTrue(controller.state.value.preview.textTruncated)
+
+        controller.closePreview()
+        controller.openPreview(image.id)
+        runCurrent()
+        assertEquals("https://ticket/1", controller.state.value.preview.mediaUrl)
+        controller.reportPreviewError(UiMessage(MobileString.ErrorPreviewFailed))
+        runCurrent()
+        assertEquals("https://ticket/2", controller.state.value.preview.mediaUrl)
+        assertEquals(1, controller.state.value.preview.ticketRetryCount)
+    }
+
     private companion object {
         val USER = UserProfile(id = 7, username = "user", email = "user@example.com")
         val FILE = FileItem(id = 8, fileName = "sample.txt", fileSize = 12)
         fun page(vararg files: FileItem) = PageResult(
             records = files.toList(), total = files.size.toLong(), page = 1, size = 50, pages = 1,
+        )
+        fun transferTask(id: String, status: TransferStatus, parentId: Long? = null) = TransferTask(
+            id = id,
+            direction = TransferDirection.UPLOAD,
+            status = status,
+            serverBaseUrl = "https://drive.example.com",
+            scope = TransferScope.Personal(parentId),
+            fileName = "$id.bin",
+            bytesTotal = 10,
+            createdAt = 1,
+            updatedAt = 1,
         )
     }
 }
@@ -356,9 +517,15 @@ private class FakeFiles : AppFileOperations {
     data class Request(val parentId: Long?, val page: Int, val sortBy: String, val order: String)
     val responses = ArrayDeque<Result<PageResult<FileItem>>>()
     val requests = mutableListOf<Request>()
+    val searchResponses = ArrayDeque<Result<PageResult<FileItem>>>()
+    val searchRequests = mutableListOf<Triple<String, Int, Int>>()
+    var searchHandler: (suspend (String, Int, Int) -> PageResult<FileItem>)? = null
+    var searchPageTwoFailures = 0
     val metadata = mutableMapOf<Long, FileItem>()
     val createdNames = mutableListOf<String>()
     var mutationFailure: Throwable? = null
+    var ticketCalls = 0
+    var textPreview = TextPreview("", false)
     override suspend fun listPersonalFiles(
         parentId: Long?, page: Int, size: Int, sortBy: String, order: String,
     ): PageResult<FileItem> {
@@ -378,6 +545,14 @@ private class FakeFiles : AppFileOperations {
     override suspend fun movePersonalFile(fileId: Long, targetParentId: Long?) { mutationFailure?.let { throw it } }
     override suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) { mutationFailure?.let { throw it } }
     override suspend fun deletePersonalFiles(fileIds: List<Long>) { mutationFailure?.let { throw it } }
+    override suspend fun searchPersonalFiles(query: String, page: Int, size: Int): PageResult<FileItem> {
+        searchRequests += Triple(query, page, size)
+        searchHandler?.let { return it(query, page, size) }
+        return searchResponses.removeFirst().getOrThrow()
+    }
+    override suspend fun createPersonalDownloadTicket(fileId: Long): String = "https://ticket/${++ticketCalls}"
+    override suspend fun loadPersonalText(file: FileItem): TextPreview = textPreview
+    override suspend fun loadPersonalOffice(fileId: Long): OfficeConfig = OfficeConfig()
     override suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig = error("unused")
 }
 
@@ -385,8 +560,13 @@ private class FakeTransfers : AppTransferOperations {
     val mutableTasks = MutableStateFlow<List<TransferTask>>(emptyList())
     override val tasks: Flow<List<TransferTask>> = mutableTasks
     var clearCalls = 0
+    var enqueueResult = UploadEnqueueResult(emptyList(), 0, 0)
+    val uploadParents = mutableListOf<Long?>()
 
-    override suspend fun enqueueUpload(document: PickedDocument) = Unit
+    override suspend fun enqueueUploads(result: UploadPickResult, parentId: Long?): UploadEnqueueResult {
+        uploadParents += parentId
+        return enqueueResult
+    }
     override suspend fun enqueueDownload(
         fileId: Long,
         fileName: String,
@@ -404,4 +584,5 @@ private class FakeTransfers : AppTransferOperations {
         clearCalls++
         mutableTasks.value = emptyList()
     }
+    override suspend fun clearFinished(): Int = 0
 }

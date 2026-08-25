@@ -14,6 +14,9 @@ import com.betterclouddrive.mobile.core.database.MobileDatabase
 import com.betterclouddrive.mobile.core.database.TransferTaskEntity
 import com.betterclouddrive.mobile.core.platform.TransferScheduleSpec
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
+import com.betterclouddrive.mobile.feature.transfers.TransferScope
+import com.betterclouddrive.mobile.feature.transfers.TransferStatus
+import com.betterclouddrive.mobile.feature.transfers.TransferTask
 import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
@@ -90,6 +93,34 @@ class AndroidSecurityDeviceTest {
     }
 
     @Test
+    fun purgingDeletedTransferRemovesSensitiveHandleFromDatabaseFiles() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val name = "device-transfer-purge-${System.nanoTime()}.db"
+        val marker = "content://stage78-sensitive-${System.nanoTime()}"
+        context.deleteDatabase(name)
+        val database = openDatabase(context, name)
+        database.transferTaskDao().upsert(
+            TransferTaskEntity(
+                id = "sensitive-task", direction = "UPLOAD", status = "SUCCEEDED",
+                serverBaseUrl = "https://drive.example.com", teamId = null, remoteParentId = null,
+                remoteFileId = null, remoteResultFileId = null, fileName = "finished.bin", mimeType = null,
+                bytesDone = 1, bytesTotal = 1, sourceHandle = marker, destinationHandle = null,
+                sessionId = null, chunkSize = 5L * 1024 * 1024, totalChunks = 1,
+                md5Hash = null, retryCount = 0, errorKey = null, createdAt = 1, updatedAt = 2,
+            ),
+        )
+        val files = databaseFiles(context, name)
+        assertTrue(files.any { it.exists() && it.readBytes().contains(marker.encodeToByteArray()) })
+
+        database.transferTaskDao().delete("sensitive-task")
+        database.purgeDeletedTransferContent()
+
+        assertTrue(files.none { it.exists() && it.readBytes().contains(marker.encodeToByteArray()) })
+        database.close()
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun transferTempsArePrivateAndCanBeCleaned() = runTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val files = AndroidTransferFileAccess(context)
@@ -124,7 +155,12 @@ class AndroidSecurityDeviceTest {
                 setLocales(android.os.LocaleList.forLanguageTags("zh-CN"))
             },
         )
-        val notification = transferNotification(context, "notification-task", "正在传输")
+        val task = TransferTask(
+            id = "notification-task", direction = TransferDirection.UPLOAD, status = TransferStatus.RUNNING,
+            serverBaseUrl = "https://drive.example.com", scope = TransferScope.Personal(), fileName = "file.bin",
+            bytesTotal = 1, createdAt = 1, updatedAt = 1,
+        )
+        val notification = transferNotification(context, "notification-batch", "正在传输", task)
         assertEquals(2, notification.actions.size)
         assertEquals("暂停", notification.actions[0].title.toString())
         assertEquals("取消", notification.actions[1].title.toString())
@@ -141,18 +177,20 @@ class AndroidSecurityDeviceTest {
             .build()
         WorkManagerTestInitHelper.initializeTestWorkManager(context, configuration)
         val scheduler = AndroidTransferScheduler(context)
-        val spec = TransferScheduleSpec("wm-${System.nanoTime()}", TransferDirection.UPLOAD, 1024)
+        val batchId = "wm-${System.nanoTime()}"
+        val taskId = "$batchId-task"
+        val spec = TransferScheduleSpec(batchId, listOf(taskId), uploadBytes = 1024, downloadBytes = 0)
 
         assertTrue(scheduler.schedule(spec))
         assertTrue(scheduler.schedule(spec))
         val manager = WorkManager.getInstance(context)
-        val infos = manager.getWorkInfosForUniqueWork(AndroidTransferScheduler.workName(spec.taskId)).get()
+        val infos = manager.getWorkInfosForUniqueWork(AndroidTransferScheduler.workName(batchId)).get()
         assertEquals(1, infos.count { !it.state.isFinished })
         assertTrue(infos.single().constraints.requiredNetworkType == androidx.work.NetworkType.CONNECTED)
 
         assertTrue(WorkManagerTestInitHelper.getTestDriver(context) != null)
-        scheduler.cancel(spec.taskId)
-        assertTrue(manager.getWorkInfosForUniqueWork(AndroidTransferScheduler.workName(spec.taskId)).get().all { it.state.isFinished })
+        scheduler.cancelAll()
+        assertTrue(manager.getWorkInfosForUniqueWork(AndroidTransferScheduler.workName(batchId)).get().all { it.state.isFinished })
     }
 
     private fun openDatabase(context: android.content.Context, name: String): MobileDatabase =
@@ -160,4 +198,16 @@ class AndroidSecurityDeviceTest {
             .setDriver(BundledSQLiteDriver())
             .setQueryCoroutineContext(Dispatchers.IO)
             .build()
+
+    private fun databaseFiles(context: android.content.Context, name: String): List<java.io.File> {
+        val database = context.getDatabasePath(name)
+        return listOf(database, java.io.File(database.path + "-wal"), java.io.File(database.path + "-shm"))
+    }
+
+    private fun ByteArray.contains(needle: ByteArray): Boolean {
+        if (needle.isEmpty() || size < needle.size) return false
+        return (0..size - needle.size).any { offset ->
+            needle.indices.all { index -> this[offset + index] == needle[index] }
+        }
+    }
 }

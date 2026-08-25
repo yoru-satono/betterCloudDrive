@@ -277,6 +277,8 @@ private class FakeTransferFiles(
 
     override suspend fun validateReadable(sourceHandle: String) = Unit
     override suspend fun validateWritable(destinationHandle: String) = Unit
+    override suspend fun releaseReadable(sourceHandle: String) = Unit
+    override suspend fun releaseWritable(destinationHandle: String) = Unit
     override suspend fun computeDigest(sourceHandle: String): FileDigest = FileDigest("test-md5", source.size.toLong())
     override fun uploadPart(sourceHandle: String, offset: Long, length: Long, onBytes: (Long) -> Unit): InputProvider = InputProvider(length) {
         onBytes(length)

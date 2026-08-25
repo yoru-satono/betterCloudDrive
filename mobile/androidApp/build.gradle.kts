@@ -11,8 +11,8 @@ android {
         applicationId = "com.betterclouddrive.mobile.spike"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "0.7.0-stage6"
+        versionCode = 9
+        versionName = "0.9.0-stage8"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

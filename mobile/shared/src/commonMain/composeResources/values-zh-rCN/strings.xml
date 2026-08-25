@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP 移动端 · 阶段 6</string>
+    <string name="stage_label">KMP 移动端 · 阶段 8</string>
     <string name="restore_title">暂时无法连接服务器</string>
     <string name="session_preserved">本地会话仍已加密保存</string>
     <string name="retry">重试</string>
@@ -104,7 +104,23 @@
     <string name="created_at">创建时间</string>
     <string name="version_count">版本数</string>
     <string name="choose_file">选择文件</string>
+    <string name="choose_files">选择多个文件</string>
+    <string name="upload">上传</string>
     <string name="download">下载</string>
+    <string name="upload_to_current_folder">上传到当前目录</string>
+    <string name="upload_queued_summary">已加入 {0} 个文件；跳过 {1} 个不可读文件和 {2} 个超限文件</string>
+    <string name="upload_nothing_queued">没有文件加入队列；{0} 个文件不可读，{1} 个文件超限</string>
+    <string name="view_transfers">查看传输</string>
+    <string name="uploads">上传 {0}</string>
+    <string name="downloads">下载 {0}</string>
+    <string name="uploads_empty">暂无上传任务</string>
+    <string name="downloads_empty">暂无下载任务</string>
+    <string name="transfer_bytes">{0} / {1} · {2}%</string>
+    <string name="clear_finished">清除已结束</string>
+    <string name="clear_finished_title">清除已结束任务？</string>
+    <string name="clear_finished_message">将移除 {0} 个成功、失败或已取消任务。失败任务清除后不能继续重试。</string>
+    <string name="clear">清除</string>
+    <string name="error_background_scheduling">无法调度后台传输，请在应用打开时重试。</string>
     <string name="create_folder">新建文件夹</string>
     <string name="rename">重命名</string>
     <string name="move">移动</string>
@@ -139,4 +155,21 @@
     <string name="notification_transferring">正在传输</string>
     <string name="notification_uploading">正在上传 {0}{1}</string>
     <string name="notification_downloading">正在下载 {0}{1}</string>
+    <string name="search">搜索</string>
+    <string name="search_files">搜索个人文件</string>
+    <string name="search_hint">输入文件或文件夹名称</string>
+    <string name="search_initial">搜索个人空间中的全部文件</string>
+    <string name="search_no_results">未找到“{0}”</string>
+    <string name="search_failed">搜索失败</string>
+    <string name="search_result_count">共 {0} 项结果</string>
+    <string name="open_location">打开文件所在位置</string>
+    <string name="preview">预览</string>
+    <string name="preview_loading">正在加载预览</string>
+    <string name="preview_truncated">仅显示前 512 KiB；请下载文件查看完整内容。</string>
+    <string name="preview_unsupported">无法预览</string>
+    <string name="preview_unsupported_detail">当前不支持在线预览此文件类型。</string>
+    <string name="preview_empty_text">此文本文件为空。</string>
+    <string name="preview_read_only">只读预览</string>
+    <string name="error_preview_failed">预览加载失败，请重试。</string>
+    <string name="retry_preview">重试预览</string>
 </resources>

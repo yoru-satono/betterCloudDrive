@@ -24,12 +24,15 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,7 +68,8 @@ import com.betterclouddrive.mobile.core.localization.MobileStrings
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
-import com.betterclouddrive.mobile.core.platform.PickedDocument
+import com.betterclouddrive.mobile.core.platform.MediaPreviewRenderer
+import com.betterclouddrive.mobile.core.platform.UploadPickResult
 import com.betterclouddrive.mobile.feature.files.FileViewMode
 import com.betterclouddrive.mobile.feature.files.PersonalFileSort
 import com.betterclouddrive.mobile.feature.files.SortDirection
@@ -92,12 +96,25 @@ data class ProductShellActions(
     val confirmFolderPicker: () -> Unit,
     val consumeFileFeedback: () -> Unit,
     val updatePersonalScrollAnchor: (Long?) -> Unit,
-    val upload: (PickedDocument) -> Unit,
+    val updateSearchQuery: (String) -> Unit,
+    val submitSearch: () -> Unit,
+    val retrySearch: () -> Unit,
+    val loadMoreSearch: () -> Unit,
+    val updateSearchScrollAnchor: (Long?) -> Unit,
+    val prepareOpenSearchLocation: (FileItem) -> Unit,
+    val openPreview: (Long) -> Unit,
+    val retryPreview: () -> Unit,
+    val closePreview: () -> Unit,
+    val updatePreviewPosition: (Long) -> Unit,
+    val reportPreviewError: (UiMessage) -> Unit,
+    val upload: (Long?, UploadPickResult) -> Unit,
+    val consumeTransferFeedback: () -> Unit,
     val download: (FileItem, String) -> Unit,
     val pause: (String) -> Unit,
     val resume: (String) -> Unit,
     val cancel: (String) -> Unit,
     val retry: (String) -> Unit,
+    val clearFinishedTransfers: () -> Unit,
     val logout: () -> Unit,
     val loadDiagnosticOffice: (Long, Long) -> Unit,
     val updateDiagnosticStatus: (UiMessage) -> Unit,
@@ -123,6 +140,7 @@ fun ProductShell(
     state: AppUiState,
     documentPicker: DocumentPicker,
     officeRenderer: OfficeRenderer,
+    mediaPreviewRenderer: MediaPreviewRenderer,
     roomTaskCount: suspend () -> Int,
     actions: ProductShellActions,
     debugToolsEnabled: Boolean,
@@ -131,6 +149,8 @@ fun ProductShell(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
     val isDiagnostics = destination.matches(DiagnosticsRoute)
+    val isPreview = destination?.hasRoute<PersonalPreviewRoute>() == true
+    val isSearch = destination?.hasRoute<PersonalSearchRoute>() == true
 
     LaunchedEffect(backStackEntry) {
         when {
@@ -177,26 +197,46 @@ fun ProductShell(
         }
     }
 
+    fun openTransfers() = navigateTopLevel(TransfersRoute)
+    fun openSearch() = navController.navigate(PersonalSearchRoute) { launchSingleTop = true }
+    fun openPreview(file: FileItem) = navController.navigate(PersonalPreviewRoute(file.id))
+    fun closePreview() {
+        actions.closePreview()
+        navController.popBackStack()
+    }
+    fun openSearchLocation(file: FileItem) {
+        actions.prepareOpenSearchLocation(file)
+        val route: AppRoute = file.parentId?.let(::PersonalFolderRoute) ?: PersonalRoute
+        navController.navigate(route) { launchSingleTop = true }
+    }
+
     @Composable
     fun Content(modifier: Modifier) {
         AppNavHost(
-            navController, modifier, state, documentPicker, officeRenderer, roomTaskCount,
+            navController, modifier, state, documentPicker, officeRenderer, mediaPreviewRenderer, roomTaskCount,
             actions, debugToolsEnabled,
             onOpenFolder = ::openFolder,
             onGoRoot = ::goPersonalRoot,
             onOpenDiagnostics = { navController.navigate(DiagnosticsRoute) },
+            onOpenTransfers = ::openTransfers,
+            onOpenSearch = ::openSearch,
+            onOpenPreview = ::openPreview,
+            onClosePreview = ::closePreview,
+            onOpenSearchLocation = ::openSearchLocation,
         )
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 600.dp
-        if (wide && !isDiagnostics) {
+        if (wide && !isDiagnostics && !isPreview) {
             Row(Modifier.fillMaxSize().testTag("product-shell-wide")) {
-                MainNavigationRail(destination, ::navigateTopLevel)
+                MainNavigationRail(destination, state.activeTransferCount, ::navigateTopLevel)
                 ShellScaffold(
                     destination, state, actions,
                     onBack = navController::popBackStack,
                     onBreadcrumb = ::openBreadcrumb,
+                    onOpenSearch = ::openSearch,
+                    showTopBar = !isSearch,
                     modifier = Modifier.weight(1f),
                     content = { Content(it) },
                 )
@@ -206,7 +246,9 @@ fun ProductShell(
                 destination, state, actions,
                 onBack = navController::popBackStack,
                 onBreadcrumb = ::openBreadcrumb,
-                bottomBar = { if (!isDiagnostics) MainNavigationBar(destination, ::navigateTopLevel) },
+                onOpenSearch = ::openSearch,
+                showTopBar = !isSearch && !isPreview,
+                bottomBar = { if (!isDiagnostics && !isPreview) MainNavigationBar(destination, state.activeTransferCount, ::navigateTopLevel) },
                 modifier = Modifier.fillMaxSize().testTag("product-shell-compact"),
                 content = { Content(it) },
             )
@@ -222,6 +264,8 @@ private fun ShellScaffold(
     actions: ProductShellActions,
     onBack: () -> Unit,
     onBreadcrumb: (Long?) -> Unit,
+    onOpenSearch: () -> Unit,
+    showTopBar: Boolean = true,
     modifier: Modifier = Modifier,
     bottomBar: @Composable () -> Unit = {},
     content: @Composable (Modifier) -> Unit,
@@ -230,7 +274,7 @@ private fun ShellScaffold(
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
+            if (showTopBar) TopAppBar(
                 title = {
                     if (destination.isPersonal()) {
                         BreadcrumbBar(state.personalFiles, onBreadcrumb)
@@ -245,7 +289,7 @@ private fun ShellScaffold(
                     }
                 },
                 actions = {
-                    if (destination.isPersonal()) PersonalTopActions(state.personalFiles, actions)
+                    if (destination.isPersonalDirectory()) PersonalTopActions(state.personalFiles, actions, onOpenSearch)
                 },
             )
         },
@@ -291,9 +335,12 @@ private fun BreadcrumbBar(state: PersonalFilesUiState, onClick: (Long?) -> Unit)
 }
 
 @Composable
-private fun PersonalTopActions(state: PersonalFilesUiState, actions: ProductShellActions) {
+private fun PersonalTopActions(state: PersonalFilesUiState, actions: ProductShellActions, onOpenSearch: () -> Unit) {
     val strings = LocalMobileStrings.current
     var sortExpanded by remember { mutableStateOf(false) }
+    IconButton(onClick = onOpenSearch, modifier = Modifier.testTag("personal-search")) {
+        Icon(Icons.Default.Search, contentDescription = strings[MobileString.SearchFiles])
+    }
     Box {
         IconButton(
             onClick = { sortExpanded = true },
@@ -359,12 +406,18 @@ private fun AppNavHost(
     state: AppUiState,
     documentPicker: DocumentPicker,
     officeRenderer: OfficeRenderer,
+    mediaPreviewRenderer: MediaPreviewRenderer,
     roomTaskCount: suspend () -> Int,
     actions: ProductShellActions,
     debugToolsEnabled: Boolean,
     onOpenFolder: (FileItem) -> Unit,
     onGoRoot: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenTransfers: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onOpenPreview: (FileItem) -> Unit,
+    onClosePreview: () -> Unit,
+    onOpenSearchLocation: (FileItem) -> Unit,
 ) {
     @Composable
     fun Personal() {
@@ -376,16 +429,45 @@ private fun AppNavHost(
             actions.createPersonalFolder, actions.renamePersonalFile, actions.deletePersonalFiles,
             actions.openFolderPicker, actions.openPickerFolder, actions.pickerBack,
             actions.retryFolderPicker, actions.closeFolderPicker, actions.confirmFolderPicker,
-            actions.consumeFileFeedback,
+            actions.consumeFileFeedback, actions.consumeTransferFeedback, onOpenTransfers, onOpenPreview,
         )
     }
 
     NavHost(navController, startDestination = PersonalRoute, modifier = modifier) {
         composable<PersonalRoute> { Personal() }
         composable<PersonalFolderRoute> { Personal() }
+        composable<PersonalSearchRoute> {
+            PersonalSearchScreen(
+                state.search, documentPicker, onBack = navController::popBackStack,
+                onQueryChanged = actions.updateSearchQuery,
+                onSubmit = actions.submitSearch,
+                onLoadMore = actions.loadMoreSearch,
+                onRetry = actions.retrySearch,
+                onScrollAnchor = actions.updateSearchScrollAnchor,
+                onOpenFolder = { navController.navigate(PersonalFolderRoute(it.id)) },
+                onOpenLocation = onOpenSearchLocation,
+                onPreview = onOpenPreview,
+                onDownload = actions.download,
+            )
+        }
+        composable<PersonalPreviewRoute> { entry ->
+            val fileId = entry.toRoute<PersonalPreviewRoute>().fileId
+            LaunchedEffect(fileId) { actions.openPreview(fileId) }
+            PersonalPreviewScreen(
+                state.preview, documentPicker, officeRenderer, mediaPreviewRenderer,
+                onBack = onClosePreview,
+                onRetry = actions.retryPreview,
+                onDownload = actions.download,
+                onPositionChanged = actions.updatePreviewPosition,
+                onRendererError = actions.reportPreviewError,
+            )
+        }
         composable<TeamsRoute> { TeamsPlaceholderScreen() }
         composable<TransfersRoute> {
-            TransferQueueScreen(state.transfers, actions.pause, actions.resume, actions.cancel, actions.retry)
+            TransferQueueScreen(
+                state.transfers, actions.pause, actions.resume, actions.cancel, actions.retry,
+                actions.clearFinishedTransfers,
+            )
         }
         composable<ProfileRoute> {
             ProfileScreen(state.user, state.server, debugToolsEnabled, onOpenDiagnostics, actions.logout)
@@ -402,7 +484,7 @@ private fun AppNavHost(
 }
 
 @Composable
-private fun MainNavigationBar(destination: NavDestination?, onNavigate: (AppRoute) -> Unit) {
+private fun MainNavigationBar(destination: NavDestination?, activeTransfers: Int, onNavigate: (AppRoute) -> Unit) {
     val strings = LocalMobileStrings.current
     NavigationBar(modifier = Modifier.testTag("main-navigation-bar")) {
         topLevelItems.forEach { item ->
@@ -410,7 +492,7 @@ private fun MainNavigationBar(destination: NavDestination?, onNavigate: (AppRout
             NavigationBarItem(
                 selected = selected,
                 onClick = { if (!selected || (item.route == PersonalRoute && destination.isPersonalFolder())) onNavigate(item.route) },
-                icon = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, strings[item.label]) },
+                icon = { NavigationIcon(item, selected, activeTransfers, strings) },
                 label = { Text(strings[item.label]) },
                 modifier = Modifier.testTag(item.testTag),
             )
@@ -419,7 +501,7 @@ private fun MainNavigationBar(destination: NavDestination?, onNavigate: (AppRout
 }
 
 @Composable
-private fun MainNavigationRail(destination: NavDestination?, onNavigate: (AppRoute) -> Unit) {
+private fun MainNavigationRail(destination: NavDestination?, activeTransfers: Int, onNavigate: (AppRoute) -> Unit) {
     val strings = LocalMobileStrings.current
     NavigationRail(modifier = Modifier.fillMaxHeight().testTag("main-navigation-rail")) {
         Spacer(Modifier.height(16.dp))
@@ -428,7 +510,7 @@ private fun MainNavigationRail(destination: NavDestination?, onNavigate: (AppRou
             NavigationRailItem(
                 selected = selected,
                 onClick = { if (!selected || (item.route == PersonalRoute && destination.isPersonalFolder())) onNavigate(item.route) },
-                icon = { Icon(if (selected) item.selectedIcon else item.unselectedIcon, strings[item.label]) },
+                icon = { NavigationIcon(item, selected, activeTransfers, strings) },
                 label = { Text(strings[item.label]) },
                 modifier = Modifier.testTag(item.testTag),
             )
@@ -436,9 +518,32 @@ private fun MainNavigationRail(destination: NavDestination?, onNavigate: (AppRou
     }
 }
 
+@Composable
+private fun NavigationIcon(item: TopLevelItem, selected: Boolean, activeTransfers: Int, strings: MobileStrings) {
+    if (item.route == TransfersRoute && activeTransfers > 0) {
+        BadgedBox(
+            modifier = Modifier.testTag("nav-transfers-badge"),
+            badge = { Badge { Text(activeTransfers.coerceAtMost(99).toString()) } },
+        ) {
+            Icon(if (selected) item.selectedIcon else item.unselectedIcon, strings[item.label])
+        }
+    } else {
+        Icon(if (selected) item.selectedIcon else item.unselectedIcon, strings[item.label])
+    }
+}
+
+private val AppUiState.activeTransferCount: Int
+    get() = transfers.count { it.status !in setOf(
+        com.betterclouddrive.mobile.feature.transfers.TransferStatus.SUCCEEDED,
+        com.betterclouddrive.mobile.feature.transfers.TransferStatus.FAILED,
+        com.betterclouddrive.mobile.feature.transfers.TransferStatus.CANCELED,
+    ) }
+
 private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
     PersonalRoute -> isPersonal()
     is PersonalFolderRoute -> this?.hasRoute<PersonalFolderRoute>() == true
+    PersonalSearchRoute -> this?.hasRoute<PersonalSearchRoute>() == true
+    is PersonalPreviewRoute -> this?.hasRoute<PersonalPreviewRoute>() == true
     TeamsRoute -> this?.hasRoute<TeamsRoute>() == true
     TransfersRoute -> this?.hasRoute<TransfersRoute>() == true
     ProfileRoute -> this?.hasRoute<ProfileRoute>() == true
@@ -446,11 +551,16 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
 }
 
 private fun NavDestination?.isPersonal(): Boolean =
+    this?.hasRoute<PersonalRoute>() == true || this?.hasRoute<PersonalFolderRoute>() == true ||
+        this?.hasRoute<PersonalSearchRoute>() == true || this?.hasRoute<PersonalPreviewRoute>() == true
+
+private fun NavDestination?.isPersonalDirectory(): Boolean =
     this?.hasRoute<PersonalRoute>() == true || this?.hasRoute<PersonalFolderRoute>() == true
 
 private fun NavDestination?.isPersonalFolder(): Boolean = this?.hasRoute<PersonalFolderRoute>() == true
 
 private fun NavDestination?.title(strings: MobileStrings): String = when {
+    matches(PersonalSearchRoute) -> strings[MobileString.SearchFiles]
     matches(TeamsRoute) -> strings[MobileString.TeamsTitle]
     matches(TransfersRoute) -> strings[MobileString.TransferQueueTitle]
     matches(ProfileRoute) -> strings[MobileString.Profile]

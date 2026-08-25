@@ -68,6 +68,16 @@ data class FileItem(
     val isFolder: Boolean get() = fileType == "folder"
 }
 
+enum class PreviewKind { OFFICE, IMAGE, TEXT, VIDEO, UNSUPPORTED }
+
+@Serializable
+data class DownloadTicketResponse(val url: String)
+
+data class TextPreview(
+    val content: String,
+    val truncated: Boolean,
+)
+
 @Serializable
 data class CreatePersonalFolderRequest(
     @SerialName("parentId") val parentId: Long? = null,

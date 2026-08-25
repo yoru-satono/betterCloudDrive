@@ -5,6 +5,7 @@ import com.betterclouddrive.mobile.core.localization.PlatformLocaleProvider
 import com.betterclouddrive.mobile.core.network.BackendClient
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
+import com.betterclouddrive.mobile.core.platform.MediaPreviewRenderer
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
 import com.betterclouddrive.mobile.feature.files.FileRepository
 import com.betterclouddrive.mobile.feature.transfers.TransferEngine
@@ -22,6 +23,7 @@ class AppContainer(
     val transferEngine: TransferEngine,
     val documentPicker: DocumentPicker,
     val officeRenderer: OfficeRenderer,
+    val mediaPreviewRenderer: MediaPreviewRenderer,
     val localeProvider: PlatformLocaleProvider,
     private val applicationScope: CoroutineScope,
 ) {
