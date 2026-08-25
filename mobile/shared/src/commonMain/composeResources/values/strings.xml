@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP mobile · Stage 5</string>
+    <string name="stage_label">KMP mobile · Stage 6</string>
     <string name="restore_title">Can&apos;t connect to the server</string>
     <string name="session_preserved">Your local session remains encrypted</string>
     <string name="retry">Retry</string>
@@ -105,6 +105,34 @@
     <string name="version_count">Versions</string>
     <string name="choose_file">Choose file</string>
     <string name="download">Download</string>
+    <string name="create_folder">New folder</string>
+    <string name="rename">Rename</string>
+    <string name="move">Move</string>
+    <string name="copy">Copy</string>
+    <string name="delete">Move to trash</string>
+    <string name="more_actions">More actions</string>
+    <string name="selected_count">{0} selected</string>
+    <string name="folder_name">Folder name</string>
+    <string name="new_name">New name</string>
+    <string name="confirm">Confirm</string>
+    <string name="delete_single_title">Move “{0}” to trash?</string>
+    <string name="delete_single_message">The item will be moved to the recycle bin.</string>
+    <string name="delete_multiple_title">Move selected items to trash?</string>
+    <string name="delete_multiple_message">Move {0} selected item(s) to the recycle bin.</string>
+    <string name="choose_destination">Choose destination folder</string>
+    <string name="destination_root">Personal root</string>
+    <string name="destination_empty">No subfolders here</string>
+    <string name="current_folder">Current folder</string>
+    <string name="folder_created">Folder created</string>
+    <string name="file_renamed">Item renamed</string>
+    <string name="file_moved">Item moved</string>
+    <string name="file_copied">Item copied</string>
+    <string name="files_moved_to_trash">Item(s) moved to the recycle bin</string>
+    <string name="error_invalid_destination">This destination cannot be used</string>
+    <string name="error_invalid_file_name">Enter a name from 1 to 255 characters</string>
+    <string name="name_required">Enter a name</string>
+    <string name="name_too_long">The name cannot exceed 255 characters</string>
+    <string name="close">Close</string>
     <string name="notification_transfer_title">BetterCloudDrive file transfer</string>
     <string name="notification_channel">File transfers</string>
     <string name="notification_preparing">Preparing transfer</string>
@@ -112,4 +140,3 @@
     <string name="notification_uploading">Uploading {0}{1}</string>
     <string name="notification_downloading">Downloading {0}{1}</string>
 </resources>
-

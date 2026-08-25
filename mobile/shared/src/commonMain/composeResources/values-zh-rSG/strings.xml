@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP 移动端 · 阶段 5</string>
+    <string name="stage_label">KMP 移动端 · 阶段 6</string>
     <string name="restore_title">暂时无法连接服务器</string>
     <string name="session_preserved">本地会话仍已加密保存</string>
     <string name="retry">重试</string>
@@ -105,6 +105,34 @@
     <string name="version_count">版本数</string>
     <string name="choose_file">选择文件</string>
     <string name="download">下载</string>
+    <string name="create_folder">新建文件夹</string>
+    <string name="rename">重命名</string>
+    <string name="move">移动</string>
+    <string name="copy">复制</string>
+    <string name="delete">移入回收站</string>
+    <string name="more_actions">更多操作</string>
+    <string name="selected_count">已选择 {0} 项</string>
+    <string name="folder_name">文件夹名称</string>
+    <string name="new_name">新名称</string>
+    <string name="confirm">确认</string>
+    <string name="delete_single_title">将“{0}”移入回收站？</string>
+    <string name="delete_single_message">该项目将被移入回收站。</string>
+    <string name="delete_multiple_title">将所选项目移入回收站？</string>
+    <string name="delete_multiple_message">将已选择的 {0} 项移入回收站。</string>
+    <string name="choose_destination">选择目标文件夹</string>
+    <string name="destination_root">个人根目录</string>
+    <string name="destination_empty">此处没有子文件夹</string>
+    <string name="current_folder">当前文件夹</string>
+    <string name="folder_created">文件夹已创建</string>
+    <string name="file_renamed">项目已重命名</string>
+    <string name="file_moved">项目已移动</string>
+    <string name="file_copied">项目已复制</string>
+    <string name="files_moved_to_trash">项目已移入回收站</string>
+    <string name="error_invalid_destination">不能使用该目标位置</string>
+    <string name="error_invalid_file_name">请输入 1 至 255 个字符的名称</string>
+    <string name="name_required">请输入名称</string>
+    <string name="name_too_long">名称不能超过 255 个字符</string>
+    <string name="close">关闭</string>
     <string name="notification_transfer_title">BetterCloudDrive 文件传输</string>
     <string name="notification_channel">文件传输</string>
     <string name="notification_preparing">正在准备传输</string>
@@ -112,4 +140,3 @@
     <string name="notification_uploading">正在上传 {0}{1}</string>
     <string name="notification_downloading">正在下载 {0}{1}</string>
 </resources>
-

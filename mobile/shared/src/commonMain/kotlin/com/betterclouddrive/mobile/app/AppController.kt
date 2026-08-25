@@ -43,6 +43,11 @@ internal interface AppFileOperations {
         parentId: Long?, page: Int, size: Int, sortBy: String, order: String,
     ): PageResult<FileItem>
     suspend fun getPersonalFile(fileId: Long): FileItem
+    suspend fun createPersonalFolder(parentId: Long?, folderName: String): FileItem
+    suspend fun renamePersonalFile(fileId: Long, newName: String): FileItem
+    suspend fun movePersonalFile(fileId: Long, targetParentId: Long?)
+    suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?)
+    suspend fun deletePersonalFiles(fileIds: List<Long>)
     suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig
 }
 
@@ -80,6 +85,15 @@ private class RepositoryFileOperations(private val repository: FileRepository) :
         parentId: Long?, page: Int, size: Int, sortBy: String, order: String,
     ) = repository.listPersonalFiles(parentId, page, size, sortBy, order)
     override suspend fun getPersonalFile(fileId: Long) = repository.getPersonalFile(fileId)
+    override suspend fun createPersonalFolder(parentId: Long?, folderName: String) =
+        repository.createPersonalFolder(parentId, folderName)
+    override suspend fun renamePersonalFile(fileId: Long, newName: String) =
+        repository.renamePersonalFile(fileId, newName)
+    override suspend fun movePersonalFile(fileId: Long, targetParentId: Long?) =
+        repository.movePersonalFile(fileId, targetParentId)
+    override suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) =
+        repository.copyPersonalFile(fileId, targetParentId)
+    override suspend fun deletePersonalFiles(fileIds: List<Long>) = repository.deletePersonalFiles(fileIds)
     override suspend fun loadTeamOffice(teamId: Long, fileId: Long) = repository.loadTeamOffice(teamId, fileId)
 }
 
@@ -130,7 +144,33 @@ data class PersonalFilesUiState(
     val direction: SortDirection = SortDirection.ASCENDING,
     val viewMode: FileViewMode = FileViewMode.LIST,
     val selectedFile: FileItem? = null,
+    val selectedIds: Set<Long> = emptySet(),
+    val mutation: FileMutationKind? = null,
+    val mutationError: UiMessage? = null,
+    val mutationErrorKind: FileMutationKind? = null,
+    val feedback: FileMutationFeedback? = null,
+    val folderPicker: FolderPickerState? = null,
 )
+
+enum class FileMutationKind { CREATE_FOLDER, RENAME, MOVE, COPY, DELETE }
+
+data class FileMutationFeedback(
+    val id: Long,
+    val message: UiMessage,
+    val isError: Boolean,
+)
+
+data class FolderPickerState(
+    val kind: FileMutationKind,
+    val source: FileItem,
+    val breadcrumb: List<BreadcrumbEntry> = listOf(BreadcrumbEntry(null, "")),
+    val currentFolderId: Long? = null,
+    val folders: List<FileItem> = emptyList(),
+    val loading: Boolean = false,
+    val error: UiMessage? = null,
+) {
+    val canConfirm: Boolean get() = kind == FileMutationKind.COPY || currentFolderId != source.parentId
+}
 
 data class DiagnosticUiState(
     val office: OfficeConfig? = null,
@@ -169,6 +209,9 @@ class AppController internal constructor(
     private val directoryCache = mutableMapOf<Long?, DirectoryPageState>()
     private var directoryJob: Job? = null
     private var detailJob: Job? = null
+    private var mutationJob: Job? = null
+    private var pickerJob: Job? = null
+    private var feedbackSequence = 0L
     private var started = false
 
     init {
@@ -292,6 +335,7 @@ class AppController internal constructor(
     }
 
     fun refreshFiles() {
+        clearSelection()
         directoryJob?.cancel()
         directoryJob = scope.launch {
             loadDirectoryPage(mutableState.value.personalFiles.current.folderId, page = 1, refresh = true)
@@ -320,6 +364,7 @@ class AppController internal constructor(
                     direction = direction,
                     current = previous.current.copy(refreshing = previous.current.hasLoaded, error = null),
                     selectedFile = null,
+                    selectedIds = emptySet(),
                 ),
             )
         }
@@ -352,6 +397,103 @@ class AppController internal constructor(
 
     fun changeFileViewMode(mode: FileViewMode) {
         mutableState.update { it.copy(personalFiles = it.personalFiles.copy(viewMode = mode)) }
+    }
+
+    fun togglePersonalSelection(fileId: Long) {
+        val personal = mutableState.value.personalFiles
+        if (personal.current.items.none { it.id == fileId }) return
+        val updated = personal.selectedIds.toMutableSet().apply {
+            if (!add(fileId)) remove(fileId)
+        }
+        mutableState.update { it.copy(personalFiles = it.personalFiles.copy(selectedIds = updated, selectedFile = null)) }
+    }
+
+    fun clearSelection() {
+        mutableState.update { it.copy(personalFiles = it.personalFiles.copy(selectedIds = emptySet())) }
+    }
+
+    fun clearPersonalTransientUi() {
+        pickerJob?.cancel()
+        mutableState.update {
+            it.copy(personalFiles = it.personalFiles.copy(
+                selectedIds = emptySet(), mutationError = null, mutationErrorKind = null, folderPicker = null,
+            ))
+        }
+    }
+
+    fun createPersonalFolder(name: String) = launchMutation(FileMutationKind.CREATE_FOLDER) {
+        files.createPersonalFolder(mutableState.value.personalFiles.current.folderId, name)
+        MobileString.FolderCreated
+    }
+
+    fun renamePersonalFile(file: FileItem, name: String) = launchMutation(FileMutationKind.RENAME) {
+        files.renamePersonalFile(file.id, name)
+        MobileString.FileRenamed
+    }
+
+    fun deletePersonalFiles(fileIds: Set<Long>) {
+        if (fileIds.isEmpty()) return
+        launchMutation(FileMutationKind.DELETE) {
+            files.deletePersonalFiles(fileIds.toList())
+            MobileString.FilesMovedToTrash
+        }
+    }
+
+    fun openFolderPicker(file: FileItem, kind: FileMutationKind) {
+        if (kind != FileMutationKind.MOVE && kind != FileMutationKind.COPY) return
+        pickerJob?.cancel()
+        mutableState.update {
+            it.copy(personalFiles = it.personalFiles.copy(
+                mutationError = null,
+                mutationErrorKind = null,
+                folderPicker = FolderPickerState(kind = kind, source = file, loading = true),
+            ))
+        }
+        loadPickerFolder(null, listOf(BreadcrumbEntry(null, "")))
+    }
+
+    fun openPickerFolder(folder: FileItem) {
+        if (!folder.isFolder) return
+        val picker = mutableState.value.personalFiles.folderPicker ?: return
+        loadPickerFolder(folder.id, picker.breadcrumb + BreadcrumbEntry(folder.id, folder.fileName))
+    }
+
+    fun pickerBack() {
+        val picker = mutableState.value.personalFiles.folderPicker ?: return
+        if (picker.breadcrumb.size <= 1) return
+        val path = picker.breadcrumb.dropLast(1)
+        loadPickerFolder(path.last().id, path)
+    }
+
+    fun retryFolderPicker() {
+        val picker = mutableState.value.personalFiles.folderPicker ?: return
+        loadPickerFolder(picker.currentFolderId, picker.breadcrumb)
+    }
+
+    fun closeFolderPicker() {
+        pickerJob?.cancel()
+        mutableState.update { it.copy(personalFiles = it.personalFiles.copy(
+            folderPicker = null, mutationError = null, mutationErrorKind = null,
+        )) }
+    }
+
+    fun confirmFolderPicker() {
+        val picker = mutableState.value.personalFiles.folderPicker ?: return
+        if (!picker.canConfirm) return
+        val targetId = picker.currentFolderId
+        launchMutation(picker.kind) {
+            when (picker.kind) {
+                FileMutationKind.MOVE -> files.movePersonalFile(picker.source.id, targetId)
+                FileMutationKind.COPY -> files.copyPersonalFile(picker.source.id, targetId)
+                else -> error("unsupported file destination operation")
+            }
+            if (targetId != mutableState.value.personalFiles.current.folderId) directoryCache.remove(targetId)
+            if (picker.kind == FileMutationKind.MOVE) MobileString.FileMoved else MobileString.FileCopied
+        }
+    }
+
+    fun consumeFileFeedback() {
+        mutableState.update { it.copy(personalFiles = it.personalFiles.copy(feedback = null)) }
     }
 
     fun selectPersonalFile(file: FileItem?) {
@@ -512,6 +654,10 @@ class AppController internal constructor(
                     breadcrumb = path,
                     current = snapshot,
                     selectedFile = null,
+                    selectedIds = emptySet(),
+                    mutationError = null,
+                    mutationErrorKind = null,
+                    folderPicker = null,
                 ),
             )
         }
@@ -534,6 +680,10 @@ class AppController internal constructor(
         directoryJob = null
         detailJob?.cancel()
         detailJob = null
+        mutationJob?.cancel()
+        mutationJob = null
+        pickerJob?.cancel()
+        pickerJob = null
         directoryCache.clear()
     }
 
@@ -602,7 +752,9 @@ class AppController internal constructor(
         is ApiException -> when (error.messageKey) {
             "error.unauthorized" -> UiMessage(MobileString.ErrorCredentials)
             "error.storageQuotaExceeded" -> UiMessage(MobileString.ErrorQuota)
-            "error.fileNameExists" -> UiMessage(MobileString.ErrorNameConflict)
+            "error.fileNameExists", "error.fileNameConflict" -> UiMessage(MobileString.ErrorNameConflict)
+            "error.invalidFileDestination" -> UiMessage(MobileString.ErrorInvalidDestination)
+            "error.invalidFileName", "error.validation", "error.invalidParameter" -> UiMessage(MobileString.ErrorInvalidFileName)
             "error.fileNotFound", "error.notFound" -> UiMessage(MobileString.ErrorNotFound)
             else -> if (error.requestId.isNullOrBlank()) {
                 UiMessage(MobileString.ErrorRequest)
@@ -629,8 +781,125 @@ class AppController internal constructor(
         total = total,
     )
 
+    private fun launchMutation(
+        kind: FileMutationKind,
+        block: suspend () -> MobileString,
+    ) {
+        if (mutableState.value.personalFiles.mutation != null) return
+        mutationJob = scope.launch {
+            mutableState.update {
+                it.copy(personalFiles = it.personalFiles.copy(
+                    mutation = kind, mutationError = null, mutationErrorKind = null,
+                ))
+            }
+            try {
+                val success = block()
+                val refreshError = try {
+                    reloadCurrentLoadedPages()
+                    null
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    friendly(error)
+                }
+                mutableState.update {
+                    it.copy(personalFiles = it.personalFiles.copy(
+                        mutation = null,
+                        mutationError = null,
+                        mutationErrorKind = null,
+                        selectedIds = emptySet(),
+                        selectedFile = null,
+                        folderPicker = null,
+                        feedback = FileMutationFeedback(++feedbackSequence, UiMessage(success), false),
+                        current = if (refreshError == null) it.personalFiles.current
+                        else it.personalFiles.current.copy(error = refreshError),
+                    ))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                val message = friendly(error)
+                mutableState.update {
+                    it.copy(personalFiles = it.personalFiles.copy(
+                        mutation = null,
+                        mutationError = message,
+                        mutationErrorKind = kind,
+                        feedback = FileMutationFeedback(++feedbackSequence, message, true),
+                    ))
+                }
+            }
+        }
+    }
+
+    private suspend fun reloadCurrentLoadedPages() {
+        val personal = mutableState.value.personalFiles
+        val folderId = personal.current.folderId
+        val pageCount = personal.current.page.coerceAtLeast(1)
+        val accumulated = mutableListOf<FileItem>()
+        var last: PageResult<FileItem>? = null
+        for (page in 1..pageCount) {
+            last = files.listPersonalFiles(folderId, page, PAGE_SIZE, personal.sort.apiValue, personal.direction.apiValue)
+            accumulated += last.records
+            if (page >= last.pages) break
+        }
+        val result = checkNotNull(last)
+        val snapshot = DirectoryPageState(
+            folderId = folderId,
+            items = accumulated.distinctBy(FileItem::id),
+            hasLoaded = true,
+            page = minOf(pageCount, result.pages.coerceAtLeast(1)),
+            pages = result.pages.coerceAtLeast(1),
+            total = result.total,
+            scrollAnchorId = personal.current.scrollAnchorId,
+        )
+        directoryCache[folderId] = snapshot
+        mutableState.update { it.copy(personalFiles = it.personalFiles.copy(current = snapshot)) }
+    }
+
+    private fun loadPickerFolder(folderId: Long?, breadcrumb: List<BreadcrumbEntry>) {
+        pickerJob?.cancel()
+        pickerJob = scope.launch {
+            val original = mutableState.value.personalFiles.folderPicker ?: return@launch
+            mutableState.update {
+                it.copy(personalFiles = it.personalFiles.copy(folderPicker = original.copy(
+                    breadcrumb = breadcrumb, currentFolderId = folderId, loading = true, error = null, folders = emptyList(),
+                )))
+            }
+            try {
+                val folders = mutableListOf<FileItem>()
+                var page = 1
+                while (true) {
+                    val result = files.listPersonalFiles(folderId, page, PICKER_PAGE_SIZE, "fileName", "asc")
+                    val firstFile = result.records.indexOfFirst { !it.isFolder }
+                    val folderRecords = if (firstFile >= 0) result.records.take(firstFile) else result.records
+                    folders += folderRecords.filterNot { it.id == original.source.id }
+                    if (firstFile >= 0 || page >= result.pages) break
+                    page++
+                }
+                mutableState.update {
+                    val current = it.personalFiles.folderPicker
+                    if (current?.source?.id != original.source.id || current.currentFolderId != folderId) it
+                    else it.copy(personalFiles = it.personalFiles.copy(folderPicker = current.copy(
+                        folders = folders.distinctBy(FileItem::id), loading = false,
+                    )))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update {
+                    val current = it.personalFiles.folderPicker
+                    if (current?.source?.id != original.source.id || current.currentFolderId != folderId) it
+                    else it.copy(personalFiles = it.personalFiles.copy(folderPicker = current.copy(
+                        loading = false, error = friendly(error),
+                    )))
+                }
+            }
+        }
+    }
+
     private companion object {
         const val PAGE_SIZE = 50
+        const val PICKER_PAGE_SIZE = 100
         const val MAX_BREADCRUMB_DEPTH = 128
     }
 }

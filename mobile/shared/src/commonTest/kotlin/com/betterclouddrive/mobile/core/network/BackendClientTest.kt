@@ -12,6 +12,7 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.HttpMethod
 import io.ktor.http.headersOf
 import io.ktor.http.content.OutgoingContent
 import io.ktor.utils.io.readAvailable
@@ -33,6 +34,45 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class BackendClientTest {
+    @Test
+    fun personalFileMutationsUseStableEndpointsAndBodies() = runTest {
+        val observed = mutableListOf<Triple<HttpMethod, String, String>>()
+        val engine = MockEngine { request ->
+            val outgoing = request.body as OutgoingContent.ByteArrayContent
+            observed += Triple(request.method, request.url.encodedPath, outgoing.bytes().decodeToString())
+            if (request.method == HttpMethod.Post && request.url.encodedPath == "/api/v1/files/folder") {
+                jsonResponse("""{"code":200,"data":{"id":9,"parentId":7,"fileName":"Docs","fileType":"folder"}}""")
+            } else if (request.method == HttpMethod.Put) {
+                jsonResponse("""{"code":200,"data":{"id":9,"parentId":7,"fileName":"Renamed","fileType":"folder"}}""")
+            } else {
+                jsonResponse("""{"code":200}""")
+            }
+        }
+        val client = BackendClient(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals("Docs", client.createPersonalFolder(7, "Docs").fileName)
+        assertEquals("Renamed", client.renamePersonalFile(9, "Renamed").fileName)
+        client.movePersonalFile(9, 11)
+        client.copyPersonalFile(9, null)
+        client.deletePersonalFiles(listOf(9, 9, 10))
+
+        assertEquals(
+            listOf(
+                Triple(HttpMethod.Post, "/api/v1/files/folder", """{"parentId":7,"folderName":"Docs"}"""),
+                Triple(HttpMethod.Put, "/api/v1/files/9", """{"newName":"Renamed"}"""),
+                Triple(HttpMethod.Post, "/api/v1/files/9/move", """{"targetParentId":11}"""),
+                Triple(HttpMethod.Post, "/api/v1/files/9/copy", "{}"),
+                Triple(HttpMethod.Delete, "/api/v1/files", """{"fileIds":[9,10]}"""),
+            ),
+            observed,
+        )
+    }
+
     @Test
     fun personalDirectoryQueryCarriesPagingAndSortAndParsesMetadata() = runTest {
         var requestedUrl = ""

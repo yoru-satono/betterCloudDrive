@@ -24,6 +24,8 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -34,10 +36,14 @@ import com.betterclouddrive.mobile.app.DirectoryPageState
 import com.betterclouddrive.mobile.app.PersonalFilesUiState
 import com.betterclouddrive.mobile.app.ProductShell
 import com.betterclouddrive.mobile.app.ProductShellActions
+import com.betterclouddrive.mobile.app.FileMutationKind
+import com.betterclouddrive.mobile.app.FolderPickerState
+import com.betterclouddrive.mobile.app.FileMutationFeedback
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.UserProfile
 import com.betterclouddrive.mobile.core.localization.UiMessage
+import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.mobileStringsFor
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
@@ -174,6 +180,34 @@ class ProductShellDeviceTest {
     }
 
     @Test
+    fun fileManagementExposesCreateRenameMoveAndBatchDelete() {
+        val folder = FileItem(id = 10, fileName = "Docs", fileType = "folder")
+        val file = FileItem(id = 11, fileName = "note.txt")
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(false, listOf(folder, file)) } }
+
+        composeRule.onNodeWithTag("personal-create-folder").performClick()
+        composeRule.onNodeWithTag("personal-name-dialog").assertIsDisplayed()
+        composeRule.onNodeWithText("Cancel").performClick()
+
+        composeRule.onNodeWithTag("personal-more-11").performClick()
+        composeRule.onNodeWithTag("personal-rename-11").performClick()
+        composeRule.onNodeWithTag("personal-name-dialog").assertIsDisplayed()
+        composeRule.onNodeWithText("Cancel").performClick()
+
+        composeRule.onNodeWithTag("personal-more-11").performClick()
+        composeRule.onNodeWithTag("personal-move-11").performClick()
+        composeRule.onNodeWithTag("personal-destination-sheet").assertIsDisplayed()
+        composeRule.onNodeWithTag("personal-destination-confirm").assertIsDisplayed()
+        composeRule.onNodeWithText("Cancel").performClick()
+
+        composeRule.onNodeWithTag("personal-file-10").performTouchInput { longClick() }
+        composeRule.onNodeWithTag("personal-file-11").performClick()
+        composeRule.onNodeWithTag("personal-selection-bar").assertIsDisplayed()
+        composeRule.onNodeWithTag("personal-selection-delete").performClick()
+        composeRule.onNodeWithTag("personal-delete-dialog").assertIsDisplayed()
+    }
+
+    @Test
     fun folderRouteShowsParentNavigationAndReturnsToRoot() {
         val folder = FileItem(id = 10, fileName = "一级", fileType = "folder")
         val child = FileItem(id = 11, parentId = 10, fileName = "二级", fileType = "folder")
@@ -219,6 +253,24 @@ class ProductShellDeviceTest {
         composeRule.setContent { BetterCloudDriveTheme { TestShell(false) } }
         composeRule.onNodeWithText("个人").assertIsDisplayed()
         composeRule.onNodeWithText("个人空间为空").assertIsDisplayed()
+    }
+
+    @Test
+    fun simplifiedChineseFileManagementControlsUseLocalizedResources() {
+        setActivityLocale("zh-CN")
+        val file = FileItem(id = 81, fileName = "notes.txt")
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(false, listOf(file)) } }
+
+        composeRule.onNodeWithText("新建文件夹").assertIsDisplayed()
+        composeRule.onNodeWithTag("personal-create-folder").performClick()
+        composeRule.onNodeWithText("文件夹名称").assertIsDisplayed()
+        composeRule.onNodeWithText("取消").performClick()
+
+        composeRule.onNodeWithTag("personal-more-81").performClick()
+        composeRule.onNodeWithText("重命名").assertIsDisplayed()
+        composeRule.onNodeWithText("移动").assertIsDisplayed()
+        composeRule.onNodeWithText("复制").assertIsDisplayed()
+        composeRule.onNodeWithText("移入回收站").assertIsDisplayed()
     }
 
     @Test
@@ -321,6 +373,46 @@ private fun TestShell(
             changeFileSort = { sort, direction -> personal = personal.copy(sort = sort, direction = direction) },
             changeFileViewMode = { personal = personal.copy(viewMode = it) },
             selectPersonalFile = { personal = personal.copy(selectedFile = it) },
+            togglePersonalSelection = { id ->
+                personal = personal.copy(selectedIds = personal.selectedIds.toMutableSet().apply {
+                    if (!add(id)) remove(id)
+                })
+            },
+            clearPersonalSelection = { personal = personal.copy(selectedIds = emptySet()) },
+            clearPersonalTransientUi = { personal = personal.copy(selectedIds = emptySet(), folderPicker = null) },
+            createPersonalFolder = { name ->
+                val created = FileItem(id = 999, parentId = personal.current.folderId, fileName = name.trim(), fileType = "folder")
+                personal = personal.copy(
+                    current = personal.current.copy(items = personal.current.items + created),
+                    feedback = FileMutationFeedback(1, UiMessage(MobileString.FolderCreated), false),
+                )
+            },
+            renamePersonalFile = { file, name ->
+                personal = personal.copy(
+                    current = personal.current.copy(items = personal.current.items.map { if (it.id == file.id) it.copy(fileName = name.trim()) else it }),
+                    feedback = FileMutationFeedback(2, UiMessage(MobileString.FileRenamed), false),
+                )
+            },
+            deletePersonalFiles = { ids ->
+                personal = personal.copy(
+                    current = personal.current.copy(items = personal.current.items.filterNot { it.id in ids }),
+                    selectedIds = emptySet(),
+                    feedback = FileMutationFeedback(3, UiMessage(MobileString.FilesMovedToTrash), false),
+                )
+            },
+            openFolderPicker = { source, kind ->
+                personal = personal.copy(folderPicker = FolderPickerState(
+                    kind = kind,
+                    source = source,
+                    folders = rootItems.filter { it.isFolder && it.id != source.id },
+                ))
+            },
+            openPickerFolder = {},
+            pickerBack = {},
+            retryFolderPicker = {},
+            closeFolderPicker = { personal = personal.copy(folderPicker = null) },
+            confirmFolderPicker = { personal = personal.copy(folderPicker = null) },
+            consumeFileFeedback = { personal = personal.copy(feedback = null) },
             updatePersonalScrollAnchor = {},
             upload = {},
             download = { _, _ -> },

@@ -4,6 +4,8 @@ import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.ApiResponse
 import com.betterclouddrive.mobile.core.model.AuthTokens
 import com.betterclouddrive.mobile.core.model.CompleteResult
+import com.betterclouddrive.mobile.core.model.CreatePersonalFolderRequest
+import com.betterclouddrive.mobile.core.model.DeletePersonalFilesRequest
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.InitUploadRequest
 import com.betterclouddrive.mobile.core.model.InitUploadResult
@@ -12,7 +14,9 @@ import com.betterclouddrive.mobile.core.model.InstantUploadResult
 import com.betterclouddrive.mobile.core.model.LoginRequest
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
+import com.betterclouddrive.mobile.core.model.PersonalFileDestinationRequest
 import com.betterclouddrive.mobile.core.model.RefreshRequest
+import com.betterclouddrive.mobile.core.model.RenamePersonalFileRequest
 import com.betterclouddrive.mobile.core.model.SessionExpiredException
 import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
@@ -32,9 +36,11 @@ import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.InputProvider
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
+import io.ktor.client.request.delete
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
@@ -195,6 +201,47 @@ class BackendClient(
 
     suspend fun getPersonalFile(fileId: Long): FileItem = authenticatedEnvelope { token ->
         client.get(url("files/$fileId")) { bearer(token) }
+    }
+
+    suspend fun createPersonalFolder(parentId: Long?, folderName: String): FileItem = authenticatedEnvelope { token ->
+        client.post(url("files/folder")) {
+            bearer(token)
+            jsonBody(CreatePersonalFolderRequest(parentId, folderName))
+        }
+    }
+
+    suspend fun renamePersonalFile(fileId: Long, newName: String): FileItem = authenticatedEnvelope { token ->
+        client.put(url("files/$fileId")) {
+            bearer(token)
+            jsonBody(RenamePersonalFileRequest(newName))
+        }
+    }
+
+    suspend fun movePersonalFile(fileId: Long, targetParentId: Long?) {
+        authenticatedNoData { token ->
+            client.post(url("files/$fileId/move")) {
+                bearer(token)
+                jsonBody(PersonalFileDestinationRequest(targetParentId))
+            }
+        }
+    }
+
+    suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) {
+        authenticatedNoData { token ->
+            client.post(url("files/$fileId/copy")) {
+                bearer(token)
+                jsonBody(PersonalFileDestinationRequest(targetParentId))
+            }
+        }
+    }
+
+    suspend fun deletePersonalFiles(fileIds: List<Long>) {
+        authenticatedNoData { token ->
+            client.delete(url("files")) {
+                bearer(token)
+                jsonBody(DeletePersonalFilesRequest(fileIds.distinct()))
+            }
+        }
     }
 
     suspend fun listRootFiles(): List<FileItem> {
@@ -396,7 +443,7 @@ class BackendClient(
             401 -> "error.unauthorized"
             403 -> "error.forbidden"
             404 -> "error.notFound"
-            409 -> "error.fileNameExists"
+            409 -> "error.fileNameConflict"
             429 -> "error.rateLimited"
             in 500..599 -> "error.internal"
             else -> "error.network"

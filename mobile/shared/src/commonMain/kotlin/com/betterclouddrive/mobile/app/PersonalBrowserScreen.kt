@@ -1,6 +1,7 @@
 package com.betterclouddrive.mobile.app
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,21 +26,44 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,7 +77,7 @@ import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.feature.files.FileViewMode
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun PersonalSpaceScreen(
     state: PersonalFilesUiState,
@@ -66,7 +90,38 @@ fun PersonalSpaceScreen(
     onScrollAnchor: (Long?) -> Unit,
     onRetry: () -> Unit,
     onGoRoot: () -> Unit,
+    onToggleSelection: (Long) -> Unit,
+    onClearSelection: () -> Unit,
+    onCreateFolder: (String) -> Unit,
+    onRename: (FileItem, String) -> Unit,
+    onDelete: (Set<Long>) -> Unit,
+    onOpenPicker: (FileItem, FileMutationKind) -> Unit,
+    onOpenPickerFolder: (FileItem) -> Unit,
+    onPickerBack: () -> Unit,
+    onRetryPicker: () -> Unit,
+    onClosePicker: () -> Unit,
+    onConfirmPicker: () -> Unit,
+    onConsumeFeedback: () -> Unit,
 ) {
+    val strings = LocalMobileStrings.current
+    val snackbar = remember { SnackbarHostState() }
+    var createDialog by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<FileItem?>(null) }
+    var deleteTargets by remember { mutableStateOf<List<FileItem>>(emptyList()) }
+    BackHandler(enabled = state.folderPicker != null || state.selectedIds.isNotEmpty()) {
+        if (state.folderPicker != null) onClosePicker() else onClearSelection()
+    }
+    LaunchedEffect(state.feedback?.id) {
+        state.feedback?.let { feedback ->
+            if (!feedback.isError) {
+                createDialog = false
+                renameTarget = null
+                deleteTargets = emptyList()
+            }
+            snackbar.showSnackbar(strings.resolve(feedback.message).orEmpty())
+            onConsumeFeedback()
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize().testTag("personal-content")) {
         val wide = maxWidth >= 600.dp
         if (wide) {
@@ -74,6 +129,9 @@ fun PersonalSpaceScreen(
                 PersonalDirectoryContent(
                     state, documentPicker, onUpload, onOpenFolder, onSelectFile,
                     onLoadMore, onScrollAnchor, onRetry, onGoRoot,
+                    onToggleSelection, onClearSelection, { createDialog = true },
+                    { renameTarget = it }, { deleteTargets = listOf(it) }, onOpenPicker,
+                    { deleteTargets = state.current.items.filter { item -> item.id in state.selectedIds } },
                     Modifier.weight(0.58f),
                 )
                 VerticalDivider(Modifier.fillMaxHeight())
@@ -87,6 +145,9 @@ fun PersonalSpaceScreen(
             PersonalDirectoryContent(
                 state, documentPicker, onUpload, onOpenFolder, onSelectFile,
                 onLoadMore, onScrollAnchor, onRetry, onGoRoot,
+                onToggleSelection, onClearSelection, { createDialog = true },
+                { renameTarget = it }, { deleteTargets = listOf(it) }, onOpenPicker,
+                { deleteTargets = state.current.items.filter { item -> item.id in state.selectedIds } },
                 Modifier.fillMaxSize(),
             )
             state.selectedFile?.let { file ->
@@ -98,7 +159,41 @@ fun PersonalSpaceScreen(
                 }
             }
         }
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).testTag("personal-feedback"))
+        state.folderPicker?.let { picker ->
+            DestinationPicker(
+                picker = picker,
+                wide = wide,
+                onOpenFolder = onOpenPickerFolder,
+                onBack = onPickerBack,
+                onRetry = onRetryPicker,
+                onDismiss = onClosePicker,
+                onConfirm = onConfirmPicker,
+                busy = state.mutation != null,
+                operationError = state.mutationError.takeIf {
+                    state.mutationErrorKind == FileMutationKind.MOVE || state.mutationErrorKind == FileMutationKind.COPY
+                },
+            )
+        }
     }
+    if (createDialog) NameDialog(
+        title = strings[MobileString.CreateFolder], label = strings[MobileString.FolderName], initial = "",
+        busy = state.mutation == FileMutationKind.CREATE_FOLDER,
+        serverError = state.mutationError.takeIf { state.mutationErrorKind == FileMutationKind.CREATE_FOLDER },
+        onDismiss = { if (state.mutation == null) createDialog = false }, onConfirm = onCreateFolder,
+    )
+    renameTarget?.let { file -> NameDialog(
+        title = strings[MobileString.Rename], label = strings[MobileString.NewName], initial = file.fileName,
+        busy = state.mutation == FileMutationKind.RENAME,
+        serverError = state.mutationError.takeIf { state.mutationErrorKind == FileMutationKind.RENAME },
+        onDismiss = { if (state.mutation == null) renameTarget = null }, onConfirm = { onRename(file, it) },
+    ) }
+    if (deleteTargets.isNotEmpty()) DeleteDialog(
+        targets = deleteTargets,
+        busy = state.mutation == FileMutationKind.DELETE,
+        onDismiss = { if (state.mutation == null) deleteTargets = emptyList() },
+        onConfirm = { onDelete(deleteTargets.map(FileItem::id).toSet()) },
+    )
 }
 
 @Composable
@@ -112,11 +207,31 @@ private fun PersonalDirectoryContent(
     onScrollAnchor: (Long?) -> Unit,
     onRetry: () -> Unit,
     onGoRoot: () -> Unit,
+    onToggleSelection: (Long) -> Unit,
+    onClearSelection: () -> Unit,
+    onCreateFolder: () -> Unit,
+    onRename: (FileItem) -> Unit,
+    onDeleteOne: (FileItem) -> Unit,
+    onOpenPicker: (FileItem, FileMutationKind) -> Unit,
+    onDeleteSelected: () -> Unit,
     modifier: Modifier,
 ) {
     val strings = LocalMobileStrings.current
     val directory = state.current
     Column(modifier.padding(horizontal = 16.dp).testTag("personal-folder-${directory.folderId ?: "root"}")) {
+        if (state.selectedIds.isNotEmpty()) {
+            SelectionBar(state.selectedIds.size, onClearSelection, onDeleteSelected)
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                OutlinedButton(onClick = onCreateFolder, modifier = Modifier.testTag("personal-create-folder")) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Text(strings[MobileString.CreateFolder])
+                }
+            }
+        }
         if (directory.refreshing) {
             LinearProgressIndicator(Modifier.fillMaxWidth().testTag("personal-refreshing"))
         }
@@ -152,9 +267,11 @@ private fun PersonalDirectoryContent(
             directory.items.isEmpty() -> EmptyDirectory(directory.folderId == null)
             state.viewMode == FileViewMode.LIST -> PersonalList(
                 state, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
+                onToggleSelection, onRename, onDeleteOne, onOpenPicker,
             )
             else -> PersonalGrid(
                 state, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
+                onToggleSelection, onRename, onDeleteOne, onOpenPicker,
             )
         }
     }
@@ -167,6 +284,10 @@ private fun PersonalList(
     onSelectFile: (FileItem?) -> Unit,
     onLoadMore: () -> Unit,
     onScrollAnchor: (Long?) -> Unit,
+    onToggleSelection: (Long) -> Unit,
+    onRename: (FileItem) -> Unit,
+    onDelete: (FileItem) -> Unit,
+    onOpenPicker: (FileItem, FileMutationKind) -> Unit,
 ) {
     val items = state.current.items
     val initialIndex = items.indexOfFirst { it.id == state.current.scrollAnchorId }.coerceAtLeast(0)
@@ -188,7 +309,20 @@ private fun PersonalList(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(items, key = { it.id }) { file ->
-            PersonalFileRow(file) { if (file.isFolder) onOpenFolder(file) else onSelectFile(file) }
+            PersonalFileRow(
+                file = file,
+                selected = file.id in state.selectedIds,
+                selectionMode = state.selectedIds.isNotEmpty(),
+                onClick = {
+                    if (state.selectedIds.isNotEmpty()) onToggleSelection(file.id)
+                    else if (file.isFolder) onOpenFolder(file) else onSelectFile(file)
+                },
+                onLongClick = { onToggleSelection(file.id) },
+                onRename = { onRename(file) },
+                onMove = { onOpenPicker(file, FileMutationKind.MOVE) },
+                onCopy = { onOpenPicker(file, FileMutationKind.COPY) },
+                onDelete = { onDelete(file) },
+            )
         }
         item { PagingFooter(state.current, onLoadMore) }
     }
@@ -201,6 +335,10 @@ private fun PersonalGrid(
     onSelectFile: (FileItem?) -> Unit,
     onLoadMore: () -> Unit,
     onScrollAnchor: (Long?) -> Unit,
+    onToggleSelection: (Long) -> Unit,
+    onRename: (FileItem) -> Unit,
+    onDelete: (FileItem) -> Unit,
+    onOpenPicker: (FileItem, FileMutationKind) -> Unit,
 ) {
     val items = state.current.items
     val initialIndex = items.indexOfFirst { it.id == state.current.scrollAnchorId }.coerceAtLeast(0)
@@ -224,23 +362,52 @@ private fun PersonalGrid(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(items, key = { it.id }) { file ->
-            PersonalFileCard(file) { if (file.isFolder) onOpenFolder(file) else onSelectFile(file) }
+            PersonalFileCard(
+                file = file,
+                selected = file.id in state.selectedIds,
+                selectionMode = state.selectedIds.isNotEmpty(),
+                onClick = {
+                    if (state.selectedIds.isNotEmpty()) onToggleSelection(file.id)
+                    else if (file.isFolder) onOpenFolder(file) else onSelectFile(file)
+                },
+                onLongClick = { onToggleSelection(file.id) },
+                onRename = { onRename(file) },
+                onMove = { onOpenPicker(file, FileMutationKind.MOVE) },
+                onCopy = { onOpenPicker(file, FileMutationKind.COPY) },
+                onDelete = { onDelete(file) },
+            )
         }
         item { PagingFooter(state.current, onLoadMore) }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PersonalFileRow(file: FileItem, onClick: () -> Unit) {
+private fun PersonalFileRow(
+    file: FileItem,
+    selected: Boolean,
+    selectionMode: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onRename: () -> Unit,
+    onMove: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+) {
     val strings = LocalMobileStrings.current
-    Card(Modifier.fillMaxWidth().testTag("personal-file-${file.id}").clickable(onClick = onClick)) {
+    Card(
+        Modifier.fillMaxWidth().testTag("personal-file-${file.id}")
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        colors = if (selected) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        else CardDefaults.cardColors(),
+    ) {
         Row(
             Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(
-                if (file.isFolder) Icons.Default.Folder else Icons.Default.Description,
+                if (selected) Icons.Default.CheckCircle else if (file.isFolder) Icons.Default.Folder else Icons.Default.Description,
                 contentDescription = strings[if (file.isFolder) MobileString.Folder else MobileString.File],
             )
             Column(Modifier.weight(1f)) {
@@ -251,21 +418,38 @@ private fun PersonalFileRow(file: FileItem, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (!selectionMode) FileActionsMenu(file.id, onRename, onMove, onCopy, onDelete)
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PersonalFileCard(file: FileItem, onClick: () -> Unit) {
+private fun PersonalFileCard(
+    file: FileItem,
+    selected: Boolean,
+    selectionMode: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onRename: () -> Unit,
+    onMove: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+) {
     val strings = LocalMobileStrings.current
-    Card(Modifier.testTag("personal-file-${file.id}").clickable(onClick = onClick)) {
+    Card(
+        Modifier.testTag("personal-file-${file.id}")
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        colors = if (selected) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        else CardDefaults.cardColors(),
+    ) {
         Column(
             Modifier.fillMaxWidth().padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(
-                if (file.isFolder) Icons.Default.Folder else Icons.Default.Description,
+                if (selected) Icons.Default.CheckCircle else if (file.isFolder) Icons.Default.Folder else Icons.Default.Description,
                 contentDescription = strings[if (file.isFolder) MobileString.Folder else MobileString.File],
             )
             Text(file.fileName, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -274,6 +458,253 @@ private fun PersonalFileCard(file: FileItem, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (!selectionMode) FileActionsMenu(file.id, onRename, onMove, onCopy, onDelete)
+        }
+    }
+}
+
+@Composable
+private fun FileActionsMenu(
+    fileId: Long,
+    onRename: () -> Unit,
+    onMove: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val strings = LocalMobileStrings.current
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.testTag("personal-more-$fileId")) {
+            Icon(Icons.Default.MoreVert, contentDescription = strings[MobileString.MoreActions])
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.Rename]) }, leadingIcon = { Icon(Icons.Default.Edit, null) },
+                onClick = { expanded = false; onRename() }, modifier = Modifier.testTag("personal-rename-$fileId"),
+            )
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.Move]) }, leadingIcon = { Icon(Icons.Default.DriveFileMove, null) },
+                onClick = { expanded = false; onMove() }, modifier = Modifier.testTag("personal-move-$fileId"),
+            )
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.Copy]) }, leadingIcon = { Icon(Icons.Default.ContentCopy, null) },
+                onClick = { expanded = false; onCopy() }, modifier = Modifier.testTag("personal-copy-$fileId"),
+            )
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.Delete]) }, leadingIcon = { Icon(Icons.Default.Delete, null) },
+                onClick = { expanded = false; onDelete() }, modifier = Modifier.testTag("personal-delete-$fileId"),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SelectionBar(count: Int, onClear: () -> Unit, onDelete: () -> Unit) {
+    val strings = LocalMobileStrings.current
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp).testTag("personal-selection-bar"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(strings.format(MobileString.SelectedCount, count), Modifier.weight(1f))
+        TextButton(onClick = onClear, modifier = Modifier.testTag("personal-selection-clear")) {
+            Text(strings[MobileString.Cancel])
+        }
+        Button(onClick = onDelete, modifier = Modifier.testTag("personal-selection-delete")) {
+            Icon(Icons.Default.Delete, contentDescription = null)
+            Text(strings[MobileString.Delete])
+        }
+    }
+}
+
+@Composable
+private fun NameDialog(
+    title: String,
+    label: String,
+    initial: String,
+    busy: Boolean,
+    serverError: UiMessage?,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    val strings = LocalMobileStrings.current
+    var value by remember(initial) { mutableStateOf(initial) }
+    val normalized = value.trim()
+    val localError = when {
+        normalized.isEmpty() -> MobileString.NameRequired
+        normalized.length > 255 -> MobileString.NameTooLong
+        else -> null
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("personal-name-dialog"),
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it },
+                enabled = !busy,
+                singleLine = true,
+                label = { Text(label) },
+                isError = localError != null || serverError != null,
+                supportingText = {
+                    Text(
+                        localError?.let { strings[it] }
+                            ?: strings.resolve(serverError).orEmpty(),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth().testTag("personal-name-input"),
+            )
+        },
+        confirmButton = {
+            Button(
+                enabled = !busy && localError == null,
+                onClick = { onConfirm(value) },
+                modifier = Modifier.testTag("personal-name-confirm"),
+            ) { if (busy) CircularProgressIndicator(Modifier.height(18.dp)) else Text(strings[MobileString.Confirm]) }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(strings[MobileString.Cancel]) } },
+    )
+}
+
+@Composable
+private fun DeleteDialog(
+    targets: List<FileItem>,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val strings = LocalMobileStrings.current
+    val single = targets.singleOrNull()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag("personal-delete-dialog"),
+        title = {
+            Text(
+                if (single != null) strings.format(MobileString.DeleteSingleTitle, single.fileName)
+                else strings[MobileString.DeleteMultipleTitle],
+            )
+        },
+        text = {
+            Text(
+                if (single != null) strings[MobileString.DeleteSingleMessage]
+                else strings.format(MobileString.DeleteMultipleMessage, targets.size),
+            )
+        },
+        confirmButton = {
+            Button(enabled = !busy, onClick = onConfirm, modifier = Modifier.testTag("personal-delete-confirm")) {
+                if (busy) CircularProgressIndicator(Modifier.height(18.dp)) else Text(strings[MobileString.Delete])
+            }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(strings[MobileString.Cancel]) } },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DestinationPicker(
+    picker: FolderPickerState,
+    wide: Boolean,
+    onOpenFolder: (FileItem) -> Unit,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    busy: Boolean,
+    operationError: UiMessage?,
+) {
+    val strings = LocalMobileStrings.current
+    if (wide) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            modifier = Modifier.testTag("personal-destination-dialog"),
+            title = { Text(strings[MobileString.ChooseDestination]) },
+            text = {
+                Column {
+                    FolderPickerContent(picker, onOpenFolder, onBack, onRetry)
+                    operationError?.let { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = picker.canConfirm && !picker.loading && !busy,
+                    onClick = onConfirm,
+                    modifier = Modifier.testTag("personal-destination-confirm"),
+                ) { Text(strings[MobileString.Confirm]) }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(strings[MobileString.Cancel]) } },
+        )
+    } else {
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            modifier = Modifier.testTag("personal-destination-sheet"),
+        ) {
+            Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f).padding(16.dp)) {
+                Text(strings[MobileString.ChooseDestination], style = MaterialTheme.typography.headlineSmall)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(enabled = !busy, onClick = onDismiss) { Text(strings[MobileString.Cancel]) }
+                    Button(
+                        enabled = picker.canConfirm && !picker.loading && !busy,
+                        onClick = onConfirm,
+                        modifier = Modifier.testTag("personal-destination-confirm"),
+                    ) { Text(strings[MobileString.Confirm]) }
+                }
+                operationError?.let {
+                    Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error)
+                }
+                FolderPickerContent(picker, onOpenFolder, onBack, onRetry, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FolderPickerContent(
+    picker: FolderPickerState,
+    onOpenFolder: (FileItem) -> Unit,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val strings = LocalMobileStrings.current
+    Column(modifier.fillMaxWidth().testTag("personal-destination-content")) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                enabled = picker.breadcrumb.size > 1,
+                onClick = onBack,
+                modifier = Modifier.testTag("personal-destination-back"),
+            ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent]) }
+            Text(
+                picker.breadcrumb.lastOrNull()?.name?.ifEmpty { strings[MobileString.DestinationRoot] }
+                    ?: strings[MobileString.DestinationRoot],
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        Text(strings[MobileString.CurrentFolder], color = MaterialTheme.colorScheme.onSurfaceVariant)
+        when {
+            picker.loading -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            picker.error != null -> Column(Modifier.padding(16.dp)) {
+                Text(strings.resolve(picker.error).orEmpty(), color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = onRetry, modifier = Modifier.testTag("personal-destination-retry")) {
+                    Text(strings[MobileString.Retry])
+                }
+            }
+            picker.folders.isEmpty() -> Text(
+                strings[MobileString.DestinationEmpty], Modifier.padding(16.dp).testTag("personal-destination-empty"),
+            )
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(picker.folders, key = { it.id }) { folder ->
+                    OutlinedButton(
+                        onClick = { onOpenFolder(folder) },
+                        modifier = Modifier.fillMaxWidth().testTag("personal-destination-${folder.id}"),
+                    ) {
+                        Icon(Icons.Default.Folder, null)
+                        Text(folder.fileName, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
         }
     }
 }

@@ -112,6 +112,8 @@ Authorization: Bearer <accessToken>
 
 ### 2.3 创建文件夹
 
+`folderName` 会先去除首尾空白，规范化后的长度必须为 1～255。`parentId` 必须指向当前用户拥有、未删除的个人文件夹；文件和文件夹在同一父目录共用名称空间。
+
 ```
 POST /api/v1/files/folder
 Authorization: Bearer <accessToken>
@@ -154,6 +156,8 @@ Authorization: Bearer <accessToken>
 
 ### 2.4 重命名
 
+`newName` 使用与创建文件夹相同的修剪、长度和同目录冲突规则。规范化后与当前名称相同时按幂等成功处理，不修改更新时间。
+
 ```
 PUT /api/v1/files/{fileId}
 Authorization: Bearer <accessToken>
@@ -183,6 +187,8 @@ Authorization: Bearer <accessToken>
 ---
 
 ### 2.5 移动
+
+目标必须是当前用户拥有、未删除的个人文件夹。移动到当前父目录按幂等成功处理；文件夹不能移动到自身或其后代，否则返回 `400 / error.invalidFileDestination`。目标目录存在同名文件或文件夹时返回 `409001 / error.fileNameConflict`。
 
 ```
 POST /api/v1/files/{fileId}/move
@@ -238,7 +244,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> 复制后的文件名自动追加 ` (copy)` 后缀。
+> 普通文件和文件夹均可复制；文件夹会递归复制完整的未删除子树，并按子树总大小执行现有配额检查。目标名称在源名称后追加 ` (copy)`；超过 255 字符时先安全截断源名称再追加后缀。目标已有该名称时不自动编号，返回 `409001 / error.fileNameConflict`。文件夹不能复制到自身或其后代，否则返回 `400 / error.invalidFileDestination`。
 
 ---
 
@@ -265,7 +271,9 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> 删除的文件进入回收站，30 天后自动清理。文件夹及其所有子文件一并移入回收站。
+> 服务端先对 `fileIds` 去重，再在同一事务中执行软删除；任一项目无权访问或不存在时整批失败。删除的文件进入回收站，30 天后自动清理。文件夹及其所有子文件沿用现有回收站链路。
+
+个人文件创建、重命名、移动和复制在同一用户内串行执行，避免并发请求绕过名称冲突检查；URL、请求体与 Web/Tauri 调用方式保持不变。
 
 ---
 

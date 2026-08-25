@@ -69,6 +69,16 @@ data class FileItem(
 }
 
 @Serializable
+data class CreatePersonalFolderRequest(
+    @SerialName("parentId") val parentId: Long? = null,
+    @SerialName("folderName") val folderName: String,
+)
+
+@Serializable data class RenamePersonalFileRequest(@SerialName("newName") val newName: String)
+@Serializable data class PersonalFileDestinationRequest(@SerialName("targetParentId") val targetParentId: Long? = null)
+@Serializable data class DeletePersonalFilesRequest(@SerialName("fileIds") val fileIds: List<Long>)
+
+@Serializable
 data class InitUploadRequest(
     @SerialName("parentId") val parentId: Long? = null,
     @SerialName("fileName") val fileName: String,

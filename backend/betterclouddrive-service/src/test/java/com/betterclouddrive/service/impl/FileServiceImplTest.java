@@ -16,6 +16,7 @@ import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.storage.StorageService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -63,6 +64,12 @@ class FileServiceImplTest {
 
     @InjectMocks
     private FileServiceImpl fileService;
+
+    @BeforeEach
+    void allowPersonalMutationLock() {
+        lenient().when(userRepository.findByIdForUpdate(anyLong()))
+                .thenReturn(Optional.of(UserEntity.builder().id(1L).build()));
+    }
 
     @Test
     void listFiles_shouldReturnPage() {
@@ -191,21 +198,44 @@ class FileServiceImplTest {
 
     @Test
     void createFolder_shouldSucceed() {
-        when(fileRepository.count(any(Specification.class))).thenReturn(0L);
         FileEntity saved = FileEntity.builder().id(10L).fileName("NewFolder").build();
         when(fileRepository.save(any(FileEntity.class))).thenReturn(saved);
 
-        fileService.createFolder(1L, null, "NewFolder");
+        fileService.createFolder(1L, null, "  NewFolder  ");
 
-        verify(fileRepository).save(any(FileEntity.class));
+        ArgumentCaptor<FileEntity> captor = ArgumentCaptor.forClass(FileEntity.class);
+        verify(fileRepository).save(captor.capture());
+        assertThat(captor.getValue().getFileName()).isEqualTo("NewFolder");
     }
 
     @Test
     void createFolder_shouldThrowWhenNameConflict() {
-        when(fileRepository.count(any(Specification.class))).thenReturn(1L);
+        when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(1L, "NewFolder"))
+                .thenReturn(true);
 
         assertThatThrownBy(() -> fileService.createFolder(1L, null, "NewFolder"))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void createFolder_shouldValidateParentOwnershipAndType() {
+        FileEntity foreignFile = FileEntity.builder().id(9L).userId(2L).fileType("file").isDeleted(false).build();
+        when(fileRepository.findById(9L)).thenReturn(Optional.of(foreignFile));
+
+        assertThatThrownBy(() -> fileService.createFolder(1L, 9L, "Docs"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404001));
+        verify(fileRepository, never()).save(any());
+    }
+
+    @Test
+    void createFolder_shouldRejectBlankAfterTrimAndOverlongNames() {
+        assertThatThrownBy(() -> fileService.createFolder(1L, null, "   "))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getMessageKey()).isEqualTo("error.invalidFileName"));
+        assertThatThrownBy(() -> fileService.createFolder(1L, null, "a".repeat(256)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getMessageKey()).isEqualTo("error.invalidFileName"));
     }
 
     @Test
@@ -226,9 +256,25 @@ class FileServiceImplTest {
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
         when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
 
-        fileService.renameFile(1L, 1L, "NewName");
+        fileService.renameFile(1L, 1L, "  NewName  ");
 
         assertThat(file.getFileName()).isEqualTo("NewName");
+    }
+
+    @Test
+    void renameFile_shouldBeIdempotentAndRejectSharedNamespaceConflict() {
+        FileEntity file = FileEntity.builder().id(1L).userId(1L).fileName("old.txt").isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+
+        FileEntity unchanged = fileService.renameFile(1L, 1L, " old.txt ");
+        assertThat(unchanged).isSameAs(file);
+        verify(fileRepository, never()).save(any());
+
+        when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(1L, "folder"))
+                .thenReturn(true);
+        assertThatThrownBy(() -> fileService.renameFile(1L, 1L, "folder"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(409001));
     }
 
     @Test
@@ -242,6 +288,18 @@ class FileServiceImplTest {
         fileService.moveFile(1L, 1L, 100L);
 
         assertThat(file.getParentId()).isEqualTo(100L);
+    }
+
+    @Test
+    void moveFile_shouldBeIdempotentForCurrentParent() {
+        FileEntity file = FileEntity.builder().id(1L).userId(1L).parentId(50L).fileName("a.txt").isDeleted(false).build();
+        FileEntity target = FileEntity.builder().id(50L).userId(1L).fileType("folder").isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findById(50L)).thenReturn(Optional.of(target));
+
+        fileService.moveFile(1L, 1L, 50L);
+
+        verify(fileRepository, never()).save(any());
     }
 
     @Test
@@ -259,6 +317,21 @@ class FileServiceImplTest {
 
         assertThat(captor.getValue().getFileName()).isEqualTo("doc.txt (copy)");
         assertThat(captor.getValue().getParentId()).isEqualTo(100L);
+    }
+
+    @Test
+    void copyFile_shouldTruncateLongNameBeforeSuffix() {
+        String longName = "x".repeat(255);
+        FileEntity source = FileEntity.builder().id(1L).userId(1L).fileName(longName)
+                .fileType("file").fileSize(0L).isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(source));
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        fileService.copyFile(1L, 1L, null);
+
+        ArgumentCaptor<FileEntity> captor = ArgumentCaptor.forClass(FileEntity.class);
+        verify(fileRepository).save(captor.capture());
+        assertThat(captor.getValue().getFileName()).hasSize(255).endsWith(" (copy)");
     }
 
     @Test
@@ -370,7 +443,10 @@ class FileServiceImplTest {
 
         assertThatThrownBy(() -> fileService.moveFile(1L, 1L, 2L))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
+                .satisfies(ex -> {
+                    assertThat(((BusinessException) ex).getCode()).isEqualTo(400);
+                    assertThat(((BusinessException) ex).getMessageKey()).isEqualTo("error.invalidFileDestination");
+                });
         verify(fileRepository, never()).save(any(FileEntity.class));
     }
 
@@ -384,6 +460,18 @@ class FileServiceImplTest {
 
         assertThat(file.getIsDeleted()).isTrue();
         assertThat(file.getDeletedAt()).isNotNull();
+    }
+
+    @Test
+    void deleteFiles_shouldDeduplicateIds() {
+        FileEntity file = FileEntity.builder().id(1L).userId(1L).isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
+
+        fileService.deleteFiles(1L, List.of(1L, 1L));
+
+        verify(fileRepository, times(1)).findById(1L);
+        verify(fileRepository, times(1)).save(file);
     }
 
     @Test

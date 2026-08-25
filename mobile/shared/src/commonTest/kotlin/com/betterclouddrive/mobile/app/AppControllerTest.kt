@@ -1,6 +1,7 @@
 package com.betterclouddrive.mobile.app
 
 import com.betterclouddrive.mobile.core.model.FileItem
+import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
@@ -240,6 +241,89 @@ class AppControllerTest {
         assertEquals(detailed, controller.state.value.personalFiles.selectedFile)
     }
 
+    @Test
+    fun selectionSurvivesViewAndPagingButRefreshClearsIt() = runTest {
+        val second = FileItem(id = 9, fileName = "second.txt")
+        val files = FakeFiles().apply {
+            responses += Result.success(PageResult(listOf(FILE), total = 2, page = 1, size = 50, pages = 2))
+            responses += Result.success(PageResult(listOf(second), total = 2, page = 2, size = 50, pages = 2))
+            responses += Result.success(page(FILE, second))
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.togglePersonalSelection(FILE.id)
+        controller.changeFileViewMode(com.betterclouddrive.mobile.feature.files.FileViewMode.GRID)
+        controller.loadMoreFiles()
+        runCurrent()
+        assertEquals(setOf(FILE.id), controller.state.value.personalFiles.selectedIds)
+
+        controller.refreshFiles()
+        runCurrent()
+        assertTrue(controller.state.value.personalFiles.selectedIds.isEmpty())
+    }
+
+    @Test
+    fun createFolderReloadsLoadedPagesAndReportsSuccess() = runTest {
+        val folder = FileItem(id = 10, fileName = "Docs", fileType = "folder")
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            responses += Result.success(page(folder))
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.createPersonalFolder(" Docs ")
+        runCurrent()
+
+        assertEquals(listOf(" Docs "), files.createdNames)
+        assertEquals(listOf(folder), controller.state.value.personalFiles.current.items)
+        assertEquals(UiMessage(MobileString.FolderCreated), controller.state.value.personalFiles.feedback?.message)
+        assertNull(controller.state.value.personalFiles.mutation)
+    }
+
+    @Test
+    fun mutationSemanticErrorsRemainExplainableAndKeepSelection() = runTest {
+        val files = FakeFiles().apply {
+            responses += Result.success(page(FILE))
+            mutationFailure = ApiException(409001, "error.fileNameConflict")
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+        controller.togglePersonalSelection(FILE.id)
+
+        controller.renamePersonalFile(FILE, "duplicate")
+        runCurrent()
+
+        assertEquals(setOf(FILE.id), controller.state.value.personalFiles.selectedIds)
+        assertEquals(UiMessage(MobileString.ErrorNameConflict), controller.state.value.personalFiles.mutationError)
+    }
+
+    @Test
+    fun destinationPickerLoadsFolderPagesAndHidesSourceFolder() = runTest {
+        val source = FileItem(id = 10, fileName = "Source", fileType = "folder")
+        val target = FileItem(id = 11, fileName = "Target", fileType = "folder")
+        val files = FakeFiles().apply {
+            responses += Result.success(page(source, target))
+            responses += Result.success(PageResult(listOf(source, target), total = 3, page = 1, size = 100, pages = 2))
+            responses += Result.success(PageResult(listOf(FileItem(id = 12, fileName = "a.txt")), total = 3, page = 2, size = 100, pages = 2))
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.openFolderPicker(source, FileMutationKind.COPY)
+        runCurrent()
+
+        val picker = controller.state.value.personalFiles.folderPicker
+        assertEquals(listOf(target), picker?.folders)
+        assertTrue(picker?.canConfirm == true)
+        assertEquals(listOf(1, 1, 2), files.requests.map { it.page })
+    }
+
     private companion object {
         val USER = UserProfile(id = 7, username = "user", email = "user@example.com")
         val FILE = FileItem(id = 8, fileName = "sample.txt", fileSize = 12)
@@ -273,6 +357,8 @@ private class FakeFiles : AppFileOperations {
     val responses = ArrayDeque<Result<PageResult<FileItem>>>()
     val requests = mutableListOf<Request>()
     val metadata = mutableMapOf<Long, FileItem>()
+    val createdNames = mutableListOf<String>()
+    var mutationFailure: Throwable? = null
     override suspend fun listPersonalFiles(
         parentId: Long?, page: Int, size: Int, sortBy: String, order: String,
     ): PageResult<FileItem> {
@@ -280,6 +366,18 @@ private class FakeFiles : AppFileOperations {
         return responses.removeFirst().getOrThrow()
     }
     override suspend fun getPersonalFile(fileId: Long): FileItem = metadata.getValue(fileId)
+    override suspend fun createPersonalFolder(parentId: Long?, folderName: String): FileItem {
+        mutationFailure?.let { throw it }
+        createdNames += folderName
+        return FileItem(id = 1000, parentId = parentId, fileName = folderName, fileType = "folder")
+    }
+    override suspend fun renamePersonalFile(fileId: Long, newName: String): FileItem {
+        mutationFailure?.let { throw it }
+        return metadata[fileId]?.copy(fileName = newName) ?: FileItem(id = fileId, fileName = newName)
+    }
+    override suspend fun movePersonalFile(fileId: Long, targetParentId: Long?) { mutationFailure?.let { throw it } }
+    override suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) { mutationFailure?.let { throw it } }
+    override suspend fun deletePersonalFiles(fileIds: List<Long>) { mutationFailure?.let { throw it } }
     override suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig = error("unused")
 }
 

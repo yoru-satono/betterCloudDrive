@@ -183,6 +183,92 @@ class TestDelete:
         assert_api_ok(r)
 
 
+class TestStage6FileManagementJourney:
+    def test_recursive_copy_move_conflict_and_batch_recycle(
+        self, client, auth_headers, created_folder, uploaded_file,
+    ):
+        def create(parent_id, name):
+            return assert_api_ok(client.post(
+                "/api/v1/files/folder",
+                json={"parentId": parent_id, "folderName": name},
+                headers=auth_headers,
+            ))
+
+        suffix = uuid.uuid4().hex[:6]
+        level1 = create(created_folder["id"], f"  stage6-l1-{suffix}  ")
+        assert level1["fileName"] == f"stage6-l1-{suffix}"
+        level2 = create(level1["id"], f"stage6-l2-{suffix}")
+        level3 = create(level2["id"], f"stage6-l3-{suffix}")
+        destination = create(created_folder["id"], f"stage6-dest-{suffix}")
+
+        renamed = assert_api_ok(client.put(
+            f"/api/v1/files/{level1['id']}",
+            json={"newName": f"  stage6-renamed-{suffix}  "},
+            headers=auth_headers,
+        ))
+        assert renamed["fileName"] == f"stage6-renamed-{suffix}"
+
+        assert_api_ok(client.post(
+            f"/api/v1/files/{uploaded_file['fileId']}/move",
+            json={"targetParentId": level3["id"]},
+            headers=auth_headers,
+        ))
+        assert_api_ok(client.post(
+            f"/api/v1/files/{level2['id']}/move",
+            json={"targetParentId": destination["id"]},
+            headers=auth_headers,
+        ))
+
+        assert_api_ok(client.post(
+            f"/api/v1/files/{level2['id']}/copy",
+            json={"targetParentId": created_folder["id"]},
+            headers=auth_headers,
+        ))
+        root_items = assert_paginated(client.get(
+            "/api/v1/files",
+            params={"parentId": created_folder["id"], "size": 100},
+            headers=auth_headers,
+        ))["records"]
+        copied_level2 = next(
+            item for item in root_items
+            if item["fileName"] == f"{level2['fileName']} (copy)"
+        )
+        copied_children = assert_paginated(client.get(
+            "/api/v1/files",
+            params={"parentId": copied_level2["id"], "size": 100},
+            headers=auth_headers,
+        ))["records"]
+        copied_level3 = next(
+            item for item in copied_children if item["fileName"] == level3["fileName"]
+        )
+        copied_leaf_items = assert_paginated(client.get(
+            "/api/v1/files",
+            params={"parentId": copied_level3["id"], "size": 100},
+            headers=auth_headers,
+        ))["records"]
+        assert [item["fileName"] for item in copied_leaf_items] == [uploaded_file["fileName"]]
+
+        conflict = client.post(
+            f"/api/v1/files/{level2['id']}/copy",
+            json={"targetParentId": created_folder["id"]},
+            headers=auth_headers,
+        )
+        assert_api_error(conflict, 409001)
+
+        trash = create(created_folder["id"], f"stage6-trash-{suffix}")
+        assert_api_ok(client.request(
+            "DELETE", "/api/v1/files",
+            json={"fileIds": [copied_level2["id"], trash["id"], copied_level2["id"]]},
+            headers=auth_headers,
+        ))
+        recycled = assert_paginated(client.get(
+            "/api/v1/recycle-bin", params={"size": 100}, headers=auth_headers,
+        ))["records"]
+        recycled_ids = {item["id"] for item in recycled}
+        assert copied_level2["id"] in recycled_ids
+        assert trash["id"] in recycled_ids
+
+
 class TestSearch:
     def test_search_by_filename(self, client, auth_headers, uploaded_file):
         r = client.get(f"/api/v1/files/search?q={uploaded_file['fileName'][:5]}", headers=auth_headers)

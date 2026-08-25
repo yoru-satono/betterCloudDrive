@@ -78,6 +78,19 @@ data class ProductShellActions(
     val changeFileSort: (PersonalFileSort, SortDirection) -> Unit,
     val changeFileViewMode: (FileViewMode) -> Unit,
     val selectPersonalFile: (FileItem?) -> Unit,
+    val togglePersonalSelection: (Long) -> Unit,
+    val clearPersonalSelection: () -> Unit,
+    val clearPersonalTransientUi: () -> Unit,
+    val createPersonalFolder: (String) -> Unit,
+    val renamePersonalFile: (FileItem, String) -> Unit,
+    val deletePersonalFiles: (Set<Long>) -> Unit,
+    val openFolderPicker: (FileItem, FileMutationKind) -> Unit,
+    val openPickerFolder: (FileItem) -> Unit,
+    val pickerBack: () -> Unit,
+    val retryFolderPicker: () -> Unit,
+    val closeFolderPicker: () -> Unit,
+    val confirmFolderPicker: () -> Unit,
+    val consumeFileFeedback: () -> Unit,
     val updatePersonalScrollAnchor: (Long?) -> Unit,
     val upload: (PickedDocument) -> Unit,
     val download: (FileItem, String) -> Unit,
@@ -140,6 +153,7 @@ fun ProductShell(
             goPersonalRoot()
             return
         }
+        actions.clearPersonalTransientUi()
         navController.navigate(route) {
             popUpTo<PersonalRoute> { saveState = true }
             launchSingleTop = true
@@ -358,6 +372,11 @@ private fun AppNavHost(
             state.personalFiles, documentPicker, actions.upload, actions.download,
             onOpenFolder, actions.selectPersonalFile, actions.loadMoreFiles,
             actions.updatePersonalScrollAnchor, actions.refreshFiles, onGoRoot,
+            actions.togglePersonalSelection, actions.clearPersonalSelection,
+            actions.createPersonalFolder, actions.renamePersonalFile, actions.deletePersonalFiles,
+            actions.openFolderPicker, actions.openPickerFolder, actions.pickerBack,
+            actions.retryFolderPicker, actions.closeFolderPicker, actions.confirmFolderPicker,
+            actions.consumeFileFeedback,
         )
     }
 

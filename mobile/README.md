@@ -1,13 +1,13 @@
 # BetterCloudDrive KMP 移动端
 
-这是 Android 优先的 Kotlin Multiplatform 重写工程。阶段 5 已为阶段 0～4 的界面、错误、无障碍描述、诊断和后台通知建立共享国际化资源，完整支持简体中文与英语；登录后仍通过“个人、团队、传输、我的”四个固定入口切换页面。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
+这是 Android 优先的 Kotlin Multiplatform 重写工程。阶段 6 已在个人文件浏览器上加入新建文件夹、重命名、移动、递归复制、当前目录多选和批量移入回收站；共享国际化资源继续完整支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
 
 ## 目标与范围
 
 - Android 是当前唯一可运行、可交付的平台。
 - `iosArm64` 和 `iosSimulatorArm64` 通过 `-PenableIos=true` 保留公共代码与 Framework 编译能力，阶段 1 不提供 iOS 平台服务或宿主应用。
 - 不配置桌面、JVM 应用、JS、Wasm 或 Web 目标。
-- 当前可见功能包括启动恢复、登录、个人目录浏览、分页与排序、列表/网格、只读文件详情、根目录上传、单文件下载、独立传输队列、个人设置和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
+- 当前可见功能包括启动恢复、登录、个人目录浏览与管理、分页与排序、列表/网格、只读文件详情、根目录上传、单文件下载、独立传输队列、个人设置和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
 
 ## 工程结构
 
@@ -53,6 +53,6 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 .\scripts\verify-all.ps1 -Module mobile-android -AndroidSerial '<adb 设备序列号>'
 ```
 
-阶段 5 继续在 Android 9/API 28 和 Android 14/API 34 上运行设备测试，覆盖中英文界面、系统语言声明、通知文案以及既有 WorkManager/UIDT 回归。标准 Android Emulator 可使用 `http://10.0.2.2:8080` 访问宿主机；若模拟器厂商没有该别名，则在登录页使用开发机局域网地址。Debug 允许本地 HTTP，Release 强制 HTTPS。
+阶段 6 继续在 Android 9/API 28 和 Android 14/API 34 上运行设备测试，覆盖个人文件修改、选择模式、中英文界面以及既有 WorkManager/UIDT 回归。标准 Android Emulator 可使用 `http://10.0.2.2:8080` 访问宿主机；若模拟器厂商没有该别名，则在登录页使用开发机局域网地址。Debug 允许本地 HTTP，Release 强制 HTTPS。
 
-当前实现与验收结果见[阶段 5 国际化基础](docs/stage-5-localization.md)，个人文件浏览基线见[阶段 4 个人文件浏览](docs/stage-4-personal-browser.md)，产品外壳基线见[阶段 3 产品应用外壳](docs/stage-3-product-shell.md)，传输可靠性证据见[阶段 2 传输可靠性与验收](docs/stage-2-reliability.md)。
+当前实现与验收结果见[阶段 6 个人文件管理](docs/stage-6-file-management.md)，国际化基线见[阶段 5 国际化基础](docs/stage-5-localization.md)，个人文件浏览基线见[阶段 4 个人文件浏览](docs/stage-4-personal-browser.md)。

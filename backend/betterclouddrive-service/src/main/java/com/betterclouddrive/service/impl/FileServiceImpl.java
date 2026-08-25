@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.LinkedHashSet;
 
 @Slf4j
 @Service
@@ -45,6 +46,10 @@ public class FileServiceImpl implements FileService {
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
     private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
     private static final String DEFAULT_FILE_SORT = "fileName";
+    private static final int MAX_FILE_NAME_LENGTH = 255;
+    private static final String COPY_SUFFIX = " (copy)";
+    private static final String INVALID_FILE_NAME = "error.invalidFileName";
+    private static final String INVALID_FILE_DESTINATION = "error.invalidFileDestination";
 
     @Override
     public PageResult<FileEntity> listFiles(Long userId, Long parentId, int page, int size, String sortBy, String order) {
@@ -98,22 +103,10 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileEntity createFolder(Long userId, Long parentId, String folderName) {
-        Specification<FileEntity> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("userId"), userId));
-            predicates.add(cb.isNull(root.get("teamId")));
-            if (parentId != null) {
-                predicates.add(cb.equal(root.get("parentId"), parentId));
-            } else {
-                predicates.add(cb.isNull(root.get("parentId")));
-            }
-            predicates.add(cb.equal(root.get("fileName"), folderName));
-            predicates.add(cb.equal(root.get("fileType"), "folder"));
-            predicates.add(cb.equal(root.get("isDeleted"), false));
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-
-        if (fileRepository.count(spec) > 0) {
+        lockPersonalMutations(userId);
+        String normalizedName = normalizeFileName(folderName);
+        validateTargetParent(userId, parentId);
+        if (nameExists(userId, parentId, normalizedName)) {
             throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
         }
 
@@ -121,7 +114,7 @@ public class FileServiceImpl implements FileService {
                 .userId(userId)
                 .teamId(null)
                 .parentId(parentId)
-                .fileName(folderName)
+                .fileName(normalizedName)
                 .fileType("folder")
                 .fileSize(0L)
                 .isDeleted(false)
@@ -135,8 +128,16 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileEntity renameFile(Long userId, Long fileId, String newName) {
+        lockPersonalMutations(userId);
         FileEntity file = getFile(userId, fileId);
-        file.setFileName(newName);
+        String normalizedName = normalizeFileName(newName);
+        if (Objects.equals(file.getFileName(), normalizedName)) {
+            return file;
+        }
+        if (nameExists(userId, file.getParentId(), normalizedName)) {
+            throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
+        }
+        file.setFileName(normalizedName);
         file.setUpdatedAt(LocalDateTime.now());
         return fileRepository.save(file);
     }
@@ -144,12 +145,16 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void moveFile(Long userId, Long fileId, Long targetParentId) {
+        lockPersonalMutations(userId);
         FileEntity file = getFile(userId, fileId);
         FileEntity targetParent = validateTargetParent(userId, targetParentId);
         if ("folder".equals(file.getFileType()) && targetParent != null && isSameOrDescendant(targetParent, file)) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Cannot move a folder into itself or its subfolder");
+            throw invalidDestination("Cannot move a folder into itself or its descendant");
         }
-        if (!Objects.equals(file.getParentId(), targetParentId) && nameExists(userId, targetParentId, file.getFileName())) {
+        if (Objects.equals(file.getParentId(), targetParentId)) {
+            return;
+        }
+        if (nameExists(userId, targetParentId, file.getFileName())) {
             throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
         }
         file.setParentId(targetParentId);
@@ -160,14 +165,16 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void copyFile(Long userId, Long fileId, Long targetParentId) {
+        lockPersonalMutations(userId);
         FileEntity source = getFile(userId, fileId);
-        copyPersonalTree(userId, source, targetParentId, source.getFileName() + " (copy)");
+        copyPersonalTree(userId, source, targetParentId, copyName(source.getFileName()));
     }
 
     @Override
     @Transactional
     public void deleteFiles(Long userId, List<Long> fileIds) {
-        for (Long fileId : fileIds) {
+        lockPersonalMutations(userId);
+        for (Long fileId : new LinkedHashSet<>(fileIds)) {
             FileEntity file = getFile(userId, fileId);
             file.setIsDeleted(true);
             file.setDeletedAt(LocalDateTime.now());
@@ -258,8 +265,9 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileEntity copyFileTo(Long userId, Long fileId, Long targetParentId, String targetFileName) {
+        lockPersonalMutations(userId);
         FileEntity source = getFile(userId, fileId);
-        return copyPersonalTree(userId, source, targetParentId, targetFileName);
+        return copyPersonalTree(userId, source, targetParentId, normalizeFileName(targetFileName));
     }
 
     @Override
@@ -436,12 +444,10 @@ public class FileServiceImpl implements FileService {
     }
 
     private FileEntity copyPersonalTree(Long userId, FileEntity source, Long targetParentId, String targetFileName) {
-        if (!StringUtils.hasText(targetFileName)) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Target file name is required");
-        }
+        targetFileName = normalizeFileName(targetFileName);
         FileEntity targetParent = validateTargetParent(userId, targetParentId);
         if ("folder".equals(source.getFileType()) && targetParent != null && isSameOrDescendant(targetParent, source)) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Cannot copy a folder into itself or its subfolder");
+            throw invalidDestination("Cannot copy a folder into itself or its descendant");
         }
         if (nameExists(userId, targetParentId, targetFileName)) {
             throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
@@ -566,6 +572,37 @@ public class FileServiceImpl implements FileService {
             return fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(userId, fileName);
         }
         return fileRepository.existsByUserIdAndParentIdAndFileNameAndIsDeletedFalse(userId, targetParentId, fileName);
+    }
+
+    private void lockPersonalMutations(Long userId) {
+        if (userRepository.findByIdForUpdate(userId).isEmpty()) {
+            throw new BusinessException(ApiCode.UNAUTHORIZED);
+        }
+    }
+
+    private String normalizeFileName(String fileName) {
+        String normalized = fileName == null ? "" : fileName.trim();
+        if (normalized.isEmpty() || normalized.length() > MAX_FILE_NAME_LENGTH) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, INVALID_FILE_NAME, java.util.Map.of());
+        }
+        return normalized;
+    }
+
+    private String copyName(String sourceName) {
+        int maxSourceLength = MAX_FILE_NAME_LENGTH - COPY_SUFFIX.length();
+        String safeSource = sourceName == null ? "" : sourceName;
+        if (safeSource.length() > maxSourceLength) {
+            safeSource = safeSource.substring(0, maxSourceLength);
+            if (!safeSource.isEmpty() && Character.isHighSurrogate(safeSource.charAt(safeSource.length() - 1))) {
+                safeSource = safeSource.substring(0, safeSource.length() - 1);
+            }
+        }
+        return safeSource + COPY_SUFFIX;
+    }
+
+    private BusinessException invalidDestination(String diagnostic) {
+        return new BusinessException(ApiCode.BAD_REQUEST.getCode(), INVALID_FILE_DESTINATION,
+                java.util.Map.of(), diagnostic);
     }
 
     private FileEntity validateTeamTargetParent(Long teamId, Long targetParentId) {

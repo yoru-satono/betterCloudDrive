@@ -16,5 +16,14 @@ class FileRepository(private val backend: BackendClient) {
     ): PageResult<FileItem> = backend.listPersonalFiles(parentId, page, size, sortBy, order)
 
     suspend fun getPersonalFile(fileId: Long): FileItem = backend.getPersonalFile(fileId)
+    suspend fun createPersonalFolder(parentId: Long?, folderName: String): FileItem =
+        backend.createPersonalFolder(parentId, folderName)
+    suspend fun renamePersonalFile(fileId: Long, newName: String): FileItem =
+        backend.renamePersonalFile(fileId, newName)
+    suspend fun movePersonalFile(fileId: Long, targetParentId: Long?) =
+        backend.movePersonalFile(fileId, targetParentId)
+    suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) =
+        backend.copyPersonalFile(fileId, targetParentId)
+    suspend fun deletePersonalFiles(fileIds: List<Long>) = backend.deletePersonalFiles(fileIds)
     suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig = backend.loadTeamOffice(teamId, fileId)
 }
