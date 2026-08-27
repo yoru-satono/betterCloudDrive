@@ -114,6 +114,21 @@ data class CreatePersonalFolderRequest(
 @Serializable data class DeletePersonalFilesRequest(@SerialName("fileIds") val fileIds: List<Long>)
 
 @Serializable
+data class PersonalTag(
+    val id: Long = 0,
+    @SerialName("userId") val userId: Long = 0,
+    @SerialName("teamId") val teamId: Long? = null,
+    @SerialName("tagName") val tagName: String = "",
+    val color: String? = null,
+    @SerialName("fileCount") val fileCount: Long = 0,
+    @SerialName("createdAt") val createdAt: String? = null,
+)
+
+@Serializable data class CreatePersonalTagRequest(@SerialName("tagName") val tagName: String, val color: String)
+@Serializable data class UpdatePersonalTagRequest(@SerialName("tagName") val tagName: String, val color: String)
+@Serializable data class ReplacePersonalFileTagsRequest(@SerialName("tagIds") val tagIds: List<Long>)
+
+@Serializable
 data class InitUploadRequest(
     @SerialName("parentId") val parentId: Long? = null,
     @SerialName("fileName") val fileName: String,

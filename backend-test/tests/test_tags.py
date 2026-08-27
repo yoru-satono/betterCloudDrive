@@ -32,7 +32,7 @@ class TestCreateTag:
 
     def test_create_tag_duplicate_name(self, client, auth_headers, created_tag):
         r = client.post("/api/v1/tags", json={"tagName": created_tag["tagName"]}, headers=auth_headers)
-        assert_api_error(r, 409)
+        assert_api_error(r, 409002)
 
 
 class TestListTags:
@@ -40,6 +40,7 @@ class TestListTags:
         r = client.get("/api/v1/tags", headers=auth_headers)
         data = assert_api_ok(r)
         assert len(data) >= 1
+        assert "fileCount" in next(tag for tag in data if tag["id"] == created_tag["id"])
 
     def test_list_tags_empty(self, client, auth_headers):
         r = client.get("/api/v1/tags", headers=auth_headers)
@@ -71,6 +72,31 @@ class TestDeleteTag:
 
 
 class TestTagFiles:
+    def test_atomically_replaces_file_tags(self, client, auth_headers, created_tag, uploaded_file):
+        second = assert_api_ok(client.post(
+            "/api/v1/tags",
+            json={"tagName": f"atomic_{uuid.uuid4().hex[:6]}", "color": "#336699"},
+            headers=auth_headers,
+        ))
+        file_id = uploaded_file["fileId"]
+
+        saved = assert_api_ok(client.put(
+            f"/api/v1/files/{file_id}/tags",
+            json={"tagIds": [created_tag["id"], second["id"], created_tag["id"]]},
+            headers=auth_headers,
+        ))
+        assert {tag["id"] for tag in saved} == {created_tag["id"], second["id"]}
+
+        current = assert_api_ok(client.get(f"/api/v1/files/{file_id}/tags", headers=auth_headers))
+        assert {tag["id"] for tag in current} == {created_tag["id"], second["id"]}
+
+        cleared = assert_api_ok(client.put(
+            f"/api/v1/files/{file_id}/tags",
+            json={"tagIds": []},
+            headers=auth_headers,
+        ))
+        assert cleared == []
+
     def test_tag_files(self, client, auth_headers, created_tag, uploaded_file):
         r = client.post(f"/api/v1/tags/{created_tag['id']}/files", json={
             "fileIds": [uploaded_file["fileId"]]

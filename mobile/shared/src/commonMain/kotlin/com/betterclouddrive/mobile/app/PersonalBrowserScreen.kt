@@ -33,6 +33,9 @@ import androidx.compose.material.icons.filled.DriveFileMove
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -85,6 +88,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun PersonalSpaceScreen(
     state: PersonalFilesUiState,
+    favorites: FavoritesUiState,
     documentPicker: DocumentPicker,
     onUpload: (Long?, UploadPickResult) -> Unit,
     onDownload: (FileItem, String) -> Unit,
@@ -109,6 +113,9 @@ fun PersonalSpaceScreen(
     onConsumeTransferFeedback: () -> Unit,
     onOpenTransfers: () -> Unit,
     onPreview: (FileItem) -> Unit,
+    onLoadFavoriteStatus: (Long) -> Unit,
+    onToggleFavorite: (FileItem) -> Unit,
+    onManageTags: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
@@ -161,29 +168,32 @@ fun PersonalSpaceScreen(
         if (wide) {
             Row(Modifier.fillMaxSize()) {
                 PersonalDirectoryContent(
-                    state, ::launchUpload, ::launchDownload, onOpenFolder, onSelectFile,
+                    state, favorites, ::launchUpload, ::launchDownload, onOpenFolder, onSelectFile,
                     onLoadMore, onScrollAnchor, onRetry, onGoRoot,
                     onToggleSelection, onClearSelection, { createDialog = true },
                     { renameTarget = it }, { deleteTargets = listOf(it) }, onOpenPicker,
                     { deleteTargets = state.current.items.filter { item -> item.id in state.selectedIds } },
-                    onPreview,
+                    onPreview, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
                     Modifier.weight(0.58f),
                 )
                 VerticalDivider(Modifier.fillMaxHeight())
                 Box(Modifier.weight(0.42f).fillMaxHeight().testTag("personal-detail-pane")) {
                     state.selectedFile?.let { file ->
-                        FileDetailContent(file, ::launchDownload, onPreview)
+                        FileDetailContent(
+                            file, favorites, ::launchDownload, onPreview,
+                            onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                        )
                     } ?: EmptyDetail()
                 }
             }
         } else {
             PersonalDirectoryContent(
-                state, ::launchUpload, ::launchDownload, onOpenFolder, onSelectFile,
+                state, favorites, ::launchUpload, ::launchDownload, onOpenFolder, onSelectFile,
                 onLoadMore, onScrollAnchor, onRetry, onGoRoot,
                 onToggleSelection, onClearSelection, { createDialog = true },
                 { renameTarget = it }, { deleteTargets = listOf(it) }, onOpenPicker,
                 { deleteTargets = state.current.items.filter { item -> item.id in state.selectedIds } },
-                onPreview,
+                onPreview, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
                 Modifier.fillMaxSize(),
             )
             state.selectedFile?.let { file ->
@@ -191,7 +201,10 @@ fun PersonalSpaceScreen(
                     onDismissRequest = { onSelectFile(null) },
                     modifier = Modifier.testTag("personal-detail-sheet"),
                 ) {
-                    FileDetailContent(file, ::launchDownload, onPreview)
+                    FileDetailContent(
+                        file, favorites, ::launchDownload, onPreview,
+                        onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                    )
                 }
             }
         }
@@ -235,6 +248,7 @@ fun PersonalSpaceScreen(
 @Composable
 private fun PersonalDirectoryContent(
     state: PersonalFilesUiState,
+    favorites: FavoritesUiState,
     onUpload: () -> Unit,
     onDownload: (FileItem) -> Unit,
     onOpenFolder: (FileItem) -> Unit,
@@ -251,6 +265,9 @@ private fun PersonalDirectoryContent(
     onOpenPicker: (FileItem, FileMutationKind) -> Unit,
     onDeleteSelected: () -> Unit,
     onPreview: (FileItem) -> Unit,
+    onLoadFavoriteStatus: (Long) -> Unit,
+    onToggleFavorite: (FileItem) -> Unit,
+    onManageTags: (FileItem) -> Unit,
     modifier: Modifier,
 ) {
     val strings = LocalMobileStrings.current
@@ -301,12 +318,14 @@ private fun PersonalDirectoryContent(
             )
             directory.items.isEmpty() -> EmptyDirectory(directory.folderId == null)
             state.viewMode == FileViewMode.LIST -> PersonalList(
-                state, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
+                state, favorites, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
                 onToggleSelection, onRename, onDeleteOne, onOpenPicker, onDownload, onPreview,
+                onLoadFavoriteStatus, onToggleFavorite, onManageTags,
             )
             else -> PersonalGrid(
-                state, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
+                state, favorites, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
                 onToggleSelection, onRename, onDeleteOne, onOpenPicker, onDownload, onPreview,
+                onLoadFavoriteStatus, onToggleFavorite, onManageTags,
             )
         }
     }
@@ -315,6 +334,7 @@ private fun PersonalDirectoryContent(
 @Composable
 private fun PersonalList(
     state: PersonalFilesUiState,
+    favorites: FavoritesUiState,
     onOpenFolder: (FileItem) -> Unit,
     onSelectFile: (FileItem?) -> Unit,
     onLoadMore: () -> Unit,
@@ -325,6 +345,9 @@ private fun PersonalList(
     onOpenPicker: (FileItem, FileMutationKind) -> Unit,
     onDownload: (FileItem) -> Unit,
     onPreview: (FileItem) -> Unit,
+    onLoadFavoriteStatus: (Long) -> Unit,
+    onToggleFavorite: (FileItem) -> Unit,
+    onManageTags: (FileItem) -> Unit,
 ) {
     val items = state.current.items
     val initialIndex = items.indexOfFirst { it.id == state.current.scrollAnchorId }.coerceAtLeast(0)
@@ -361,6 +384,11 @@ private fun PersonalList(
                 onDelete = { onDelete(file) },
                 onDownload = { onDownload(file) },
                 onPreview = { onPreview(file) },
+                favorite = favorites.favoriteStatus[file.id],
+                favoriteLoading = file.id in favorites.statusLoading || favorites.mutatingFileId == file.id,
+                onLoadFavoriteStatus = { onLoadFavoriteStatus(file.id) },
+                onToggleFavorite = { onToggleFavorite(file) },
+                onManageTags = { onManageTags(file) },
             )
         }
         item { PagingFooter(state.current, onLoadMore) }
@@ -370,6 +398,7 @@ private fun PersonalList(
 @Composable
 private fun PersonalGrid(
     state: PersonalFilesUiState,
+    favorites: FavoritesUiState,
     onOpenFolder: (FileItem) -> Unit,
     onSelectFile: (FileItem?) -> Unit,
     onLoadMore: () -> Unit,
@@ -380,6 +409,9 @@ private fun PersonalGrid(
     onOpenPicker: (FileItem, FileMutationKind) -> Unit,
     onDownload: (FileItem) -> Unit,
     onPreview: (FileItem) -> Unit,
+    onLoadFavoriteStatus: (Long) -> Unit,
+    onToggleFavorite: (FileItem) -> Unit,
+    onManageTags: (FileItem) -> Unit,
 ) {
     val items = state.current.items
     val initialIndex = items.indexOfFirst { it.id == state.current.scrollAnchorId }.coerceAtLeast(0)
@@ -418,6 +450,11 @@ private fun PersonalGrid(
                 onDelete = { onDelete(file) },
                 onDownload = { onDownload(file) },
                 onPreview = { onPreview(file) },
+                favorite = favorites.favoriteStatus[file.id],
+                favoriteLoading = file.id in favorites.statusLoading || favorites.mutatingFileId == file.id,
+                onLoadFavoriteStatus = { onLoadFavoriteStatus(file.id) },
+                onToggleFavorite = { onToggleFavorite(file) },
+                onManageTags = { onManageTags(file) },
             )
         }
         item { PagingFooter(state.current, onLoadMore) }
@@ -438,6 +475,11 @@ private fun PersonalFileRow(
     onDelete: () -> Unit,
     onDownload: () -> Unit,
     onPreview: () -> Unit,
+    favorite: Boolean?,
+    favoriteLoading: Boolean,
+    onLoadFavoriteStatus: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onManageTags: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     Card(
@@ -463,7 +505,10 @@ private fun PersonalFileRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (!selectionMode) FileActionsMenu(file, onRename, onMove, onCopy, onDelete, onDownload, onPreview)
+            if (!selectionMode) FileActionsMenu(
+                file, onRename, onMove, onCopy, onDelete, onDownload, onPreview,
+                favorite, favoriteLoading, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+            )
         }
     }
 }
@@ -482,6 +527,11 @@ private fun PersonalFileCard(
     onDelete: () -> Unit,
     onDownload: () -> Unit,
     onPreview: () -> Unit,
+    favorite: Boolean?,
+    favoriteLoading: Boolean,
+    onLoadFavoriteStatus: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onManageTags: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     Card(
@@ -505,7 +555,10 @@ private fun PersonalFileCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!selectionMode) FileActionsMenu(file, onRename, onMove, onCopy, onDelete, onDownload, onPreview)
+            if (!selectionMode) FileActionsMenu(
+                file, onRename, onMove, onCopy, onDelete, onDownload, onPreview,
+                favorite, favoriteLoading, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+            )
         }
     }
 }
@@ -519,14 +572,32 @@ private fun FileActionsMenu(
     onDelete: () -> Unit,
     onDownload: () -> Unit,
     onPreview: () -> Unit,
+    favorite: Boolean?,
+    favoriteLoading: Boolean,
+    onLoadFavoriteStatus: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onManageTags: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }, modifier = Modifier.testTag("personal-more-${file.id}")) {
+        IconButton(onClick = { onLoadFavoriteStatus(); expanded = true }, modifier = Modifier.testTag("personal-more-${file.id}")) {
             Icon(Icons.Default.MoreVert, contentDescription = strings[MobileString.MoreActions])
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text(strings[if (favorite == true) MobileString.RemoveFavorite else MobileString.AddFavorite]) },
+                leadingIcon = { Icon(if (favorite == true) Icons.Default.Star else Icons.Default.StarBorder, null) },
+                enabled = !favoriteLoading,
+                onClick = { expanded = false; onToggleFavorite() },
+                modifier = Modifier.testTag("personal-favorite-${file.id}"),
+            )
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.ManageTags]) },
+                leadingIcon = { Icon(Icons.Default.Label, null) },
+                onClick = { expanded = false; onManageTags() },
+                modifier = Modifier.testTag("personal-tags-${file.id}"),
+            )
             if (!file.isFolder) DropdownMenuItem(
                 text = { Text(strings[MobileString.Preview]) },
                 leadingIcon = { Icon(Icons.Default.Visibility, null) },
@@ -843,10 +914,15 @@ private fun EmptyDetail() {
 @Composable
 private fun FileDetailContent(
     file: FileItem,
+    favorites: FavoritesUiState,
     onDownload: (FileItem) -> Unit,
     onPreview: (FileItem) -> Unit,
+    onLoadFavoriteStatus: (Long) -> Unit,
+    onToggleFavorite: (FileItem) -> Unit,
+    onManageTags: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
+    LaunchedEffect(file.id) { onLoadFavoriteStatus(file.id) }
     Column(
         Modifier.fillMaxWidth().padding(24.dp).testTag("personal-file-detail-${file.id}"),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -859,6 +935,18 @@ private fun FileDetailContent(
         DetailRow(strings[MobileString.CreatedAt], formatDate(file.createdAt))
         DetailRow("MD5", file.md5Hash ?: "—")
         DetailRow(strings[MobileString.VersionCount], file.versionCount.toString())
+        OutlinedButton(
+            enabled = file.id !in favorites.statusLoading && favorites.mutatingFileId != file.id,
+            onClick = { onToggleFavorite(file) },
+            modifier = Modifier.testTag("personal-detail-favorite-${file.id}"),
+        ) {
+            Icon(if (favorites.favoriteStatus[file.id] == true) Icons.Default.Star else Icons.Default.StarBorder, null)
+            Text(strings[if (favorites.favoriteStatus[file.id] == true) MobileString.RemoveFavorite else MobileString.AddFavorite])
+        }
+        OutlinedButton(
+            onClick = { onManageTags(file) },
+            modifier = Modifier.testTag("personal-detail-tags-${file.id}"),
+        ) { Icon(Icons.Default.Label, null); Text(strings[MobileString.ManageTags]) }
         OutlinedButton(
             onClick = { onPreview(file) },
             modifier = Modifier.testTag("personal-detail-preview-${file.id}"),

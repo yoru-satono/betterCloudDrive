@@ -41,9 +41,13 @@ import com.betterclouddrive.mobile.app.ProductShellActions
 import com.betterclouddrive.mobile.app.FileMutationKind
 import com.betterclouddrive.mobile.app.FolderPickerState
 import com.betterclouddrive.mobile.app.FileMutationFeedback
+import com.betterclouddrive.mobile.app.FavoritesUiState
+import com.betterclouddrive.mobile.app.OrganizationFileListUiState
+import com.betterclouddrive.mobile.app.TagsUiState
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.UserProfile
+import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
@@ -236,6 +240,44 @@ class ProductShellDeviceTest {
     }
 
     @Test
+    fun personalOrganizeMenuOpensFavoritesAndTagsAndReturnsToRoot() {
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(debugToolsEnabled = false) } }
+
+        composeRule.onNodeWithTag("personal-organize").performClick()
+        composeRule.onNodeWithTag("personal-open-favorites").performClick()
+        composeRule.onNodeWithTag("favorites-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("nav-personal").performClick()
+        composeRule.onNodeWithTag("personal-empty").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("personal-organize").performClick()
+        composeRule.onNodeWithTag("personal-open-tags").performClick()
+        composeRule.onNodeWithTag("tags-screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun wideTagsUseListAndFileDetailPanes() {
+        val tag = PersonalTag(id = 31, tagName = "work", color = "#00d4aa", fileCount = 1)
+        val tagged = FileItem(id = 32, fileName = "tagged.txt")
+        composeRule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f)) {
+                BetterCloudDriveTheme {
+                    TestShell(
+                        debugToolsEnabled = false,
+                        tags = TagsUiState(tags = listOf(tag)),
+                        tagFiles = listOf(tagged),
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("personal-organize").performClick()
+        composeRule.onNodeWithTag("personal-open-tags").performClick()
+        composeRule.onNodeWithTag("tag-row-31").performClick()
+        composeRule.onNodeWithTag("tags-wide-detail").assertIsDisplayed()
+        composeRule.onNodeWithTag("organization-file-32").assertIsDisplayed()
+    }
+
+    @Test
     fun personalSearchOpensTextPreviewAndReturnsToResults() {
         val file = FileItem(id = 71, fileName = "search-note.txt", mimeType = "text/plain", fileSize = 5)
         composeRule.setContent {
@@ -395,6 +437,9 @@ private fun TestShell(
     files: List<FileItem> = emptyList(),
     tree: Map<Long?, List<FileItem>> = emptyMap(),
     transfers: List<TransferTask> = emptyList(),
+    favorites: FavoritesUiState = FavoritesUiState(),
+    tags: TagsUiState = TagsUiState(),
+    tagFiles: List<FileItem> = emptyList(),
 ) {
     val rootItems = tree[null] ?: files
     val root = remember(rootItems) {
@@ -404,6 +449,8 @@ private fun TestShell(
     var search by remember { mutableStateOf(PersonalSearchUiState()) }
     var preview by remember { mutableStateOf(PersonalPreviewUiState()) }
     var transferTasks by remember(transfers) { mutableStateOf(transfers) }
+    var favoritesState by remember(favorites) { mutableStateOf(favorites) }
+    var tagsState by remember(tags) { mutableStateOf(tags) }
     val locales = LocalConfiguration.current.locales
     val strings = mobileStringsFor((0 until locales.size()).map { locales[it].toLanguageTag() })
     CompositionLocalProvider(LocalMobileStrings provides strings) {
@@ -416,6 +463,8 @@ private fun TestShell(
             search = search,
             preview = preview,
             transfers = transferTasks,
+            favorites = favoritesState,
+            tags = tagsState,
         ),
         documentPicker = TestDocumentPicker,
         officeRenderer = TestOfficeRenderer,
@@ -533,6 +582,45 @@ private fun TestShell(
             closePreview = { preview = PersonalPreviewUiState() },
             updatePreviewPosition = { preview = preview.copy(playbackPositionMillis = it) },
             reportPreviewError = { preview = preview.copy(error = it) },
+            activateFavorites = {},
+            updateFavoritesQuery = {},
+            refreshFavorites = {},
+            loadMoreFavorites = {},
+            updateFavoritesScrollAnchor = {},
+            loadFavoriteStatus = {},
+            toggleFavorite = { file ->
+                val now = !(favoritesState.favoriteStatus[file.id] ?: false)
+                favoritesState = favoritesState.copy(favoriteStatus = favoritesState.favoriteStatus + (file.id to now))
+            },
+            consumeFavoriteFeedback = {},
+            activateTags = {},
+            updateTagsQuery = {},
+            refreshTags = {},
+            createPersonalTag = { _, _ -> },
+            updatePersonalTag = { _, _, _ -> },
+            deletePersonalTag = {},
+            activateTagFiles = { tagId ->
+                tagsState = tagsState.copy(
+                    activeTagId = tagId,
+                    tagFiles = OrganizationFileListUiState(
+                        items = tagFiles,
+                        page = 1,
+                        pages = 1,
+                        total = tagFiles.size.toLong(),
+                    ),
+                )
+            },
+            updateTagFilesQuery = {},
+            refreshTagFiles = {},
+            loadMoreTagFiles = {},
+            updateTagFilesScrollAnchor = {},
+            removeFileFromActiveTag = {},
+            openFileTagEditor = {},
+            toggleFileTag = {},
+            saveFileTags = {},
+            createTagInEditor = { _, _ -> },
+            closeFileTagEditor = {},
+            consumeTagFeedback = {},
             upload = { _, _ -> },
             download = { _, _ -> },
             pause = { id -> transferTasks = transferTasks.map { if (it.id == id) it.copy(status = TransferStatus.PAUSED) else it } },

@@ -480,6 +480,12 @@ describe('API endpoint contracts', () => {
     await tagsApi.removeFileTag(9, 7)
     expect(apiMock.delete).toHaveBeenCalledWith('/tags/7/files/9')
 
+    await tagsApi.listFileTags(9)
+    expect(apiMock.get).toHaveBeenCalledWith('/files/9/tags')
+
+    await tagsApi.replaceFileTags(9, [7, 8])
+    expect(apiMock.put).toHaveBeenCalledWith('/files/9/tags', { tagIds: [7, 8] })
+
     await tagsApi.updateTag(7, 'work', '#00d4aa')
     expect(apiMock.put).toHaveBeenCalledWith('/tags/7', { tagName: 'work', color: '#00d4aa' })
   })

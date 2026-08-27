@@ -288,14 +288,12 @@ async function openTagManager(file: FileEntity) {
   tagsLoading.value = true
   selectedTagIds.value = new Set()
   try {
-    const { data } = await tagsApi.listTags()
-    tags.value = data.data
-    const selected = new Set<number>()
-    await Promise.all(tags.value.map(async tag => {
-      const filesRes = await tagsApi.listFilesByTag(tag.id, 1, 100)
-      if (filesRes.data.data.records.some(item => item.id === file.id)) selected.add(tag.id)
-    }))
-    selectedTagIds.value = selected
+    const [tagsResponse, selectedResponse] = await Promise.all([
+      tagsApi.listTags(),
+      tagsApi.listFileTags(file.id),
+    ])
+    tags.value = tagsResponse.data.data
+    selectedTagIds.value = new Set(selectedResponse.data.data.map(tag => tag.id))
   } finally {
     tagsLoading.value = false
   }
@@ -312,12 +310,7 @@ async function saveTags() {
   if (!tagTarget.value) return
   tagsLoading.value = true
   try {
-    await Promise.all(tags.value.map(tag => {
-      const selected = selectedTagIds.value.has(tag.id)
-      return selected
-        ? tagsApi.addFileTag(tagTarget.value!.id, tag.id)
-        : tagsApi.removeFileTag(tagTarget.value!.id, tag.id)
-    }))
+    await tagsApi.replaceFileTags(tagTarget.value.id, [...selectedTagIds.value])
     toast.success(__t('commonUi.filebrowser.labelUpdated'))
     tagOpen.value = false
   } finally {

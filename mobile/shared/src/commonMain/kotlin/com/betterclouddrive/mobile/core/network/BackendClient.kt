@@ -22,6 +22,10 @@ import com.betterclouddrive.mobile.core.model.UpdateLocaleRequest
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.PersonalFileDestinationRequest
+import com.betterclouddrive.mobile.core.model.PersonalTag
+import com.betterclouddrive.mobile.core.model.CreatePersonalTagRequest
+import com.betterclouddrive.mobile.core.model.UpdatePersonalTagRequest
+import com.betterclouddrive.mobile.core.model.ReplacePersonalFileTagsRequest
 import com.betterclouddrive.mobile.core.model.RefreshRequest
 import com.betterclouddrive.mobile.core.model.RenamePersonalFileRequest
 import com.betterclouddrive.mobile.core.model.SessionExpiredException
@@ -257,6 +261,81 @@ class BackendClient(
                 jsonBody(DeletePersonalFilesRequest(fileIds.distinct()))
             }
         }
+    }
+
+    suspend fun listPersonalFavorites(query: String?, page: Int, size: Int): PageResult<FileItem> =
+        authenticatedEnvelope { token ->
+            client.get(url("favorites")) {
+                bearer(token)
+                url {
+                    query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                    parameters.append("page", page.toString())
+                    parameters.append("size", size.toString())
+                }
+            }
+        }
+
+    suspend fun isPersonalFavorite(fileId: Long): Boolean = authenticatedEnvelope { token ->
+        client.get(url("favorites/$fileId/status")) { bearer(token) }
+    }
+
+    suspend fun addPersonalFavorite(fileId: Long) {
+        authenticatedNoData { token -> client.post(url("favorites/$fileId")) { bearer(token) } }
+    }
+
+    suspend fun removePersonalFavorite(fileId: Long) {
+        authenticatedNoData { token -> client.delete(url("favorites/$fileId")) { bearer(token) } }
+    }
+
+    suspend fun listPersonalTags(query: String? = null): List<PersonalTag> = authenticatedEnvelope { token ->
+        client.get(url("tags")) {
+            bearer(token)
+            url { query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) } }
+        }
+    }
+
+    suspend fun createPersonalTag(name: String, color: String): PersonalTag = authenticatedEnvelope { token ->
+        client.post(url("tags")) { bearer(token); jsonBody(CreatePersonalTagRequest(name, color)) }
+    }
+
+    suspend fun updatePersonalTag(tagId: Long, name: String, color: String): PersonalTag = authenticatedEnvelope { token ->
+        client.put(url("tags/$tagId")) { bearer(token); jsonBody(UpdatePersonalTagRequest(name, color)) }
+    }
+
+    suspend fun deletePersonalTag(tagId: Long) {
+        authenticatedNoData { token -> client.delete(url("tags/$tagId")) { bearer(token) } }
+    }
+
+    suspend fun listPersonalFilesByTag(
+        tagId: Long,
+        query: String?,
+        page: Int,
+        size: Int,
+    ): PageResult<FileItem> = authenticatedEnvelope { token ->
+        client.get(url("tags/$tagId/files")) {
+            bearer(token)
+            url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        }
+    }
+
+    suspend fun listPersonalFileTags(fileId: Long): List<PersonalTag> = authenticatedEnvelope { token ->
+        client.get(url("files/$fileId/tags")) { bearer(token) }
+    }
+
+    suspend fun replacePersonalFileTags(fileId: Long, tagIds: List<Long>): List<PersonalTag> =
+        authenticatedEnvelope { token ->
+            client.put(url("files/$fileId/tags")) {
+                bearer(token)
+                jsonBody(ReplacePersonalFileTagsRequest(tagIds.distinct()))
+            }
+        }
+
+    suspend fun removePersonalFileTag(tagId: Long, fileId: Long) {
+        authenticatedNoData { token -> client.delete(url("tags/$tagId/files/$fileId")) { bearer(token) } }
     }
 
     suspend fun listRootFiles(): List<FileItem> {

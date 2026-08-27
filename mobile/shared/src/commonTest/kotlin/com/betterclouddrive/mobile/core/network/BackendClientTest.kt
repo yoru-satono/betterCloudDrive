@@ -128,6 +128,64 @@ class BackendClientTest {
     }
 
     @Test
+    fun personalOrganizationRequestsUseStableEndpointsPagingAndAtomicTagBody() = runTest {
+        val observed = mutableListOf<Triple<HttpMethod, String, String>>()
+        val engine = MockEngine { request ->
+            val body = (request.body as? OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+            observed += Triple(request.method, request.url.toString(), body)
+            when {
+                request.url.encodedPath == "/api/v1/favorites" -> jsonResponse(
+                    """{"code":200,"data":{"records":[{"id":7,"fileName":"report.pdf"}],"total":51,"page":2,"size":50,"pages":2}}""",
+                )
+                request.url.encodedPath.endsWith("/status") -> jsonResponse("""{"code":200,"data":true}""")
+                request.url.encodedPath == "/api/v1/tags" && request.method == HttpMethod.Get -> jsonResponse(
+                    """{"code":200,"data":[{"id":3,"tagName":"work","color":"#00d4aa","fileCount":105}]}""",
+                )
+                request.url.encodedPath == "/api/v1/tags" -> jsonResponse(
+                    """{"code":200,"data":{"id":4,"tagName":"new","color":"#60a5fa","fileCount":0}}""",
+                )
+                request.url.encodedPath == "/api/v1/tags/3/files" && request.method == HttpMethod.Get -> jsonResponse(
+                    """{"code":200,"data":{"records":[{"id":8,"fileName":"tagged.txt"}],"total":1,"page":1,"size":50,"pages":1}}""",
+                )
+                request.url.encodedPath == "/api/v1/files/7/tags" -> jsonResponse(
+                    """{"code":200,"data":[{"id":3,"tagName":"work","color":"#00d4aa"}]}""",
+                )
+                request.url.encodedPath == "/api/v1/tags/3" && request.method == HttpMethod.Put -> jsonResponse(
+                    """{"code":200,"data":{"id":3,"tagName":"renamed","color":"#a78bfa","fileCount":105}}""",
+                )
+                else -> jsonResponse("""{"code":200}""")
+            }
+        }
+        val client = BackendClient(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals(51, client.listPersonalFavorites(" report ", 2, 50).total)
+        assertTrue(client.isPersonalFavorite(7))
+        client.addPersonalFavorite(7)
+        client.removePersonalFavorite(7)
+        assertEquals(105, client.listPersonalTags(" work ").single().fileCount)
+        assertEquals("new", client.createPersonalTag("new", "#60a5fa").tagName)
+        assertEquals("renamed", client.updatePersonalTag(3, "renamed", "#a78bfa").tagName)
+        assertEquals(8, client.listPersonalFilesByTag(3, " tagged ", 1, 50).records.single().id)
+        assertEquals(3, client.listPersonalFileTags(7).single().id)
+        assertEquals(3, client.replacePersonalFileTags(7, listOf(3, 3)).single().id)
+        client.removePersonalFileTag(3, 7)
+        client.deletePersonalTag(3)
+
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/favorites?q=report&page=2&size=50") })
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/tags?q=work") })
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/tags/3/files?q=tagged&page=1&size=50") })
+        assertTrue(observed.any {
+            it.first == HttpMethod.Put && it.second.endsWith("/files/7/tags") && it.third == """{"tagIds":[3]}"""
+        })
+        assertTrue(observed.any { it.first == HttpMethod.Delete && it.second.endsWith("/tags/3/files/7") })
+    }
+
+    @Test
     fun personalDirectoryQueryCarriesPagingAndSortAndParsesMetadata() = runTest {
         var requestedUrl = ""
         val engine = MockEngine { request ->

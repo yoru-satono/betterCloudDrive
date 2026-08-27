@@ -3,11 +3,14 @@ package com.betterclouddrive.web.controller;
 import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.TagEntity;
 import com.betterclouddrive.service.FileService;
+import com.betterclouddrive.service.TagService;
 import com.betterclouddrive.web.dto.request.BatchDeleteRequest;
 import com.betterclouddrive.web.dto.request.CreateFolderRequest;
 import com.betterclouddrive.web.dto.request.MoveFileRequest;
 import com.betterclouddrive.web.dto.request.RenameRequest;
+import com.betterclouddrive.web.dto.request.ReplaceFileTagsRequest;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import jakarta.validation.Valid;
@@ -15,6 +18,8 @@ import jakarta.validation.constraints.Max;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @Validated
 
@@ -24,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 public class FileController {
 
     private final FileService fileService;
+    private final TagService tagService;
 
     @GetMapping
     public ApiResponse<PageResult<FileEntity>> listFiles(
@@ -39,6 +45,19 @@ public class FileController {
     @GetMapping("/{fileId}")
     public ApiResponse<FileEntity> getFile(@CurrentUser UserPrincipal user, @PathVariable Long fileId) {
         return ApiResponse.success(fileService.getFile(user.getUserId(), fileId));
+    }
+
+    @GetMapping("/{fileId}/tags")
+    public ApiResponse<List<TagEntity>> listFileTags(@CurrentUser UserPrincipal user, @PathVariable Long fileId) {
+        return ApiResponse.success(tagService.listFileTags(user.getUserId(), fileId));
+    }
+
+    @PutMapping("/{fileId}/tags")
+    public ApiResponse<List<TagEntity>> replaceFileTags(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long fileId,
+            @Valid @RequestBody ReplaceFileTagsRequest request) {
+        return ApiResponse.success(tagService.replaceFileTags(user.getUserId(), fileId, request.getTagIds()));
     }
 
     @PostMapping("/folder")

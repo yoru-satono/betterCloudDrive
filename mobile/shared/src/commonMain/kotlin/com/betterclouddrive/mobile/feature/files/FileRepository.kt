@@ -5,6 +5,7 @@ import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.PreviewKind
 import com.betterclouddrive.mobile.core.model.TextPreview
+import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.network.BackendClient
 
 class FileRepository(private val backend: BackendClient) {
@@ -36,6 +37,22 @@ class FileRepository(private val backend: BackendClient) {
     suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) =
         backend.copyPersonalFile(fileId, targetParentId)
     suspend fun deletePersonalFiles(fileIds: List<Long>) = backend.deletePersonalFiles(fileIds)
+    suspend fun listPersonalFavorites(query: String?, page: Int, size: Int): PageResult<FileItem> =
+        backend.listPersonalFavorites(query, page, size)
+    suspend fun isPersonalFavorite(fileId: Long): Boolean = backend.isPersonalFavorite(fileId)
+    suspend fun addPersonalFavorite(fileId: Long) = backend.addPersonalFavorite(fileId)
+    suspend fun removePersonalFavorite(fileId: Long) = backend.removePersonalFavorite(fileId)
+    suspend fun listPersonalTags(query: String? = null): List<PersonalTag> = backend.listPersonalTags(query)
+    suspend fun createPersonalTag(name: String, color: String): PersonalTag = backend.createPersonalTag(name, color)
+    suspend fun updatePersonalTag(tagId: Long, name: String, color: String): PersonalTag =
+        backend.updatePersonalTag(tagId, name, color)
+    suspend fun deletePersonalTag(tagId: Long) = backend.deletePersonalTag(tagId)
+    suspend fun listPersonalFilesByTag(tagId: Long, query: String?, page: Int, size: Int): PageResult<FileItem> =
+        backend.listPersonalFilesByTag(tagId, query, page, size)
+    suspend fun listPersonalFileTags(fileId: Long): List<PersonalTag> = backend.listPersonalFileTags(fileId)
+    suspend fun replacePersonalFileTags(fileId: Long, tagIds: List<Long>): List<PersonalTag> =
+        backend.replacePersonalFileTags(fileId, tagIds)
+    suspend fun removePersonalFileTag(tagId: Long, fileId: Long) = backend.removePersonalFileTag(tagId, fileId)
     suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig = backend.loadTeamOffice(teamId, fileId)
 
     companion object {

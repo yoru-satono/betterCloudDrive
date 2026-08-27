@@ -5,6 +5,7 @@ import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.TagEntity;
 import com.betterclouddrive.service.TagService;
+import com.betterclouddrive.service.dto.TagSummaryDto;
 import com.betterclouddrive.web.dto.request.CreateTagRequest;
 import com.betterclouddrive.web.dto.request.UpdateTagRequest;
 import com.betterclouddrive.web.security.CurrentUser;
@@ -38,7 +39,7 @@ public class TagController {
     }
 
     @GetMapping
-    public ApiResponse<List<TagEntity>> listTags(
+    public ApiResponse<List<TagSummaryDto>> listTags(
             @CurrentUser UserPrincipal user,
             @RequestParam(required = false) String q) {
         return ApiResponse.success(tagService.listTags(user.getUserId(), q));

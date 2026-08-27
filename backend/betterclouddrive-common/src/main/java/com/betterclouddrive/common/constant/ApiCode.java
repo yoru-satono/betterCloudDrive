@@ -23,6 +23,7 @@ public enum ApiCode {
     METHOD_NOT_ALLOWED(405, "method not allowed"),
     CONFLICT(409, "resource conflict"),
     FILE_NAME_CONFLICT(409001, "file name already exists in this folder"),
+    TAG_NAME_CONFLICT(409002, "tag name already exists"),
     RATE_LIMITED(429, "too many requests"),
 
     // ==================== Business Errors (419) ====================

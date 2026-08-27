@@ -7,6 +7,7 @@ import { useFilesStore } from '@/stores/files'
 import { dispatchFileAction } from '@/components/file/fileActions'
 import * as filesApi from '@/api/files'
 import * as sharesApi from '@/api/shares'
+import * as tagsApi from '@/api/tags'
 import { downloadFolderZip, previewFile } from '@/api/download'
 import type { FileEntity } from '@/types/file'
 
@@ -49,6 +50,14 @@ vi.mock('@/api/favorites', () => ({
   addFavorite: vi.fn(),
 }))
 
+vi.mock('@/api/tags', () => ({
+  listTags: vi.fn(),
+  listFileTags: vi.fn(),
+  replaceFileTags: vi.fn(),
+  addFileTag: vi.fn(),
+  removeFileTag: vi.fn(),
+}))
+
 vi.mock('@/api/download', () => ({
   downloadFile: vi.fn(),
   downloadFolderZip: vi.fn(),
@@ -60,6 +69,11 @@ const getFile = filesApi.getFile as Mock
 const createShare = sharesApi.createShare as Mock
 const downloadFolderZipMock = downloadFolderZip as Mock
 const previewFileMock = previewFile as Mock
+const listTags = tagsApi.listTags as Mock
+const listFileTags = tagsApi.listFileTags as Mock
+const replaceFileTags = tagsApi.replaceFileTags as Mock
+const addFileTag = tagsApi.addFileTag as Mock
+const removeFileTag = tagsApi.removeFileTag as Mock
 
 const file = {
   id: 7,
@@ -104,7 +118,7 @@ const stubs = {
       }
     },
   },
-  OButton: { template: '<button @click="$emit(\'click\', $event)"><slot /></button>' },
+  OButton: { emits: ['click'], template: '<button @click="$emit(\'click\', $event)"><slot /></button>' },
 }
 
 beforeEach(() => {
@@ -115,6 +129,19 @@ beforeEach(() => {
   downloadFolderZipMock.mockReset()
   previewFileMock.mockReset()
   previewFileMock.mockResolvedValue({ data: new Blob(['preview']) })
+  const tagRecords = Array.from({ length: 105 }, (_, index) => ({
+    id: index + 1,
+    userId: 1,
+    teamId: null,
+    tagName: `tag-${index + 1}`,
+    color: '#00d4aa',
+    createdAt: '2026-01-01T00:00:00',
+  }))
+  listTags.mockReset().mockResolvedValue({ data: { data: tagRecords } })
+  listFileTags.mockReset().mockResolvedValue({ data: { data: [tagRecords[104]] } })
+  replaceFileTags.mockReset().mockResolvedValue({ data: { data: [tagRecords[104]] } })
+  addFileTag.mockReset()
+  removeFileTag.mockReset()
   routerPush.mockReset()
   Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
   vi.stubGlobal('crypto', {
@@ -306,5 +333,30 @@ describe('FileBrowserPage share dialog', () => {
     expect(routerPush).toHaveBeenCalledWith({ name: 'Folder', params: { folderId: 42 } })
     expect(store.currentParentId).toBe(42)
     expect(store.breadcrumb.at(-1)).toEqual({ id: 42, name: 'parent' })
+  })
+
+  it('loads and saves all file tags with one atomic read and write', async () => {
+    const store = useFilesStore()
+    store.viewMode = 'grid'
+    const wrapper = mount(FileBrowserPage, { global: { stubs } })
+    await flushPromises()
+
+    await wrapper.find('.file-entry').trigger('click')
+    await wrapper.findAll('button').find(button => button.text() === '管理标签')!.trigger('click')
+    await flushPromises()
+
+    expect(listTags).toHaveBeenCalledTimes(1)
+    expect(listFileTags).toHaveBeenCalledTimes(1)
+    expect(listFileTags).toHaveBeenCalledWith(7)
+    expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(105)
+    expect((wrapper.findAll('input[type="checkbox"]')[104].element as HTMLInputElement).checked).toBe(true)
+
+    await wrapper.findAll('button').find(button => button.text() === '保存')!.trigger('click')
+    await flushPromises()
+
+    expect(replaceFileTags).toHaveBeenCalledTimes(1)
+    expect(replaceFileTags).toHaveBeenCalledWith(7, [105])
+    expect(addFileTag).not.toHaveBeenCalled()
+    expect(removeFileTag).not.toHaveBeenCalled()
   })
 })

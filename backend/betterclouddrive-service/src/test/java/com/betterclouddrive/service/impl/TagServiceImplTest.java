@@ -46,19 +46,19 @@ class TagServiceImplTest {
     @Test
     void createTag_shouldSaveTag() {
         when(tagRepository.existsByUserIdAndTagName(1L, "work")).thenReturn(false);
-        when(tagRepository.save(any(TagEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tagRepository.saveAndFlush(any(TagEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         TagEntity result = tagService.createTag(1L, "work", "#ff0000");
 
         assertThat(result.getTagName()).isEqualTo("work");
         assertThat(result.getColor()).isEqualTo("#ff0000");
-        verify(tagRepository).save(any(TagEntity.class));
+        verify(tagRepository).saveAndFlush(any(TagEntity.class));
     }
 
     @Test
     void createTag_shouldUseDefaultColorWhenNull() {
         when(tagRepository.existsByUserIdAndTagName(1L, "personal")).thenReturn(false);
-        when(tagRepository.save(any(TagEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tagRepository.saveAndFlush(any(TagEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         TagEntity result = tagService.createTag(1L, "personal", null);
 
@@ -77,7 +77,7 @@ class TagServiceImplTest {
     void updateTag_shouldUpdateNameAndColor() {
         TagEntity tag = tag(1L, 1L);
         when(tagRepository.findById(1L)).thenReturn(Optional.of(tag));
-        when(tagRepository.save(any())).thenReturn(tag);
+        when(tagRepository.saveAndFlush(any())).thenReturn(tag);
 
         tagService.updateTag(1L, 1L, "updated", "#aabbcc");
 
@@ -144,6 +144,7 @@ class TagServiceImplTest {
     void listFilesByTag_shouldReturnFiles() {
         FileEntity file = FileEntity.builder().id(10L).build();
         Page<FileEntity> files = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
+        when(tagRepository.findById(1L)).thenReturn(Optional.of(tag(1L, 1L)));
         when(fileTagRepository.findTaggedFilesByKeyword(eq(1L), eq(1L), eq("report"), any(PageRequest.class)))
                 .thenReturn(files);
 
@@ -151,6 +152,86 @@ class TagServiceImplTest {
 
         assertThat(result.getRecords()).hasSize(1);
         assertThat(result.getTotal()).isEqualTo(1);
+    }
+
+    @Test
+    void createTag_shouldTrimNameNormalizeColorAndRejectInvalidInput() {
+        when(tagRepository.existsByUserIdAndTagName(1L, "work")).thenReturn(false);
+        when(tagRepository.saveAndFlush(any(TagEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TagEntity result = tagService.createTag(1L, "  work  ", " #AABBCC ");
+
+        assertThat(result.getTagName()).isEqualTo("work");
+        assertThat(result.getColor()).isEqualTo("#aabbcc");
+        assertThatThrownBy(() -> tagService.createTag(1L, " ", null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getMessageKey()).isEqualTo("error.invalidTagName"));
+        assertThatThrownBy(() -> tagService.createTag(1L, "bad-color", "red"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getMessageKey()).isEqualTo("error.invalidTagColor"));
+    }
+
+    @Test
+    void updateTag_shouldReturnStableNameConflict() {
+        TagEntity existing = tag(1L, 1L);
+        when(tagRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(tagRepository.existsByUserIdAndTagNameAndIdNot(1L, "archive", 1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> tagService.updateTag(1L, 1L, " archive ", null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> {
+                    BusinessException business = (BusinessException) error;
+                    assertThat(business.getCode()).isEqualTo(409002);
+                    assertThat(business.getMessageKey()).isEqualTo("error.tagNameConflict");
+                });
+    }
+
+    @Test
+    void listTags_shouldIncludeActiveFileCounts() {
+        TagEntity work = tag(1L, 1L);
+        TagEntity archive = TagEntity.builder().id(2L).userId(1L).tagName("archive").color("#1890ff").build();
+        when(tagRepository.findByUserIdOrderByTagNameAsc(1L)).thenReturn(List.of(archive, work));
+        when(fileTagRepository.countActivePersonalFilesByTag(1L)).thenReturn(List.<Object[]>of(new Object[]{1L, 3L}));
+
+        var result = tagService.listTags(1L, null);
+
+        assertThat(result).extracting(item -> item.getFileCount()).containsExactly(0L, 3L);
+    }
+
+    @Test
+    void replaceFileTags_shouldDeduplicateAndReplaceAtomically() {
+        FileEntity file = FileEntity.builder().id(10L).userId(1L).isDeleted(false).build();
+        TagEntity work = tag(1L, 1L);
+        TagEntity archive = TagEntity.builder().id(2L).userId(1L).tagName("archive").build();
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(file));
+        when(tagRepository.findById(1L)).thenReturn(Optional.of(work));
+        when(tagRepository.findById(2L)).thenReturn(Optional.of(archive));
+        when(fileTagRepository.findPersonalTagsForFile(1L, 10L)).thenReturn(List.of(work));
+
+        List<TagEntity> result = tagService.replaceFileTags(1L, 10L, List.of(2L, 1L, 2L));
+
+        assertThat(result).extracting(TagEntity::getId).containsExactly(2L, 1L);
+        verify(fileTagRepository).deleteByUserIdAndFileId(1L, 10L);
+        verify(fileTagRepository).flush();
+        verify(fileTagRepository, times(2)).save(any(FileTagEntity.class));
+    }
+
+    @Test
+    void replaceFileTags_shouldBeIdempotentAndRejectForeignTagsBeforeDelete() {
+        FileEntity file = FileEntity.builder().id(10L).userId(1L).isDeleted(false).build();
+        TagEntity work = tag(1L, 1L);
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(file));
+        when(tagRepository.findById(1L)).thenReturn(Optional.of(work));
+        when(fileTagRepository.findPersonalTagsForFile(1L, 10L)).thenReturn(List.of(work));
+
+        assertThat(tagService.replaceFileTags(1L, 10L, List.of(1L))).containsExactly(work);
+        verify(fileTagRepository, never()).deleteByUserIdAndFileId(anyLong(), anyLong());
+
+        TagEntity foreign = tag(2L, 2L);
+        when(tagRepository.findById(2L)).thenReturn(Optional.of(foreign));
+        assertThatThrownBy(() -> tagService.replaceFileTags(1L, 10L, List.of(2L)))
+                .isInstanceOf(BusinessException.class);
+        verify(fileTagRepository, never()).deleteByUserIdAndFileId(anyLong(), anyLong());
     }
 
     @Test

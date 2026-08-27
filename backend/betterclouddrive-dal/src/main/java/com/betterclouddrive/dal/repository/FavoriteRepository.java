@@ -24,26 +24,16 @@ public interface FavoriteRepository extends JpaRepository<FavoriteEntity, Long> 
                     SELECT f FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
                     WHERE fav.userId = :userId
                       AND f.isDeleted = false
-                      AND (
-                        (f.teamId IS NULL AND f.userId = :userId)
-                        OR EXISTS (
-                          SELECT 1 FROM TeamMemberEntity tm
-                          WHERE tm.teamId = f.teamId AND tm.userId = :userId AND tm.status = 1
-                        )
-                      )
-                    ORDER BY fav.createdAt DESC
+                      AND f.teamId IS NULL
+                      AND f.userId = :userId
+                    ORDER BY fav.createdAt DESC, f.id DESC
                     """,
             countQuery = """
                     SELECT COUNT(f) FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
                     WHERE fav.userId = :userId
                       AND f.isDeleted = false
-                      AND (
-                        (f.teamId IS NULL AND f.userId = :userId)
-                        OR EXISTS (
-                          SELECT 1 FROM TeamMemberEntity tm
-                          WHERE tm.teamId = f.teamId AND tm.userId = :userId AND tm.status = 1
-                        )
-                      )
+                      AND f.teamId IS NULL
+                      AND f.userId = :userId
                     """
     )
     Page<FileEntity> findFavoriteFiles(
@@ -55,27 +45,17 @@ public interface FavoriteRepository extends JpaRepository<FavoriteEntity, Long> 
                     SELECT f FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
                     WHERE fav.userId = :userId
                       AND f.isDeleted = false
-                      AND (
-                        (f.teamId IS NULL AND f.userId = :userId)
-                        OR EXISTS (
-                          SELECT 1 FROM TeamMemberEntity tm
-                          WHERE tm.teamId = f.teamId AND tm.userId = :userId AND tm.status = 1
-                        )
-                      )
+                      AND f.teamId IS NULL
+                      AND f.userId = :userId
                       AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
-                    ORDER BY fav.createdAt DESC
+                    ORDER BY fav.createdAt DESC, f.id DESC
                     """,
             countQuery = """
                     SELECT COUNT(f) FROM FavoriteEntity fav JOIN FileEntity f ON fav.fileId = f.id
                     WHERE fav.userId = :userId
                       AND f.isDeleted = false
-                      AND (
-                        (f.teamId IS NULL AND f.userId = :userId)
-                        OR EXISTS (
-                          SELECT 1 FROM TeamMemberEntity tm
-                          WHERE tm.teamId = f.teamId AND tm.userId = :userId AND tm.status = 1
-                        )
-                      )
+                      AND f.teamId IS NULL
+                      AND f.userId = :userId
                       AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
                     """
     )

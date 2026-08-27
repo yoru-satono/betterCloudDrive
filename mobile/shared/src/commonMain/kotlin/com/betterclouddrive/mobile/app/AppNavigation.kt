@@ -21,10 +21,13 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
@@ -43,6 +46,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +66,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.betterclouddrive.mobile.core.model.FileItem
+import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.MobileStrings
@@ -104,6 +109,32 @@ data class ProductShellActions(
     val loadMoreSearch: () -> Unit,
     val updateSearchScrollAnchor: (Long?) -> Unit,
     val prepareOpenSearchLocation: (FileItem) -> Unit,
+    val activateFavorites: () -> Unit = {},
+    val updateFavoritesQuery: (String) -> Unit = {},
+    val refreshFavorites: () -> Unit = {},
+    val loadMoreFavorites: () -> Unit = {},
+    val updateFavoritesScrollAnchor: (Long?) -> Unit = {},
+    val loadFavoriteStatus: (Long) -> Unit = {},
+    val toggleFavorite: (FileItem) -> Unit = {},
+    val consumeFavoriteFeedback: () -> Unit = {},
+    val activateTags: () -> Unit = {},
+    val updateTagsQuery: (String) -> Unit = {},
+    val refreshTags: () -> Unit = {},
+    val createPersonalTag: (String, String) -> Unit = { _, _ -> },
+    val updatePersonalTag: (PersonalTag, String, String) -> Unit = { _, _, _ -> },
+    val deletePersonalTag: (PersonalTag) -> Unit = {},
+    val activateTagFiles: (Long) -> Unit = {},
+    val updateTagFilesQuery: (String) -> Unit = {},
+    val refreshTagFiles: () -> Unit = {},
+    val loadMoreTagFiles: () -> Unit = {},
+    val updateTagFilesScrollAnchor: (Long?) -> Unit = {},
+    val removeFileFromActiveTag: (FileItem) -> Unit = {},
+    val openFileTagEditor: (FileItem) -> Unit = {},
+    val toggleFileTag: (Long) -> Unit = {},
+    val saveFileTags: () -> Unit = {},
+    val createTagInEditor: (String, String) -> Unit = { _, _ -> },
+    val closeFileTagEditor: () -> Unit = {},
+    val consumeTagFeedback: () -> Unit = {},
     val openPreview: (Long) -> Unit,
     val retryPreview: () -> Unit,
     val closePreview: () -> Unit,
@@ -177,7 +208,7 @@ fun ProductShell(
     }
 
     fun navigateTopLevel(route: AppRoute) {
-        if (route == PersonalRoute && destination.isPersonalFolder()) {
+        if (route == PersonalRoute && destination.isPersonal() && destination?.hasRoute<PersonalRoute>() != true) {
             goPersonalRoot()
             return
         }
@@ -207,6 +238,8 @@ fun ProductShell(
 
     fun openTransfers() = navigateTopLevel(TransfersRoute)
     fun openSearch() = navController.navigate(PersonalSearchRoute) { launchSingleTop = true }
+    fun openFavorites() = navController.navigate(PersonalFavoritesRoute) { launchSingleTop = true }
+    fun openTags() = navController.navigate(PersonalTagsRoute) { launchSingleTop = true }
     fun openPreview(file: FileItem) = navController.navigate(PersonalPreviewRoute(file.id))
     fun closePreview() {
         actions.closePreview()
@@ -219,10 +252,10 @@ fun ProductShell(
     }
 
     @Composable
-    fun Content(modifier: Modifier) {
+    fun Content(modifier: Modifier, wide: Boolean) {
         AppNavHost(
             navController, modifier, state, documentPicker, officeRenderer, mediaPreviewRenderer, roomTaskCount,
-            actions, debugToolsEnabled,
+            actions, debugToolsEnabled, wide,
             onOpenFolder = ::openFolder,
             onGoRoot = ::goPersonalRoot,
             onOpenDiagnostics = { navController.navigate(DiagnosticsRoute) },
@@ -244,9 +277,11 @@ fun ProductShell(
                     onBack = navController::popBackStack,
                     onBreadcrumb = ::openBreadcrumb,
                     onOpenSearch = ::openSearch,
+                    onOpenFavorites = ::openFavorites,
+                    onOpenTags = ::openTags,
                     showTopBar = !isSearch,
                     modifier = Modifier.weight(1f),
-                    content = { Content(it) },
+                    content = { Content(it, true) },
                 )
             }
         } else {
@@ -255,10 +290,22 @@ fun ProductShell(
                 onBack = navController::popBackStack,
                 onBreadcrumb = ::openBreadcrumb,
                 onOpenSearch = ::openSearch,
+                onOpenFavorites = ::openFavorites,
+                onOpenTags = ::openTags,
                 showTopBar = !isSearch && !isPreview,
                 bottomBar = { if (!isDiagnostics && !isPreview) MainNavigationBar(destination, state.activeTransferCount, ::navigateTopLevel) },
                 modifier = Modifier.fillMaxSize().testTag("product-shell-compact"),
-                content = { Content(it) },
+                content = { Content(it, false) },
+            )
+        }
+        state.fileTagEditor?.let { editor ->
+            FileTagEditorOverlay(
+                editor = editor,
+                wide = wide,
+                onToggle = actions.toggleFileTag,
+                onSave = actions.saveFileTags,
+                onCreate = actions.createTagInEditor,
+                onDismiss = actions.closeFileTagEditor,
             )
         }
     }
@@ -273,6 +320,8 @@ private fun ShellScaffold(
     onBack: () -> Unit,
     onBreadcrumb: (Long?) -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenFavorites: () -> Unit,
+    onOpenTags: () -> Unit,
     showTopBar: Boolean = true,
     modifier: Modifier = Modifier,
     bottomBar: @Composable () -> Unit = {},
@@ -284,7 +333,7 @@ private fun ShellScaffold(
         topBar = {
             if (showTopBar) TopAppBar(
                 title = {
-                    if (destination.isPersonal()) {
+                    if (destination.isPersonalDirectory()) {
                         BreadcrumbBar(state.personalFiles, onBreadcrumb)
                     } else {
                         Text(destination.title(strings))
@@ -293,11 +342,14 @@ private fun ShellScaffold(
                 navigationIcon = {
                     when {
                         destination.matches(DiagnosticsRoute) -> BackButton(onBack, strings[MobileString.BackToProfile], "diagnostics-back")
+                        destination.isPersonalOrganization() -> BackButton(onBack, strings[MobileString.BackToParent], "organization-back")
                         destination.isPersonalFolder() -> BackButton(onBack, strings[MobileString.BackToParent], "personal-parent")
                     }
                 },
                 actions = {
-                    if (destination.isPersonalDirectory()) PersonalTopActions(state.personalFiles, actions, onOpenSearch)
+                    if (destination.isPersonalDirectory()) PersonalTopActions(
+                        state.personalFiles, actions, onOpenSearch, onOpenFavorites, onOpenTags,
+                    )
                 },
             )
         },
@@ -343,9 +395,16 @@ private fun BreadcrumbBar(state: PersonalFilesUiState, onClick: (Long?) -> Unit)
 }
 
 @Composable
-private fun PersonalTopActions(state: PersonalFilesUiState, actions: ProductShellActions, onOpenSearch: () -> Unit) {
+private fun PersonalTopActions(
+    state: PersonalFilesUiState,
+    actions: ProductShellActions,
+    onOpenSearch: () -> Unit,
+    onOpenFavorites: () -> Unit,
+    onOpenTags: () -> Unit,
+) {
     val strings = LocalMobileStrings.current
     var sortExpanded by remember { mutableStateOf(false) }
+    var organizeExpanded by remember { mutableStateOf(false) }
     IconButton(onClick = onOpenSearch, modifier = Modifier.testTag("personal-search")) {
         Icon(Icons.Default.Search, contentDescription = strings[MobileString.SearchFiles])
     }
@@ -405,6 +464,25 @@ private fun PersonalTopActions(state: PersonalFilesUiState, actions: ProductShel
         enabled = !state.current.initialLoading && !state.current.refreshing,
         modifier = Modifier.testTag("personal-refresh"),
     ) { Icon(Icons.Default.Refresh, contentDescription = strings[MobileString.RefreshDirectory]) }
+    Box {
+        IconButton(onClick = { organizeExpanded = true }, modifier = Modifier.testTag("personal-organize")) {
+            Icon(Icons.Default.MoreVert, contentDescription = strings[MobileString.Organize])
+        }
+        DropdownMenu(expanded = organizeExpanded, onDismissRequest = { organizeExpanded = false }) {
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.FavoritesTitle]) },
+                leadingIcon = { Icon(Icons.Default.Star, null) },
+                onClick = { organizeExpanded = false; onOpenFavorites() },
+                modifier = Modifier.testTag("personal-open-favorites"),
+            )
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.TagsTitle]) },
+                leadingIcon = { Icon(Icons.Default.Label, null) },
+                onClick = { organizeExpanded = false; onOpenTags() },
+                modifier = Modifier.testTag("personal-open-tags"),
+            )
+        }
+    }
 }
 
 @Composable
@@ -418,6 +496,7 @@ private fun AppNavHost(
     roomTaskCount: suspend () -> Int,
     actions: ProductShellActions,
     debugToolsEnabled: Boolean,
+    wide: Boolean,
     onOpenFolder: (FileItem) -> Unit,
     onGoRoot: () -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -430,7 +509,7 @@ private fun AppNavHost(
     @Composable
     fun Personal() {
         PersonalSpaceScreen(
-            state.personalFiles, documentPicker, actions.upload, actions.download,
+            state.personalFiles, state.favorites, documentPicker, actions.upload, actions.download,
             onOpenFolder, actions.selectPersonalFile, actions.loadMoreFiles,
             actions.updatePersonalScrollAnchor, actions.refreshFiles, onGoRoot,
             actions.togglePersonalSelection, actions.clearPersonalSelection,
@@ -438,6 +517,7 @@ private fun AppNavHost(
             actions.openFolderPicker, actions.openPickerFolder, actions.pickerBack,
             actions.retryFolderPicker, actions.closeFolderPicker, actions.confirmFolderPicker,
             actions.consumeFileFeedback, actions.consumeTransferFeedback, onOpenTransfers, onOpenPreview,
+            actions.loadFavoriteStatus, actions.toggleFavorite, actions.openFileTagEditor,
         )
     }
 
@@ -456,6 +536,88 @@ private fun AppNavHost(
                 onOpenLocation = onOpenSearchLocation,
                 onPreview = onOpenPreview,
                 onDownload = actions.download,
+            )
+        }
+        composable<PersonalFavoritesRoute> {
+            LaunchedEffect(Unit) { actions.activateFavorites() }
+            FavoritesScreen(
+                state.favorites,
+                documentPicker,
+                actions.updateFavoritesQuery,
+                actions.refreshFavorites,
+                actions.loadMoreFavorites,
+                actions.updateFavoritesScrollAnchor,
+                onOpenFolder,
+                onOpenSearchLocation,
+                onOpenPreview,
+                actions.download,
+                actions.toggleFavorite,
+                actions.openFileTagEditor,
+                actions.consumeFavoriteFeedback,
+            )
+        }
+        composable<PersonalTagsRoute> {
+            LaunchedEffect(Unit) { actions.activateTags() }
+            Row(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(if (wide) 0.42f else 1f)) {
+                    TagsScreen(
+                        state.tags,
+                        actions.updateTagsQuery,
+                        actions.refreshTags,
+                        onOpenTag = {
+                            if (wide) actions.activateTagFiles(it.id)
+                            else navController.navigate(PersonalTagFilesRoute(it.id))
+                        },
+                        actions.createPersonalTag,
+                        actions.updatePersonalTag,
+                        actions.deletePersonalTag,
+                        actions.consumeTagFeedback,
+                    )
+                }
+                if (wide) {
+                    VerticalDivider()
+                    Box(Modifier.weight(0.58f).testTag("tags-wide-detail")) {
+                        TagFilesScreen(
+                            state.tags.tags.firstOrNull { it.id == state.tags.activeTagId },
+                            state.tags,
+                            documentPicker,
+                            actions.updateTagFilesQuery,
+                            actions.refreshTagFiles,
+                            actions.loadMoreTagFiles,
+                            actions.updateTagFilesScrollAnchor,
+                            onOpenFolder,
+                            onOpenSearchLocation,
+                            onOpenPreview,
+                            actions.download,
+                            actions.openFileTagEditor,
+                            actions.removeFileFromActiveTag,
+                            actions.consumeTagFeedback,
+                        )
+                    }
+                }
+            }
+        }
+        composable<PersonalTagFilesRoute> { entry ->
+            val tagId = entry.toRoute<PersonalTagFilesRoute>().tagId
+            LaunchedEffect(tagId) {
+                actions.activateTags()
+                actions.activateTagFiles(tagId)
+            }
+            TagFilesScreen(
+                state.tags.tags.firstOrNull { it.id == tagId },
+                state.tags,
+                documentPicker,
+                actions.updateTagFilesQuery,
+                actions.refreshTagFiles,
+                actions.loadMoreTagFiles,
+                actions.updateTagFilesScrollAnchor,
+                onOpenFolder,
+                onOpenSearchLocation,
+                onOpenPreview,
+                actions.download,
+                actions.openFileTagEditor,
+                actions.removeFileFromActiveTag,
+                actions.consumeTagFeedback,
             )
         }
         composable<PersonalPreviewRoute> { entry ->
@@ -511,7 +673,7 @@ private fun MainNavigationBar(destination: NavDestination?, activeTransfers: Int
             val selected = destination.matches(item.route)
             NavigationBarItem(
                 selected = selected,
-                onClick = { if (!selected || (item.route == PersonalRoute && destination.isPersonalFolder())) onNavigate(item.route) },
+                onClick = { if (!selected || (item.route == PersonalRoute && destination?.hasRoute<PersonalRoute>() != true)) onNavigate(item.route) },
                 icon = { NavigationIcon(item, selected, activeTransfers, strings) },
                 label = { Text(strings[item.label]) },
                 modifier = Modifier.testTag(item.testTag),
@@ -529,7 +691,7 @@ private fun MainNavigationRail(destination: NavDestination?, activeTransfers: In
             val selected = destination.matches(item.route)
             NavigationRailItem(
                 selected = selected,
-                onClick = { if (!selected || (item.route == PersonalRoute && destination.isPersonalFolder())) onNavigate(item.route) },
+                onClick = { if (!selected || (item.route == PersonalRoute && destination?.hasRoute<PersonalRoute>() != true)) onNavigate(item.route) },
                 icon = { NavigationIcon(item, selected, activeTransfers, strings) },
                 label = { Text(strings[item.label]) },
                 modifier = Modifier.testTag(item.testTag),
@@ -563,6 +725,9 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
     PersonalRoute -> isPersonal()
     is PersonalFolderRoute -> this?.hasRoute<PersonalFolderRoute>() == true
     PersonalSearchRoute -> this?.hasRoute<PersonalSearchRoute>() == true
+    PersonalFavoritesRoute -> this?.hasRoute<PersonalFavoritesRoute>() == true
+    PersonalTagsRoute -> this?.hasRoute<PersonalTagsRoute>() == true
+    is PersonalTagFilesRoute -> this?.hasRoute<PersonalTagFilesRoute>() == true
     is PersonalPreviewRoute -> this?.hasRoute<PersonalPreviewRoute>() == true
     TeamsRoute -> this?.hasRoute<TeamsRoute>() == true
     TransfersRoute -> this?.hasRoute<TransfersRoute>() == true
@@ -572,15 +737,23 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
 
 private fun NavDestination?.isPersonal(): Boolean =
     this?.hasRoute<PersonalRoute>() == true || this?.hasRoute<PersonalFolderRoute>() == true ||
-        this?.hasRoute<PersonalSearchRoute>() == true || this?.hasRoute<PersonalPreviewRoute>() == true
+        this?.hasRoute<PersonalSearchRoute>() == true || this?.hasRoute<PersonalPreviewRoute>() == true ||
+        this?.hasRoute<PersonalFavoritesRoute>() == true || this?.hasRoute<PersonalTagsRoute>() == true ||
+        this?.hasRoute<PersonalTagFilesRoute>() == true
 
 private fun NavDestination?.isPersonalDirectory(): Boolean =
     this?.hasRoute<PersonalRoute>() == true || this?.hasRoute<PersonalFolderRoute>() == true
 
 private fun NavDestination?.isPersonalFolder(): Boolean = this?.hasRoute<PersonalFolderRoute>() == true
 
+private fun NavDestination?.isPersonalOrganization(): Boolean =
+    this?.hasRoute<PersonalFavoritesRoute>() == true || this?.hasRoute<PersonalTagsRoute>() == true ||
+        this?.hasRoute<PersonalTagFilesRoute>() == true
+
 private fun NavDestination?.title(strings: MobileStrings): String = when {
     matches(PersonalSearchRoute) -> strings[MobileString.SearchFiles]
+    matches(PersonalFavoritesRoute) -> strings[MobileString.FavoritesTitle]
+    matches(PersonalTagsRoute) || this?.hasRoute<PersonalTagFilesRoute>() == true -> strings[MobileString.TagsTitle]
     matches(TeamsRoute) -> strings[MobileString.TeamsTitle]
     matches(TransfersRoute) -> strings[MobileString.TransferQueueTitle]
     matches(ProfileRoute) -> strings[MobileString.Profile]

@@ -15,6 +15,15 @@ data class PersonalFolderRoute(val folderId: Long) : AppRoute
 data object PersonalSearchRoute : AppRoute
 
 @Serializable
+data object PersonalFavoritesRoute : AppRoute
+
+@Serializable
+data object PersonalTagsRoute : AppRoute
+
+@Serializable
+data class PersonalTagFilesRoute(val tagId: Long) : AppRoute
+
+@Serializable
 data class PersonalPreviewRoute(val fileId: Long) : AppRoute
 
 @Serializable

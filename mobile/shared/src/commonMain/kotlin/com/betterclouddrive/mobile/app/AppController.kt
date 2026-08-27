@@ -4,6 +4,7 @@ import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
+import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.model.PreviewKind
 import com.betterclouddrive.mobile.core.model.TextPreview
 import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
@@ -69,6 +70,18 @@ internal interface AppFileOperations {
     suspend fun movePersonalFile(fileId: Long, targetParentId: Long?)
     suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?)
     suspend fun deletePersonalFiles(fileIds: List<Long>)
+    suspend fun listPersonalFavorites(query: String?, page: Int, size: Int): PageResult<FileItem>
+    suspend fun isPersonalFavorite(fileId: Long): Boolean
+    suspend fun addPersonalFavorite(fileId: Long)
+    suspend fun removePersonalFavorite(fileId: Long)
+    suspend fun listPersonalTags(query: String? = null): List<PersonalTag>
+    suspend fun createPersonalTag(name: String, color: String): PersonalTag
+    suspend fun updatePersonalTag(tagId: Long, name: String, color: String): PersonalTag
+    suspend fun deletePersonalTag(tagId: Long)
+    suspend fun listPersonalFilesByTag(tagId: Long, query: String?, page: Int, size: Int): PageResult<FileItem>
+    suspend fun listPersonalFileTags(fileId: Long): List<PersonalTag>
+    suspend fun replacePersonalFileTags(fileId: Long, tagIds: List<Long>): List<PersonalTag>
+    suspend fun removePersonalFileTag(tagId: Long, fileId: Long)
     suspend fun searchPersonalFiles(query: String, page: Int, size: Int): PageResult<FileItem>
     suspend fun createPersonalDownloadTicket(fileId: Long): String
     suspend fun loadPersonalText(file: FileItem): TextPreview
@@ -130,6 +143,23 @@ private class RepositoryFileOperations(private val repository: FileRepository) :
     override suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) =
         repository.copyPersonalFile(fileId, targetParentId)
     override suspend fun deletePersonalFiles(fileIds: List<Long>) = repository.deletePersonalFiles(fileIds)
+    override suspend fun listPersonalFavorites(query: String?, page: Int, size: Int) =
+        repository.listPersonalFavorites(query, page, size)
+    override suspend fun isPersonalFavorite(fileId: Long) = repository.isPersonalFavorite(fileId)
+    override suspend fun addPersonalFavorite(fileId: Long) = repository.addPersonalFavorite(fileId)
+    override suspend fun removePersonalFavorite(fileId: Long) = repository.removePersonalFavorite(fileId)
+    override suspend fun listPersonalTags(query: String?) = repository.listPersonalTags(query)
+    override suspend fun createPersonalTag(name: String, color: String) = repository.createPersonalTag(name, color)
+    override suspend fun updatePersonalTag(tagId: Long, name: String, color: String) =
+        repository.updatePersonalTag(tagId, name, color)
+    override suspend fun deletePersonalTag(tagId: Long) = repository.deletePersonalTag(tagId)
+    override suspend fun listPersonalFilesByTag(tagId: Long, query: String?, page: Int, size: Int) =
+        repository.listPersonalFilesByTag(tagId, query, page, size)
+    override suspend fun listPersonalFileTags(fileId: Long) = repository.listPersonalFileTags(fileId)
+    override suspend fun replacePersonalFileTags(fileId: Long, tagIds: List<Long>) =
+        repository.replacePersonalFileTags(fileId, tagIds)
+    override suspend fun removePersonalFileTag(tagId: Long, fileId: Long) =
+        repository.removePersonalFileTag(tagId, fileId)
     override suspend fun searchPersonalFiles(query: String, page: Int, size: Int) =
         repository.searchPersonalFiles(query, page, size)
     override suspend fun createPersonalDownloadTicket(fileId: Long) = repository.createPersonalDownloadTicket(fileId)
@@ -275,6 +305,57 @@ data class PersonalSearchUiState(
     val hasMore: Boolean get() = submittedQuery.isNotEmpty() && page < pages
 }
 
+data class OrganizationFileListUiState(
+    val query: String = "",
+    val submittedQuery: String = "",
+    val items: List<FileItem> = emptyList(),
+    val loading: Boolean = false,
+    val refreshing: Boolean = false,
+    val loadingMore: Boolean = false,
+    val error: UiMessage? = null,
+    val loadMoreError: UiMessage? = null,
+    val page: Int = 0,
+    val pages: Int = 1,
+    val total: Long = 0,
+    val scrollAnchorId: Long? = null,
+) {
+    val hasLoaded: Boolean get() = page > 0
+    val hasMore: Boolean get() = page < pages
+}
+
+data class FavoritesUiState(
+    val files: OrganizationFileListUiState = OrganizationFileListUiState(),
+    val favoriteStatus: Map<Long, Boolean> = emptyMap(),
+    val statusLoading: Set<Long> = emptySet(),
+    val mutatingFileId: Long? = null,
+    val feedback: FileMutationFeedback? = null,
+)
+
+enum class TagMutationKind { CREATE, UPDATE, DELETE, ASSIGN, REMOVE_FILE }
+
+data class TagsUiState(
+    val query: String = "",
+    val submittedQuery: String = "",
+    val tags: List<PersonalTag> = emptyList(),
+    val loading: Boolean = false,
+    val error: UiMessage? = null,
+    val mutation: TagMutationKind? = null,
+    val mutationError: UiMessage? = null,
+    val feedback: FileMutationFeedback? = null,
+    val activeTagId: Long? = null,
+    val tagFiles: OrganizationFileListUiState = OrganizationFileListUiState(),
+)
+
+data class FileTagEditorState(
+    val file: FileItem,
+    val tags: List<PersonalTag> = emptyList(),
+    val selectedIds: Set<Long> = emptySet(),
+    val loading: Boolean = true,
+    val saving: Boolean = false,
+    val creating: Boolean = false,
+    val error: UiMessage? = null,
+)
+
 data class PersonalPreviewUiState(
     val fileId: Long? = null,
     val file: FileItem? = null,
@@ -297,6 +378,9 @@ data class AppUiState(
     val sessionError: UiMessage? = null,
     val personalFiles: PersonalFilesUiState = PersonalFilesUiState(),
     val search: PersonalSearchUiState = PersonalSearchUiState(),
+    val favorites: FavoritesUiState = FavoritesUiState(),
+    val tags: TagsUiState = TagsUiState(),
+    val fileTagEditor: FileTagEditorState? = null,
     val preview: PersonalPreviewUiState = PersonalPreviewUiState(),
     val transfers: List<TransferTask> = emptyList(),
     val diagnostics: DiagnosticUiState = DiagnosticUiState(),
@@ -344,6 +428,11 @@ class AppController internal constructor(
     private var pickerJob: Job? = null
     private var uploadRefreshJob: Job? = null
     private var searchJob: Job? = null
+    private var favoritesJob: Job? = null
+    private var tagsJob: Job? = null
+    private var tagFilesJob: Job? = null
+    private var organizationMutationJob: Job? = null
+    private var fileTagEditorJob: Job? = null
     private var previewJob: Job? = null
     private var registrationCountdownJob: Job? = null
     private var feedbackSequence = 0L
@@ -888,6 +977,304 @@ class AppController internal constructor(
         mutableState.update { it.copy(search = it.search.copy(scrollAnchorId = fileId)) }
     }
 
+    fun activateFavorites() {
+        val current = mutableState.value.favorites.files
+        if (!current.hasLoaded && !current.loading) refreshFavorites()
+    }
+
+    fun updateFavoritesQuery(value: String) {
+        favoritesJob?.cancel()
+        mutableState.update { it.copy(favorites = it.favorites.copy(
+            files = it.favorites.files.copy(query = value, error = null, loadMoreError = null),
+        )) }
+        favoritesJob = scope.launch {
+            delay(SEARCH_DEBOUNCE_MILLIS)
+            loadFavoritesPage(value.trim(), 1, refresh = false)
+        }
+    }
+
+    fun refreshFavorites() {
+        favoritesJob?.cancel()
+        val query = mutableState.value.favorites.files.query.trim()
+        favoritesJob = scope.launch { loadFavoritesPage(query, 1, refresh = true) }
+    }
+
+    fun loadMoreFavorites() {
+        val current = mutableState.value.favorites.files
+        if (!current.hasMore || current.loading || current.loadingMore) return
+        favoritesJob?.cancel()
+        favoritesJob = scope.launch { loadFavoritesPage(current.submittedQuery, current.page + 1, refresh = false) }
+    }
+
+    fun updateFavoritesScrollAnchor(fileId: Long?) {
+        mutableState.update { it.copy(favorites = it.favorites.copy(files = it.favorites.files.copy(scrollAnchorId = fileId))) }
+    }
+
+    fun loadFavoriteStatus(fileId: Long) {
+        if (fileId in mutableState.value.favorites.statusLoading) return
+        scope.launch {
+            mutableState.update { it.copy(favorites = it.favorites.copy(
+                statusLoading = it.favorites.statusLoading + fileId,
+            )) }
+            try {
+                val favorite = files.isPersonalFavorite(fileId)
+                mutableState.update { it.copy(favorites = it.favorites.copy(
+                    favoriteStatus = it.favorites.favoriteStatus + (fileId to favorite),
+                    statusLoading = it.favorites.statusLoading - fileId,
+                )) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                mutableState.update { it.copy(favorites = it.favorites.copy(
+                    statusLoading = it.favorites.statusLoading - fileId,
+                )) }
+            }
+        }
+    }
+
+    fun toggleFavorite(file: FileItem) {
+        if (mutableState.value.favorites.mutatingFileId != null) return
+        organizationMutationJob = scope.launch {
+            mutableState.update { it.copy(favorites = it.favorites.copy(mutatingFileId = file.id, feedback = null)) }
+            try {
+                val wasFavorite = mutableState.value.favorites.favoriteStatus[file.id]
+                    ?: files.isPersonalFavorite(file.id)
+                if (wasFavorite) files.removePersonalFavorite(file.id) else files.addPersonalFavorite(file.id)
+                mutableState.update { state ->
+                    val listed = state.favorites.files.items.any { it.id == file.id }
+                    val updatedFiles = if (wasFavorite && listed) state.favorites.files.copy(
+                        items = state.favorites.files.items.filterNot { it.id == file.id },
+                        total = (state.favorites.files.total - 1).coerceAtLeast(0),
+                    ) else state.favorites.files
+                    state.copy(favorites = state.favorites.copy(
+                        files = updatedFiles,
+                        favoriteStatus = state.favorites.favoriteStatus + (file.id to !wasFavorite),
+                        mutatingFileId = null,
+                        feedback = FileMutationFeedback(
+                            ++feedbackSequence,
+                            UiMessage(if (wasFavorite) MobileString.FavoriteRemoved else MobileString.FavoriteAdded),
+                            false,
+                        ),
+                    ))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(favorites = it.favorites.copy(
+                    mutatingFileId = null,
+                    feedback = FileMutationFeedback(++feedbackSequence, friendly(error), true),
+                )) }
+            }
+        }
+    }
+
+    fun consumeFavoriteFeedback() {
+        mutableState.update { it.copy(favorites = it.favorites.copy(feedback = null)) }
+    }
+
+    fun activateTags() {
+        if (mutableState.value.tags.tags.isEmpty() && !mutableState.value.tags.loading) refreshTags()
+    }
+
+    fun updateTagsQuery(value: String) {
+        tagsJob?.cancel()
+        mutableState.update { it.copy(tags = it.tags.copy(query = value, error = null)) }
+        tagsJob = scope.launch {
+            delay(SEARCH_DEBOUNCE_MILLIS)
+            loadTags(value.trim())
+        }
+    }
+
+    fun refreshTags() {
+        tagsJob?.cancel()
+        tagsJob = scope.launch { loadTags(mutableState.value.tags.query.trim()) }
+    }
+
+    fun createPersonalTag(name: String, color: String) = mutateTag(TagMutationKind.CREATE) {
+        val created = files.createPersonalTag(name, color)
+        mutableState.update { state -> state.copy(tags = state.tags.copy(
+            tags = (state.tags.tags + created).distinctBy(PersonalTag::id).sortedBy { it.tagName.lowercase() },
+            mutation = null,
+            mutationError = null,
+            feedback = FileMutationFeedback(++feedbackSequence, UiMessage(MobileString.TagCreated), false),
+        )) }
+    }
+
+    fun updatePersonalTag(tag: PersonalTag, name: String, color: String) = mutateTag(TagMutationKind.UPDATE) {
+        val updated = files.updatePersonalTag(tag.id, name, color)
+        mutableState.update { state -> state.copy(tags = state.tags.copy(
+            tags = state.tags.tags.map { if (it.id == updated.id) updated else it }.sortedBy { it.tagName.lowercase() },
+            mutation = null,
+            mutationError = null,
+            feedback = FileMutationFeedback(++feedbackSequence, UiMessage(MobileString.TagUpdated), false),
+        )) }
+    }
+
+    fun deletePersonalTag(tag: PersonalTag) = mutateTag(TagMutationKind.DELETE) {
+        files.deletePersonalTag(tag.id)
+        mutableState.update { state -> state.copy(tags = state.tags.copy(
+            tags = state.tags.tags.filterNot { it.id == tag.id },
+            activeTagId = state.tags.activeTagId.takeUnless { it == tag.id },
+            tagFiles = if (state.tags.activeTagId == tag.id) OrganizationFileListUiState() else state.tags.tagFiles,
+            mutation = null,
+            mutationError = null,
+            feedback = FileMutationFeedback(++feedbackSequence, UiMessage(MobileString.TagDeleted), false),
+        )) }
+    }
+
+    fun activateTagFiles(tagId: Long) {
+        val tags = mutableState.value.tags
+        if (tags.activeTagId != tagId) {
+            tagFilesJob?.cancel()
+            mutableState.update { it.copy(tags = it.tags.copy(
+                activeTagId = tagId,
+                tagFiles = OrganizationFileListUiState(),
+            )) }
+        }
+        if (!mutableState.value.tags.tagFiles.hasLoaded && !mutableState.value.tags.tagFiles.loading) refreshTagFiles()
+    }
+
+    fun updateTagFilesQuery(value: String) {
+        tagFilesJob?.cancel()
+        mutableState.update { it.copy(tags = it.tags.copy(tagFiles = it.tags.tagFiles.copy(
+            query = value, error = null, loadMoreError = null,
+        ))) }
+        tagFilesJob = scope.launch {
+            delay(SEARCH_DEBOUNCE_MILLIS)
+            loadTagFilesPage(value.trim(), 1, refresh = false)
+        }
+    }
+
+    fun refreshTagFiles() {
+        tagFilesJob?.cancel()
+        tagFilesJob = scope.launch {
+            loadTagFilesPage(mutableState.value.tags.tagFiles.query.trim(), 1, refresh = true)
+        }
+    }
+
+    fun loadMoreTagFiles() {
+        val current = mutableState.value.tags.tagFiles
+        if (!current.hasMore || current.loading || current.loadingMore) return
+        tagFilesJob?.cancel()
+        tagFilesJob = scope.launch { loadTagFilesPage(current.submittedQuery, current.page + 1, refresh = false) }
+    }
+
+    fun updateTagFilesScrollAnchor(fileId: Long?) {
+        mutableState.update { it.copy(tags = it.tags.copy(tagFiles = it.tags.tagFiles.copy(scrollAnchorId = fileId))) }
+    }
+
+    fun removeFileFromActiveTag(file: FileItem) = mutateTag(TagMutationKind.REMOVE_FILE) {
+        val tagId = mutableState.value.tags.activeTagId ?: return@mutateTag
+        files.removePersonalFileTag(tagId, file.id)
+        mutableState.update { state -> state.copy(tags = state.tags.copy(
+            tags = state.tags.tags.map { tag ->
+                if (tag.id == tagId) tag.copy(fileCount = (tag.fileCount - 1).coerceAtLeast(0)) else tag
+            },
+            tagFiles = state.tags.tagFiles.copy(
+                items = state.tags.tagFiles.items.filterNot { it.id == file.id },
+                total = (state.tags.tagFiles.total - 1).coerceAtLeast(0),
+            ),
+            mutation = null,
+            feedback = FileMutationFeedback(++feedbackSequence, UiMessage(MobileString.FileTagRemoved), false),
+        )) }
+    }
+
+    fun openFileTagEditor(file: FileItem) {
+        fileTagEditorJob?.cancel()
+        mutableState.update { it.copy(fileTagEditor = FileTagEditorState(file = file)) }
+        fileTagEditorJob = scope.launch {
+            try {
+                val available = files.listPersonalTags()
+                val assigned = files.listPersonalFileTags(file.id)
+                mutableState.update { state ->
+                    if (state.fileTagEditor?.file?.id != file.id) state else state.copy(
+                        fileTagEditor = state.fileTagEditor.copy(
+                            tags = available,
+                            selectedIds = assigned.map(PersonalTag::id).toSet(),
+                            loading = false,
+                        ),
+                    )
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { state ->
+                    if (state.fileTagEditor?.file?.id != file.id) state else state.copy(
+                        fileTagEditor = state.fileTagEditor.copy(loading = false, error = friendly(error)),
+                    )
+                }
+            }
+        }
+    }
+
+    fun toggleFileTag(tagId: Long) {
+        mutableState.update { state ->
+            val editor = state.fileTagEditor ?: return@update state
+            val selected = editor.selectedIds.toMutableSet().apply {
+                if (!add(tagId)) remove(tagId)
+            }
+            state.copy(fileTagEditor = editor.copy(selectedIds = selected, error = null))
+        }
+    }
+
+    fun saveFileTags() {
+        val editor = mutableState.value.fileTagEditor ?: return
+        if (editor.loading || editor.saving) return
+        fileTagEditorJob?.cancel()
+        mutableState.update { it.copy(fileTagEditor = it.fileTagEditor?.copy(saving = true, error = null)) }
+        fileTagEditorJob = scope.launch {
+            try {
+                files.replacePersonalFileTags(editor.file.id, editor.selectedIds.toList())
+                mutableState.update { state -> state.copy(
+                    fileTagEditor = null,
+                    tags = state.tags.copy(tags = emptyList(), tagFiles = OrganizationFileListUiState()),
+                ) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(fileTagEditor = it.fileTagEditor?.copy(
+                    saving = false, error = friendly(error),
+                )) }
+            }
+        }
+    }
+
+    fun createTagInEditor(name: String, color: String) {
+        val editor = mutableState.value.fileTagEditor ?: return
+        if (editor.creating || editor.saving) return
+        fileTagEditorJob?.cancel()
+        mutableState.update { it.copy(fileTagEditor = it.fileTagEditor?.copy(creating = true, error = null)) }
+        fileTagEditorJob = scope.launch {
+            try {
+                val created = files.createPersonalTag(name, color)
+                mutableState.update { state ->
+                    val current = state.fileTagEditor ?: return@update state
+                    state.copy(fileTagEditor = current.copy(
+                        tags = (current.tags + created).distinctBy(PersonalTag::id).sortedBy { it.tagName.lowercase() },
+                        selectedIds = current.selectedIds + created.id,
+                        creating = false,
+                    ))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(fileTagEditor = it.fileTagEditor?.copy(
+                    creating = false, error = friendly(error),
+                )) }
+            }
+        }
+    }
+
+    fun closeFileTagEditor() {
+        fileTagEditorJob?.cancel()
+        fileTagEditorJob = null
+        mutableState.update { it.copy(fileTagEditor = null) }
+    }
+
+    fun consumeTagFeedback() {
+        mutableState.update { it.copy(tags = it.tags.copy(feedback = null, mutationError = null)) }
+    }
+
     fun prepareOpenSearchLocation(file: FileItem) {
         val parentId = file.parentId
         directoryCache[parentId]?.let { snapshot ->
@@ -1259,6 +1646,16 @@ class AppController internal constructor(
         pickerJob = null
         searchJob?.cancel()
         searchJob = null
+        favoritesJob?.cancel()
+        favoritesJob = null
+        tagsJob?.cancel()
+        tagsJob = null
+        tagFilesJob?.cancel()
+        tagFilesJob = null
+        organizationMutationJob?.cancel()
+        organizationMutationJob = null
+        fileTagEditorJob?.cancel()
+        fileTagEditorJob = null
         previewJob?.cancel()
         previewJob = null
         directoryCache.clear()
@@ -1309,6 +1706,142 @@ class AppController internal constructor(
                 ))
             }
         }
+    }
+
+    private suspend fun loadFavoritesPage(query: String, page: Int, refresh: Boolean) {
+        val existing = mutableState.value.favorites.files
+        mutableState.update { state -> state.copy(favorites = state.favorites.copy(
+            files = state.favorites.files.copy(
+                submittedQuery = query,
+                loading = page == 1 && !refresh,
+                refreshing = page == 1 && refresh && state.favorites.files.hasLoaded,
+                loadingMore = page > 1,
+                error = if (page == 1) null else state.favorites.files.error,
+                loadMoreError = null,
+            ),
+        )) }
+        try {
+            val result = files.listPersonalFavorites(query.ifEmpty { null }, page, ORGANIZATION_PAGE_SIZE)
+            val latest = mutableState.value.favorites.files
+            if (latest.query.trim() != query || latest.submittedQuery != query) return
+            val merged = if (page == 1) result.records.distinctBy(FileItem::id)
+            else (existing.items + result.records).distinctBy(FileItem::id)
+            mutableState.update { state -> state.copy(favorites = state.favorites.copy(
+                files = state.favorites.files.copy(
+                    items = merged,
+                    loading = false,
+                    refreshing = false,
+                    loadingMore = false,
+                    error = null,
+                    loadMoreError = null,
+                    page = result.page,
+                    pages = result.pages.coerceAtLeast(result.page),
+                    total = result.total,
+                    scrollAnchorId = if (page == 1) null else existing.scrollAnchorId,
+                ),
+                favoriteStatus = state.favorites.favoriteStatus + merged.associate { it.id to true },
+            )) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            if (mutableState.value.favorites.files.query.trim() != query) return
+            mutableState.update { state -> state.copy(favorites = state.favorites.copy(
+                files = state.favorites.files.copy(
+                    loading = false,
+                    refreshing = false,
+                    loadingMore = false,
+                    error = if (page == 1) friendly(error) else state.favorites.files.error,
+                    loadMoreError = if (page > 1) friendly(error) else null,
+                ),
+            )) }
+        }
+    }
+
+    private suspend fun loadTags(query: String) {
+        mutableState.update { it.copy(tags = it.tags.copy(
+            submittedQuery = query, loading = true, error = null,
+        )) }
+        try {
+            val result = files.listPersonalTags(query.ifEmpty { null })
+            if (mutableState.value.tags.query.trim() != query) return
+            mutableState.update { it.copy(tags = it.tags.copy(tags = result, loading = false, error = null)) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            if (mutableState.value.tags.query.trim() != query) return
+            mutableState.update { it.copy(tags = it.tags.copy(loading = false, error = friendly(error))) }
+        }
+    }
+
+    private suspend fun loadTagFilesPage(query: String, page: Int, refresh: Boolean) {
+        val tagId = mutableState.value.tags.activeTagId ?: return
+        val existing = mutableState.value.tags.tagFiles
+        mutableState.update { state -> state.copy(tags = state.tags.copy(tagFiles = state.tags.tagFiles.copy(
+            submittedQuery = query,
+            loading = page == 1 && !refresh,
+            refreshing = page == 1 && refresh && state.tags.tagFiles.hasLoaded,
+            loadingMore = page > 1,
+            error = if (page == 1) null else state.tags.tagFiles.error,
+            loadMoreError = null,
+        ))) }
+        try {
+            val result = files.listPersonalFilesByTag(tagId, query.ifEmpty { null }, page, ORGANIZATION_PAGE_SIZE)
+            val latest = mutableState.value.tags
+            if (latest.activeTagId != tagId || latest.tagFiles.query.trim() != query ||
+                latest.tagFiles.submittedQuery != query) return
+            val merged = if (page == 1) result.records.distinctBy(FileItem::id)
+            else (existing.items + result.records).distinctBy(FileItem::id)
+            mutableState.update { state -> state.copy(tags = state.tags.copy(tagFiles = state.tags.tagFiles.copy(
+                items = merged,
+                loading = false,
+                refreshing = false,
+                loadingMore = false,
+                error = null,
+                loadMoreError = null,
+                page = result.page,
+                pages = result.pages.coerceAtLeast(result.page),
+                total = result.total,
+                scrollAnchorId = if (page == 1) null else existing.scrollAnchorId,
+            ))) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            if (mutableState.value.tags.activeTagId != tagId) return
+            mutableState.update { state -> state.copy(tags = state.tags.copy(tagFiles = state.tags.tagFiles.copy(
+                loading = false,
+                refreshing = false,
+                loadingMore = false,
+                error = if (page == 1) friendly(error) else state.tags.tagFiles.error,
+                loadMoreError = if (page > 1) friendly(error) else null,
+            ))) }
+        }
+    }
+
+    private fun mutateTag(kind: TagMutationKind, block: suspend () -> Unit) {
+        if (mutableState.value.tags.mutation != null) return
+        organizationMutationJob?.cancel()
+        organizationMutationJob = scope.launch {
+            mutableState.update { it.copy(tags = it.tags.copy(mutation = kind, mutationError = null, feedback = null)) }
+            try {
+                block()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                val message = friendly(error)
+                mutableState.update { it.copy(tags = it.tags.copy(
+                    mutation = null,
+                    mutationError = message,
+                    feedback = FileMutationFeedback(++feedbackSequence, message, true),
+                )) }
+            }
+        }
+    }
+
+    private fun invalidateOrganizationCaches() {
+        mutableState.update { state -> state.copy(
+            favorites = state.favorites.copy(files = OrganizationFileListUiState(query = state.favorites.files.query)),
+            tags = state.tags.copy(tagFiles = OrganizationFileListUiState(query = state.tags.tagFiles.query)),
+        ) }
     }
 
     private suspend fun loadPreviewContent(file: FileItem, position: Long, ticketRetryCount: Int) {
@@ -1421,6 +1954,9 @@ class AppController internal constructor(
             "error.unauthorized" -> UiMessage(MobileString.ErrorCredentials)
             "error.storageQuotaExceeded" -> UiMessage(MobileString.ErrorQuota)
             "error.fileNameExists", "error.fileNameConflict" -> UiMessage(MobileString.ErrorNameConflict)
+            "error.tagNameConflict" -> UiMessage(MobileString.ErrorTagNameConflict)
+            "error.invalidTagName" -> UiMessage(MobileString.ErrorInvalidTagName)
+            "error.invalidTagColor" -> UiMessage(MobileString.ErrorInvalidTagColor)
             "error.invalidFileDestination" -> UiMessage(MobileString.ErrorInvalidDestination)
             "error.invalidFileName", "error.validation", "error.invalidParameter" -> UiMessage(MobileString.ErrorInvalidFileName)
             "error.fileNotFound", "error.notFound" -> UiMessage(MobileString.ErrorNotFound)
@@ -1462,6 +1998,7 @@ class AppController internal constructor(
             }
             try {
                 val success = block()
+                invalidateOrganizationCaches()
                 val refreshError = try {
                     reloadCurrentLoadedPages()
                     null
@@ -1568,6 +2105,7 @@ class AppController internal constructor(
     private companion object {
         const val PAGE_SIZE = 50
         const val SEARCH_PAGE_SIZE = 50
+        const val ORGANIZATION_PAGE_SIZE = 50
         const val SEARCH_DEBOUNCE_MILLIS = 300L
         const val PICKER_PAGE_SIZE = 100
         const val MAX_BREADCRUMB_DEPTH = 128

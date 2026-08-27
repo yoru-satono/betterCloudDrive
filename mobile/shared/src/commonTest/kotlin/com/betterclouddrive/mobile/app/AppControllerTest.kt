@@ -12,6 +12,7 @@ import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.MobileLocale
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.model.RegistrationResult
+import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
 import com.betterclouddrive.mobile.core.platform.ThemeMode
 import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
@@ -579,6 +580,126 @@ class AppControllerTest {
         assertEquals(1, controller.state.value.preview.ticketRetryCount)
     }
 
+    @Test
+    fun favoritesPageDeduplicatesPagingAndToggleRemovesVisibleItem() = runTest {
+        val first = FileItem(id = 21, fileName = "one.txt")
+        val second = FileItem(id = 22, fileName = "two.txt")
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            favoriteResponses += Result.success(PageResult(listOf(first, second), 3, 1, 50, 2))
+            favoriteResponses += Result.success(PageResult(listOf(second), 3, 2, 50, 2))
+            favoriteIds += setOf(first.id, second.id)
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.activateFavorites()
+        runCurrent()
+        controller.loadMoreFavorites()
+        runCurrent()
+
+        assertEquals(listOf(first, second), controller.state.value.favorites.files.items)
+        assertEquals(listOf(1, 2), files.favoriteRequests.map { it.second })
+        controller.toggleFavorite(first)
+        runCurrent()
+        assertFalse(first.id in files.favoriteIds)
+        assertEquals(listOf(second), controller.state.value.favorites.files.items)
+        assertEquals(UiMessage(MobileString.FavoriteRemoved), controller.state.value.favorites.feedback?.message)
+    }
+
+    @Test
+    fun favoritesSearchDebouncesAndKeepsOnlyLatestQuery() = runTest {
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            favoriteResponses += Result.success(PageResult(emptyList(), 0, 1, 50, 1))
+            favoriteResponses += Result.success(PageResult(listOf(FILE), 1, 1, 50, 1))
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+        controller.activateFavorites()
+        runCurrent()
+
+        controller.updateFavoritesQuery("sam")
+        controller.updateFavoritesQuery("sample")
+        advanceTimeBy(299)
+        runCurrent()
+        assertEquals(1, files.favoriteRequests.size)
+        advanceTimeBy(1)
+        runCurrent()
+
+        assertEquals("sample", files.favoriteRequests.last().first)
+        assertEquals(listOf(FILE), controller.state.value.favorites.files.items)
+    }
+
+    @Test
+    fun tagFilesPagingDeduplicatesAndUsesActiveTag() = runTest {
+        val first = FileItem(id = 41, fileName = "one.txt")
+        val second = FileItem(id = 42, fileName = "two.txt")
+        val tag = PersonalTag(id = 5, tagName = "work", fileCount = 2)
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            personalTags += tag
+            tagFileResponses += Result.success(PageResult(listOf(first, second), 3, 1, 50, 2))
+            tagFileResponses += Result.success(PageResult(listOf(second), 3, 2, 50, 2))
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.activateTagFiles(tag.id)
+        runCurrent()
+        controller.loadMoreTagFiles()
+        runCurrent()
+
+        assertEquals(listOf(first, second), controller.state.value.tags.tagFiles.items)
+        assertEquals(listOf(1, 2), files.tagFileRequests.map { it[2] })
+        assertEquals(tag.id, controller.state.value.tags.activeTagId)
+    }
+
+    @Test
+    fun fileTagEditorLoadsAssignmentsAndAtomicallyReplacesSelection() = runTest {
+        val work = PersonalTag(id = 1, tagName = "work", color = "#00d4aa")
+        val archive = PersonalTag(id = 2, tagName = "archive", color = "#60a5fa")
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            personalTags += listOf(work, archive)
+            fileTags[FILE.id] = mutableSetOf(work.id)
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.openFileTagEditor(FILE)
+        runCurrent()
+        assertEquals(setOf(work.id), controller.state.value.fileTagEditor?.selectedIds)
+        controller.toggleFileTag(archive.id)
+        controller.saveFileTags()
+        runCurrent()
+
+        assertEquals(setOf(work.id, archive.id), files.fileTags[FILE.id]?.toSet())
+        assertNull(controller.state.value.fileTagEditor)
+    }
+
+    @Test
+    fun tagConflictKeepsMutationStateExplainable() = runTest {
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            mutationFailure = ApiException(409002, "error.tagNameConflict")
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.createPersonalTag("work", "#00d4aa")
+        runCurrent()
+
+        assertNull(controller.state.value.tags.mutation)
+        assertEquals(UiMessage(MobileString.ErrorTagNameConflict), controller.state.value.tags.mutationError)
+        assertTrue(controller.state.value.tags.feedback?.isError == true)
+    }
+
     private companion object {
         val USER = UserProfile(id = 7, username = "user", email = "user@example.com")
         val FILE = FileItem(id = 8, fileName = "sample.txt", fileSize = 12)
@@ -665,6 +786,13 @@ private class FakeFiles : AppFileOperations {
     var mutationFailure: Throwable? = null
     var ticketCalls = 0
     var textPreview = TextPreview("", false)
+    val favoriteResponses = ArrayDeque<Result<PageResult<FileItem>>>()
+    val favoriteRequests = mutableListOf<Triple<String?, Int, Int>>()
+    val favoriteIds = mutableSetOf<Long>()
+    val personalTags = mutableListOf<PersonalTag>()
+    val tagFileResponses = ArrayDeque<Result<PageResult<FileItem>>>()
+    val tagFileRequests = mutableListOf<List<Any?>>()
+    val fileTags = mutableMapOf<Long, MutableSet<Long>>()
     override suspend fun listPersonalFiles(
         parentId: Long?, page: Int, size: Int, sortBy: String, order: String,
     ): PageResult<FileItem> {
@@ -684,6 +812,45 @@ private class FakeFiles : AppFileOperations {
     override suspend fun movePersonalFile(fileId: Long, targetParentId: Long?) { mutationFailure?.let { throw it } }
     override suspend fun copyPersonalFile(fileId: Long, targetParentId: Long?) { mutationFailure?.let { throw it } }
     override suspend fun deletePersonalFiles(fileIds: List<Long>) { mutationFailure?.let { throw it } }
+    override suspend fun listPersonalFavorites(query: String?, page: Int, size: Int): PageResult<FileItem> {
+        favoriteRequests += Triple(query, page, size)
+        return favoriteResponses.removeFirst().getOrThrow()
+    }
+    override suspend fun isPersonalFavorite(fileId: Long): Boolean = fileId in favoriteIds
+    override suspend fun addPersonalFavorite(fileId: Long) { favoriteIds += fileId }
+    override suspend fun removePersonalFavorite(fileId: Long) { favoriteIds -= fileId }
+    override suspend fun listPersonalTags(query: String?): List<PersonalTag> = personalTags.filter {
+        query.isNullOrBlank() || it.tagName.contains(query, ignoreCase = true)
+    }
+    override suspend fun createPersonalTag(name: String, color: String): PersonalTag {
+        mutationFailure?.let { throw it }
+        return PersonalTag(id = (personalTags.maxOfOrNull { it.id } ?: 0) + 1, tagName = name.trim(), color = color)
+            .also(personalTags::add)
+    }
+    override suspend fun updatePersonalTag(tagId: Long, name: String, color: String): PersonalTag {
+        mutationFailure?.let { throw it }
+        val updated = personalTags.first { it.id == tagId }.copy(tagName = name.trim(), color = color)
+        personalTags.replaceAll { if (it.id == tagId) updated else it }
+        return updated
+    }
+    override suspend fun deletePersonalTag(tagId: Long) {
+        mutationFailure?.let { throw it }
+        personalTags.removeAll { it.id == tagId }
+        fileTags.values.forEach { it.remove(tagId) }
+    }
+    override suspend fun listPersonalFilesByTag(
+        tagId: Long, query: String?, page: Int, size: Int,
+    ): PageResult<FileItem> {
+        tagFileRequests += listOf(tagId, query, page, size)
+        return tagFileResponses.removeFirst().getOrThrow()
+    }
+    override suspend fun listPersonalFileTags(fileId: Long): List<PersonalTag> =
+        personalTags.filter { it.id in fileTags[fileId].orEmpty() }
+    override suspend fun replacePersonalFileTags(fileId: Long, tagIds: List<Long>): List<PersonalTag> {
+        fileTags[fileId] = tagIds.toMutableSet()
+        return listPersonalFileTags(fileId)
+    }
+    override suspend fun removePersonalFileTag(tagId: Long, fileId: Long) { fileTags[fileId]?.remove(tagId) }
     override suspend fun searchPersonalFiles(query: String, page: Int, size: Int): PageResult<FileItem> {
         searchRequests += Triple(query, page, size)
         searchHandler?.let { return it(query, page, size) }

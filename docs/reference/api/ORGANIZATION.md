@@ -29,11 +29,15 @@ Authorization: Bearer <accessToken>
 ### 11.3 收藏列表
 
 ```
-GET /api/v1/favorites?page=1&size=20
+GET /api/v1/favorites?page=1&size=20&q=report
 Authorization: Bearer <accessToken>
 ```
 
-分页返回当前用户收藏的文件列表，包含完整 FileEntity。
+分页返回当前用户收藏的、尚未删除的个人文件和文件夹，包含完整 `FileEntity`。团队收藏不会出现在此接口中，团队内容应使用对应团队接口。
+
+- `q` 可选，服务端会先去除首尾空白，再按文件名模糊搜索。
+- `page` 从 1 开始，`size` 最大为 100。
+- 结果按收藏时间倒序排列，并以文件 ID 倒序作为稳定次级顺序。
 
 ---
 
@@ -68,23 +72,35 @@ Authorization: Bearer <accessToken>
 **Request Body:**
 ```json
 {
-  "tagName": "重要",       // 必填
-  "color": "#ff0000"       // 可选，默认 "#1890ff"
+  "tagName": "重要",
+  "color": "#ff0000"
 }
 ```
 
-同用户下标签名不可重复，返回 409。
+标签名会去除首尾空白，长度必须为 1～64；颜色必须是 `#RRGGBB`，省略时使用 `#1890ff`。同一用户的个人标签名不可重复，冲突返回 `409002 / error.tagNameConflict`。
 
 ---
 
 ### 12.2 标签列表
 
 ```
-GET /api/v1/tags
+GET /api/v1/tags?q=work
 Authorization: Bearer <accessToken>
 ```
 
-返回当前用户所有标签（非分页）。
+返回当前用户所有个人标签（非分页），按名称升序。`q` 可选，去除首尾空白后按名称模糊搜索。每项除原有字段外包含当前活动个人项目数量 `fileCount`：
+
+```json
+{
+  "id": 7,
+  "userId": 1,
+  "teamId": null,
+  "tagName": "work",
+  "color": "#00d4aa",
+  "fileCount": 12,
+  "createdAt": "2026-08-27T10:00:00"
+}
+```
 
 ---
 
@@ -102,6 +118,8 @@ Authorization: Bearer <accessToken>
   "color": "#ff4444"
 }
 ```
+
+名称与颜色使用与创建相同的规范；重命名冲突同样返回 `409002 / error.tagNameConflict`。
 
 ---
 
@@ -144,11 +162,40 @@ Authorization: Bearer <accessToken>
 ### 12.7 按标签列出文件
 
 ```
-GET /api/v1/tags/{tagId}/files?page=1&size=20
+GET /api/v1/tags/{tagId}/files?page=1&size=20&q=report
 Authorization: Bearer <accessToken>
 ```
 
-分页返回该标签关联的所有文件。
+分页返回该个人标签关联的活动个人文件和文件夹。`q` 的处理与收藏搜索一致；结果按关联时间倒序并使用文件 ID 保证分页稳定。标签不存在、属于其他用户或属于团队时统一返回 404。
+
+---
+
+### 12.8 读取单个项目的标签
+
+```
+GET /api/v1/files/{fileId}/tags
+Authorization: Bearer <accessToken>
+```
+
+返回该个人文件或文件夹当前关联的全部个人标签，按标签名称升序。文件不存在、已删除、属于其他用户或属于团队时返回 404。
+
+---
+
+### 12.9 原子替换单个项目的标签
+
+```
+PUT /api/v1/files/{fileId}/tags
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "tagIds": [7, 8]
+}
+```
+
+服务端在一个事务内把关联精确替换为请求集合，并返回最终标签列表。请求内重复 ID 会去重；空集合会清除全部标签；相同集合按幂等成功处理。文件和所有标签都必须属于当前用户的个人空间，任一 ID 无效时整体回滚。旧的 12.5、12.6 接口继续用于兼容已有客户端，新客户端应优先使用此原子接口。
 
 ---
 

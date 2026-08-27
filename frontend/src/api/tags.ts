@@ -21,5 +21,11 @@ export const addFileTag = (fileId: number, tagId: number) =>
 export const removeFileTag = (fileId: number, tagId: number) =>
   api.delete<ApiResponse<void>>(`/tags/${tagId}/files/${fileId}`)
 
+export const listFileTags = (fileId: number) =>
+  api.get<ApiResponse<TagEntity[]>>(`/files/${fileId}/tags`)
+
+export const replaceFileTags = (fileId: number, tagIds: number[]) =>
+  api.put<ApiResponse<TagEntity[]>>(`/files/${fileId}/tags`, { tagIds })
+
 export const listFilesByTag = (tagId: number, page = 1, size = 20, q?: string) =>
   api.get<ApiResponse<PageResult<FileEntity>>>(`/tags/${tagId}/files`, { params: { page, size, q } })

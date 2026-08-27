@@ -20,7 +20,7 @@ class S3StorageServiceIT {
 
     @Container
     static final GenericContainer<?> SEAWEED = new GenericContainer<>(
-            DockerImageName.parse("chrislusf/seaweedfs:latest"))
+            DockerImageName.parse("chrislusf/seaweedfs:4.40"))
             .withCommand("server", "-s3", "-dir=/data", "-ip=0.0.0.0")
             .withExposedPorts(8333);
 
