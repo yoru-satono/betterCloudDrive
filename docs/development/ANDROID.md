@@ -2,7 +2,7 @@
 
 本文面向修改 Android 客户端的开发者，说明旧版 `android/` 与 KMP 重写 `mobile/` 的工程结构、服务地址、设备调试和测试约定。两者使用同一后端 REST 协议，不在本地复制服务端权限规则。新应用达到功能对等前不得删除旧应用。
 
-## KMP 阶段 5 快速入口
+## KMP 快速入口
 
 KMP 工程使用 Kotlin 2.4.10、Compose Multiplatform 1.11.1、AGP 9.1.1、Gradle 9.3.1、Ktor 3.5.1、Room 2.8.4、DataStore 1.2.1 和 WorkManager 2.11.2。Android 14+ 的长传输由 UIDT 执行，Android 13 及以下回退 WorkManager。
 
@@ -13,7 +13,7 @@ $env:ANDROID_SERIAL = '<adb 设备序列号>'
 .\mobile\gradlew.bat -p mobile :androidApp:assembleRelease
 ```
 
-KMP 当前国际化实现见[阶段 5 国际化基础](../../mobile/docs/stage-5-localization.md)，个人文件浏览基线见[阶段 4 个人文件浏览](../../mobile/docs/stage-4-personal-browser.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
+KMP 当前账号、语言、主题和服务器设置见[阶段 9 账号生命周期与个人设置](../../mobile/docs/stage-9-account-settings.md)，国际化资源约束见[阶段 5 国际化基础](../../mobile/docs/stage-5-localization.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
 
 ## 工具与构建
 
@@ -56,6 +56,8 @@ debug 默认服务器地址来自 `ANDROID_DEFAULT_SERVER_BASE_URL`，未设置�
 修改环境变量后需要重新构建应用。生产服务器应使用 HTTPS；不要把个人开发 IP 或凭据提交到源码。
 
 KMP 登录页直接保存规范化服务器地址。标准 Android Emulator 使用 `http://10.0.2.2:8080`；部分第三方模拟器没有该宿主别名，此时使用开发机局域网地址。KMP 不把个人开发地址编译进生产状态，也不得记录密码、Token、请求正文或 SAF URI。
+
+KMP 认证页提供注册验证码、注册、忘记密码和重置密码。应用语言通过 Android per-app locale 保存，登录后以账号精确地区为准；主题通过独立 DataStore 保存并在登出、切换服务器和重启后保留。服务器切换必须先规范化和确认，随后按“尽力登出、取消调度、释放 URI 权限、删除传输与临时文件、清除令牌、保存新地址”的边界执行。
 
 ## API 与认证
 

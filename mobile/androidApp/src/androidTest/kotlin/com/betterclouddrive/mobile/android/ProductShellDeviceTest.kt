@@ -68,6 +68,7 @@ import com.betterclouddrive.mobile.feature.files.FileViewMode
 import com.betterclouddrive.mobile.feature.files.previewKind
 import org.junit.Rule
 import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.Assert.assertEquals
@@ -79,6 +80,11 @@ import java.util.Locale
 class ProductShellDeviceTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Before
+    fun initializeActivityLocale() {
+        setActivityLocale("en-US")
+    }
 
     @Test
     fun android13LanguageSettingsExposeOnlySupportedLocales() {
@@ -138,6 +144,7 @@ class ProductShellDeviceTest {
         composeRule.onNodeWithTag("nav-profile").performClick()
         composeRule.onNodeWithTag("profile-content").assertIsDisplayed()
 
+        composeRule.onNodeWithTag("profile-content").performScrollToNode(hasTestTag("profile-diagnostics"))
         composeRule.onNodeWithTag("profile-diagnostics").performClick()
         composeRule.onNodeWithTag("diagnostics-content").assertIsDisplayed()
         composeRule.onNodeWithTag("main-navigation-bar").assertIsNotDisplayed()

@@ -14,6 +14,8 @@ describe('lazy locale loading', () => {
     expect([...SUPPORTED_LOCALES].sort()).toEqual(['en-US', 'zh-Hans'])
     expect(resolveSupportedLocale('en-us')).toBe('en-US')
     expect(resolveSupportedLocale('zh-Hant')).toBe('zh-Hans')
+    expect(resolveSupportedLocale('zh-CN')).toBe('zh-Hans')
+    expect(resolveSupportedLocale('zh-SG')).toBe('zh-Hans')
     expect(resolveSupportedLocale('fr-FR')).toBeUndefined()
     expect(i18n.global.availableLocales).toEqual(['zh-Hans'])
 

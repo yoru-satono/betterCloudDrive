@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as authApi from '@/api/auth'
 import type { UserEntity } from '@/types/user'
-import { locale, setLocale, type SupportedLocale } from '@/i18n'
+import { locale, resolveSupportedLocale, setLocale, type SupportedLocale } from '@/i18n'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserEntity | null>(null)
@@ -38,7 +38,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     user.value = currentUser
     try {
-      await setLocale(currentUser.preferredLocale || 'zh-Hans')
+      await setLocale(resolveSupportedLocale(currentUser.preferredLocale) || 'en-US')
     } catch (error) {
       console.warn('Failed to load the preferred locale', error)
     }

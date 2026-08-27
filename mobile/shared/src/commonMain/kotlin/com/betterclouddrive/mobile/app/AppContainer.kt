@@ -2,6 +2,8 @@ package com.betterclouddrive.mobile.app
 
 import com.betterclouddrive.mobile.core.database.MobileDatabase
 import com.betterclouddrive.mobile.core.localization.PlatformLocaleProvider
+import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
+import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
 import com.betterclouddrive.mobile.core.network.BackendClient
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
@@ -25,9 +27,13 @@ class AppContainer(
     val officeRenderer: OfficeRenderer,
     val mediaPreviewRenderer: MediaPreviewRenderer,
     val localeProvider: PlatformLocaleProvider,
+    val localeController: ApplicationLocaleController,
+    val themePreferences: ThemePreferenceStore,
     private val applicationScope: CoroutineScope,
 ) {
-    val controller: AppController by lazy { AppController(auth, files, transfers, applicationScope) }
+    val controller: AppController by lazy {
+        AppController(auth, files, transfers, applicationScope, localeController, themePreferences)
+    }
 
     init {
         applicationScope.launch {

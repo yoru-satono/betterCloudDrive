@@ -6,6 +6,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.betterclouddrive.mobile.core.platform.ThemeMode
 
 private val Accent = Color(0xFF00D4AA)
 private val BackgroundDark = Color(0xFF0A0E17)
@@ -51,9 +52,14 @@ private val LightColors = lightColorScheme(
 )
 
 @Composable
-fun BetterCloudDriveTheme(content: @Composable () -> Unit) {
+fun BetterCloudDriveTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
+    val dark = when (mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
+        colorScheme = if (dark) DarkColors else LightColors,
         content = content,
     )
 }

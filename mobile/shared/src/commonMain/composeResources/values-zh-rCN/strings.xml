@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP 移动端 · 阶段 8</string>
+    <string name="stage_label">KMP 移动端 · 阶段 9</string>
     <string name="restore_title">暂时无法连接服务器</string>
     <string name="session_preserved">本地会话仍已加密保存</string>
     <string name="retry">重试</string>
@@ -172,4 +172,40 @@
     <string name="preview_read_only">只读预览</string>
     <string name="error_preview_failed">预览加载失败，请重试。</string>
     <string name="retry_preview">重试预览</string>
+    <string name="register">注册账号</string>
+    <string name="forgot_password">忘记密码？</string>
+    <string name="verification_code">验证码</string>
+    <string name="send_code">发送验证码</string>
+    <string name="resend_in">{0} 秒后重发</string>
+    <string name="confirm_password">确认密码</string>
+    <string name="back_to_login">返回登录</string>
+    <string name="registration_success">账号创建成功，请使用用户名登录。</string>
+    <string name="reset_password">重置密码</string>
+    <string name="new_password">新密码</string>
+    <string name="reset_code_sent">如果账号存在，重置验证码已发送。</string>
+    <string name="reset_success">密码已重置，请使用新密码登录。</string>
+    <string name="language">语言</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese_cn">简体中文（中国大陆）</string>
+    <string name="language_chinese_sg">简体中文（新加坡）</string>
+    <string name="appearance">外观</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="account_details">账号资料</string>
+    <string name="email_verified">邮箱已验证</string>
+    <string name="email_unverified">邮箱未验证</string>
+    <string name="role">角色</string>
+    <string name="registered_at">注册时间</string>
+    <string name="storage">存储空间</string>
+    <string name="storage_usage">已使用 {0}，共 {1}（{2}%）</string>
+    <string name="storage_near_quota">存储空间即将用尽</string>
+    <string name="switch_server">切换服务器</string>
+    <string name="switch_server_title">切换服务器？</string>
+    <string name="switch_server_message">此操作会退出账号，并删除当前服务器的传输任务和临时文件。</string>
+    <string name="refresh_profile">刷新资料</string>
+    <string name="error_rate_limited">请求过于频繁，请稍后再试。</string>
+    <string name="error_verification_expired">验证码已过期。</string>
+    <string name="error_verification_code">验证码不正确。</string>
+    <string name="error_account_conflict">用户名或邮箱已被使用。</string>
 </resources>

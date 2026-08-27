@@ -3,6 +3,7 @@ package com.betterclouddrive.mobile.app
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,16 +15,21 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -31,7 +37,9 @@ import com.betterclouddrive.mobile.designsystem.BetterCloudDriveTheme
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.mobileStringsFor
+import com.betterclouddrive.mobile.core.localization.MobileLocale
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun BetterCloudDriveApp(container: AppContainer, debugToolsEnabled: Boolean) {
     val controller = container.controller
@@ -40,12 +48,20 @@ fun BetterCloudDriveApp(container: AppContainer, debugToolsEnabled: Boolean) {
 
     val strings = mobileStringsFor(container.localeProvider.preferredLanguageTags())
     CompositionLocalProvider(LocalMobileStrings provides strings) {
-        BetterCloudDriveTheme {
+        BetterCloudDriveTheme(state.account.themeMode) {
+            BackHandler(
+                enabled = state.phase == AppPhase.LOGGED_OUT && state.account.publicPage != PublicAuthPage.LOGIN,
+                onBack = controller::showLogin,
+            )
             Surface(Modifier.fillMaxSize()) {
                 when (state.phase) {
                     AppPhase.LOADING -> StartupLoadingScreen()
                     AppPhase.RESTORE_FAILED -> RestoreFailedScreen(state, controller)
-                    AppPhase.LOGGED_OUT -> LoginScreen(state, controller)
+                    AppPhase.LOGGED_OUT -> when (state.account.publicPage) {
+                        PublicAuthPage.LOGIN -> LoginScreen(state, controller)
+                        PublicAuthPage.REGISTER -> RegistrationScreen(state, controller)
+                        PublicAuthPage.FORGOT_PASSWORD -> ForgotPasswordScreen(state, controller)
+                    }
                     AppPhase.LOGGED_IN -> ProductShell(
                         state = state,
                         documentPicker = container.documentPicker,
@@ -93,6 +109,12 @@ fun BetterCloudDriveApp(container: AppContainer, debugToolsEnabled: Boolean) {
                             cancel = controller::cancel,
                             retry = controller::retry,
                             clearFinishedTransfers = controller::clearFinishedTransfers,
+                            refreshProfile = controller::refreshProfile,
+                            updateAccountLocale = controller::updateAccountLocale,
+                            setThemeMode = controller::setThemeMode,
+                            requestServerSwitch = controller::requestServerSwitch,
+                            cancelServerSwitch = controller::cancelServerSwitch,
+                            confirmServerSwitch = controller::confirmServerSwitch,
                             logout = controller::logout,
                             loadDiagnosticOffice = controller::loadDiagnosticOffice,
                             updateDiagnosticStatus = controller::updateDiagnosticStatus,
@@ -140,15 +162,16 @@ private fun RestoreFailedScreen(state: AppUiState, controller: AppController) {
 @Composable
 private fun LoginScreen(state: AppUiState, controller: AppController) {
     val strings = LocalMobileStrings.current
-    var server by remember(state.server) { mutableStateOf(state.server) }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var server by rememberSaveable(state.server) { mutableStateOf(state.server) }
+    var username by rememberSaveable(state.account.loginUsername) { mutableStateOf(state.account.loginUsername) }
+    var password by rememberSaveable { mutableStateOf("") }
     Column(
         Modifier.fillMaxSize().padding(24.dp).testTag("login-screen"),
         verticalArrangement = Arrangement.Center,
     ) {
         Text(strings[MobileString.AppName], style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
         Text(strings[MobileString.StageLabel])
+        LocaleChoices(state.account.locale, controller::selectPublicLocale)
         Spacer(Modifier.height(20.dp))
         OutlinedTextField(
             value = server,
@@ -187,5 +210,107 @@ private fun LoginScreen(state: AppUiState, controller: AppController) {
                 Text(strings[MobileString.Login])
             }
         }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = { controller.showRegistration(server) }, modifier = Modifier.testTag("login-register")) {
+                Text(strings[MobileString.Register])
+            }
+            TextButton(onClick = { controller.showForgotPassword(server) }, modifier = Modifier.testTag("login-forgot")) {
+                Text(strings[MobileString.ForgotPassword])
+            }
+        }
+        if (state.account.registrationSucceeded) Text(strings[MobileString.RegistrationSuccess])
+        if (state.account.passwordResetSucceeded) Text(strings[MobileString.ResetSuccess])
+    }
+}
+
+@Composable
+private fun LocaleChoices(selected: MobileLocale, onSelect: (MobileLocale) -> Unit) {
+    val strings = LocalMobileStrings.current
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(strings[MobileString.Language])
+        listOf(
+            MobileLocale.ENGLISH_US to MobileString.LanguageEnglish,
+            MobileLocale.SIMPLIFIED_CHINESE_CN to MobileString.LanguageChineseCn,
+            MobileLocale.SIMPLIFIED_CHINESE_SG to MobileString.LanguageChineseSg,
+        ).forEach { (locale, label) ->
+            TextButton(
+                onClick = { onSelect(locale) },
+                enabled = selected != locale,
+                modifier = Modifier.fillMaxWidth().testTag("locale-${locale.languageTag}"),
+            ) { Text(strings[label]) }
+        }
+    }
+}
+
+@Composable
+private fun RegistrationScreen(state: AppUiState, controller: AppController) {
+    val strings = LocalMobileStrings.current
+    var username by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmation by rememberSaveable { mutableStateOf("") }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag("register-screen"),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(strings[MobileString.Register], style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+        LocaleChoices(state.account.locale, controller::selectPublicLocale)
+        OutlinedTextField(username, { username = it }, label = { Text(strings[MobileString.Username]) }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(email, { email = it }, label = { Text(strings[MobileString.Email]) }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(code, { code = it }, label = { Text(strings[MobileString.VerificationCode]) }, modifier = Modifier.fillMaxWidth())
+        OutlinedButton(
+            onClick = { controller.sendRegistrationCode(email) },
+            enabled = !state.account.registrationCodeBusy && state.account.registrationCodeSeconds == 0 && email.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().testTag("register-send-code"),
+        ) {
+            Text(if (state.account.registrationCodeSeconds > 0) {
+                strings.format(MobileString.ResendIn, state.account.registrationCodeSeconds)
+            } else strings[MobileString.SendCode])
+        }
+        OutlinedTextField(password, { password = it }, label = { Text(strings[MobileString.Password]) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(confirmation, { confirmation = it }, label = { Text(strings[MobileString.ConfirmPassword]) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        state.account.registrationError?.let { Text(strings.resolve(it).orEmpty(), color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
+        Button(
+            onClick = { controller.register(username, email, code, password, confirmation) },
+            enabled = !state.account.registerBusy,
+            modifier = Modifier.fillMaxWidth().testTag("register-submit"),
+        ) { Text(strings[MobileString.Register]) }
+        TextButton(onClick = controller::showLogin, modifier = Modifier.fillMaxWidth()) { Text(strings[MobileString.BackToLogin]) }
+    }
+}
+
+@Composable
+private fun ForgotPasswordScreen(state: AppUiState, controller: AppController) {
+    val strings = LocalMobileStrings.current
+    var email by rememberSaveable(state.account.resetEmail) { mutableStateOf(state.account.resetEmail) }
+    var code by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmation by rememberSaveable { mutableStateOf("") }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp).testTag("forgot-screen"),
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(strings[MobileString.ResetPassword], style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+        if (state.account.resetStep == PasswordResetStep.EMAIL) {
+            OutlinedTextField(email, { email = it }, label = { Text(strings[MobileString.Email]) }, modifier = Modifier.fillMaxWidth())
+            Button(
+                onClick = { controller.requestPasswordReset(email) },
+                enabled = !state.account.resetBusy && email.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().testTag("forgot-send"),
+            ) { Text(strings[MobileString.SendCode]) }
+        } else {
+            Text(strings[MobileString.ResetCodeSent])
+            OutlinedTextField(code, { code = it }, label = { Text(strings[MobileString.VerificationCode]) }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(password, { password = it }, label = { Text(strings[MobileString.NewPassword]) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(confirmation, { confirmation = it }, label = { Text(strings[MobileString.ConfirmPassword]) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+            Button(
+                onClick = { controller.resetPassword(code, password, confirmation) },
+                enabled = !state.account.resetBusy,
+                modifier = Modifier.fillMaxWidth().testTag("forgot-reset"),
+            ) { Text(strings[MobileString.ResetPassword]) }
+        }
+        state.account.resetError?.let { Text(strings.resolve(it).orEmpty(), color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
+        TextButton(onClick = controller::showLogin, modifier = Modifier.fillMaxWidth()) { Text(strings[MobileString.BackToLogin]) }
     }
 }

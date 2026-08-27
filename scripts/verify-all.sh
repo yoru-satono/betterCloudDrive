@@ -235,8 +235,13 @@ blackbox_tests() {
 security_tests() { run_pytest security ../test-results/security/junit.xml; }
 web_unit_tests() { (cd frontend && pnpm run test:coverage); }
 web_e2e_tests() {
+  local rc=0 restore_rc=0
+  set_functional_test_rate_limits || return
   (cd frontend && E2E_USE_DOCKER=1 E2E_BASE_URL=http://127.0.0.1:3000 \
-    E2E_BACKEND_URL=http://127.0.0.1:8080 E2E_ONLYOFFICE=0 pnpm exec playwright test --project=core)
+    E2E_BACKEND_URL=http://127.0.0.1:8080 E2E_ONLYOFFICE=0 pnpm exec playwright test --project=core) || rc=$?
+  restore_default_rate_limits || restore_rc=$?
+  ((rc != 0)) && return "$rc"
+  return "$restore_rc"
 }
 office_tests() {
   (cd frontend && E2E_USE_DOCKER=1 E2E_BASE_URL=http://127.0.0.1:3000 \
@@ -254,11 +259,15 @@ set_functional_test_rate_limits() {
     DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERMITS=10000 \
     DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERIOD_SECONDS=1 \
     docker compose up -d --no-deps --force-recreate backend &&
-    wait_docker_service_healthy backend
+    wait_docker_service_healthy backend &&
+    docker compose restart frontend &&
+    wait_docker_service_healthy frontend
 }
 restore_default_rate_limits() {
   docker compose up -d --no-deps --force-recreate backend &&
-    wait_docker_service_healthy backend
+    wait_docker_service_healthy backend &&
+    docker compose restart frontend &&
+    wait_docker_service_healthy frontend
 }
 tauri_tests() {
   local rc=0 restore_rc=0

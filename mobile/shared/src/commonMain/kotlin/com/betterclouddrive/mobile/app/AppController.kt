@@ -10,7 +10,12 @@ import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
 import com.betterclouddrive.mobile.core.model.UserProfile
 import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.MobileLocale
 import com.betterclouddrive.mobile.core.localization.UiMessage
+import com.betterclouddrive.mobile.core.model.RegistrationResult
+import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
+import com.betterclouddrive.mobile.core.platform.ThemeMode
+import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
 import com.betterclouddrive.mobile.core.platform.UploadPickResult
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
 import com.betterclouddrive.mobile.feature.files.BreadcrumbEntry
@@ -43,6 +48,14 @@ internal interface AppAuthOperations {
     suspend fun switchServer(value: String): Result<String>
     fun normalizeServer(value: String): Result<String>
     suspend fun login(username: String, password: String): UserProfile
+    suspend fun sendRegistrationCode(email: String, preferredLocale: String) = Unit
+    suspend fun register(
+        username: String, password: String, email: String, verificationCode: String, preferredLocale: String,
+    ): RegistrationResult = RegistrationResult(0, username)
+    suspend fun forgotPassword(email: String) = Unit
+    suspend fun resetPassword(email: String, code: String, newPassword: String) = Unit
+    suspend fun getCurrentUser(): UserProfile = error("getCurrentUser is not implemented")
+    suspend fun updatePreferredLocale(locale: String): UserProfile = error("updatePreferredLocale is not implemented")
     suspend fun logout()
 }
 
@@ -90,6 +103,16 @@ private class RepositoryAuthOperations(private val repository: AuthRepository) :
     override suspend fun switchServer(value: String) = repository.switchServer(value)
     override fun normalizeServer(value: String) = repository.normalizeServer(value)
     override suspend fun login(username: String, password: String) = repository.login(username, password)
+    override suspend fun sendRegistrationCode(email: String, preferredLocale: String) =
+        repository.sendRegistrationCode(email, preferredLocale)
+    override suspend fun register(
+        username: String, password: String, email: String, verificationCode: String, preferredLocale: String,
+    ) = repository.register(username, password, email, verificationCode, preferredLocale)
+    override suspend fun forgotPassword(email: String) = repository.forgotPassword(email)
+    override suspend fun resetPassword(email: String, code: String, newPassword: String) =
+        repository.resetPassword(email, code, newPassword)
+    override suspend fun getCurrentUser() = repository.getCurrentUser()
+    override suspend fun updatePreferredLocale(locale: String) = repository.updatePreferredLocale(locale)
     override suspend fun logout() = repository.logout()
 }
 
@@ -143,6 +166,34 @@ private class ManagerTransferOperations(private val manager: TransferManager) : 
 }
 
 enum class AppPhase { LOADING, RESTORE_FAILED, LOGGED_OUT, LOGGED_IN }
+enum class PublicAuthPage { LOGIN, REGISTER, FORGOT_PASSWORD }
+enum class PasswordResetStep { EMAIL, RESET }
+
+data class AccountUiState(
+    val publicPage: PublicAuthPage = PublicAuthPage.LOGIN,
+    val loginUsername: String = "",
+    val registerBusy: Boolean = false,
+    val registrationCodeBusy: Boolean = false,
+    val registrationCodeSeconds: Int = 0,
+    val registrationError: UiMessage? = null,
+    val registrationSucceeded: Boolean = false,
+    val resetStep: PasswordResetStep = PasswordResetStep.EMAIL,
+    val resetBusy: Boolean = false,
+    val resetEmail: String = "",
+    val resetError: UiMessage? = null,
+    val resetCodeSent: Boolean = false,
+    val passwordResetSucceeded: Boolean = false,
+    val profileRefreshing: Boolean = false,
+    val profileError: UiMessage? = null,
+    val localeSaving: Boolean = false,
+    val localeError: UiMessage? = null,
+    val locale: MobileLocale = MobileLocale.ENGLISH_US,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val serverCandidate: String = "",
+    val serverSwitchConfirming: Boolean = false,
+    val serverSwitching: Boolean = false,
+    val serverError: UiMessage? = null,
+)
 
 data class DirectoryPageState(
     val folderId: Long? = null,
@@ -249,22 +300,39 @@ data class AppUiState(
     val preview: PersonalPreviewUiState = PersonalPreviewUiState(),
     val transfers: List<TransferTask> = emptyList(),
     val diagnostics: DiagnosticUiState = DiagnosticUiState(),
+    val account: AccountUiState = AccountUiState(),
 )
+
+private class MemoryThemePreferenceStore : ThemePreferenceStore {
+    private val state = MutableStateFlow(ThemeMode.SYSTEM)
+    override val themeMode = state.asStateFlow()
+    override suspend fun setThemeMode(mode: ThemeMode) { state.value = mode }
+}
+
+private class PassiveLocaleController : ApplicationLocaleController {
+    private var locale = MobileLocale.ENGLISH_US
+    override fun currentLocale(): MobileLocale = locale
+    override fun applyLocale(locale: MobileLocale) { this.locale = locale }
+}
 
 class AppController internal constructor(
     private val auth: AppAuthOperations,
     private val files: AppFileOperations,
     private val transfers: AppTransferOperations,
     private val scope: CoroutineScope,
+    private val localeController: ApplicationLocaleController = PassiveLocaleController(),
+    private val themePreferences: ThemePreferenceStore = MemoryThemePreferenceStore(),
 ) {
     constructor(
         auth: AuthRepository,
         files: FileRepository,
         transfers: TransferManager,
         scope: CoroutineScope,
+        localeController: ApplicationLocaleController = PassiveLocaleController(),
+        themePreferences: ThemePreferenceStore = MemoryThemePreferenceStore(),
     ) : this(
         RepositoryAuthOperations(auth), RepositoryFileOperations(files),
-        ManagerTransferOperations(transfers), scope,
+        ManagerTransferOperations(transfers), scope, localeController, themePreferences,
     )
 
     private val mutableState = MutableStateFlow(AppUiState())
@@ -277,6 +345,7 @@ class AppController internal constructor(
     private var uploadRefreshJob: Job? = null
     private var searchJob: Job? = null
     private var previewJob: Job? = null
+    private var registrationCountdownJob: Job? = null
     private var feedbackSequence = 0L
     private var previousTransfers = emptyMap<String, TransferTask>()
     private var hasObservedTransfers = false
@@ -284,6 +353,14 @@ class AppController internal constructor(
     private var started = false
 
     init {
+        mutableState.update {
+            it.copy(account = it.account.copy(locale = localeController.currentLocale()))
+        }
+        scope.launch {
+            themePreferences.themeMode.collectLatest { mode ->
+                mutableState.update { it.copy(account = it.account.copy(themeMode = mode)) }
+            }
+        }
         scope.launch {
             transfers.tasks.collectLatest { tasks ->
                 tasks.filter { task ->
@@ -335,6 +412,7 @@ class AppController internal constructor(
                             server = auth.serverBaseUrl,
                             transfers = it.transfers,
                             sessionError = UiMessage(MobileString.ErrorSessionExpired),
+                            account = it.account.copy(publicPage = PublicAuthPage.LOGIN),
                         )
                     }
                 }
@@ -356,7 +434,12 @@ class AppController internal constructor(
         transfers.clearForLogout()
         resetDirectoryState()
         mutableState.update {
-            AppUiState(phase = AppPhase.LOGGED_OUT, server = auth.serverBaseUrl, transfers = emptyList())
+            AppUiState(
+                phase = AppPhase.LOGGED_OUT,
+                server = auth.serverBaseUrl,
+                transfers = emptyList(),
+                account = it.account.copy(publicPage = PublicAuthPage.LOGIN),
+            )
         }
     }
 
@@ -368,6 +451,7 @@ class AppController internal constructor(
                 auth.switchServer(normalized).getOrThrow()
             }
             val user = auth.login(username, password)
+            applyAccountLocale(user.preferredLocale)
             resetDirectoryState()
             mutableState.update {
                 it.copy(
@@ -375,6 +459,12 @@ class AppController internal constructor(
                     user = user,
                     server = auth.serverBaseUrl,
                     personalFiles = PersonalFilesUiState(),
+                    account = it.account.copy(
+                        publicPage = PublicAuthPage.LOGIN,
+                        loginUsername = username,
+                        registrationError = null,
+                        resetError = null,
+                    ),
                 )
             }
             transfers.resumeWaitingForLogin()
@@ -625,6 +715,142 @@ class AppController internal constructor(
         updateCurrent(folderId) { it.copy(scrollAnchorId = fileId) }
     }
 
+    fun showLogin() {
+        mutableState.update { it.copy(account = it.account.copy(
+            publicPage = PublicAuthPage.LOGIN,
+            registrationError = null,
+            resetError = null,
+        )) }
+    }
+
+    fun showRegistration(server: String) = openPublicPage(server, PublicAuthPage.REGISTER)
+
+    fun showForgotPassword(server: String) = openPublicPage(server, PublicAuthPage.FORGOT_PASSWORD)
+
+    private fun openPublicPage(server: String, page: PublicAuthPage) = scope.launch {
+        try {
+            val normalized = auth.normalizeServer(server).getOrThrow()
+            if (normalized != auth.serverBaseUrl) auth.switchServer(normalized).getOrThrow()
+            mutableState.update { it.copy(
+                server = auth.serverBaseUrl,
+                sessionError = null,
+                account = it.account.copy(
+                    publicPage = page,
+                    registrationError = null,
+                    registrationSucceeded = false,
+                    resetStep = PasswordResetStep.EMAIL,
+                    resetError = null,
+                    passwordResetSucceeded = false,
+                    resetCodeSent = false,
+                ),
+            ) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { it.copy(sessionError = friendly(error)) }
+        }
+    }
+
+    fun selectPublicLocale(locale: MobileLocale) {
+        localeController.applyLocale(locale)
+        mutableState.update { it.copy(account = it.account.copy(locale = locale, localeError = null)) }
+    }
+
+    fun sendRegistrationCode(email: String) = scope.launch {
+        if (mutableState.value.account.registrationCodeBusy || mutableState.value.account.registrationCodeSeconds > 0) return@launch
+        mutableState.update { it.copy(account = it.account.copy(registrationCodeBusy = true, registrationError = null)) }
+        try {
+            auth.sendRegistrationCode(email.trim(), mutableState.value.account.locale.languageTag)
+            mutableState.update { it.copy(account = it.account.copy(registrationCodeBusy = false, registrationCodeSeconds = 60)) }
+            registrationCountdownJob?.cancel()
+            registrationCountdownJob = scope.launch {
+                repeat(60) {
+                    delay(1_000)
+                    mutableState.update { state -> state.copy(account = state.account.copy(
+                        registrationCodeSeconds = (state.account.registrationCodeSeconds - 1).coerceAtLeast(0),
+                    )) }
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { it.copy(account = it.account.copy(
+                registrationCodeBusy = false, registrationError = friendlyAccount(error),
+            )) }
+        }
+    }
+
+    fun register(username: String, email: String, code: String, password: String, confirmation: String) = scope.launch {
+        if (mutableState.value.account.registerBusy) return@launch
+        val validation = validateRegistration(username, email, code, password, confirmation)
+        if (validation != null) {
+            mutableState.update { it.copy(account = it.account.copy(registrationError = validation)) }
+            return@launch
+        }
+        mutableState.update { it.copy(account = it.account.copy(registerBusy = true, registrationError = null)) }
+        try {
+            val result = auth.register(
+                username.trim(), password, email.trim(), code.trim(), mutableState.value.account.locale.languageTag,
+            )
+            registrationCountdownJob?.cancel()
+            mutableState.update { it.copy(account = it.account.copy(
+                publicPage = PublicAuthPage.LOGIN,
+                loginUsername = result.username,
+                registerBusy = false,
+                registrationCodeSeconds = 0,
+                registrationSucceeded = true,
+            )) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { it.copy(account = it.account.copy(
+                registerBusy = false, registrationError = friendlyAccount(error),
+            )) }
+        }
+    }
+
+    fun requestPasswordReset(email: String) = scope.launch {
+        if (mutableState.value.account.resetBusy) return@launch
+        if (!isEmail(email)) {
+            mutableState.update { it.copy(account = it.account.copy(resetError = UiMessage(MobileString.ErrorInvalidInput))) }
+            return@launch
+        }
+        mutableState.update { it.copy(account = it.account.copy(resetBusy = true, resetError = null)) }
+        try {
+            auth.forgotPassword(email.trim())
+            mutableState.update { it.copy(account = it.account.copy(
+                resetBusy = false, resetEmail = email.trim(), resetStep = PasswordResetStep.RESET, resetCodeSent = true,
+            )) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { it.copy(account = it.account.copy(resetBusy = false, resetError = friendlyAccount(error))) }
+        }
+    }
+
+    fun resetPassword(code: String, password: String, confirmation: String) = scope.launch {
+        if (mutableState.value.account.resetBusy) return@launch
+        if (!code.matches(Regex("\\d{6}")) || password.length !in 6..128 || password != confirmation) {
+            mutableState.update { it.copy(account = it.account.copy(resetError = UiMessage(MobileString.ErrorInvalidInput))) }
+            return@launch
+        }
+        mutableState.update { it.copy(account = it.account.copy(resetBusy = true, resetError = null)) }
+        try {
+            auth.resetPassword(mutableState.value.account.resetEmail, code, password)
+            mutableState.update { it.copy(account = it.account.copy(
+                publicPage = PublicAuthPage.LOGIN,
+                resetBusy = false,
+                resetStep = PasswordResetStep.EMAIL,
+                resetCodeSent = false,
+                passwordResetSucceeded = true,
+            )) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { it.copy(account = it.account.copy(resetBusy = false, resetError = friendlyAccount(error))) }
+        }
+    }
+
     fun updateSearchQuery(value: String) {
         searchJob?.cancel()
         val query = value
@@ -744,13 +970,110 @@ class AppController internal constructor(
         mutableState.update { it.copy(preview = PersonalPreviewUiState()) }
     }
 
+    fun refreshProfile() = scope.launch {
+        if (mutableState.value.account.profileRefreshing) return@launch
+        mutableState.update { it.copy(account = it.account.copy(profileRefreshing = true, profileError = null)) }
+        try {
+            val profile = auth.getCurrentUser()
+            mutableState.update { it.copy(user = profile, account = it.account.copy(profileRefreshing = false)) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { it.copy(account = it.account.copy(
+                profileRefreshing = false, profileError = friendlyAccount(error),
+            )) }
+        }
+    }
+
+    fun updateAccountLocale(locale: MobileLocale) = scope.launch {
+        val account = mutableState.value.account
+        if (account.localeSaving || account.locale == locale) return@launch
+        mutableState.update { it.copy(account = it.account.copy(localeSaving = true, localeError = null)) }
+        try {
+            val profile = auth.updatePreferredLocale(locale.languageTag)
+            mutableState.update { it.copy(
+                user = profile,
+                account = it.account.copy(localeSaving = false, locale = locale),
+            ) }
+            localeController.applyLocale(locale)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { it.copy(account = it.account.copy(
+                localeSaving = false, localeError = friendlyAccount(error),
+            )) }
+        }
+    }
+
+    fun setThemeMode(mode: ThemeMode) = scope.launch {
+        themePreferences.setThemeMode(mode)
+    }
+
+    fun requestServerSwitch(value: String) {
+        val normalized = auth.normalizeServer(value)
+        normalized.fold(
+            onSuccess = { server ->
+                mutableState.update { state ->
+                    if (server == auth.serverBaseUrl) state.copy(account = state.account.copy(
+                        serverCandidate = "", serverSwitchConfirming = false, serverError = null,
+                    )) else state.copy(account = state.account.copy(
+                        serverCandidate = server, serverSwitchConfirming = true, serverError = null,
+                    ))
+                }
+            },
+            onFailure = { error ->
+                mutableState.update { it.copy(account = it.account.copy(serverError = friendly(error))) }
+            },
+        )
+    }
+
+    fun cancelServerSwitch() {
+        mutableState.update { it.copy(account = it.account.copy(
+            serverCandidate = "", serverSwitchConfirming = false, serverError = null,
+        )) }
+    }
+
+    fun confirmServerSwitch() = scope.launch {
+        val target = mutableState.value.account.serverCandidate
+        if (target.isBlank() || mutableState.value.account.serverSwitching) return@launch
+        mutableState.update { it.copy(account = it.account.copy(serverSwitching = true, serverError = null)) }
+        try {
+            auth.logout()
+            transfers.clearForLogout()
+            auth.switchServer(target).getOrThrow()
+            resetDirectoryState()
+            mutableState.update { state -> AppUiState(
+                phase = AppPhase.LOGGED_OUT,
+                server = auth.serverBaseUrl,
+                transfers = emptyList(),
+                account = state.account.copy(
+                    publicPage = PublicAuthPage.LOGIN,
+                    serverCandidate = "",
+                    serverSwitchConfirming = false,
+                    serverSwitching = false,
+                ),
+            ) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { it.copy(account = it.account.copy(
+                serverSwitching = false, serverError = friendly(error),
+            )) }
+        }
+    }
+
     fun logout() = scope.launch {
         mutableState.update { it.copy(loginBusy = true, sessionError = null) }
         auth.logout()
         transfers.clearForLogout()
         resetDirectoryState()
         mutableState.update {
-            AppUiState(phase = AppPhase.LOGGED_OUT, server = auth.serverBaseUrl, transfers = emptyList())
+            AppUiState(
+                phase = AppPhase.LOGGED_OUT,
+                server = auth.serverBaseUrl,
+                transfers = emptyList(),
+                account = it.account.copy(publicPage = PublicAuthPage.LOGIN),
+            )
         }
     }
 
@@ -1064,7 +1387,12 @@ class AppController internal constructor(
         when (val result = auth.restore()) {
             SessionRestoreResult.NoSession,
             is SessionRestoreResult.Invalidated -> mutableState.update {
-                AppUiState(phase = AppPhase.LOGGED_OUT, server = auth.serverBaseUrl, transfers = it.transfers)
+                AppUiState(
+                    phase = AppPhase.LOGGED_OUT,
+                    server = auth.serverBaseUrl,
+                    transfers = it.transfers,
+                    account = it.account.copy(publicPage = PublicAuthPage.LOGIN),
+                )
             }
             is SessionRestoreResult.RetryableFailure -> mutableState.update {
                 it.copy(
@@ -1074,6 +1402,7 @@ class AppController internal constructor(
                 )
             }
             is SessionRestoreResult.Restored -> {
+                applyAccountLocale(result.user.preferredLocale)
                 mutableState.update {
                     it.copy(
                         phase = AppPhase.LOGGED_IN,
@@ -1245,5 +1574,51 @@ class AppController internal constructor(
         val ACTIVE_UPLOAD_STATUSES = setOf(
             TransferStatus.QUEUED, TransferStatus.PREPARING, TransferStatus.RUNNING,
         )
+    }
+
+    private fun applyAccountLocale(preferredLocale: String) {
+        val locale = accountLocale(preferredLocale)
+        mutableState.update { it.copy(account = it.account.copy(locale = locale)) }
+        localeController.applyLocale(locale)
+    }
+
+    private fun accountLocale(value: String): MobileLocale = when (value.replace('_', '-').lowercase()) {
+        "zh-sg", "zh-hans-sg" -> MobileLocale.SIMPLIFIED_CHINESE_SG
+        "zh-cn", "zh-hans", "zh-hans-cn" -> MobileLocale.SIMPLIFIED_CHINESE_CN
+        else -> MobileLocale.ENGLISH_US
+    }
+
+    private fun validateRegistration(
+        username: String,
+        email: String,
+        code: String,
+        password: String,
+        confirmation: String,
+    ): UiMessage? = when {
+        username.trim().length !in 3..64 -> UiMessage(MobileString.ErrorInvalidInput)
+        !isEmail(email) -> UiMessage(MobileString.ErrorInvalidInput)
+        !code.trim().matches(Regex("\\d{6}")) -> UiMessage(MobileString.ErrorInvalidInput)
+        password.length !in 8..128 || !password.any(Char::isUpperCase) ||
+            !password.any(Char::isLowerCase) || !password.any(Char::isDigit) -> UiMessage(MobileString.ErrorInvalidInput)
+        password != confirmation -> UiMessage(MobileString.ErrorInvalidInput)
+        else -> null
+    }
+
+    private fun isEmail(value: String): Boolean {
+        val trimmed = value.trim()
+        return trimmed.length <= 254 && '@' in trimmed && trimmed.substringAfter('@').contains('.')
+    }
+
+    private fun friendlyAccount(error: Throwable): UiMessage = when (error) {
+        is ApiException -> when (error.messageKey) {
+            "error.rateLimited" -> UiMessage(MobileString.ErrorRateLimited)
+            "error.emailCodeExpired" -> UiMessage(MobileString.ErrorVerificationExpired)
+            "error.emailCodeMismatch", "error.emailVerificationFailed" -> UiMessage(MobileString.ErrorVerificationCode)
+            "error.usernameExists", "error.emailExists", "error.accountConflict" -> UiMessage(MobileString.ErrorAccountConflict)
+            "error.unauthorized", "error.invalidCredentials" -> UiMessage(MobileString.ErrorCredentials)
+            "error.validation", "error.invalidParameter" -> UiMessage(MobileString.ErrorInvalidInput)
+            else -> friendly(error)
+        }
+        else -> friendly(error)
     }
 }

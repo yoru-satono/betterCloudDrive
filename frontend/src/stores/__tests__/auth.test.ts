@@ -83,6 +83,16 @@ describe('auth store', () => {
     expect(document.documentElement.lang).toBe('en-US')
   })
 
+  it.each(['zh-CN', 'zh-SG'])('maps regional simplified Chinese %s to the existing web dictionary', async (preferredLocale) => {
+    vi.mocked(authApi.getMe).mockResolvedValue({ data: { data: { ...user, preferredLocale } } } as never)
+    const store = useAuthStore()
+
+    await store.fetchMe()
+
+    expect(locale.value).toBe('zh-Hans')
+    expect(document.documentElement.lang).toBe('zh-Hans')
+  })
+
   it('restores the previous locale when preference persistence fails', async () => {
     vi.mocked(authApi.updateLocale).mockRejectedValue(new Error('offline'))
     const store = useAuthStore()

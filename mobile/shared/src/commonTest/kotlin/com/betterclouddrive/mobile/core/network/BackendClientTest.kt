@@ -35,6 +35,60 @@ import kotlin.test.assertTrue
 
 class BackendClientTest {
     @Test
+    fun publicAccountLifecycleRequestsAreUnauthenticatedAndPreserveExactLocale() = runTest {
+        val observed = mutableListOf<Triple<HttpMethod, String, String>>()
+        val engine = MockEngine { request ->
+            val body = (request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()
+            observed += Triple(request.method, request.url.encodedPath, body)
+            assertNull(request.headers[HttpHeaders.Authorization])
+            if (request.url.encodedPath.endsWith("/register")) {
+                jsonResponse("""{"code":200,"data":{"userId":9,"username":"alice"}}""")
+            } else jsonResponse("""{"code":200}""")
+        }
+        val client = BackendClient(HttpClient(engine), "https://drive.example.com")
+
+        client.sendRegistrationCode("a@example.com", "zh-SG")
+        val registered = client.register("alice", "Password1", "a@example.com", "123456", "zh-SG")
+        client.forgotPassword("a@example.com")
+        client.resetPassword("a@example.com", "654321", "newpass")
+
+        assertEquals("alice", registered.username)
+        assertEquals(
+            listOf(
+                Triple(HttpMethod.Post, "/api/v1/auth/register-code/send", """{"email":"a@example.com","preferredLocale":"zh-SG"}"""),
+                Triple(HttpMethod.Post, "/api/v1/auth/register", """{"username":"alice","password":"Password1","email":"a@example.com","verificationCode":"123456","preferredLocale":"zh-SG"}"""),
+                Triple(HttpMethod.Post, "/api/v1/auth/forgot-password", """{"email":"a@example.com"}"""),
+                Triple(HttpMethod.Post, "/api/v1/auth/reset-password", """{"email":"a@example.com","code":"654321","newPassword":"newpass"}"""),
+            ),
+            observed,
+        )
+    }
+
+    @Test
+    fun profileAndLocaleUpdateParseCompleteAccountFields() = runTest {
+        val engine = MockEngine { request ->
+            if (request.url.encodedPath.endsWith("/preferences/locale")) {
+                val body = (request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()
+                assertEquals("""{"preferredLocale":"zh-CN"}""", body)
+            }
+            jsonResponse("""{"code":200,"data":{"id":7,"username":"alice","email":"a@example.com","emailVerified":true,"preferredLocale":"zh-CN","role":"ROLE_USER","status":1,"storageQuota":1073741824,"storageUsed":536870912,"webdavEnabled":false,"createdAt":"2026-08-25T10:00:00"}}""")
+        }
+        val client = BackendClient(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        val profile = client.updatePreferredLocale("zh-CN")
+
+        assertTrue(profile.emailVerified)
+        assertEquals("zh-CN", profile.preferredLocale)
+        assertEquals(536870912, profile.storageUsed)
+        assertEquals("2026-08-25T10:00:00", profile.createdAt)
+    }
+
+    @Test
     fun personalFileMutationsUseStableEndpointsAndBodies() = runTest {
         val observed = mutableListOf<Triple<HttpMethod, String, String>>()
         val engine = MockEngine { request ->

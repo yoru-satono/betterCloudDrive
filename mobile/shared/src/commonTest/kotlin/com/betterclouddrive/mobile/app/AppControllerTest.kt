@@ -9,7 +9,12 @@ import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
 import com.betterclouddrive.mobile.core.model.UserProfile
 import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.MobileLocale
 import com.betterclouddrive.mobile.core.localization.UiMessage
+import com.betterclouddrive.mobile.core.model.RegistrationResult
+import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
+import com.betterclouddrive.mobile.core.platform.ThemeMode
+import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
 import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.core.platform.UploadPickResult
 import com.betterclouddrive.mobile.feature.transfers.UploadEnqueueResult
@@ -35,6 +40,106 @@ import kotlin.test.assertTrue
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class AppControllerTest {
+    @Test
+    fun registrationUsesExactLocaleAndCooldownSurvivesControllerState() = runTest {
+        val auth = FakeAuth(SessionRestoreResult.NoSession)
+        val controller = AppController(auth, FakeFiles(), FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+        controller.selectPublicLocale(MobileLocale.SIMPLIFIED_CHINESE_SG)
+
+        controller.sendRegistrationCode("user@example.com")
+        runCurrent()
+        assertEquals("zh-SG", auth.registrationLocale)
+        assertEquals(60, controller.state.value.account.registrationCodeSeconds)
+
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(59, controller.state.value.account.registrationCodeSeconds)
+
+        controller.register("alice", "user@example.com", "123456", "Password1", "Password1")
+        runCurrent()
+        assertEquals(PublicAuthPage.LOGIN, controller.state.value.account.publicPage)
+        assertEquals("alice", controller.state.value.account.loginUsername)
+        assertEquals("zh-SG", auth.registrationLocale)
+    }
+
+    @Test
+    fun leavingRegistrationKeepsResendCountdownRunning() = runTest {
+        val auth = FakeAuth(SessionRestoreResult.NoSession)
+        val controller = AppController(auth, FakeFiles(), FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.sendRegistrationCode("user@example.com")
+        runCurrent()
+        controller.showLogin()
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertEquals(PublicAuthPage.LOGIN, controller.state.value.account.publicPage)
+        assertEquals(59, controller.state.value.account.registrationCodeSeconds)
+    }
+
+    @Test
+    fun confirmedServerSwitchLogsOutClearsTransfersThenSavesNewServer() = runTest {
+        val events = mutableListOf<String>()
+        val auth = FakeAuth(SessionRestoreResult.Restored(USER), events)
+        val files = FakeFiles().apply { responses += Result.success(page()) }
+        val transfers = FakeTransfers(events)
+        val controller = AppController(auth, files, transfers, backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.requestServerSwitch("https://other.example.com/")
+        assertTrue(controller.state.value.account.serverSwitchConfirming)
+        controller.confirmServerSwitch()
+        runCurrent()
+
+        assertEquals(
+            listOf("logout", "clear-transfers", "switch:https://other.example.com"),
+            events,
+        )
+        assertEquals(AppPhase.LOGGED_OUT, controller.state.value.phase)
+        assertEquals("https://other.example.com", controller.state.value.server)
+        assertTrue(controller.state.value.transfers.isEmpty())
+    }
+
+    @Test
+    fun unchangedServerDoesNotLogOutOrClearTransfers() = runTest {
+        val events = mutableListOf<String>()
+        val auth = FakeAuth(SessionRestoreResult.Restored(USER), events)
+        val files = FakeFiles().apply { responses += Result.success(page()) }
+        val controller = AppController(auth, files, FakeTransfers(events), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.requestServerSwitch("https://drive.example.com/")
+        controller.confirmServerSwitch()
+        runCurrent()
+
+        assertTrue(events.isEmpty())
+        assertFalse(controller.state.value.account.serverSwitchConfirming)
+        assertEquals(AppPhase.LOGGED_IN, controller.state.value.phase)
+    }
+
+    @Test
+    fun restoredHistoricalLocaleMapsToMainlandAndThemePersistsLocally() = runTest {
+        val auth = FakeAuth(SessionRestoreResult.Restored(USER.copy(preferredLocale = "zh-Hans")))
+        val locale = TestLocaleController()
+        val themes = TestThemeStore()
+        val files = FakeFiles().apply { responses += Result.success(page()) }
+        val controller = AppController(auth, files, FakeTransfers(), backgroundScope, locale, themes)
+
+        controller.start()
+        runCurrent()
+        assertEquals(MobileLocale.SIMPLIFIED_CHINESE_CN, locale.currentLocale())
+
+        controller.setThemeMode(ThemeMode.DARK)
+        runCurrent()
+        assertEquals(ThemeMode.DARK, controller.state.value.account.themeMode)
+    }
+
     @Test
     fun restoredSessionLoadsPersonalRootWithoutBlockingTransfers() = runTest {
         val auth = FakeAuth(restoreResult = SessionRestoreResult.Restored(USER))
@@ -496,21 +601,55 @@ class AppControllerTest {
 
 private class FakeAuth(
     var restoreResult: SessionRestoreResult,
+    private val events: MutableList<String>? = null,
 ) : AppAuthOperations {
     override var serverBaseUrl: String = "https://drive.example.com"
     val invalidations = MutableSharedFlow<SessionInvalidationReason>(extraBufferCapacity = 1)
     override val sessionInvalidations: Flow<SessionInvalidationReason> = invalidations
     var logoutCalls = 0
+    var registrationLocale: String? = null
+    var profile = UserProfile(id = 7, username = "user", email = "user@example.com")
 
     override suspend fun restore(): SessionRestoreResult = restoreResult
     override suspend fun switchServer(value: String): Result<String> {
+        events?.add("switch:$value")
         serverBaseUrl = value
         return Result.success(value)
     }
     override fun normalizeServer(value: String): Result<String> = Result.success(value.trimEnd('/'))
     override suspend fun login(username: String, password: String): UserProfile =
         UserProfile(id = 7, username = username, email = "$username@example.com")
-    override suspend fun logout() { logoutCalls++ }
+    override suspend fun sendRegistrationCode(email: String, preferredLocale: String) {
+        registrationLocale = preferredLocale
+    }
+    override suspend fun register(
+        username: String, password: String, email: String, verificationCode: String, preferredLocale: String,
+    ): RegistrationResult {
+        registrationLocale = preferredLocale
+        return RegistrationResult(9, username)
+    }
+    override suspend fun forgotPassword(email: String) = Unit
+    override suspend fun resetPassword(email: String, code: String, newPassword: String) = Unit
+    override suspend fun getCurrentUser(): UserProfile = profile
+    override suspend fun updatePreferredLocale(locale: String): UserProfile = profile.copy(preferredLocale = locale).also {
+        profile = it
+    }
+    override suspend fun logout() {
+        logoutCalls++
+        events?.add("logout")
+    }
+}
+
+private class TestLocaleController : ApplicationLocaleController {
+    private var value = MobileLocale.ENGLISH_US
+    override fun currentLocale(): MobileLocale = value
+    override fun applyLocale(locale: MobileLocale) { value = locale }
+}
+
+private class TestThemeStore : ThemePreferenceStore {
+    private val state = MutableStateFlow(ThemeMode.SYSTEM)
+    override val themeMode: Flow<ThemeMode> = state
+    override suspend fun setThemeMode(mode: ThemeMode) { state.value = mode }
 }
 
 private class FakeFiles : AppFileOperations {
@@ -556,7 +695,7 @@ private class FakeFiles : AppFileOperations {
     override suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig = error("unused")
 }
 
-private class FakeTransfers : AppTransferOperations {
+private class FakeTransfers(private val events: MutableList<String>? = null) : AppTransferOperations {
     val mutableTasks = MutableStateFlow<List<TransferTask>>(emptyList())
     override val tasks: Flow<List<TransferTask>> = mutableTasks
     var clearCalls = 0
@@ -582,6 +721,7 @@ private class FakeTransfers : AppTransferOperations {
     override suspend fun resumeWaitingForLogin() = Unit
     override suspend fun clearForLogout() {
         clearCalls++
+        events?.add("clear-transfers")
         mutableTasks.value = emptyList()
     }
     override suspend fun clearFinished(): Int = 0

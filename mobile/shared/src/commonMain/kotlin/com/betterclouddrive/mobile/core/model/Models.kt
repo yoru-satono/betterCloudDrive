@@ -26,6 +26,22 @@ data class PageResult<T>(
 
 @Serializable data class LoginRequest(val username: String, val password: String)
 @Serializable data class RefreshRequest(@SerialName("refreshToken") val refreshToken: String)
+@Serializable data class RegisterCodeRequest(val email: String, @SerialName("preferredLocale") val preferredLocale: String)
+@Serializable data class RegisterRequest(
+    val username: String,
+    val password: String,
+    val email: String,
+    @SerialName("verificationCode") val verificationCode: String,
+    @SerialName("preferredLocale") val preferredLocale: String,
+)
+@Serializable data class RegistrationResult(val userId: Long, val username: String)
+@Serializable data class ForgotPasswordRequest(val email: String)
+@Serializable data class ResetPasswordRequest(
+    val email: String,
+    val code: String,
+    @SerialName("newPassword") val newPassword: String,
+)
+@Serializable data class UpdateLocaleRequest(@SerialName("preferredLocale") val preferredLocale: String)
 
 @Serializable
 data class AuthTokens(
@@ -39,8 +55,17 @@ data class UserProfile(
     val id: Long = 0,
     val username: String = "",
     val email: String = "",
-    @SerialName("preferredLocale") val preferredLocale: String = "zh-Hans",
+    @SerialName("emailVerified") val emailVerified: Boolean = false,
+    @SerialName("preferredLocale") val preferredLocale: String = "en-US",
+    val nickname: String? = null,
+    @SerialName("avatarUrl") val avatarUrl: String? = null,
     val role: String = "ROLE_USER",
+    val status: Int = 1,
+    @SerialName("storageQuota") val storageQuota: Long = 0,
+    @SerialName("storageUsed") val storageUsed: Long = 0,
+    @SerialName("webdavEnabled") val webdavEnabled: Boolean = false,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
 )
 
 @Serializable

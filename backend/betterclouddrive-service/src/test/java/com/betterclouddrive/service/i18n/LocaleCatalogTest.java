@@ -11,12 +11,16 @@ class LocaleCatalogTest {
 
     @Test
     void discoversEveryMailBundleLocale() {
-        assertThat(catalog.supportedLocales()).containsExactly("en-US", "zh-Hans");
+        assertThat(catalog.supportedLocales()).containsExactly("en-US", "zh-CN", "zh-Hans", "zh-SG");
     }
 
     @Test
     void normalizesSupportedLanguageTagsAndUsesTheDefaultForMissingValues() {
         assertThat(catalog.normalize("en-us")).isEqualTo("en-US");
+        assertThat(catalog.normalize("zh-cn")).isEqualTo("zh-CN");
+        assertThat(catalog.normalize("zh-sg")).isEqualTo("zh-SG");
+        assertThat(catalog.bundleLocale("zh-CN")).isEqualTo("zh-Hans");
+        assertThat(catalog.bundleLocale("zh-SG")).isEqualTo("zh-Hans");
         assertThat(catalog.normalize(null)).isEqualTo("zh-Hans");
         assertThat(catalog.resolveOrDefault("not-a-supported-locale")).isEqualTo("zh-Hans");
     }

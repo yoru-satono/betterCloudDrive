@@ -58,6 +58,14 @@ public class LocaleCatalog {
         return supportedLocales;
     }
 
+    public String bundleLocale(String localeTag) {
+        String normalized = resolveOrDefault(localeTag);
+        return switch (normalized) {
+            case "zh-CN", "zh-SG" -> "zh-Hans";
+            default -> normalized;
+        };
+    }
+
     private Set<String> discover() {
         try {
             Resource[] resources = new PathMatchingResourcePatternResolver().getResources(RESOURCE_PATTERN);
@@ -67,6 +75,10 @@ public class LocaleCatalog {
                 if (filename == null || !filename.startsWith(PREFIX) || !filename.endsWith(SUFFIX)) continue;
                 String bundleSuffix = filename.substring(PREFIX.length(), filename.length() - SUFFIX.length());
                 locales.add(canonicalTag(bundleSuffix.replace('_', '-')));
+            }
+            if (locales.contains("zh-Hans")) {
+                locales.add("zh-CN");
+                locales.add("zh-SG");
             }
             if (locales.isEmpty()) throw new BeanInitializationException("No mail locale resources found");
             return Collections.unmodifiableSet(locales);

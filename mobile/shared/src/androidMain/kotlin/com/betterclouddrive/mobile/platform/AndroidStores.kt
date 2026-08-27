@@ -15,6 +15,8 @@ import com.betterclouddrive.mobile.core.model.SessionStorageInvalidException
 import com.betterclouddrive.mobile.core.network.BackendClient
 import com.betterclouddrive.mobile.core.platform.SecureSessionStore
 import com.betterclouddrive.mobile.core.platform.ServerSettingsStore
+import com.betterclouddrive.mobile.core.platform.ThemeMode
+import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -38,6 +40,22 @@ internal class AndroidServerSettingsStore(
 
     private companion object {
         val SERVER_KEY = stringPreferencesKey("server_base_url")
+    }
+}
+
+internal class AndroidThemePreferenceStore(
+    private val dataStore: DataStore<Preferences>,
+) : ThemePreferenceStore {
+    override val themeMode: Flow<ThemeMode> = dataStore.data.map { preferences ->
+        preferences[THEME_KEY]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM
+    }
+
+    override suspend fun setThemeMode(mode: ThemeMode) {
+        dataStore.edit { it[THEME_KEY] = mode.name }
+    }
+
+    private companion object {
+        val THEME_KEY = stringPreferencesKey("theme_mode")
     }
 }
 

@@ -5,6 +5,7 @@ import androidx.compose.ui.Modifier
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PreviewKind
 import com.betterclouddrive.mobile.core.localization.UiMessage
+import com.betterclouddrive.mobile.core.localization.MobileLocale
 import com.betterclouddrive.mobile.core.model.StoredSession
 import io.ktor.client.HttpClient
 import io.ktor.client.request.forms.InputProvider
@@ -65,6 +66,18 @@ interface DocumentPicker {
 
     @Composable
     fun rememberDownloadLauncher(onPicked: (PickedDestination) -> Unit): (DownloadRequest) -> Unit
+}
+
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+interface ThemePreferenceStore {
+    val themeMode: Flow<ThemeMode>
+    suspend fun setThemeMode(mode: ThemeMode)
+}
+
+interface ApplicationLocaleController {
+    fun currentLocale(): MobileLocale
+    fun applyLocale(locale: MobileLocale)
 }
 
 interface TransferFileAccess {

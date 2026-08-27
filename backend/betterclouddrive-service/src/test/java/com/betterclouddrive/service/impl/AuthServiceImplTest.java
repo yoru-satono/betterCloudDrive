@@ -318,6 +318,18 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void sendRegistrationCode_shouldPreserveSupportedChineseRegions() {
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+
+        authService.sendRegistrationCode("cn@test.com", "zh-CN");
+        authService.sendRegistrationCode("sg@test.com", "zh-SG");
+
+        verify(emailService).sendVerificationCode(eq("cn@test.com"), anyString(), eq("zh-CN"));
+        verify(emailService).sendVerificationCode(eq("sg@test.com"), anyString(), eq("zh-SG"));
+    }
+
+    @Test
     void sendRegistrationCode_shouldRejectAnUndiscoveredLocale() {
         assertThatThrownBy(() -> authService.sendRegistrationCode("fr@test.com", "fr-FR"))
                 .isInstanceOf(BusinessException.class)

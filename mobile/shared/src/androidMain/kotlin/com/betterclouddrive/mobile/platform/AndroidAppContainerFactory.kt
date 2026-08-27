@@ -10,6 +10,8 @@ import com.betterclouddrive.mobile.core.localization.PlatformLocaleProvider
 import com.betterclouddrive.mobile.core.localization.MobileStrings
 import com.betterclouddrive.mobile.core.localization.loadMobileStrings
 import com.betterclouddrive.mobile.core.localization.resolveMobileLocale
+import com.betterclouddrive.mobile.core.localization.MobileLocale
+import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
 import com.betterclouddrive.mobile.core.network.BackendClient
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
 import com.betterclouddrive.mobile.feature.files.FileRepository
@@ -23,12 +25,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 
 object AndroidAppContainerFactory {
     fun create(context: Context): AppContainer {
         val appContext = context.applicationContext
         val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val settings = AndroidServerSettingsStore(createPreferencesStore(appContext, "bcd_settings"))
+        val appearance = AndroidThemePreferenceStore(createPreferencesStore(appContext, "bcd_appearance"))
         val sessions = AndroidSecureSessionStore(
             createPreferencesStore(appContext, "bcd_session"),
             appContext.packageName,
@@ -65,8 +70,19 @@ object AndroidAppContainerFactory {
             officeRenderer = AndroidOfficeRenderer(),
             mediaPreviewRenderer = AndroidMediaPreviewRenderer(),
             localeProvider = AndroidLocaleProvider(appContext),
+            localeController = AndroidApplicationLocaleController(appContext),
+            themePreferences = appearance,
             applicationScope = applicationScope,
         )
+    }
+}
+
+internal class AndroidApplicationLocaleController(private val context: Context) : ApplicationLocaleController {
+    override fun currentLocale(): MobileLocale = resolveMobileLocale(AndroidLocaleProvider(context).preferredLanguageTags())
+
+    override fun applyLocale(locale: MobileLocale) {
+        if (currentLocale() == locale) return
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(locale.languageTag))
     }
 }
 

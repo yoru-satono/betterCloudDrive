@@ -12,6 +12,7 @@ if (process.platform === 'linux') {
 const child = spawn(pnpm, args, {
   env,
   stdio: 'inherit',
+  shell: process.platform === 'win32',
   windowsHide: true,
 })
 

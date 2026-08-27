@@ -2,6 +2,7 @@ package com.betterclouddrive.mobile.app
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BugReport
@@ -34,6 +37,7 @@ import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,8 +53,10 @@ import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.UserProfile
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.MobileLocale
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
+import com.betterclouddrive.mobile.core.platform.ThemeMode
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
@@ -211,26 +217,115 @@ private fun TransferRow(
 
 @Composable
 fun ProfileScreen(
-    user: UserProfile?,
-    server: String,
+    state: AppUiState,
     debugToolsEnabled: Boolean,
     onOpenDiagnostics: () -> Unit,
+    onRefresh: () -> Unit,
+    onLocale: (MobileLocale) -> Unit,
+    onTheme: (ThemeMode) -> Unit,
+    onRequestServerSwitch: (String) -> Unit,
+    onCancelServerSwitch: () -> Unit,
+    onConfirmServerSwitch: () -> Unit,
     onLogout: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).testTag("profile-content"),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    val user = state.user
+    var serverInput by remember(state.server) { mutableStateOf(state.server) }
+    val quota = user?.storageQuota?.coerceAtLeast(0) ?: 0
+    val used = user?.storageUsed?.coerceAtLeast(0) ?: 0
+    val percent = if (quota > 0) ((used.toDouble() / quota) * 100).toInt().coerceIn(0, 100) else 0
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        LazyVerticalGrid(
+            columns = if (maxWidth >= 600.dp) GridCells.Fixed(2) else GridCells.Fixed(1),
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).testTag("profile-content"),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(strings[MobileString.Account], style = MaterialTheme.typography.titleMedium)
+                    Text(strings[MobileString.AccountDetails], style = MaterialTheme.typography.titleMedium)
                     InfoRow(strings[MobileString.Username], user?.username.orEmpty())
                     InfoRow(strings[MobileString.Email], user?.email?.ifBlank { strings[MobileString.NotSet] } ?: strings[MobileString.NotSet])
+                    InfoRow(
+                        strings[MobileString.EmailVerified],
+                        strings[if (user?.emailVerified == true) MobileString.EmailVerified else MobileString.EmailUnverified],
+                    )
+                    InfoRow(strings[MobileString.Role], user?.role.orEmpty())
+                    InfoRow(strings[MobileString.RegisteredAt], user?.createdAt ?: strings[MobileString.NotSet])
+                    state.account.profileError?.let { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) }
+                    OutlinedButton(onClick = onRefresh, enabled = !state.account.profileRefreshing) {
+                        Text(strings[MobileString.RefreshProfile])
+                    }
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(strings[MobileString.Storage], style = MaterialTheme.typography.titleMedium)
+                    Text(strings.format(MobileString.StorageUsage, formatBytes(used), formatBytes(quota), percent))
+                    LinearProgressIndicator(progress = { percent / 100f }, modifier = Modifier.fillMaxWidth())
+                    if (percent >= 90) Text(strings[MobileString.StorageNearQuota], color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings[MobileString.Language], style = MaterialTheme.typography.titleMedium)
+                    listOf(
+                        MobileLocale.ENGLISH_US to MobileString.LanguageEnglish,
+                        MobileLocale.SIMPLIFIED_CHINESE_CN to MobileString.LanguageChineseCn,
+                        MobileLocale.SIMPLIFIED_CHINESE_SG to MobileString.LanguageChineseSg,
+                    ).forEach { (locale, label) ->
+                        OutlinedButton(
+                            onClick = { onLocale(locale) },
+                            enabled = !state.account.localeSaving && state.account.locale != locale,
+                            modifier = Modifier.fillMaxWidth().testTag("profile-locale-${locale.languageTag}"),
+                        ) { Text(strings[label]) }
+                    }
+                    state.account.localeError?.let { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(strings[MobileString.Appearance], style = MaterialTheme.typography.titleMedium)
+                    listOf(
+                        ThemeMode.SYSTEM to MobileString.ThemeSystem,
+                        ThemeMode.LIGHT to MobileString.ThemeLight,
+                        ThemeMode.DARK to MobileString.ThemeDark,
+                    ).forEach { (mode, label) ->
+                        OutlinedButton(
+                            onClick = { onTheme(mode) },
+                            enabled = state.account.themeMode != mode,
+                            modifier = Modifier.fillMaxWidth().testTag("profile-theme-${mode.name.lowercase()}"),
+                        ) { Text(strings[label]) }
+                    }
+                }
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(strings[MobileString.CurrentServer], style = MaterialTheme.typography.titleMedium)
+                    OutlinedTextField(
+                        value = serverInput,
+                        onValueChange = { serverInput = it },
+                        label = { Text(strings[MobileString.ServerAddress]) },
+                        modifier = Modifier.fillMaxWidth().testTag("profile-server"),
+                    )
+                    state.account.serverError?.let { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) }
+                    OutlinedButton(
+                        onClick = { onRequestServerSwitch(serverInput) },
+                        enabled = !state.account.serverSwitching,
+                        modifier = Modifier.fillMaxWidth().testTag("profile-switch-server"),
+                    ) { Text(strings[MobileString.SwitchServer]) }
                     HorizontalDivider()
-                    InfoRow(strings[MobileString.CurrentServer], server)
+                    InfoRow(strings[MobileString.CurrentServer], state.server)
                 }
             }
         }
@@ -246,17 +341,41 @@ fun ProfileScreen(
                 }
             }
         }
-        item {
-            OutlinedButton(
-                onClick = onLogout,
-                modifier = Modifier.fillMaxWidth().testTag("profile-logout"),
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
-                Spacer(Modifier.padding(horizontal = 4.dp))
-                Text(strings[MobileString.Logout])
+            item {
+                OutlinedButton(
+                    onClick = onLogout,
+                    modifier = Modifier.fillMaxWidth().testTag("profile-logout"),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null)
+                    Spacer(Modifier.padding(horizontal = 4.dp))
+                    Text(strings[MobileString.Logout])
+                }
             }
         }
     }
+    if (state.account.serverSwitchConfirming) {
+        AlertDialog(
+            onDismissRequest = onCancelServerSwitch,
+            title = { Text(strings[MobileString.SwitchServerTitle]) },
+            text = { Text(strings[MobileString.SwitchServerMessage]) },
+            confirmButton = {
+                Button(onClick = onConfirmServerSwitch, enabled = !state.account.serverSwitching) {
+                    Text(strings[MobileString.Confirm])
+                }
+            },
+            dismissButton = { OutlinedButton(onClick = onCancelServerSwitch) { Text(strings[MobileString.Cancel]) } },
+        )
+    }
+}
+
+private fun formatBytes(value: Long): String {
+    if (value < 1024) return "$value B"
+    val units = listOf("KiB", "MiB", "GiB", "TiB")
+    var amount = value.toDouble()
+    var index = -1
+    do { amount /= 1024.0; index++ } while (amount >= 1024 && index < units.lastIndex)
+    val rounded = (amount * 10).toLong() / 10.0
+    return "$rounded ${units[index]}"
 }
 
 @Composable

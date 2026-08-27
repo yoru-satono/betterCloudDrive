@@ -213,11 +213,15 @@ function Set-BackendFunctionalTestRateLimits {
         Invoke-External "docker" @("compose", "up", "-d", "--no-deps", "--force-recreate", "backend")
     }
     Wait-DockerServiceHealthy "backend"
+    Invoke-External "docker" @("compose", "restart", "frontend")
+    Wait-DockerServiceHealthy "frontend"
 }
 
 function Restore-BackendDefaultRateLimits {
     Invoke-External "docker" @("compose", "up", "-d", "--no-deps", "--force-recreate", "backend")
     Wait-DockerServiceHealthy "backend"
+    Invoke-External "docker" @("compose", "restart", "frontend")
+    Wait-DockerServiceHealthy "frontend"
 }
 
 function Invoke-InDirectory {
@@ -358,16 +362,21 @@ try {
 
     if ($RunWeb) {
         Invoke-Step "Web E2E tests" {
-            Invoke-InDirectory "frontend" {
-                $webEnv = @{
-                    E2E_USE_DOCKER = "1"
-                    E2E_BASE_URL = "http://127.0.0.1:3000"
-                    E2E_BACKEND_URL = "http://127.0.0.1:8080"
-                    E2E_ONLYOFFICE = "0"
+            Set-BackendFunctionalTestRateLimits
+            try {
+                Invoke-InDirectory "frontend" {
+                    $webEnv = @{
+                        E2E_USE_DOCKER = "1"
+                        E2E_BASE_URL = "http://127.0.0.1:3000"
+                        E2E_BACKEND_URL = "http://127.0.0.1:8080"
+                        E2E_ONLYOFFICE = "0"
+                    }
+                    Invoke-WithEnv $webEnv {
+                        Invoke-External "pnpm" @("exec", "playwright", "test", "--project=core")
+                    }
                 }
-                Invoke-WithEnv $webEnv {
-                    Invoke-External "pnpm" @("exec", "playwright", "test", "--project=core")
-                }
+            } finally {
+                Restore-BackendDefaultRateLimits
             }
         }
     }

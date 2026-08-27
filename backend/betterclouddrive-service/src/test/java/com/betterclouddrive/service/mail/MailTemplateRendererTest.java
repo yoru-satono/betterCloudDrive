@@ -16,12 +16,16 @@ class MailTemplateRendererTest {
     void verificationRendersLocalizedMultipartBodies() {
         RenderedEmail english = renderer.render("verification", "en-US", Map.of("code", "123456"));
         RenderedEmail chinese = renderer.render("verification", "zh-Hans", Map.of("code", "654321"));
+        RenderedEmail mainland = renderer.render("verification", "zh-CN", Map.of("code", "112233"));
+        RenderedEmail singapore = renderer.render("verification", "zh-SG", Map.of("code", "445566"));
 
         assertThat(english.subject()).isEqualTo("Verify your BetterCloudDrive email");
         assertThat(english.html()).contains("#f7f8fa", "#007a65", "123456", "BetterCloudDrive");
         assertThat(english.plainText()).contains("Verify your email", "123456");
         assertThat(chinese.subject()).isEqualTo("BetterCloudDrive 邮箱验证");
         assertThat(chinese.html()).contains("验证你的邮箱", "654321");
+        assertThat(mainland.html()).contains("验证你的邮箱", "112233");
+        assertThat(singapore.html()).contains("验证你的邮箱", "445566");
     }
 
     @Test

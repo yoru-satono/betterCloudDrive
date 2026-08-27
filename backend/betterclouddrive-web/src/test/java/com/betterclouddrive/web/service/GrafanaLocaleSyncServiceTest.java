@@ -39,6 +39,8 @@ class GrafanaLocaleSyncServiceTest {
     @Test
     void mapsApplicationLocalesToGrafanaLocales() {
         assertThat(service.grafanaLocale("zh-Hans")).isEqualTo("zh-Hans");
+        assertThat(service.grafanaLocale("zh-CN")).isEqualTo("zh-Hans");
+        assertThat(service.grafanaLocale("zh-SG")).isEqualTo("zh-Hans");
         assertThat(service.grafanaLocale("en-US")).isEqualTo("en-US");
         assertThat(service.grafanaLocale(null)).isEqualTo("zh-Hans");
     }

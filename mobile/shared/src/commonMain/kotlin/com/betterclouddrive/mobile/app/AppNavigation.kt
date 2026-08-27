@@ -65,7 +65,9 @@ import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.MobileStrings
+import com.betterclouddrive.mobile.core.localization.MobileLocale
 import com.betterclouddrive.mobile.core.localization.UiMessage
+import com.betterclouddrive.mobile.core.platform.ThemeMode
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
 import com.betterclouddrive.mobile.core.platform.MediaPreviewRenderer
@@ -115,6 +117,12 @@ data class ProductShellActions(
     val cancel: (String) -> Unit,
     val retry: (String) -> Unit,
     val clearFinishedTransfers: () -> Unit,
+    val refreshProfile: () -> Unit = {},
+    val updateAccountLocale: (MobileLocale) -> Unit = {},
+    val setThemeMode: (ThemeMode) -> Unit = {},
+    val requestServerSwitch: (String) -> Unit = {},
+    val cancelServerSwitch: () -> Unit = {},
+    val confirmServerSwitch: () -> Unit = {},
     val logout: () -> Unit,
     val loadDiagnosticOffice: (Long, Long) -> Unit,
     val updateDiagnosticStatus: (UiMessage) -> Unit,
@@ -470,7 +478,19 @@ private fun AppNavHost(
             )
         }
         composable<ProfileRoute> {
-            ProfileScreen(state.user, state.server, debugToolsEnabled, onOpenDiagnostics, actions.logout)
+            LaunchedEffect(Unit) { actions.refreshProfile() }
+            ProfileScreen(
+                state = state,
+                debugToolsEnabled = debugToolsEnabled,
+                onOpenDiagnostics = onOpenDiagnostics,
+                onRefresh = actions.refreshProfile,
+                onLocale = actions.updateAccountLocale,
+                onTheme = actions.setThemeMode,
+                onRequestServerSwitch = actions.requestServerSwitch,
+                onCancelServerSwitch = actions.cancelServerSwitch,
+                onConfirmServerSwitch = actions.confirmServerSwitch,
+                onLogout = actions.logout,
+            )
         }
         if (debugToolsEnabled) {
             composable<DiagnosticsRoute> {

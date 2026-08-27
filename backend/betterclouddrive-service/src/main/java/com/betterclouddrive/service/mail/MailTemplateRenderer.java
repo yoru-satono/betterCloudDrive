@@ -25,7 +25,7 @@ public class MailTemplateRenderer {
 
     public RenderedEmail render(String messageKey, String localeTag, Map<String, Object> variables) {
         messageKey = semanticKey(messageKey);
-        Locale locale = Locale.forLanguageTag(localeCatalog.resolveOrDefault(localeTag));
+        Locale locale = Locale.forLanguageTag(localeCatalog.bundleLocale(localeTag));
         ResourceBundle messages = ResourceBundle.getBundle(
                 BUNDLE, locale, ResourceBundle.Control.getNoFallbackControl(ResourceBundle.Control.FORMAT_PROPERTIES));
         Map<String, Object> model = new LinkedHashMap<>();

@@ -13,6 +13,12 @@ import com.betterclouddrive.mobile.core.model.InitUploadResult
 import com.betterclouddrive.mobile.core.model.InstantUploadRequest
 import com.betterclouddrive.mobile.core.model.InstantUploadResult
 import com.betterclouddrive.mobile.core.model.LoginRequest
+import com.betterclouddrive.mobile.core.model.RegisterCodeRequest
+import com.betterclouddrive.mobile.core.model.RegisterRequest
+import com.betterclouddrive.mobile.core.model.RegistrationResult
+import com.betterclouddrive.mobile.core.model.ForgotPasswordRequest
+import com.betterclouddrive.mobile.core.model.ResetPasswordRequest
+import com.betterclouddrive.mobile.core.model.UpdateLocaleRequest
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.PersonalFileDestinationRequest
@@ -158,6 +164,13 @@ class BackendClient(
         client.get(url("auth/me")) { bearer(token) }
     }
 
+    suspend fun updatePreferredLocale(locale: String): UserProfile = authenticatedEnvelope { token ->
+        client.put(url("auth/preferences/locale")) {
+            bearer(token)
+            jsonBody(UpdateLocaleRequest(locale))
+        }
+    }
+
     suspend fun logout() {
         try {
             authenticatedNoData { token ->
@@ -254,6 +267,36 @@ class BackendClient(
             }
         }
         return page.records
+    }
+
+    suspend fun sendRegistrationCode(email: String, preferredLocale: String) {
+        publicNoData {
+            client.post(url("auth/register-code/send")) {
+                jsonBody(RegisterCodeRequest(email, preferredLocale))
+            }
+        }
+    }
+
+    suspend fun register(
+        username: String,
+        password: String,
+        email: String,
+        verificationCode: String,
+        preferredLocale: String,
+    ): RegistrationResult = publicEnvelope {
+        client.post(url("auth/register")) {
+            jsonBody(RegisterRequest(username, password, email, verificationCode, preferredLocale))
+        }
+    }
+
+    suspend fun forgotPassword(email: String) {
+        publicNoData { client.post(url("auth/forgot-password")) { jsonBody(ForgotPasswordRequest(email)) } }
+    }
+
+    suspend fun resetPassword(email: String, code: String, newPassword: String) {
+        publicNoData {
+            client.post(url("auth/reset-password")) { jsonBody(ResetPasswordRequest(email, code, newPassword)) }
+        }
     }
 
     suspend fun searchPersonalFiles(query: String, page: Int, size: Int): PageResult<FileItem> =
@@ -456,6 +499,16 @@ class BackendClient(
                 clearSession(if (envelope.code == TOKEN_REVOKED) SessionInvalidationReason.REVOKED else SessionInvalidationReason.EXPIRED)
                 throw SessionExpiredException()
             }
+            throw ApiException(envelope.code, envelope.messageKey, envelope.messageParams, envelope.requestId)
+        }
+    }
+
+    private suspend inline fun <reified T> publicEnvelope(request: suspend () -> HttpResponse): T =
+        request().decodeEnvelope<T>().requireData()
+
+    private suspend fun publicNoData(request: suspend () -> HttpResponse) {
+        val envelope = request().decodeEnvelope<JsonElement>()
+        if (envelope.code != 200) {
             throw ApiException(envelope.code, envelope.messageKey, envelope.messageParams, envelope.requestId)
         }
     }

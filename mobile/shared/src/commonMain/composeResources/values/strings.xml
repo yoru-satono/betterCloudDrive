@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP mobile · Stage 8</string>
+    <string name="stage_label">KMP mobile · Stage 9</string>
     <string name="restore_title">Can&apos;t connect to the server</string>
     <string name="session_preserved">Your local session remains encrypted</string>
     <string name="retry">Retry</string>
@@ -172,4 +172,40 @@
     <string name="preview_read_only">Read-only preview</string>
     <string name="error_preview_failed">Preview could not be loaded. Try again.</string>
     <string name="retry_preview">Retry preview</string>
+    <string name="register">Create account</string>
+    <string name="forgot_password">Forgot password?</string>
+    <string name="verification_code">Verification code</string>
+    <string name="send_code">Send code</string>
+    <string name="resend_in">Resend in {0}s</string>
+    <string name="confirm_password">Confirm password</string>
+    <string name="back_to_login">Back to sign in</string>
+    <string name="registration_success">Account created. Sign in with your username.</string>
+    <string name="reset_password">Reset password</string>
+    <string name="new_password">New password</string>
+    <string name="reset_code_sent">If the account exists, a reset code has been sent.</string>
+    <string name="reset_success">Password reset. Sign in with your new password.</string>
+    <string name="language">Language</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese_cn">Simplified Chinese (Mainland China)</string>
+    <string name="language_chinese_sg">Simplified Chinese (Singapore)</string>
+    <string name="appearance">Appearance</string>
+    <string name="theme_system">Follow system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="account_details">Account details</string>
+    <string name="email_verified">Email verified</string>
+    <string name="email_unverified">Email not verified</string>
+    <string name="role">Role</string>
+    <string name="registered_at">Registered</string>
+    <string name="storage">Storage</string>
+    <string name="storage_usage">{0} of {1} used ({2}%)</string>
+    <string name="storage_near_quota">Storage is nearly full</string>
+    <string name="switch_server">Switch server</string>
+    <string name="switch_server_title">Switch server?</string>
+    <string name="switch_server_message">This signs you out and removes transfers and temporary files for the current server.</string>
+    <string name="refresh_profile">Refresh profile</string>
+    <string name="error_rate_limited">Too many requests. Try again later.</string>
+    <string name="error_verification_expired">The verification code has expired.</string>
+    <string name="error_verification_code">The verification code is incorrect.</string>
+    <string name="error_account_conflict">The username or email is already in use.</string>
 </resources>

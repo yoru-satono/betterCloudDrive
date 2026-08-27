@@ -2,7 +2,7 @@
 
 BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务端只传递稳定的文案键和结构化参数，由 Web/Tauri 与 Android 使用本地简体中文或英文资源渲染；选择原因见[语义本地化 ADR](../decisions/008-semantic-localization.md)。
 
-客户端支持 `zh-Hans` 和 `en-US`。未登录时使用当前设备已保存的选择，首次访问按系统语言选择；注册会保存当前语言。登录后以账号的 `preferredLocale` 为准，并同步到当前设备。全新数据库实例中的账号默认使用 `zh-Hans`。
+后端账号偏好接受 `en-US`、`zh-Hans`、`zh-CN` 和 `zh-SG`。未登录时使用当前设备已保存的选择，首次访问按系统语言选择；注册会保存当前语言。登录后以账号的 `preferredLocale` 为准，并同步到当前设备。全新数据库实例中的账号默认使用 `zh-Hans`。
 
 ## API 响应
 
@@ -65,17 +65,17 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 - KMP 默认英语资源位于 `mobile/shared/src/commonMain/composeResources/values`，简体中文资源分别位于 `values-zh-rCN` 和 `values-zh-rSG`；所有目录使用相同且不带语言前缀的稳定资源键。生产 Kotlin 源码不得硬编码用户可见文本。
 - 当前支持 `en-US`、`zh-CN` 与 `zh-SG`。`zh-CN`、`zh-Hans-CN`、`zh-SG`、`zh-Hans-SG` 选择对应简体资源；`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO`、无限定 `zh`、无地区 `zh-Hans` 和其他语言回退英语，不能把繁体中文区域误映射为简体。
 - Compose Multiplatform 1.11.1 尚不支持 `Hans/Hant` 脚本资源限定符，因此 KMP 当前使用明确地区目录。未来繁体中文通过增加 TW、HK、MO 地区目录实现，不修改资源键或业务调用。
-- Android 13+ 通过系统应用语言页面选择英语、中国大陆简体中文或新加坡简体中文；Android 12 及以下跟随系统。阶段 9 前不提供应用内语言入口，也不读取或写入账号 `preferredLocale`。
+- 认证页和“我的”可选择英语、中国大陆简体中文或新加坡简体中文；Android 13+ 系统应用语言页面提供相同列表。未登录选择立即持久化；登录或恢复后使用账号精确地区，历史账号值 `zh-Hans` 映射为 `zh-CN`。登录后修改语言先写后端，失败时不改变设备语言。
 - 控制器和持久化任务只保存稳定消息描述或语义键，在 Compose 显示和 Android 发通知时按当前语言解析，因此语言变化不会把旧语言固化进状态或 Room。
 
 ## 服务端文本边界
 
 - 固定日志、内部诊断和数据库注释使用英文。
-- 邮件由服务端外部 HTML/纯文本模板生成，支持 `zh-Hans` 与 `en-US`，不复用客户端翻译文本。已注册收件人优先使用账号语言，外部收件人使用操作发起人的语言。
+- 邮件由服务端外部 HTML/纯文本模板生成，不复用客户端翻译文本。服务端接受 `en-US`、`zh-Hans`、`zh-CN` 与 `zh-SG`；CN、SG 当前复用 `zh-Hans` 简体模板。已注册收件人优先使用账号语言，外部收件人使用操作发起人的语言。
 - 后端生产源码、资源及 DDL 不应包含面向用户的中文；测试中的显式 Unicode 用户输入样本除外。
 
 ## 兼容性与数据库
 
 数据库仅提供面向全新实例的合并基线。`V1__schema.sql` 直接包含规范化 BCP 47 语言偏好字段和语义化 message key 字段，不提供旧数据库或旧 snake_case key 的原地升级路径。
 
-管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。应用 locale 与 Grafana locale 独立映射，目前 `zh-Hans` 对应 `zh-Hans`，`en-US` 对应 `en-US`；Grafana 同步失败不会影响主应用语言保存或管理员排障入口。
+管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。`zh-Hans`、`zh-CN` 和 `zh-SG` 均映射到 Grafana 的 `zh-Hans`，`en-US` 保持不变；Web/Tauri 和旧 Android 同样把 CN、SG 映射到现有 `zh-Hans` 词典。映射不改写账号保存的精确地区，Grafana 同步失败也不会影响主应用语言保存或管理员排障入口。

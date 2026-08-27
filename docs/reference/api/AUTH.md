@@ -19,7 +19,7 @@ POST /api/v1/auth/register
   "password": "Pass123456",     // 必填，8-128 字符，必须包含大写字母、小写字母和数字
   "email": "zhangsan@example.com", // 必填，邮箱格式
   "verificationCode": "123456",    // 必填，6 位邮箱验证码
-  "preferredLocale": "zh-Hans"     // 可选，当前支持 zh-Hans、en-US
+  "preferredLocale": "zh-CN"       // 可选，支持 en-US、zh-Hans、zh-CN、zh-SG
 }
 ```
 
@@ -268,7 +268,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-当前支持 `zh-Hans` 和 `en-US`。成功后返回更新后的当前用户资料，结构同 `GET /api/v1/auth/me`。管理员修改语言时，后端还会尽力同步 Grafana 语言；Grafana 同步失败不影响主应用偏好保存。
+当前支持 `en-US`、`zh-Hans`、`zh-CN` 和 `zh-SG`。成功后返回更新后的当前用户资料，结构同 `GET /api/v1/auth/me`。CN、SG 会作为精确账号偏好保存；Web/Tauri、旧 Android 与 Grafana 渲染时兼容映射到 `zh-Hans`。管理员修改语言时，后端还会尽力同步 Grafana；同步失败不影响主应用偏好保存。
 
 ---
 

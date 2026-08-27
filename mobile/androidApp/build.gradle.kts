@@ -11,8 +11,8 @@ android {
         applicationId = "com.betterclouddrive.mobile.spike"
         minSdk = 26
         targetSdk = 37
-        versionCode = 9
-        versionName = "0.9.0-stage8"
+        versionCode = 10
+        versionName = "0.10.0-stage9"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -36,7 +36,9 @@ dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.appcompat)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.runner)
