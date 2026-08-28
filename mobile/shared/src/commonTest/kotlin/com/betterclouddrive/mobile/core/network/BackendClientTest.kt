@@ -3,6 +3,9 @@ package com.betterclouddrive.mobile.core.network
 import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.StoredSession
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
+import com.betterclouddrive.mobile.core.model.CreatePersonalShareRequest
+import com.betterclouddrive.mobile.core.model.ShareExpirationFilter
+import com.betterclouddrive.mobile.core.model.UpdatePersonalShareRequest
 import com.betterclouddrive.mobile.core.platform.SecureSessionStore
 import com.betterclouddrive.mobile.core.platform.ServerSettingsStore
 import com.betterclouddrive.mobile.feature.transfers.TransferScope
@@ -183,6 +186,43 @@ class BackendClientTest {
             it.first == HttpMethod.Put && it.second.endsWith("/files/7/tags") && it.third == """{"tagIds":[3]}"""
         })
         assertTrue(observed.any { it.first == HttpMethod.Delete && it.second.endsWith("/tags/3/files/7") })
+    }
+
+    @Test
+    fun personalShareLifecycleUsesFiltersEpochAndExplicitClearFields() = runTest {
+        val observed = mutableListOf<Triple<HttpMethod, String, String>>()
+        val shareJson = """{"id":5,"fileId":7,"shareCode":"share123","shareUrl":"https://drive.example.com/s/share123","hasPassword":true,"expireAtEpochMs":1780000000000,"maxVisits":9,"visitCount":2,"downloadCount":1,"fileName":"report.pdf","fileType":"file","fileSize":42}"""
+        val engine = MockEngine { request ->
+            val body = (request.body as? OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+            observed += Triple(request.method, request.url.toString(), body)
+            when {
+                request.url.encodedPath.endsWith("/password") -> jsonResponse("""{"code":200,"data":{"password":"safe-pass"}}""")
+                request.method == HttpMethod.Delete -> jsonResponse("""{"code":200}""")
+                request.url.encodedPath == "/api/v1/shares" && request.method == HttpMethod.Get ->
+                    jsonResponse("""{"code":200,"data":{"records":[$shareJson],"total":105,"page":2,"size":50,"pages":3}}""")
+                else -> jsonResponse("""{"code":200,"data":$shareJson}""")
+            }
+        }
+        val client = BackendClient(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals("https://drive.example.com/s/share123", client.createPersonalShare(
+            CreatePersonalShareRequest(7, "safe-pass", 1_780_000_000_000, 9),
+        ).shareUrl)
+        assertEquals(105, client.listPersonalShares(" report ", true, ShareExpirationFilter.ACTIVE, 2, 50).total)
+        assertEquals("report.pdf", client.getPersonalShare(5).fileName)
+        assertEquals("safe-pass", client.getPersonalSharePassword(5))
+        client.updatePersonalShare(5, UpdatePersonalShareRequest(clearPassword = true, clearExpireAt = true, clearMaxVisits = true))
+        client.cancelPersonalShare(5)
+
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/shares?q=report&passwordProtected=true&expirationStatus=ACTIVE&page=2&size=50") })
+        assertTrue(observed.any { it.first == HttpMethod.Post && it.third == """{"fileId":7,"password":"safe-pass","expireAt":1780000000000,"maxVisits":9}""" })
+        assertTrue(observed.any { it.first == HttpMethod.Put && it.third == """{"clearPassword":true,"clearExpireAt":true,"clearMaxVisits":true}""" })
+        assertTrue(observed.any { it.first == HttpMethod.Delete && it.second.endsWith("/shares/5") })
     }
 
     @Test

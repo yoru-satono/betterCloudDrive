@@ -19,6 +19,11 @@ class TestCreateShare:
         data = assert_api_ok(r)
         assert "shareCode" in data
         assert len(data["shareCode"]) == 8
+        assert data["shareUrl"] == f"http://localhost:3000/s/{data['shareCode']}"
+        assert data["expireAtEpochMs"] is None
+        assert data["fileName"] == uploaded_file["fileName"]
+        assert data["fileType"] == "file"
+        assert data["fileSize"] == uploaded_file["fileSize"]
 
     def test_create_share_with_password(self, client, auth_headers, uploaded_file):
         r = client.post("/api/v1/shares", json={
@@ -38,7 +43,8 @@ class TestCreateShare:
         r = client.post("/api/v1/shares", json={
             "fileId": uploaded_file["fileId"], "expireAt": future
         }, headers=auth_headers)
-        assert_api_ok(r)
+        data = assert_api_ok(r)
+        assert abs(data["expireAtEpochMs"] - future) < 1000
 
     def test_create_share_with_max_visits(self, client, auth_headers, uploaded_file):
         r = client.post("/api/v1/shares", json={
@@ -89,6 +95,26 @@ class TestUpdateShare:
         }, headers=auth_headers)
         assert_api_ok(r)
 
+    def test_update_share_explicitly_clears_limits(self, client, auth_headers, uploaded_file):
+        future = int((time.time() + 86400) * 1000)
+        created = assert_api_ok(client.post("/api/v1/shares", json={
+            "fileId": uploaded_file["fileId"],
+            "password": "pass123",
+            "expireAt": future,
+            "maxVisits": 5,
+        }, headers=auth_headers))
+
+        updated = assert_api_ok(client.put(f"/api/v1/shares/{created['id']}", json={
+            "clearPassword": True,
+            "clearExpireAt": True,
+            "clearMaxVisits": True,
+        }, headers=auth_headers))
+
+        assert updated["hasPassword"] is False
+        assert updated["expireAt"] is None
+        assert updated["expireAtEpochMs"] is None
+        assert updated["maxVisits"] is None
+
 
 class TestCancelShare:
     def test_cancel_share(self, client, auth_headers, uploaded_file):
@@ -98,6 +124,7 @@ class TestCancelShare:
 
         r2 = client.delete(f"/api/v1/shares/{share_id}", headers=auth_headers)
         assert_api_ok(r2)
+        assert_api_ok(client.delete(f"/api/v1/shares/{share_id}", headers=auth_headers))
 
         # Access should now fail
         r3 = client.post(f"/api/v1/shares/access/{share_code}")
@@ -163,15 +190,12 @@ class TestListSharedFiles:
 
 
 class TestVisitLimit:
-    def test_share_visit_limit_exceeded(self, client, auth_headers, uploaded_file):
-        """maxVisits=0 means zero visits are permitted — any access returns 419005."""
+    def test_share_visit_limit_must_be_positive(self, client, auth_headers, uploaded_file):
+        """A configured visit limit must be a positive integer."""
         r = client.post("/api/v1/shares", json={
             "fileId": uploaded_file["fileId"], "maxVisits": 0
         }, headers=auth_headers)
-        code = r.json()["data"]["shareCode"]
-
-        r2 = client.post(f"/api/v1/shares/access/{code}")
-        assert_api_error(r2, 419005)
+        assert_api_error(r, 400)
 
 
 class TestShareNotification:

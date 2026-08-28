@@ -96,7 +96,7 @@ describe('Tauri desktop window smoke', () => {
 
       await createShareFromContextMenu(file.fileName)
       const clipboardText = await readCapturedClipboardText()
-      assert.match(clipboardText, /^http:\/\/127\.0\.0\.1:3000\/s\/\S+/)
+      assertCanonicalShareUrl(clipboardText)
 
       await openSidebarLink(team.name)
       await expectFileVisible(teamFile.fileName)
@@ -106,7 +106,7 @@ describe('Tauri desktop window smoke', () => {
       await expectTeamFileUploaded(request, user.accessToken, team.id, droppedTeamFileName, droppedTeamFileContents.length)
       await createTeamShareFromContextMenu(droppedTeamFileName)
       const teamClipboardText = await readCapturedClipboardText()
-      assert.match(teamClipboardText, /^http:\/\/127\.0\.0\.1:3000\/s\/\S+/)
+      assertCanonicalShareUrl(teamClipboardText)
       await openTeamSettings()
       await closeTransferQueueIfOpen()
       await sendInviteFromTeamSettings(invitee.email)
@@ -121,6 +121,12 @@ describe('Tauri desktop window smoke', () => {
     }
   })
 })
+
+function assertCanonicalShareUrl(value: string) {
+  const shareUrl = new URL(value)
+  assert.equal(shareUrl.origin, process.env.E2E_PUBLIC_URL || 'http://localhost:3000')
+  assert.match(shareUrl.pathname, /^\/s\/[^/]+$/)
+}
 
 async function expectThemeSelection() {
   await (await $('.sidebar__user')).click()

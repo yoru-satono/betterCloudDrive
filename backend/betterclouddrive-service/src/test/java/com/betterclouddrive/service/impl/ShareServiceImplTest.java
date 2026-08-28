@@ -187,6 +187,16 @@ class ShareServiceImplTest {
     }
 
     @Test
+    void createShare_shouldRejectNonPositiveMaxVisits() {
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(ownedFile(1L, 1L)));
+
+        assertThatThrownBy(() -> shareService.createShare(1L, 1L, null, null, 0))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
+        verify(shareLinkRepository, never()).save(any());
+    }
+
+    @Test
     void updateShare_shouldRemovePasswordWhenBlank() {
         ShareLinkEntity share = activeShare("abcd1234", 1L, 1L);
         share.setPasswordCiphertext("existing-cipher");
@@ -269,6 +279,18 @@ class ShareServiceImplTest {
     }
 
     @Test
+    void updateShare_shouldRejectNonPositiveMaxVisits() {
+        ShareLinkEntity share = activeShare("abcd1234", 1L, 1L);
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+
+        assertThatThrownBy(() -> shareService.updateShare(1L, 1L,
+                new ShareUpdateCommand(null, null, 0, false, false, false)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
+        verify(shareLinkRepository, never()).save(any());
+    }
+
+    @Test
     void createShare_shouldThrowWhenFileNotFound() {
         when(fileRepository.findById(99L)).thenReturn(Optional.empty());
 
@@ -304,6 +326,17 @@ class ShareServiceImplTest {
         shareService.cancelShare(1L, 1L);
 
         assertThat(share.getIsCanceled()).isTrue();
+    }
+
+    @Test
+    void cancelShare_shouldBeIdempotent() {
+        ShareLinkEntity share = activeShare("abcd1234", 1L, 1L);
+        share.setIsCanceled(true);
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+
+        shareService.cancelShare(1L, 1L);
+
+        verify(shareLinkRepository, never()).save(any());
     }
 
     @Test

@@ -64,3 +64,6 @@ export const setStoredWebBaseUrl = (value: string) => {
 }
 
 export const buildShareUrl = (shareCode: string) => `${getWebBaseUrl()}/s/${shareCode}`
+
+export const resolveShareUrl = (share: { shareCode: string; shareUrl?: string | null }) =>
+  share.shareUrl || buildShareUrl(share.shareCode)

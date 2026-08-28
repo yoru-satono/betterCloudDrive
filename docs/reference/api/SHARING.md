@@ -32,20 +32,26 @@ Authorization: Bearer <accessToken>
     "id": 1,
     "fileId": 42,
     "shareCode": "aB3xK9mW",
+    "shareUrl": "https://drive.example.com/s/aB3xK9mW",
     "hasPassword": true,
     "expireAt": "2026-07-09T10:00:00",
+    "expireAtEpochMs": 1783562400000,
     "maxVisits": 10,
     "downloadCount": 0,
     "visitCount": 0,
     "isCanceled": false,
     "createdAt": "2026-06-09T12:00:00",
-    "updatedAt": "2026-06-09T12:00:00"
+    "updatedAt": "2026-06-09T12:00:00",
+    "fileName": "report.pdf",
+    "fileType": "file",
+    "fileSize": 1048576
   }
 }
 ```
 
 > 分享密码在数据库中以加密密文保存，API 响应只返回 `hasPassword`，不会返回密文或原始密码。`downloadCount` 当前会在公开下载或保存分享内容时递增，`maxVisits` 会限制公开访问详情、浏览内容、下载和保存分享内容。
-> 分享密码如果提供，长度必须为 4-16 个字符。
+> `shareUrl` 是由后端根据 `APP_PUBLIC_URL` 生成的 canonical 链接，客户端不应推断 Web 端口或域名。`expireAtEpochMs` 是明确时区的 epoch 毫秒值；`expireAt` 保留给旧客户端。根项目已删除时 `fileName`、`fileType`、`fileSize` 为 `null`。
+> 分享密码会先去除首尾空白，提供时长度必须为 4-16 个字符；`maxVisits` 必须是正整数。
 
 ---
 
@@ -56,7 +62,7 @@ GET /api/v1/shares?q=&passwordProtected=&expirationStatus=&page=1&size=20
 Authorization: Bearer <accessToken>
 ```
 
-分页返回当前用户创建的所有分享。`q` 只匹配用户数据，不解析“有密码”“已过期”等中文状态词；密码状态使用独立布尔参数 `passwordProtected`，过期状态使用 `expirationStatus=ACTIVE|EXPIRED|NEVER`。
+分页返回当前用户创建、尚未取消且不属于团队的分享。`q` 去除首尾空白，只匹配分享码和数字文件 ID，不解析“有密码”“已过期”等状态词；密码状态使用独立布尔参数 `passwordProtected`，过期状态使用 `expirationStatus=ACTIVE|EXPIRED|NEVER`。结果固定按 `createdAt DESC, id DESC` 排序，跨页稳定；列表中的文件元数据批量读取。
 
 ---
 
@@ -137,7 +143,7 @@ DELETE /api/v1/shares/{shareId}
 Authorization: Bearer <accessToken>
 ```
 
-取消后分享码立即失效，已获取链接的用户无法继续访问。
+取消操作幂等。取消后分享码立即失效，已获取链接的用户无法继续访问。
 
 ---
 

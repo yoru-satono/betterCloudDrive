@@ -20,6 +20,7 @@ import com.betterclouddrive.service.dto.TeamTaskDownload;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.download.DownloadTicketService;
 import com.betterclouddrive.web.export.AuditCsvExporter;
+import com.betterclouddrive.web.dto.response.ShareLinkResponseMapper;
 import com.betterclouddrive.web.security.UserPrincipal;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -52,6 +53,7 @@ class TeamControllerTaskTest {
     @Mock private FolderZipTaskService folderZipTaskService;
     @Mock private DownloadTicketService downloadTicketService;
     @Mock private ShareService shareService;
+    @Mock private ShareLinkResponseMapper shareResponseMapper;
     @Mock private TeamInviteService teamInviteService;
     @Mock private TeamActivityService teamActivityService;
     @Mock private TeamAuditExportTaskService teamAuditExportTaskService;

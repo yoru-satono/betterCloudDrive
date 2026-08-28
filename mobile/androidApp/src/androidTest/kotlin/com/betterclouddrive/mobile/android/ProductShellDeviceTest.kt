@@ -44,6 +44,7 @@ import com.betterclouddrive.mobile.app.FileMutationFeedback
 import com.betterclouddrive.mobile.app.FavoritesUiState
 import com.betterclouddrive.mobile.app.OrganizationFileListUiState
 import com.betterclouddrive.mobile.app.TagsUiState
+import com.betterclouddrive.mobile.app.PersonalSharesUiState
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.UserProfile
@@ -60,6 +61,8 @@ import com.betterclouddrive.mobile.core.platform.MediaPreviewRequest
 import com.betterclouddrive.mobile.core.platform.PickedDestination
 import com.betterclouddrive.mobile.core.platform.UploadPickResult
 import com.betterclouddrive.mobile.core.platform.TransferScheduleSpec
+import com.betterclouddrive.mobile.core.platform.ClipboardService
+import com.betterclouddrive.mobile.core.platform.LocalDateTimeService
 import com.betterclouddrive.mobile.platform.AndroidTransferScheduler
 import com.betterclouddrive.mobile.platform.transferNotification
 import com.betterclouddrive.mobile.designsystem.BetterCloudDriveTheme
@@ -252,6 +255,15 @@ class ProductShellDeviceTest {
         composeRule.onNodeWithTag("personal-organize").performClick()
         composeRule.onNodeWithTag("personal-open-tags").performClick()
         composeRule.onNodeWithTag("tags-screen").assertIsDisplayed()
+    }
+
+    @Test
+    fun personalOrganizeMenuOpensShareManagement() {
+        composeRule.setContent { BetterCloudDriveTheme { TestShell(debugToolsEnabled = false) } }
+
+        composeRule.onNodeWithTag("personal-organize").performClick()
+        composeRule.onNodeWithTag("personal-open-shares").performClick()
+        composeRule.onNodeWithTag("shares-screen").assertIsDisplayed()
     }
 
     @Test
@@ -465,10 +477,13 @@ private fun TestShell(
             transfers = transferTasks,
             favorites = favoritesState,
             tags = tagsState,
+            shares = PersonalSharesUiState(),
         ),
         documentPicker = TestDocumentPicker,
         officeRenderer = TestOfficeRenderer,
         mediaPreviewRenderer = TestMediaPreviewRenderer,
+        clipboard = TestClipboardService,
+        localDateTime = TestLocalDateTimeService,
         roomTaskCount = { 0 },
         actions = ProductShellActions(
             activatePersonalRoute = { folderId ->
@@ -646,6 +661,17 @@ private object TestDocumentPicker : DocumentPicker {
 
     @Composable
     override fun rememberDownloadLauncher(onPicked: (PickedDestination) -> Unit): (DownloadRequest) -> Unit = { }
+}
+
+private object TestClipboardService : ClipboardService {
+    override fun copyText(label: String, value: String): Boolean = true
+}
+
+private object TestLocalDateTimeService : LocalDateTimeService {
+    override fun nowEpochMillis(): Long = 1_780_000_000_000
+    override fun localDateTimeToEpochMillis(selectedUtcDateMillis: Long, hour: Int, minute: Int): Long =
+        selectedUtcDateMillis + hour * 3_600_000L + minute * 60_000L
+    override fun formatDateTime(epochMillis: Long): String = epochMillis.toString()
 }
 
 private object TestOfficeRenderer : OfficeRenderer {

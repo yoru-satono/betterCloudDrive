@@ -14,7 +14,7 @@ import * as favApi from '@/api/favorites'
 import * as recycleApi from '@/api/recycle'
 import * as sharesApi from '@/api/shares'
 import * as tagsApi from '@/api/tags'
-import { buildShareUrl } from '@/config/runtime'
+import { resolveShareUrl } from '@/config/runtime'
 import FileIcon from '@/components/file/FileIcon.vue'
 import { useFormatters } from '@/composables/useFormatters'
 import { dispatchFileAction } from '@/components/file/fileActions'
@@ -185,7 +185,7 @@ function openSearchContextMenu(result: SearchResult, event: MouseEvent) {
 }
 
 async function copyShareLink(share: ShareLinkEntity) {
-  await navigator.clipboard.writeText(buildShareUrl(share.shareCode)).catch(() => {})
+  await navigator.clipboard.writeText(resolveShareUrl(share)).catch(() => {})
   toast.success(__t('share.searchoverlay.linkCopied'))
 }
 
@@ -248,7 +248,7 @@ function fileSourceLabel(source: SearchMode | 'tag-files') {
                     <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" />
                   </svg>
                 </span>
-                <span class="search-item__name truncate">{{ buildShareUrl(result.share.shareCode) }}</span>
+                <span class="search-item__name truncate">{{ resolveShareUrl(result.share) }}</span>
                 <span class="search-item__meta">{{ __t('commonUi.searchoverlay.document') }}{{ result.share.fileId }} · {{ shareStatus(result.share) }} · {{ result.share.hasPassword ? __t('commonUi.searchoverlay.havePassword') : __t('commonUi.searchoverlay.noPassword') }}
                 </span>
                 <button class="search-item__action" type="button" @click.stop="copyShareLink(result.share)">{{ __t('team.searchoverlay.copy') }}</button>

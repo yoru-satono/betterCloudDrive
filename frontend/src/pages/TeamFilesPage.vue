@@ -26,7 +26,7 @@ import { resolveMessage } from '@/i18n'
 import * as teamsApi from '@/api/teams'
 import * as versionsApi from '@/api/versions'
 import { downloadTeamFile, downloadTeamFolderZip } from '@/api/download'
-import { buildShareUrl, isDesktopRuntime } from '@/config/runtime'
+import { resolveShareUrl, isDesktopRuntime } from '@/config/runtime'
 import {
   registerDesktopUploadListeners,
   uploadDesktopFiles,
@@ -568,7 +568,7 @@ async function submitShare() {
     password,
     notifyEmail: shareNotifyEmail.value.trim() || undefined,
   })
-  const shareUrl = buildShareUrl(data.data.shareCode)
+  const shareUrl = resolveShareUrl(data.data)
   await navigator.clipboard.writeText(shareUrl).catch(() => {})
   showShare.value = false
   toast.success(__t('team.teamfiles.teamShareLinkCopiedToClipboard'))

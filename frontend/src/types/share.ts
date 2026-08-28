@@ -4,14 +4,19 @@ export interface ShareLinkEntity {
   teamId: number | null
   fileId: number
   shareCode: string
+  shareUrl?: string | null
   hasPassword: boolean
   expireAt: string | null
+  expireAtEpochMs?: number | null
   maxVisits: number | null
   downloadCount: number
   visitCount: number
   isCanceled: boolean
   createdAt: string
   updatedAt: string
+  fileName?: string | null
+  fileType?: 'file' | 'folder' | null
+  fileSize?: number | null
 }
 
 export interface SharePasswordResponse {

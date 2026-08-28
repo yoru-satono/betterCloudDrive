@@ -32,7 +32,7 @@ import { toast } from 'vue-sonner'
 import type { FileEntity } from '@/types/file'
 import type { TagEntity } from '@/types/tag'
 import type { FileVersionEntity } from '@/types/file'
-import { buildShareUrl, isDesktopRuntime } from '@/config/runtime'
+import { resolveShareUrl, isDesktopRuntime } from '@/config/runtime'
 import { onFileAction, type FileActionDetail } from '@/components/file/fileActions'
 
 const route = useRoute()
@@ -245,7 +245,7 @@ async function submitShare() {
     password,
     notifyEmail: shareNotifyEmail.value.trim() || undefined,
   })
-  const shareUrl = buildShareUrl(data.data.shareCode)
+  const shareUrl = resolveShareUrl(data.data)
   await navigator.clipboard.writeText(shareUrl).catch(() => {})
   showShare.value = false
   toast.success(__t('file.filebrowser.sharingLinkCopiedToClipboard'))

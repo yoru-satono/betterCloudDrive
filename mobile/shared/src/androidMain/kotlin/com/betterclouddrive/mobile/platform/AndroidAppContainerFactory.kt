@@ -27,6 +27,14 @@ import kotlinx.coroutines.runBlocking
 import java.util.Locale
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import android.content.ClipData
+import android.content.ClipboardManager
+import com.betterclouddrive.mobile.core.platform.ClipboardService
+import com.betterclouddrive.mobile.core.platform.LocalDateTimeService
+import java.text.DateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.TimeZone
 
 object AndroidAppContainerFactory {
     fun create(context: Context): AppContainer {
@@ -72,9 +80,39 @@ object AndroidAppContainerFactory {
             localeProvider = AndroidLocaleProvider(appContext),
             localeController = AndroidApplicationLocaleController(appContext),
             themePreferences = appearance,
+            clipboard = AndroidClipboardService(appContext),
+            localDateTime = AndroidLocalDateTimeService(),
             applicationScope = applicationScope,
         )
     }
+}
+
+internal class AndroidClipboardService(private val context: Context) : ClipboardService {
+    override fun copyText(label: String, value: String): Boolean = runCatching {
+        val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        manager.setPrimaryClip(ClipData.newPlainText(label, value))
+    }.isSuccess
+}
+
+internal class AndroidLocalDateTimeService : LocalDateTimeService {
+    override fun nowEpochMillis(): Long = System.currentTimeMillis()
+
+    override fun localDateTimeToEpochMillis(selectedUtcDateMillis: Long, hour: Int, minute: Int): Long {
+        val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = selectedUtcDateMillis }
+        return Calendar.getInstance().apply {
+            clear()
+            set(utc.get(Calendar.YEAR), utc.get(Calendar.MONTH), utc.get(Calendar.DAY_OF_MONTH), hour, minute)
+        }.timeInMillis
+    }
+
+    override fun formatDateTime(epochMillis: Long): String =
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMillis))
+
+    override fun hourOfDay(epochMillis: Long): Int = Calendar.getInstance().apply { timeInMillis = epochMillis }
+        .get(Calendar.HOUR_OF_DAY)
+
+    override fun minuteOfHour(epochMillis: Long): Int = Calendar.getInstance().apply { timeInMillis = epochMillis }
+        .get(Calendar.MINUTE)
 }
 
 internal class AndroidApplicationLocaleController(private val context: Context) : ApplicationLocaleController {

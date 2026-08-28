@@ -13,7 +13,7 @@ $env:ANDROID_SERIAL = '<adb 设备序列号>'
 .\mobile\gradlew.bat -p mobile :androidApp:assembleRelease
 ```
 
-KMP 当前个人收藏和标签见[阶段 10 个人收藏与标签](../../mobile/docs/stage-10-personal-organization.md)，账号、语言、主题和服务器设置见[阶段 9 账号生命周期与个人设置](../../mobile/docs/stage-9-account-settings.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
+KMP 当前个人分享见[阶段 11 个人分享](../../mobile/docs/stage-11-personal-sharing.md)，个人收藏和标签见[阶段 10 个人收藏与标签](../../mobile/docs/stage-10-personal-organization.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
 
 ## 工具与构建
 
@@ -99,6 +99,8 @@ KMP 登录后的共享产品外壳使用 Navigation Compose 类型安全路由�
 个人文件修改统一通过共享 `FileRepository` 和 `AppController`：同一时间只提交一个变更，成功后按原已加载页数刷新当前目录并尽量保留滚动锚点。移动和复制使用独立文件夹选择器，选择器每页读取 100 条并只展示文件夹；文件夹源在选择器中隐藏，客户端禁用同父目录移动，但服务端仍是权限、冲突和非法目标的最终裁决者。多选集合只包含当前目录已加载项目，并且只允许批量移入回收站。
 
 个人收藏与标签入口位于个人空间顶栏菜单，不增加新的顶层导航项。收藏状态只在打开菜单或详情时按需读取，禁止在目录列表逐项请求。标签分配一次处理一个个人项目，先并行读取个人标签和项目当前关联，再通过 `PUT /files/{fileId}/tags` 原子替换；团队项目和团队标签不得进入此流程。
+
+个人分享管理同样从个人空间“整理”菜单进入。客户端必须使用后端返回的 `shareUrl`，不能根据 API 地址推断 Web 端口。分享密码只能在当前详情页按需读取并存在内存，离开详情、登出或切换服务器时立即清除；密码、链接均不得写入日志、路由或持久存储。自定义过期时间由 Android 日期选择器按设备时区转换为 epoch 毫秒，非法过去时间在提交前拦截。
 
 ## 测试
 

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Visibility
@@ -85,6 +86,7 @@ fun FavoritesScreen(
     onDownload: (FileItem, String) -> Unit,
     onToggleFavorite: (FileItem) -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
     onConsumeFeedback: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
@@ -125,6 +127,7 @@ fun FavoritesScreen(
                     onPreview = { onPreview(file) },
                     onDownload = { download(file) },
                     onManageTags = { onManageTags(file) },
+                    onCreateShare = { onCreateShare(file) },
                     trailingLabel = MobileString.RemoveFavorite,
                     trailingIcon = { Icon(Icons.Default.Star, null) },
                     onTrailing = { onToggleFavorite(file) },
@@ -139,6 +142,7 @@ fun FavoritesScreen(
             onDismiss = { selected = null },
             onPreview = { selected = null; onPreview(file) },
             onDownload = { download(file) },
+            onCreateShare = { selected = null; onCreateShare(file) },
         )
     }
 }
@@ -252,6 +256,7 @@ fun TagFilesScreen(
     onPreview: (FileItem) -> Unit,
     onDownload: (FileItem, String) -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
     onRemove: (FileItem) -> Unit,
     onConsumeFeedback: () -> Unit,
 ) {
@@ -283,7 +288,7 @@ fun TagFilesScreen(
             onScrollAnchor = onScrollAnchor,
             onClick = { if (it.isFolder) onOpenFolder(it) else onPreview(it) },
             menu = { file -> OrganizationFileMenu(
-                file, { onOpenLocation(file) }, { onPreview(file) }, { download(file) }, { onManageTags(file) },
+                file, { onOpenLocation(file) }, { onPreview(file) }, { download(file) }, { onManageTags(file) }, { onCreateShare(file) },
                 MobileString.RemoveFromTag, { Icon(Icons.Default.Label, null) }, { onRemove(file) },
             ) },
         )
@@ -447,6 +452,7 @@ private fun OrganizationFileMenu(
     onPreview: () -> Unit,
     onDownload: () -> Unit,
     onManageTags: () -> Unit,
+    onCreateShare: () -> Unit,
     trailingLabel: MobileString,
     trailingIcon: @Composable () -> Unit,
     onTrailing: () -> Unit,
@@ -470,6 +476,9 @@ private fun OrganizationFileMenu(
             DropdownMenuItem(text = { Text(strings[MobileString.ManageTags]) }, leadingIcon = {
                 Icon(Icons.Default.Label, null)
             }, onClick = { expanded = false; onManageTags() })
+            DropdownMenuItem(text = { Text(strings[MobileString.CreateShare]) }, leadingIcon = {
+                Icon(Icons.Default.Share, null)
+            }, onClick = { expanded = false; onCreateShare() })
             DropdownMenuItem(text = { Text(strings[trailingLabel]) }, leadingIcon = trailingIcon,
                 onClick = { expanded = false; onTrailing() })
         }
@@ -568,7 +577,13 @@ private fun OrganizationError(message: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun OrganizationFileDetail(file: FileItem, onDismiss: () -> Unit, onPreview: () -> Unit, onDownload: () -> Unit) {
+private fun OrganizationFileDetail(
+    file: FileItem,
+    onDismiss: () -> Unit,
+    onPreview: () -> Unit,
+    onDownload: () -> Unit,
+    onCreateShare: () -> Unit,
+) {
     val strings = LocalMobileStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -580,6 +595,7 @@ private fun OrganizationFileDetail(file: FileItem, onDismiss: () -> Unit, onPrev
         } },
         confirmButton = { if (!file.isFolder) Button(onClick = onPreview) { Text(strings[MobileString.Preview]) } },
         dismissButton = { Row {
+            TextButton(onClick = onCreateShare) { Text(strings[MobileString.CreateShare]) }
             if (!file.isFolder) TextButton(onClick = onDownload) { Text(strings[MobileString.Download]) }
             TextButton(onClick = onDismiss) { Text(strings[MobileString.Close]) }
         } },

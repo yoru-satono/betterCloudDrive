@@ -1,13 +1,13 @@
 # BetterCloudDrive KMP 移动端
 
-这是 Android 优先的 Kotlin Multiplatform 重写工程。当前版本在个人文件浏览、管理、传输、搜索和只读预览基础上，补齐了账号生命周期、个人设置、收藏与标签整理。共享国际化资源支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
+这是 Android 优先的 Kotlin Multiplatform 重写工程。当前版本在个人文件浏览、管理、传输、搜索和只读预览基础上，补齐了账号生命周期、个人设置、收藏、标签与个人分享管理。共享国际化资源支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
 
 ## 目标与范围
 
 - Android 是当前唯一可运行、可交付的平台。
 - `iosArm64` 和 `iosSimulatorArm64` 通过 `-PenableIos=true` 保留公共代码与 Framework 编译能力，阶段 1 不提供 iOS 平台服务或宿主应用。
 - 不配置桌面、JVM 应用、JS、Wasm 或 Web 目标。
-- 当前可见功能包括启动恢复、登录、注册与密码找回、个人目录浏览与管理、分页与排序、列表/网格、全局文件名搜索、只读文件详情与预览、任意目录多文件上传、单文件下载、独立传输队列、个人收藏、标签及原子标签分配、账号资料与容量、语言、主题、服务器切换和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
+- 当前可见功能包括启动恢复、登录、注册与密码找回、个人目录浏览与管理、分页与排序、列表/网格、全局文件名搜索、只读文件详情与预览、任意目录多文件上传、单文件下载、独立传输队列、个人收藏、标签及原子标签分配、个人分享生命周期、账号资料与容量、语言、主题、服务器切换和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
 
 ## 工程结构
 
@@ -53,7 +53,7 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 .\scripts\verify-all.ps1 -Module mobile-android -AndroidSerial '<adb 设备序列号>'
 ```
 
-阶段 10 已在 Android 9/API 28 和 Android 14/API 34 上完成设备测试，覆盖个人“整理”导航、收藏、标签、手机与宽屏布局，并继续回归 WorkManager/UIDT、Keystore、Room 与 SAF。标准 Android Emulator 可使用 `http://10.0.2.2:8080` 访问宿主机；若模拟器厂商没有该别名，则在登录页使用开发机局域网地址。Debug 允许本地 HTTP，Release 强制 HTTPS。
+阶段 11 已在 Android 9/API 28 和 Android 14/API 34 上完成设备测试，覆盖个人“整理”导航、收藏、标签、分享创建与管理、手机与宽屏布局，并继续回归 WorkManager/UIDT、Keystore、Room 与 SAF。标准 Android Emulator 可使用 `http://10.0.2.2:8080` 访问宿主机；若模拟器厂商没有该别名，则在登录页使用开发机局域网地址。Debug 允许本地 HTTP，Release 强制 HTTPS。
 
 截至 2026-08-25，阶段 7/8 已完成 API 34 的 64 MiB 分片续传、非零 Range 下载与 MD5 联合旅程，以及三页搜索、图片、文本、视频和 OnlyOffice 只读预览旅程；API 28/34 自动化、完整 Docker 栈、黑盒与可观测性门槛均通过。
 
@@ -61,4 +61,6 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 
 截至 2026-08-28，阶段 10 已完成 105 个个人项目的收藏与标签三页真实后端旅程、团队内容隔离、标签原子替换与清空；API 28/34 设备矩阵、Web/Tauri、完整 Docker 栈、Testcontainers、黑盒和可观测性门槛均通过。
 
-当前收藏与标签边界见[阶段 10 个人收藏与标签](docs/stage-10-personal-organization.md)，账号与设置边界见[阶段 9 账号生命周期与个人设置](docs/stage-9-account-settings.md)，预览与搜索基线见[阶段 8 个人预览与搜索](docs/stage-8-personal-preview-search.md)。
+截至 2026-08-28，阶段 11 已完成 105 个个人分享的三页真实后端旅程，覆盖密码和过期筛选、个人/团队隔离、文件与文件夹分享、限制编辑与清空、公开访问和下载计数、访问上限、幂等取消及链接立即失效；API 28/34 设备矩阵、Web/Tauri、发布构建、黑盒和可观测性门槛均通过。
+
+当前个人分享边界见[阶段 11 个人分享](docs/stage-11-personal-sharing.md)，收藏与标签边界见[阶段 10 个人收藏与标签](docs/stage-10-personal-organization.md)，账号与设置边界见[阶段 9 账号生命周期与个人设置](docs/stage-9-account-settings.md)。

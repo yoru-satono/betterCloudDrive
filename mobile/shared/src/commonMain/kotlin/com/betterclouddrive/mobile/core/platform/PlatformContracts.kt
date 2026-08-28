@@ -80,6 +80,18 @@ interface ApplicationLocaleController {
     fun applyLocale(locale: MobileLocale)
 }
 
+interface ClipboardService {
+    fun copyText(label: String, value: String): Boolean
+}
+
+interface LocalDateTimeService {
+    fun nowEpochMillis(): Long
+    fun localDateTimeToEpochMillis(selectedUtcDateMillis: Long, hour: Int, minute: Int): Long
+    fun formatDateTime(epochMillis: Long): String
+    fun hourOfDay(epochMillis: Long): Int = 12
+    fun minuteOfHour(epochMillis: Long): Int = 0
+}
+
 interface TransferFileAccess {
     suspend fun validateReadable(sourceHandle: String)
     suspend fun validateWritable(destinationHandle: String)

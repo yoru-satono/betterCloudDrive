@@ -51,6 +51,7 @@ vi.mock('@/config/runtime', () => ({
   setStoredApiBaseUrl: vi.fn(),
   setStoredWebBaseUrl: vi.fn(),
   buildShareUrl: vi.fn(() => 'http://localhost/share/mock'),
+  resolveShareUrl: vi.fn((share: { shareUrl?: string | null }) => share.shareUrl || 'http://localhost/share/mock'),
   isDesktopRuntime: vi.fn(() => false),
 }))
 

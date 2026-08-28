@@ -16,6 +16,7 @@ import com.betterclouddrive.web.dto.request.CreateShareRequest;
 import com.betterclouddrive.web.dto.request.SaveSharedItemRequest;
 import com.betterclouddrive.web.dto.request.UpdateShareRequest;
 import com.betterclouddrive.web.dto.response.ShareLinkResponse;
+import com.betterclouddrive.web.dto.response.ShareLinkResponseMapper;
 import com.betterclouddrive.web.dto.response.SharePasswordResponse;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
@@ -43,6 +44,7 @@ public class ShareController {
     private final AuthService authService;
     private final StorageService storageService;
     private final FolderZipDownloadService folderZipDownloadService;
+    private final ShareLinkResponseMapper shareResponseMapper;
 
     @PostMapping("/api/v1/shares")
     public ApiResponse<ShareLinkResponse> createShare(@CurrentUser UserPrincipal user,
@@ -58,7 +60,7 @@ public class ShareController {
                     file.getFileName(), user.getUsername());
         }
 
-        return ApiResponse.success(ShareLinkResponse.from(share));
+        return ApiResponse.success(shareResponseMapper.map(share));
     }
 
     @GetMapping("/api/v1/shares")
@@ -70,15 +72,13 @@ public class ShareController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         PageResult<ShareLinkEntity> shares = shareService.listShares(user.getUserId(), q, passwordProtected, expirationStatus, page, size);
-        List<ShareLinkResponse> records = shares.getRecords().stream()
-                .map(ShareLinkResponse::from)
-                .toList();
+        List<ShareLinkResponse> records = shareResponseMapper.mapAll(shares.getRecords());
         return ApiResponse.success(PageResult.of(records, shares.getTotal(), shares.getPage(), shares.getSize()));
     }
 
     @GetMapping("/api/v1/shares/{shareId}")
     public ApiResponse<ShareLinkResponse> getShare(@CurrentUser UserPrincipal user, @PathVariable Long shareId) {
-        return ApiResponse.success(ShareLinkResponse.from(shareService.getShare(user.getUserId(), shareId)));
+        return ApiResponse.success(shareResponseMapper.map(shareService.getShare(user.getUserId(), shareId)));
     }
 
     @GetMapping("/api/v1/shares/{shareId}/password")
@@ -93,7 +93,7 @@ public class ShareController {
                                                        @RequestBody UpdateShareRequest request) {
         ShareLinkEntity share = shareService.updateShare(
                 user.getUserId(), shareId, request.toCommand());
-        return ApiResponse.success(ShareLinkResponse.from(share));
+        return ApiResponse.success(shareResponseMapper.map(share));
     }
 
     @DeleteMapping("/api/v1/shares/{shareId}")

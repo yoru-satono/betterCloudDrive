@@ -26,6 +26,11 @@ import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.model.CreatePersonalTagRequest
 import com.betterclouddrive.mobile.core.model.UpdatePersonalTagRequest
 import com.betterclouddrive.mobile.core.model.ReplacePersonalFileTagsRequest
+import com.betterclouddrive.mobile.core.model.CreatePersonalShareRequest
+import com.betterclouddrive.mobile.core.model.ShareExpirationFilter
+import com.betterclouddrive.mobile.core.model.ShareLink
+import com.betterclouddrive.mobile.core.model.SharePasswordResponse
+import com.betterclouddrive.mobile.core.model.UpdatePersonalShareRequest
 import com.betterclouddrive.mobile.core.model.RefreshRequest
 import com.betterclouddrive.mobile.core.model.RenamePersonalFileRequest
 import com.betterclouddrive.mobile.core.model.SessionExpiredException
@@ -336,6 +341,50 @@ class BackendClient(
 
     suspend fun removePersonalFileTag(tagId: Long, fileId: Long) {
         authenticatedNoData { token -> client.delete(url("tags/$tagId/files/$fileId")) { bearer(token) } }
+    }
+
+    suspend fun createPersonalShare(request: CreatePersonalShareRequest): ShareLink =
+        authenticatedEnvelope { token ->
+            client.post(url("shares")) { bearer(token); jsonBody(request) }
+        }
+
+    suspend fun listPersonalShares(
+        query: String?,
+        passwordProtected: Boolean?,
+        expiration: ShareExpirationFilter,
+        page: Int,
+        size: Int,
+    ): PageResult<ShareLink> = authenticatedEnvelope { token ->
+        client.get(url("shares")) {
+            bearer(token)
+            url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                passwordProtected?.let { parameters.append("passwordProtected", it.toString()) }
+                expiration.apiValue?.let { parameters.append("expirationStatus", it) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        }
+    }
+
+    suspend fun getPersonalShare(shareId: Long): ShareLink = authenticatedEnvelope { token ->
+        client.get(url("shares/$shareId")) { bearer(token) }
+    }
+
+    suspend fun getPersonalSharePassword(shareId: Long): String? {
+        val response: SharePasswordResponse = authenticatedEnvelope { token ->
+            client.get(url("shares/$shareId/password")) { bearer(token) }
+        }
+        return response.password
+    }
+
+    suspend fun updatePersonalShare(shareId: Long, request: UpdatePersonalShareRequest): ShareLink =
+        authenticatedEnvelope { token ->
+            client.put(url("shares/$shareId")) { bearer(token); jsonBody(request) }
+        }
+
+    suspend fun cancelPersonalShare(shareId: Long) {
+        authenticatedNoData { token -> client.delete(url("shares/$shareId")) { bearer(token) } }
     }
 
     suspend fun listRootFiles(): List<FileItem> {

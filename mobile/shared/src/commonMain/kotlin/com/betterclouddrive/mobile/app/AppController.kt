@@ -5,6 +5,10 @@ import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.PersonalTag
+import com.betterclouddrive.mobile.core.model.CreatePersonalShareRequest
+import com.betterclouddrive.mobile.core.model.ShareExpirationFilter
+import com.betterclouddrive.mobile.core.model.ShareLink
+import com.betterclouddrive.mobile.core.model.UpdatePersonalShareRequest
 import com.betterclouddrive.mobile.core.model.PreviewKind
 import com.betterclouddrive.mobile.core.model.TextPreview
 import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
@@ -82,6 +86,15 @@ internal interface AppFileOperations {
     suspend fun listPersonalFileTags(fileId: Long): List<PersonalTag>
     suspend fun replacePersonalFileTags(fileId: Long, tagIds: List<Long>): List<PersonalTag>
     suspend fun removePersonalFileTag(tagId: Long, fileId: Long)
+    suspend fun createPersonalShare(request: CreatePersonalShareRequest): ShareLink = error("Sharing is not implemented")
+    suspend fun listPersonalShares(
+        query: String?, passwordProtected: Boolean?, expiration: ShareExpirationFilter, page: Int, size: Int,
+    ): PageResult<ShareLink> = error("Sharing is not implemented")
+    suspend fun getPersonalShare(shareId: Long): ShareLink = error("Sharing is not implemented")
+    suspend fun getPersonalSharePassword(shareId: Long): String? = error("Sharing is not implemented")
+    suspend fun updatePersonalShare(shareId: Long, request: UpdatePersonalShareRequest): ShareLink =
+        error("Sharing is not implemented")
+    suspend fun cancelPersonalShare(shareId: Long): Unit = error("Sharing is not implemented")
     suspend fun searchPersonalFiles(query: String, page: Int, size: Int): PageResult<FileItem>
     suspend fun createPersonalDownloadTicket(fileId: Long): String
     suspend fun loadPersonalText(file: FileItem): TextPreview
@@ -160,6 +173,16 @@ private class RepositoryFileOperations(private val repository: FileRepository) :
         repository.replacePersonalFileTags(fileId, tagIds)
     override suspend fun removePersonalFileTag(tagId: Long, fileId: Long) =
         repository.removePersonalFileTag(tagId, fileId)
+    override suspend fun createPersonalShare(request: CreatePersonalShareRequest) =
+        repository.createPersonalShare(request)
+    override suspend fun listPersonalShares(
+        query: String?, passwordProtected: Boolean?, expiration: ShareExpirationFilter, page: Int, size: Int,
+    ) = repository.listPersonalShares(query, passwordProtected, expiration, page, size)
+    override suspend fun getPersonalShare(shareId: Long) = repository.getPersonalShare(shareId)
+    override suspend fun getPersonalSharePassword(shareId: Long) = repository.getPersonalSharePassword(shareId)
+    override suspend fun updatePersonalShare(shareId: Long, request: UpdatePersonalShareRequest) =
+        repository.updatePersonalShare(shareId, request)
+    override suspend fun cancelPersonalShare(shareId: Long) = repository.cancelPersonalShare(shareId)
     override suspend fun searchPersonalFiles(query: String, page: Int, size: Int) =
         repository.searchPersonalFiles(query, page, size)
     override suspend fun createPersonalDownloadTicket(fileId: Long) = repository.createPersonalDownloadTicket(fileId)
@@ -356,6 +379,39 @@ data class FileTagEditorState(
     val error: UiMessage? = null,
 )
 
+data class PersonalSharesUiState(
+    val query: String = "",
+    val submittedQuery: String = "",
+    val passwordProtected: Boolean? = null,
+    val expiration: ShareExpirationFilter = ShareExpirationFilter.ALL,
+    val items: List<ShareLink> = emptyList(),
+    val loading: Boolean = false,
+    val refreshing: Boolean = false,
+    val loadingMore: Boolean = false,
+    val error: UiMessage? = null,
+    val loadMoreError: UiMessage? = null,
+    val page: Int = 0,
+    val pages: Int = 1,
+    val total: Long = 0,
+    val selected: ShareLink? = null,
+    val detailLoading: Boolean = false,
+    val detailError: UiMessage? = null,
+    val revealedPassword: String? = null,
+    val passwordVisible: Boolean = false,
+    val passwordLoading: Boolean = false,
+    val createTarget: FileItem? = null,
+    val creating: Boolean = false,
+    val createError: UiMessage? = null,
+    val created: ShareLink? = null,
+    val updating: Boolean = false,
+    val updateError: UiMessage? = null,
+    val canceling: Boolean = false,
+    val feedback: FileMutationFeedback? = null,
+) {
+    val hasLoaded: Boolean get() = page > 0
+    val hasMore: Boolean get() = page < pages
+}
+
 data class PersonalPreviewUiState(
     val fileId: Long? = null,
     val file: FileItem? = null,
@@ -381,6 +437,7 @@ data class AppUiState(
     val favorites: FavoritesUiState = FavoritesUiState(),
     val tags: TagsUiState = TagsUiState(),
     val fileTagEditor: FileTagEditorState? = null,
+    val shares: PersonalSharesUiState = PersonalSharesUiState(),
     val preview: PersonalPreviewUiState = PersonalPreviewUiState(),
     val transfers: List<TransferTask> = emptyList(),
     val diagnostics: DiagnosticUiState = DiagnosticUiState(),
@@ -433,6 +490,9 @@ class AppController internal constructor(
     private var tagFilesJob: Job? = null
     private var organizationMutationJob: Job? = null
     private var fileTagEditorJob: Job? = null
+    private var sharesJob: Job? = null
+    private var shareDetailJob: Job? = null
+    private var shareMutationJob: Job? = null
     private var previewJob: Job? = null
     private var registrationCountdownJob: Job? = null
     private var feedbackSequence = 0L
@@ -1275,6 +1335,209 @@ class AppController internal constructor(
         mutableState.update { it.copy(tags = it.tags.copy(feedback = null, mutationError = null)) }
     }
 
+    fun activateShares() {
+        val current = mutableState.value.shares
+        if (!current.hasLoaded && !current.loading) refreshShares()
+    }
+
+    fun updateSharesQuery(value: String) {
+        sharesJob?.cancel()
+        mutableState.update { it.copy(shares = it.shares.copy(query = value, error = null, loadMoreError = null)) }
+        sharesJob = scope.launch {
+            delay(SEARCH_DEBOUNCE_MILLIS)
+            loadSharesPage(value.trim(), 1, refresh = false)
+        }
+    }
+
+    fun setShareFilters(passwordProtected: Boolean?, expiration: ShareExpirationFilter) {
+        sharesJob?.cancel()
+        mutableState.update { it.copy(shares = it.shares.copy(
+            passwordProtected = passwordProtected,
+            expiration = expiration,
+            error = null,
+            loadMoreError = null,
+        )) }
+        sharesJob = scope.launch { loadSharesPage(mutableState.value.shares.query.trim(), 1, refresh = false) }
+    }
+
+    fun refreshShares() {
+        sharesJob?.cancel()
+        sharesJob = scope.launch { loadSharesPage(mutableState.value.shares.query.trim(), 1, refresh = true) }
+    }
+
+    fun loadMoreShares() {
+        val current = mutableState.value.shares
+        if (!current.hasMore || current.loading || current.loadingMore) return
+        sharesJob?.cancel()
+        sharesJob = scope.launch { loadSharesPage(current.submittedQuery, current.page + 1, refresh = false) }
+    }
+
+    fun openShareCreator(file: FileItem) {
+        mutableState.update { it.copy(shares = it.shares.copy(
+            createTarget = file, creating = false, createError = null, created = null,
+        )) }
+    }
+
+    fun closeShareCreator() {
+        shareMutationJob?.cancel()
+        mutableState.update { it.copy(shares = it.shares.copy(
+            createTarget = null, creating = false, createError = null, created = null,
+        )) }
+    }
+
+    fun createPersonalShare(password: String?, expireAt: Long?, maxVisits: Int?) {
+        val target = mutableState.value.shares.createTarget ?: return
+        if (mutableState.value.shares.creating) return
+        validateShareInput(password, expireAt, maxVisits)?.let { error ->
+            mutableState.update { it.copy(shares = it.shares.copy(createError = error)) }
+            return
+        }
+        shareMutationJob?.cancel()
+        mutableState.update { it.copy(shares = it.shares.copy(creating = true, createError = null)) }
+        shareMutationJob = scope.launch {
+            try {
+                val created = files.createPersonalShare(CreatePersonalShareRequest(
+                    target.id, password?.trim()?.takeIf(String::isNotEmpty), expireAt, maxVisits,
+                ))
+                mutableState.update { state -> state.copy(shares = state.shares.copy(
+                    creating = false,
+                    created = created,
+                    items = listOf(created) + state.shares.items.filterNot { it.id == created.id },
+                    total = state.shares.total + 1,
+                )) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(shares = it.shares.copy(creating = false, createError = friendly(error))) }
+            }
+        }
+    }
+
+    fun openShareDetail(shareId: Long) {
+        shareDetailJob?.cancel()
+        val listed = mutableState.value.shares.items.firstOrNull { it.id == shareId }
+        mutableState.update { it.copy(shares = it.shares.copy(
+            selected = listed,
+            detailLoading = true,
+            detailError = null,
+            revealedPassword = null,
+            passwordVisible = false,
+            passwordLoading = false,
+            updateError = null,
+        )) }
+        shareDetailJob = scope.launch {
+            try {
+                val detail = files.getPersonalShare(shareId)
+                mutableState.update { state -> if (state.shares.selected?.id != shareId && listed != null) state else
+                    state.copy(shares = state.shares.copy(selected = detail, detailLoading = false)) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(shares = it.shares.copy(detailLoading = false, detailError = friendly(error))) }
+            }
+        }
+    }
+
+    fun closeShareDetail() {
+        shareDetailJob?.cancel()
+        mutableState.update { it.copy(shares = it.shares.copy(
+            selected = null, detailLoading = false, detailError = null,
+            revealedPassword = null, passwordVisible = false, passwordLoading = false, updateError = null,
+        )) }
+    }
+
+    fun toggleSharePassword() {
+        val share = mutableState.value.shares.selected ?: return
+        val current = mutableState.value.shares
+        if (!share.hasPassword || current.passwordLoading) return
+        if (current.passwordVisible) {
+            mutableState.update { it.copy(shares = it.shares.copy(passwordVisible = false)) }
+            return
+        }
+        current.revealedPassword?.let {
+            mutableState.update { state -> state.copy(shares = state.shares.copy(passwordVisible = true)) }
+            return
+        }
+        shareDetailJob?.cancel()
+        mutableState.update { it.copy(shares = it.shares.copy(passwordLoading = true, detailError = null)) }
+        shareDetailJob = scope.launch {
+            try {
+                val password = files.getPersonalSharePassword(share.id)
+                mutableState.update { state -> if (state.shares.selected?.id != share.id) state else state.copy(
+                    shares = state.shares.copy(
+                        revealedPassword = password,
+                        passwordVisible = password != null,
+                        passwordLoading = false,
+                    ),
+                ) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(shares = it.shares.copy(passwordLoading = false, detailError = friendly(error))) }
+            }
+        }
+    }
+
+    fun updatePersonalShare(request: UpdatePersonalShareRequest) {
+        val share = mutableState.value.shares.selected ?: return
+        if (mutableState.value.shares.updating) return
+        validateShareInput(request.password, request.expireAt, request.maxVisits)?.let { error ->
+            mutableState.update { it.copy(shares = it.shares.copy(updateError = error)) }
+            return
+        }
+        shareMutationJob?.cancel()
+        mutableState.update { it.copy(shares = it.shares.copy(updating = true, updateError = null)) }
+        shareMutationJob = scope.launch {
+            try {
+                val updated = files.updatePersonalShare(
+                    share.id,
+                    request.copy(password = request.password?.trim()?.takeIf(String::isNotEmpty)),
+                )
+                mutableState.update { state -> state.copy(shares = state.shares.copy(
+                    updating = false,
+                    selected = updated,
+                    revealedPassword = null,
+                    passwordVisible = false,
+                    items = state.shares.items.map { if (it.id == updated.id) updated else it },
+                    feedback = FileMutationFeedback(++feedbackSequence, UiMessage(MobileString.ShareUpdated), false),
+                )) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(shares = it.shares.copy(updating = false, updateError = friendly(error))) }
+            }
+        }
+    }
+
+    fun cancelPersonalShare() {
+        val share = mutableState.value.shares.selected ?: return
+        if (mutableState.value.shares.canceling) return
+        shareMutationJob?.cancel()
+        mutableState.update { it.copy(shares = it.shares.copy(canceling = true, detailError = null)) }
+        shareMutationJob = scope.launch {
+            try {
+                files.cancelPersonalShare(share.id)
+                mutableState.update { state -> state.copy(shares = state.shares.copy(
+                    canceling = false,
+                    selected = null,
+                    revealedPassword = null,
+                    passwordVisible = false,
+                    items = state.shares.items.filterNot { it.id == share.id },
+                    total = (state.shares.total - 1).coerceAtLeast(0),
+                    feedback = FileMutationFeedback(++feedbackSequence, UiMessage(MobileString.ShareCanceled), false),
+                )) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                mutableState.update { it.copy(shares = it.shares.copy(canceling = false, detailError = friendly(error))) }
+            }
+        }
+    }
+
+    fun consumeShareFeedback() {
+        mutableState.update { it.copy(shares = it.shares.copy(feedback = null)) }
+    }
+
     fun prepareOpenSearchLocation(file: FileItem) {
         val parentId = file.parentId
         directoryCache[parentId]?.let { snapshot ->
@@ -1656,6 +1919,12 @@ class AppController internal constructor(
         organizationMutationJob = null
         fileTagEditorJob?.cancel()
         fileTagEditorJob = null
+        sharesJob?.cancel()
+        sharesJob = null
+        shareDetailJob?.cancel()
+        shareDetailJob = null
+        shareMutationJob?.cancel()
+        shareMutationJob = null
         previewJob?.cancel()
         previewJob = null
         directoryCache.clear()
@@ -1770,6 +2039,52 @@ class AppController internal constructor(
         } catch (error: Throwable) {
             if (mutableState.value.tags.query.trim() != query) return
             mutableState.update { it.copy(tags = it.tags.copy(loading = false, error = friendly(error))) }
+        }
+    }
+
+    private suspend fun loadSharesPage(query: String, page: Int, refresh: Boolean) {
+        val normalized = query.trim()
+        val before = mutableState.value.shares
+        val passwordProtected = before.passwordProtected
+        val expiration = before.expiration
+        mutableState.update { state -> state.copy(shares = state.shares.copy(
+            submittedQuery = normalized,
+            loading = page == 1 && !refresh,
+            refreshing = page == 1 && refresh,
+            loadingMore = page > 1,
+            error = if (page == 1) null else state.shares.error,
+            loadMoreError = null,
+        )) }
+        try {
+            val result = files.listPersonalShares(
+                normalized.ifEmpty { null }, passwordProtected, expiration, page, SHARE_PAGE_SIZE,
+            )
+            val latest = mutableState.value.shares
+            if (latest.query.trim() != normalized || latest.passwordProtected != passwordProtected ||
+                latest.expiration != expiration) return
+            val records = if (page == 1) result.records.distinctBy(ShareLink::id)
+            else (before.items + result.records).distinctBy(ShareLink::id)
+            mutableState.update { state -> state.copy(shares = state.shares.copy(
+                items = records,
+                loading = false,
+                refreshing = false,
+                loadingMore = false,
+                error = null,
+                loadMoreError = null,
+                page = result.page,
+                pages = result.pages,
+                total = result.total,
+            )) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            mutableState.update { state -> state.copy(shares = state.shares.copy(
+                loading = false,
+                refreshing = false,
+                loadingMore = false,
+                error = if (page == 1) friendly(error) else state.shares.error,
+                loadMoreError = if (page > 1) friendly(error) else null,
+            )) }
         }
     }
 
@@ -2106,6 +2421,7 @@ class AppController internal constructor(
         const val PAGE_SIZE = 50
         const val SEARCH_PAGE_SIZE = 50
         const val ORGANIZATION_PAGE_SIZE = 50
+        const val SHARE_PAGE_SIZE = 50
         const val SEARCH_DEBOUNCE_MILLIS = 300L
         const val PICKER_PAGE_SIZE = 100
         const val MAX_BREADCRUMB_DEPTH = 128
@@ -2124,6 +2440,18 @@ class AppController internal constructor(
         "zh-sg", "zh-hans-sg" -> MobileLocale.SIMPLIFIED_CHINESE_SG
         "zh-cn", "zh-hans", "zh-hans-cn" -> MobileLocale.SIMPLIFIED_CHINESE_CN
         else -> MobileLocale.ENGLISH_US
+    }
+
+    private fun validateShareInput(password: String?, expireAt: Long?, maxVisits: Int?): UiMessage? {
+        val normalizedPassword = password?.trim().orEmpty()
+        return when {
+            normalizedPassword.isNotEmpty() && normalizedPassword.length !in 4..16 ->
+                UiMessage(MobileString.ErrorSharePasswordLength)
+            maxVisits != null && maxVisits < 1 -> UiMessage(MobileString.ErrorShareMaxVisits)
+            expireAt != null && expireAt <= kotlin.time.Clock.System.now().toEpochMilliseconds() ->
+                UiMessage(MobileString.ErrorShareExpiryPast)
+            else -> null
+        }
     }
 
     private fun validateRegistration(

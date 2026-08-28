@@ -39,6 +39,7 @@ import com.betterclouddrive.web.download.DownloadTicketType;
 import com.betterclouddrive.web.dto.request.*;
 import com.betterclouddrive.web.dto.response.DownloadTicketResponse;
 import com.betterclouddrive.web.dto.response.ShareLinkResponse;
+import com.betterclouddrive.web.dto.response.ShareLinkResponseMapper;
 import com.betterclouddrive.web.dto.response.SharePasswordResponse;
 import com.betterclouddrive.web.dto.response.TeamInviteResponse;
 import com.betterclouddrive.web.dto.response.TeamMemberResponse;
@@ -83,6 +84,7 @@ public class TeamController {
     private final FolderZipTaskService folderZipTaskService;
     private final DownloadTicketService downloadTicketService;
     private final ShareService shareService;
+    private final ShareLinkResponseMapper shareResponseMapper;
     private final TeamInviteService teamInviteService;
     private final TeamActivityService teamActivityService;
     private final TeamAuditExportTaskService teamAuditExportTaskService;
@@ -738,7 +740,7 @@ public class TeamController {
         ShareLinkEntity share = shareService.createTeamShare(
                 user.getUserId(), teamId, request.getFileId(), request.getPassword(),
                 request.getExpireAt(), request.getMaxVisits());
-        return ApiResponse.success(ShareLinkResponse.from(share));
+        return ApiResponse.success(shareResponseMapper.map(share));
     }
 
     @GetMapping("/{teamId}/shares")
@@ -752,9 +754,7 @@ public class TeamController {
             @RequestParam(defaultValue = "20") @Max(100) int size) {
         teamService.requireRead(user.getUserId(), teamId);
         PageResult<ShareLinkEntity> shares = shareService.listTeamShares(user.getUserId(), teamId, q, passwordProtected, expirationStatus, page, size);
-        List<ShareLinkResponse> readableShares = shares.getRecords().stream()
-                .map(ShareLinkResponse::from)
-                .toList();
+        List<ShareLinkResponse> readableShares = shareResponseMapper.mapAll(shares.getRecords());
         return ApiResponse.success(PageResult.of(
                 readableShares,
                 shares.getTotal(),
@@ -769,7 +769,7 @@ public class TeamController {
             @PathVariable Long shareId) {
         ShareLinkEntity share = shareService.getTeamShare(teamId, shareId);
         teamPermissionService.requireRead(user.getUserId(), teamId, share.getFileId());
-        return ApiResponse.success(ShareLinkResponse.from(share));
+        return ApiResponse.success(shareResponseMapper.map(share));
     }
 
     @GetMapping("/{teamId}/shares/{shareId}/password")
@@ -794,7 +794,7 @@ public class TeamController {
         ShareLinkEntity share = shareService.updateTeamShare(
                 user.getUserId(), canManageAllShares(member, existing.getFileId()), teamId, shareId,
                 request.toCommand());
-        return ApiResponse.success(ShareLinkResponse.from(share));
+        return ApiResponse.success(shareResponseMapper.map(share));
     }
 
     @DeleteMapping("/{teamId}/shares/{shareId}")

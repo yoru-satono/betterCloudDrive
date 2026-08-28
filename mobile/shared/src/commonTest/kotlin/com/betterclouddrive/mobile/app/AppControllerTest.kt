@@ -13,6 +13,10 @@ import com.betterclouddrive.mobile.core.localization.MobileLocale
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.model.RegistrationResult
 import com.betterclouddrive.mobile.core.model.PersonalTag
+import com.betterclouddrive.mobile.core.model.CreatePersonalShareRequest
+import com.betterclouddrive.mobile.core.model.ShareExpirationFilter
+import com.betterclouddrive.mobile.core.model.ShareLink
+import com.betterclouddrive.mobile.core.model.UpdatePersonalShareRequest
 import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
 import com.betterclouddrive.mobile.core.platform.ThemeMode
 import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
@@ -700,6 +704,62 @@ class AppControllerTest {
         assertTrue(controller.state.value.tags.feedback?.isError == true)
     }
 
+    @Test
+    fun personalSharesPageDeduplicatesAndPasswordIsClearedWhenDetailCloses() = runTest {
+        val first = ShareLink(id = 1, fileId = 8, shareCode = "one", shareUrl = "https://drive/s/one", hasPassword = true)
+        val second = ShareLink(id = 2, fileId = 9, shareCode = "two", shareUrl = "https://drive/s/two")
+        val third = ShareLink(id = 3, fileId = 10, shareCode = "three", shareUrl = "https://drive/s/three")
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            shareResponses += Result.success(PageResult(listOf(first, second), 3, 1, 50, 2))
+            shareResponses += Result.success(PageResult(listOf(second, third), 3, 2, 50, 2))
+            shares[first.id] = first
+            sharePassword = "secret"
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+
+        controller.activateShares()
+        runCurrent()
+        controller.loadMoreShares()
+        runCurrent()
+        assertEquals(listOf(1L, 2L, 3L), controller.state.value.shares.items.map(ShareLink::id))
+
+        controller.openShareDetail(first.id)
+        runCurrent()
+        controller.toggleSharePassword()
+        runCurrent()
+        assertEquals("secret", controller.state.value.shares.revealedPassword)
+        controller.closeShareDetail()
+        assertNull(controller.state.value.shares.revealedPassword)
+        assertNull(controller.state.value.shares.selected)
+    }
+
+    @Test
+    fun shareUpdatePreservesExplicitClearSemantics() = runTest {
+        val share = ShareLink(id = 4, fileId = 8, shareCode = "four", shareUrl = "https://drive/s/four", hasPassword = true)
+        val files = FakeFiles().apply {
+            responses += Result.success(page())
+            shares[share.id] = share
+        }
+        val controller = AppController(FakeAuth(SessionRestoreResult.Restored(USER)), files, FakeTransfers(), backgroundScope)
+        controller.start()
+        runCurrent()
+        controller.openShareDetail(share.id)
+        runCurrent()
+
+        controller.updatePersonalShare(UpdatePersonalShareRequest(
+            clearPassword = true, clearExpireAt = true, clearMaxVisits = true,
+        ))
+        runCurrent()
+
+        assertEquals(UpdatePersonalShareRequest(
+            clearPassword = true, clearExpireAt = true, clearMaxVisits = true,
+        ), files.lastShareUpdate)
+        assertEquals(UiMessage(MobileString.ShareUpdated), controller.state.value.shares.feedback?.message)
+    }
+
     private companion object {
         val USER = UserProfile(id = 7, username = "user", email = "user@example.com")
         val FILE = FileItem(id = 8, fileName = "sample.txt", fileSize = 12)
@@ -793,6 +853,11 @@ private class FakeFiles : AppFileOperations {
     val tagFileResponses = ArrayDeque<Result<PageResult<FileItem>>>()
     val tagFileRequests = mutableListOf<List<Any?>>()
     val fileTags = mutableMapOf<Long, MutableSet<Long>>()
+    val shareResponses = ArrayDeque<Result<PageResult<ShareLink>>>()
+    val shareRequests = mutableListOf<List<Any?>>()
+    val shares = mutableMapOf<Long, ShareLink>()
+    var sharePassword: String? = null
+    var lastShareUpdate: UpdatePersonalShareRequest? = null
     override suspend fun listPersonalFiles(
         parentId: Long?, page: Int, size: Int, sortBy: String, order: String,
     ): PageResult<FileItem> {
@@ -851,6 +916,26 @@ private class FakeFiles : AppFileOperations {
         return listPersonalFileTags(fileId)
     }
     override suspend fun removePersonalFileTag(tagId: Long, fileId: Long) { fileTags[fileId]?.remove(tagId) }
+    override suspend fun createPersonalShare(request: CreatePersonalShareRequest): ShareLink =
+        ShareLink(id = 100, fileId = request.fileId, shareCode = "created", shareUrl = "https://drive/s/created")
+            .also { shares[it.id] = it }
+    override suspend fun listPersonalShares(
+        query: String?, passwordProtected: Boolean?, expiration: ShareExpirationFilter, page: Int, size: Int,
+    ): PageResult<ShareLink> {
+        shareRequests += listOf(query, passwordProtected, expiration, page, size)
+        return shareResponses.removeFirst().getOrThrow()
+    }
+    override suspend fun getPersonalShare(shareId: Long): ShareLink = shares.getValue(shareId)
+    override suspend fun getPersonalSharePassword(shareId: Long): String? = sharePassword
+    override suspend fun updatePersonalShare(shareId: Long, request: UpdatePersonalShareRequest): ShareLink {
+        lastShareUpdate = request
+        return shares.getValue(shareId).copy(
+            hasPassword = if (request.clearPassword) false else shares.getValue(shareId).hasPassword,
+            expireAtEpochMs = if (request.clearExpireAt) null else request.expireAt,
+            maxVisits = if (request.clearMaxVisits) null else request.maxVisits,
+        ).also { shares[shareId] = it }
+    }
+    override suspend fun cancelPersonalShare(shareId: Long) { shares.remove(shareId) }
     override suspend fun searchPersonalFiles(query: String, page: Int, size: Int): PageResult<FileItem> {
         searchRequests += Triple(query, page, size)
         searchHandler?.let { return it(query, page, size) }

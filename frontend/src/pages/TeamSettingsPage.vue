@@ -13,7 +13,7 @@ import * as teamsApi from '@/api/teams'
 import { saveBlobResponse } from '@/api/download'
 import { useAuthStore } from '@/stores/auth'
 import { useTeamsStore } from '@/stores/teams'
-import { buildShareUrl } from '@/config/runtime'
+import { resolveShareUrl } from '@/config/runtime'
 import { toast } from 'vue-sonner'
 import type { TagEntity } from '@/types/tag'
 import type { FileEntity } from '@/types/file'
@@ -461,7 +461,7 @@ function isExpired(share: ShareLinkEntity) {
 }
 
 async function copyLink(share: ShareLinkEntity) {
-  await navigator.clipboard.writeText(buildShareUrl(share.shareCode)).catch(() => {})
+  await navigator.clipboard.writeText(resolveShareUrl(share)).catch(() => {})
   toast.success(t('teamSettings.toast.linkCopied'))
 }
 
@@ -809,7 +809,7 @@ onMounted(async () => {
         <div v-else class="team-shares__list">
           <div v-for="share in shares" :key="share.id" class="team-shares__row">
             <div class="team-shares__main">
-              <div class="team-shares__url font-mono truncate">{{ buildShareUrl(share.shareCode) }}</div>
+              <div class="team-shares__url font-mono truncate">{{ resolveShareUrl(share) }}</div>
               <div class="team-shares__meta">
                 <span v-if="share.expireAt" :style="isExpired(share) ? 'color:var(--danger)' : 'color:var(--text-secondary)'">{{ t('team.teamsettings.value', { p0: t('team.teamsettings.value', { p0: t('team.teamsettings.value', { p0: isExpired(share) ? t('commonUi.searchoverlay.expiredStatus') : t('commonUi.searchoverlay.expired', { p0: formatDateFull(share.expireAt) }) }) }) }) }}</span>
                 <span v-else>{{ t('commonUi.searchoverlay.neverExpires') }}</span>
@@ -886,7 +886,7 @@ onMounted(async () => {
 
     <OModal :title="t('team.shares.shareDetails')" :open="detailOpen" @close="detailOpen = false">
       <div v-if="detailShare" class="share-info">
-        <div><span>{{ t('team.shares.link') }}</span><strong class="font-mono">{{ buildShareUrl(detailShare.shareCode) }}</strong></div>
+        <div><span>{{ t('team.shares.link') }}</span><strong class="font-mono">{{ resolveShareUrl(detailShare) }}</strong></div>
         <div><span>{{ t('team.shares.fileId') }}</span><strong class="font-mono">{{ detailShare.fileId }}</strong></div>
         <div><span>{{ t('team.shares.access') }}</span><strong class="font-mono">{{ detailShare.visitCount }}{{ detailShare.maxVisits ? `/${detailShare.maxVisits}` : '' }}</strong></div>
         <div><span>{{ t('commonUi.filepreview.download') }}</span><strong class="font-mono">{{ detailShare.downloadCount }}</strong></div>

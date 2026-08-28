@@ -83,6 +83,8 @@
 | GET | `/api/v1/teams/{teamId}/shares/{shareId}/password` | 可分享 | 读取分享密码 |
 | PUT | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | Body 同个人更新分享；可更新或清空密码、过期时间和访问次数 |
 | DELETE | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | 取消分享 |
+
+团队分享响应与个人分享使用同一兼容 DTO：`shareUrl` 由后端按 `APP_PUBLIC_URL` 生成，`expireAtEpochMs` 提供明确时区的 epoch 毫秒值，并可携带分享根项目的 `fileName`、`fileType`、`fileSize`；原有 `expireAt` 保留兼容。列表文件元数据批量读取，项目已删除时元数据字段为 `null`。
 | POST | `/api/v1/teams/{teamId}/favorites/{fileId}` | 可读 | 添加团队收藏 |
 | DELETE | `/api/v1/teams/{teamId}/favorites/{fileId}` | 登录用户 | 取消团队收藏 |
 | GET | `/api/v1/teams/{teamId}/favorites/{fileId}/status` | 可读 | 返回 boolean |

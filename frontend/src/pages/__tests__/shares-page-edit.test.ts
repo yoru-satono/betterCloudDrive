@@ -15,6 +15,7 @@ vi.mock('@/composables/useConfirm', () => ({
 
 vi.mock('@/config/runtime', () => ({
   buildShareUrl: vi.fn((code: string) => `http://localhost/share/${code}`),
+  resolveShareUrl: vi.fn((share: { shareCode: string; shareUrl?: string | null }) => share.shareUrl || `http://localhost/share/${share.shareCode}`),
 }))
 
 vi.mock('@/api/shares', () => ({

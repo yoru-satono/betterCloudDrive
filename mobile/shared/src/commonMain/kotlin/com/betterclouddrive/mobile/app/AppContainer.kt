@@ -4,6 +4,8 @@ import com.betterclouddrive.mobile.core.database.MobileDatabase
 import com.betterclouddrive.mobile.core.localization.PlatformLocaleProvider
 import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
 import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
+import com.betterclouddrive.mobile.core.platform.ClipboardService
+import com.betterclouddrive.mobile.core.platform.LocalDateTimeService
 import com.betterclouddrive.mobile.core.network.BackendClient
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
@@ -29,6 +31,8 @@ class AppContainer(
     val localeProvider: PlatformLocaleProvider,
     val localeController: ApplicationLocaleController,
     val themePreferences: ThemePreferenceStore,
+    val clipboard: ClipboardService,
+    val localDateTime: LocalDateTimeService,
     private val applicationScope: CoroutineScope,
 ) {
     val controller: AppController by lazy {

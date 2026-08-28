@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Visibility
@@ -116,6 +117,7 @@ fun PersonalSpaceScreen(
     onLoadFavoriteStatus: (Long) -> Unit,
     onToggleFavorite: (FileItem) -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
@@ -173,7 +175,7 @@ fun PersonalSpaceScreen(
                     onToggleSelection, onClearSelection, { createDialog = true },
                     { renameTarget = it }, { deleteTargets = listOf(it) }, onOpenPicker,
                     { deleteTargets = state.current.items.filter { item -> item.id in state.selectedIds } },
-                    onPreview, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                    onPreview, onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
                     Modifier.weight(0.58f),
                 )
                 VerticalDivider(Modifier.fillMaxHeight())
@@ -181,7 +183,7 @@ fun PersonalSpaceScreen(
                     state.selectedFile?.let { file ->
                         FileDetailContent(
                             file, favorites, ::launchDownload, onPreview,
-                            onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                            onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
                         )
                     } ?: EmptyDetail()
                 }
@@ -193,7 +195,7 @@ fun PersonalSpaceScreen(
                 onToggleSelection, onClearSelection, { createDialog = true },
                 { renameTarget = it }, { deleteTargets = listOf(it) }, onOpenPicker,
                 { deleteTargets = state.current.items.filter { item -> item.id in state.selectedIds } },
-                onPreview, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                onPreview, onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
                 Modifier.fillMaxSize(),
             )
             state.selectedFile?.let { file ->
@@ -203,7 +205,7 @@ fun PersonalSpaceScreen(
                 ) {
                     FileDetailContent(
                         file, favorites, ::launchDownload, onPreview,
-                        onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                        onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
                     )
                 }
             }
@@ -268,6 +270,7 @@ private fun PersonalDirectoryContent(
     onLoadFavoriteStatus: (Long) -> Unit,
     onToggleFavorite: (FileItem) -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
     modifier: Modifier,
 ) {
     val strings = LocalMobileStrings.current
@@ -320,12 +323,12 @@ private fun PersonalDirectoryContent(
             state.viewMode == FileViewMode.LIST -> PersonalList(
                 state, favorites, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
                 onToggleSelection, onRename, onDeleteOne, onOpenPicker, onDownload, onPreview,
-                onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
             )
             else -> PersonalGrid(
                 state, favorites, onOpenFolder, onSelectFile, onLoadMore, onScrollAnchor,
                 onToggleSelection, onRename, onDeleteOne, onOpenPicker, onDownload, onPreview,
-                onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
             )
         }
     }
@@ -348,6 +351,7 @@ private fun PersonalList(
     onLoadFavoriteStatus: (Long) -> Unit,
     onToggleFavorite: (FileItem) -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
 ) {
     val items = state.current.items
     val initialIndex = items.indexOfFirst { it.id == state.current.scrollAnchorId }.coerceAtLeast(0)
@@ -389,6 +393,7 @@ private fun PersonalList(
                 onLoadFavoriteStatus = { onLoadFavoriteStatus(file.id) },
                 onToggleFavorite = { onToggleFavorite(file) },
                 onManageTags = { onManageTags(file) },
+                onCreateShare = { onCreateShare(file) },
             )
         }
         item { PagingFooter(state.current, onLoadMore) }
@@ -412,6 +417,7 @@ private fun PersonalGrid(
     onLoadFavoriteStatus: (Long) -> Unit,
     onToggleFavorite: (FileItem) -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
 ) {
     val items = state.current.items
     val initialIndex = items.indexOfFirst { it.id == state.current.scrollAnchorId }.coerceAtLeast(0)
@@ -455,6 +461,7 @@ private fun PersonalGrid(
                 onLoadFavoriteStatus = { onLoadFavoriteStatus(file.id) },
                 onToggleFavorite = { onToggleFavorite(file) },
                 onManageTags = { onManageTags(file) },
+                onCreateShare = { onCreateShare(file) },
             )
         }
         item { PagingFooter(state.current, onLoadMore) }
@@ -480,6 +487,7 @@ private fun PersonalFileRow(
     onLoadFavoriteStatus: () -> Unit,
     onToggleFavorite: () -> Unit,
     onManageTags: () -> Unit,
+    onCreateShare: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     Card(
@@ -507,7 +515,7 @@ private fun PersonalFileRow(
             }
             if (!selectionMode) FileActionsMenu(
                 file, onRename, onMove, onCopy, onDelete, onDownload, onPreview,
-                favorite, favoriteLoading, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                favorite, favoriteLoading, onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
             )
         }
     }
@@ -532,6 +540,7 @@ private fun PersonalFileCard(
     onLoadFavoriteStatus: () -> Unit,
     onToggleFavorite: () -> Unit,
     onManageTags: () -> Unit,
+    onCreateShare: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     Card(
@@ -557,7 +566,7 @@ private fun PersonalFileCard(
             )
             if (!selectionMode) FileActionsMenu(
                 file, onRename, onMove, onCopy, onDelete, onDownload, onPreview,
-                favorite, favoriteLoading, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                favorite, favoriteLoading, onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
             )
         }
     }
@@ -577,6 +586,7 @@ private fun FileActionsMenu(
     onLoadFavoriteStatus: () -> Unit,
     onToggleFavorite: () -> Unit,
     onManageTags: () -> Unit,
+    onCreateShare: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var expanded by remember { mutableStateOf(false) }
@@ -597,6 +607,12 @@ private fun FileActionsMenu(
                 leadingIcon = { Icon(Icons.Default.Label, null) },
                 onClick = { expanded = false; onManageTags() },
                 modifier = Modifier.testTag("personal-tags-${file.id}"),
+            )
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.CreateShare]) },
+                leadingIcon = { Icon(Icons.Default.Share, null) },
+                onClick = { expanded = false; onCreateShare() },
+                modifier = Modifier.testTag("personal-share-${file.id}"),
             )
             if (!file.isFolder) DropdownMenuItem(
                 text = { Text(strings[MobileString.Preview]) },
@@ -920,6 +936,7 @@ private fun FileDetailContent(
     onLoadFavoriteStatus: (Long) -> Unit,
     onToggleFavorite: (FileItem) -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     LaunchedEffect(file.id) { onLoadFavoriteStatus(file.id) }
@@ -947,6 +964,10 @@ private fun FileDetailContent(
             onClick = { onManageTags(file) },
             modifier = Modifier.testTag("personal-detail-tags-${file.id}"),
         ) { Icon(Icons.Default.Label, null); Text(strings[MobileString.ManageTags]) }
+        OutlinedButton(
+            onClick = { onCreateShare(file) },
+            modifier = Modifier.testTag("personal-detail-share-${file.id}"),
+        ) { Icon(Icons.Default.Share, null); Text(strings[MobileString.CreateShare]) }
         OutlinedButton(
             onClick = { onPreview(file) },
             modifier = Modifier.testTag("personal-detail-preview-${file.id}"),

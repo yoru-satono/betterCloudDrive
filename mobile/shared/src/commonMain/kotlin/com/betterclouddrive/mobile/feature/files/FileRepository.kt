@@ -6,6 +6,10 @@ import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.PreviewKind
 import com.betterclouddrive.mobile.core.model.TextPreview
 import com.betterclouddrive.mobile.core.model.PersonalTag
+import com.betterclouddrive.mobile.core.model.CreatePersonalShareRequest
+import com.betterclouddrive.mobile.core.model.ShareExpirationFilter
+import com.betterclouddrive.mobile.core.model.ShareLink
+import com.betterclouddrive.mobile.core.model.UpdatePersonalShareRequest
 import com.betterclouddrive.mobile.core.network.BackendClient
 
 class FileRepository(private val backend: BackendClient) {
@@ -53,6 +57,16 @@ class FileRepository(private val backend: BackendClient) {
     suspend fun replacePersonalFileTags(fileId: Long, tagIds: List<Long>): List<PersonalTag> =
         backend.replacePersonalFileTags(fileId, tagIds)
     suspend fun removePersonalFileTag(tagId: Long, fileId: Long) = backend.removePersonalFileTag(tagId, fileId)
+    suspend fun createPersonalShare(request: CreatePersonalShareRequest): ShareLink =
+        backend.createPersonalShare(request)
+    suspend fun listPersonalShares(
+        query: String?, passwordProtected: Boolean?, expiration: ShareExpirationFilter, page: Int, size: Int,
+    ) = backend.listPersonalShares(query, passwordProtected, expiration, page, size)
+    suspend fun getPersonalShare(shareId: Long) = backend.getPersonalShare(shareId)
+    suspend fun getPersonalSharePassword(shareId: Long) = backend.getPersonalSharePassword(shareId)
+    suspend fun updatePersonalShare(shareId: Long, request: UpdatePersonalShareRequest) =
+        backend.updatePersonalShare(shareId, request)
+    suspend fun cancelPersonalShare(shareId: Long) = backend.cancelPersonalShare(shareId)
     suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig = backend.loadTeamOffice(teamId, fileId)
 
     companion object {

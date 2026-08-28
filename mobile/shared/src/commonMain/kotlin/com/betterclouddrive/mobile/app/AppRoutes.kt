@@ -24,6 +24,12 @@ data object PersonalTagsRoute : AppRoute
 data class PersonalTagFilesRoute(val tagId: Long) : AppRoute
 
 @Serializable
+data object PersonalSharesRoute : AppRoute
+
+@Serializable
+data class PersonalShareDetailRoute(val shareId: Long) : AppRoute
+
+@Serializable
 data class PersonalPreviewRoute(val fileId: Long) : AppRoute
 
 @Serializable

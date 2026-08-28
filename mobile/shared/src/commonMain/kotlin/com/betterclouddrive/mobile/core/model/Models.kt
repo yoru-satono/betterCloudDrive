@@ -129,6 +129,52 @@ data class PersonalTag(
 @Serializable data class ReplacePersonalFileTagsRequest(@SerialName("tagIds") val tagIds: List<Long>)
 
 @Serializable
+data class ShareLink(
+    val id: Long = 0,
+    @SerialName("userId") val userId: Long = 0,
+    @SerialName("teamId") val teamId: Long? = null,
+    @SerialName("fileId") val fileId: Long = 0,
+    @SerialName("shareCode") val shareCode: String = "",
+    @SerialName("shareUrl") val shareUrl: String = "",
+    @SerialName("hasPassword") val hasPassword: Boolean = false,
+    @SerialName("expireAt") val expireAt: String? = null,
+    @SerialName("expireAtEpochMs") val expireAtEpochMs: Long? = null,
+    @SerialName("maxVisits") val maxVisits: Int? = null,
+    @SerialName("downloadCount") val downloadCount: Int = 0,
+    @SerialName("visitCount") val visitCount: Int = 0,
+    @SerialName("isCanceled") val isCanceled: Boolean = false,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+    @SerialName("fileName") val fileName: String? = null,
+    @SerialName("fileType") val fileType: String? = null,
+    @SerialName("fileSize") val fileSize: Long? = null,
+)
+
+enum class ShareExpirationFilter(val apiValue: String?) {
+    ALL(null), ACTIVE("ACTIVE"), EXPIRED("EXPIRED"), NEVER("NEVER")
+}
+
+@Serializable
+data class CreatePersonalShareRequest(
+    @SerialName("fileId") val fileId: Long,
+    val password: String? = null,
+    @SerialName("expireAt") val expireAt: Long? = null,
+    @SerialName("maxVisits") val maxVisits: Int? = null,
+)
+
+@Serializable
+data class UpdatePersonalShareRequest(
+    val password: String? = null,
+    @SerialName("expireAt") val expireAt: Long? = null,
+    @SerialName("maxVisits") val maxVisits: Int? = null,
+    @SerialName("clearPassword") val clearPassword: Boolean = false,
+    @SerialName("clearExpireAt") val clearExpireAt: Boolean = false,
+    @SerialName("clearMaxVisits") val clearMaxVisits: Boolean = false,
+)
+
+@Serializable data class SharePasswordResponse(val password: String? = null)
+
+@Serializable
 data class InitUploadRequest(
     @SerialName("parentId") val parentId: Long? = null,
     @SerialName("fileName") val fileName: String,

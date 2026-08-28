@@ -79,6 +79,7 @@ public class ShareServiceImpl implements ShareService {
 
     private ShareLinkEntity createShareRecord(Long userId, Long teamId, Long fileId, String password, Long expireAtMs, Integer maxVisits) {
         String normalizedPassword = normalizeOptionalPassword(password);
+        validateMaxVisits(maxVisits);
         String shareCode = generateShareCode();
         ShareLinkEntity share = ShareLinkEntity.builder()
                 .userId(userId)
@@ -101,7 +102,8 @@ public class ShareServiceImpl implements ShareService {
     public PageResult<ShareLinkEntity> listShares(Long userId, String keyword, Boolean passwordProtected, String expirationStatus, int page, int size) {
         Specification<ShareLinkEntity> spec = shareListSpec(userId, null, keyword, passwordProtected, expirationStatus);
 
-        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageable = PageRequest.of(page - 1, size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
         Page<ShareLinkEntity> result = shareLinkRepository.findAll(spec, pageable);
         return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
     }
@@ -217,6 +219,7 @@ public class ShareServiceImpl implements ShareService {
     }
 
     private ShareLinkEntity updateShareRecord(ShareLinkEntity share, ShareUpdateCommand command) {
+        validateMaxVisits(command.maxVisits());
         if (command.clearPassword()) {
             share.setPasswordCiphertext(null);
         } else if (command.password() != null) {
@@ -251,6 +254,12 @@ public class ShareServiceImpl implements ShareService {
         return normalizedPassword;
     }
 
+    private void validateMaxVisits(Integer maxVisits) {
+        if (maxVisits != null && maxVisits < 1) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Share max visits must be a positive integer");
+        }
+    }
+
     @Override
     @Transactional
     public void cancelShare(Long userId, Long shareId) {
@@ -269,6 +278,9 @@ public class ShareServiceImpl implements ShareService {
     }
 
     private void cancelShareRecord(ShareLinkEntity share) {
+        if (Boolean.TRUE.equals(share.getIsCanceled())) {
+            return;
+        }
         share.setIsCanceled(true);
         share.setUpdatedAt(LocalDateTime.now());
         shareLinkRepository.save(share);

@@ -6,6 +6,7 @@ import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.FolderZipDownloadService;
 import com.betterclouddrive.service.ShareService;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.web.dto.response.ShareLinkResponseMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,7 @@ class ShareControllerDownloadTest {
     @Mock private AuthService authService;
     @Mock private StorageService storageService;
     @Mock private FolderZipDownloadService folderZipDownloadService;
+    @Mock private ShareLinkResponseMapper shareResponseMapper;
 
     private ShareController controller;
     private MockMvc mockMvc;
@@ -45,7 +47,7 @@ class ShareControllerDownloadTest {
     @BeforeEach
     void setUp() {
         controller = new ShareController(shareService, fileService, authService, storageService,
-                folderZipDownloadService);
+                folderZipDownloadService, shareResponseMapper);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 

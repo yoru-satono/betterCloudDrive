@@ -15,7 +15,7 @@ import { useConfirm } from '@/composables/useConfirm'
 import * as sharesApi from '@/api/shares'
 import { toast } from 'vue-sonner'
 import type { ShareLinkEntity } from '@/types/share'
-import { buildShareUrl } from '@/config/runtime'
+import { resolveShareUrl } from '@/config/runtime'
 
 const { formatDateFull } = useFormatters()
 const { confirm } = useConfirm()
@@ -57,7 +57,7 @@ async function openShareFromQuery() {
 }
 
 async function copyLink(share: ShareLinkEntity) {
-  await navigator.clipboard.writeText(buildShareUrl(share.shareCode))
+  await navigator.clipboard.writeText(resolveShareUrl(share))
   toast.success(__t('share.searchoverlay.linkCopied'))
 }
 
@@ -146,7 +146,7 @@ watch(() => route.query.shareId, () => openShareFromQuery())
     <div v-else class="shares-list">
       <div v-for="share in shares" :key="share.id" class="share-card">
         <div class="share-card__main">
-          <div class="share-card__url font-mono truncate">{{ buildShareUrl(share.shareCode) }}</div>
+          <div class="share-card__url font-mono truncate">{{ resolveShareUrl(share) }}</div>
           <div class="share-card__meta">
             <span v-if="share.expireAt">
               <span :style="isExpired(share) ? 'color:var(--danger)' : 'color:var(--text-secondary)'">
@@ -181,7 +181,7 @@ watch(() => route.query.shareId, () => openShareFromQuery())
 
     <OModal :title="__t('team.shares.shareDetails')" :open="detailOpen" @close="detailOpen = false">
       <div v-if="detailShare" class="share-info">
-        <div><span>{{ __t('team.shares.link') }}</span><strong class="font-mono">{{ buildShareUrl(detailShare.shareCode) }}</strong></div>
+        <div><span>{{ __t('team.shares.link') }}</span><strong class="font-mono">{{ resolveShareUrl(detailShare) }}</strong></div>
         <div><span>{{ __t('team.shares.fileId') }}</span><strong class="font-mono">{{ detailShare.fileId }}</strong></div>
         <div><span>{{ __t('team.shares.access') }}</span><strong class="font-mono">{{ detailShare.visitCount }}{{ detailShare.maxVisits ? `/${detailShare.maxVisits}` : '' }}</strong></div>
         <div><span>{{ __t('commonUi.filepreview.download') }}</span><strong class="font-mono">{{ detailShare.downloadCount }}</strong></div>
