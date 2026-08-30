@@ -12,7 +12,7 @@ import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.betterclouddrive.mobile.core.model.StoredSession
 import com.betterclouddrive.mobile.core.model.SessionStorageInvalidException
-import com.betterclouddrive.mobile.core.network.BackendClient
+import com.betterclouddrive.mobile.core.network.NetworkDefaults
 import com.betterclouddrive.mobile.core.platform.SecureSessionStore
 import com.betterclouddrive.mobile.core.platform.ServerSettingsStore
 import com.betterclouddrive.mobile.core.platform.ThemeMode
@@ -34,8 +34,8 @@ fun createPreferencesStore(context: Context, name: String): DataStore<Preference
 internal class AndroidServerSettingsStore(
     private val dataStore: DataStore<Preferences>,
 ) : ServerSettingsStore {
-    override val serverBaseUrl: Flow<String> = dataStore.data.map { it[SERVER_KEY] ?: BackendClient.DEFAULT_SERVER }
-    override suspend fun read(): String = dataStore.data.first()[SERVER_KEY] ?: BackendClient.DEFAULT_SERVER
+    override val serverBaseUrl: Flow<String> = dataStore.data.map { it[SERVER_KEY] ?: NetworkDefaults.DEFAULT_SERVER }
+    override suspend fun read(): String = dataStore.data.first()[SERVER_KEY] ?: NetworkDefaults.DEFAULT_SERVER
     override suspend fun write(value: String) { dataStore.edit { it[SERVER_KEY] = value } }
 
     private companion object {

@@ -69,7 +69,7 @@ object AndroidRuntime {
     fun install(value: AppContainer) { container = value }
 
     suspend fun executeBatch(taskIds: List<String>, onProgress: suspend (TransferTask) -> Unit = {}): TransferRunResult {
-        container.backend.initialize()
+        container.http.initialize()
         return TransferBatchExecutor(
             findTask = container.transfers::find,
             runTask = { taskId -> executeTask(taskId, onProgress) },

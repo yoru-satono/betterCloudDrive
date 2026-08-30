@@ -1,5 +1,11 @@
 package com.betterclouddrive.mobile.app
 
+import com.betterclouddrive.mobile.feature.organization.FavoritesState
+import com.betterclouddrive.mobile.feature.organization.TagsState
+import com.betterclouddrive.mobile.feature.organization.FileTagEditorState
+import com.betterclouddrive.mobile.feature.organization.OrganizationFileListState
+import com.betterclouddrive.mobile.feature.organization.TagMutationKind
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -74,7 +80,7 @@ internal val TAG_COLORS = listOf("#00d4aa", "#60a5fa", "#a78bfa", "#f87171", "#f
 
 @Composable
 fun FavoritesScreen(
-    state: FavoritesUiState,
+    state: FavoritesState,
     documentPicker: DocumentPicker,
     onQuery: (String) -> Unit,
     onRefresh: () -> Unit,
@@ -149,7 +155,7 @@ fun FavoritesScreen(
 
 @Composable
 fun TagsScreen(
-    state: TagsUiState,
+    state: TagsState,
     onQuery: (String) -> Unit,
     onRefresh: () -> Unit,
     onOpenTag: (PersonalTag) -> Unit,
@@ -245,7 +251,7 @@ fun TagsScreen(
 @Composable
 fun TagFilesScreen(
     tag: PersonalTag?,
-    state: TagsUiState,
+    state: TagsState,
     documentPicker: DocumentPicker,
     onQuery: (String) -> Unit,
     onRefresh: () -> Unit,
@@ -379,7 +385,7 @@ private fun OrganizationFilesContent(
     title: String,
     query: String,
     queryLabel: String,
-    files: OrganizationFileListUiState,
+    files: OrganizationFileListState,
     emptyTitle: String,
     emptyDetail: String,
     onQuery: (String) -> Unit,

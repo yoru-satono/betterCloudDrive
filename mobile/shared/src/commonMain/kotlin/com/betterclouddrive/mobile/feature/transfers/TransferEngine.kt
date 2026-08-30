@@ -2,7 +2,8 @@ package com.betterclouddrive.mobile.feature.transfers
 
 import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.SessionExpiredException
-import com.betterclouddrive.mobile.core.network.BackendClient
+import com.betterclouddrive.mobile.core.network.NetworkDefaults
+import com.betterclouddrive.mobile.core.network.TransferApi
 import com.betterclouddrive.mobile.core.platform.TransferFileAccess
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -15,7 +16,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.math.min
 
 class TransferEngine(
-    private val backend: BackendClient,
+    private val backend: TransferApi,
     private val repository: TransferRepository,
     private val files: TransferFileAccess,
 ) {
@@ -88,7 +89,7 @@ class TransferEngine(
                 }
                 return
             } catch (error: ApiException) {
-                if (error.code != BackendClient.INSTANT_UPLOAD_MISS) throw error
+                if (error.code != NetworkDefaults.INSTANT_UPLOAD_MISS) throw error
             }
         }
 

@@ -36,7 +36,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-class BackendClientTest {
+class NetworkTestFacadeTest {
     @Test
     fun publicAccountLifecycleRequestsAreUnauthenticatedAndPreserveExactLocale() = runTest {
         val observed = mutableListOf<Triple<HttpMethod, String, String>>()
@@ -48,7 +48,7 @@ class BackendClientTest {
                 jsonResponse("""{"code":200,"data":{"userId":9,"username":"alice"}}""")
             } else jsonResponse("""{"code":200}""")
         }
-        val client = BackendClient(HttpClient(engine), "https://drive.example.com")
+        val client = NetworkTestFacade(HttpClient(engine), "https://drive.example.com")
 
         client.sendRegistrationCode("a@example.com", "zh-SG")
         val registered = client.register("alice", "Password1", "a@example.com", "123456", "zh-SG")
@@ -76,7 +76,7 @@ class BackendClientTest {
             }
             jsonResponse("""{"code":200,"data":{"id":7,"username":"alice","email":"a@example.com","emailVerified":true,"preferredLocale":"zh-CN","role":"ROLE_USER","status":1,"storageQuota":1073741824,"storageUsed":536870912,"webdavEnabled":false,"createdAt":"2026-08-25T10:00:00"}}""")
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com",
             FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
             FakeServerStore("https://drive.example.com"),
@@ -105,7 +105,7 @@ class BackendClientTest {
                 jsonResponse("""{"code":200}""")
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com",
             FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
             FakeServerStore("https://drive.example.com"),
@@ -159,7 +159,7 @@ class BackendClientTest {
                 else -> jsonResponse("""{"code":200}""")
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com",
             FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
             FakeServerStore("https://drive.example.com"),
@@ -203,7 +203,7 @@ class BackendClientTest {
                 else -> jsonResponse("""{"code":200,"data":$shareJson}""")
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com",
             FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
             FakeServerStore("https://drive.example.com"),
@@ -234,7 +234,7 @@ class BackendClientTest {
                 """{"code":200,"data":{"records":[{"id":9,"parentId":7,"fileName":"note.txt","fileSize":12,"versionCount":3,"createdAt":"2026-08-20T10:00:00","updatedAt":"2026-08-21T11:30:00"}],"total":101,"page":2,"size":50,"pages":3}}""",
             )
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com",
             FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
             FakeServerStore("https://drive.example.com"),
@@ -259,7 +259,7 @@ class BackendClientTest {
             requestedPath = request.url.encodedPath
             jsonResponse("""{"code":200,"data":{"id":8,"fileName":"目录","fileType":"folder"}}""")
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com",
             FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
             FakeServerStore("https://drive.example.com"),
@@ -303,7 +303,7 @@ class BackendClientTest {
                 else -> error("Unexpected request ${request.url}")
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com", store,
             FakeServerStore("https://drive.example.com"),
         )
@@ -332,7 +332,7 @@ class BackendClientTest {
     fun streamingDownloadCancellationPropagatesWithoutInvalidatingSession() = runTest {
         val original = StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")
         val store = FakeSessionStore(original)
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(MockEngine { respond("stream") }), "https://drive.example.com", store,
             FakeServerStore("https://drive.example.com"),
         )
@@ -367,7 +367,7 @@ class BackendClientTest {
                 }
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com", store,
             FakeServerStore("https://drive.example.com"),
         )
@@ -402,7 +402,7 @@ class BackendClientTest {
             }
         }
 
-        val profile = BackendClient(HttpClient(engine), "https://drive.example.com")
+        val profile = NetworkTestFacade(HttpClient(engine), "https://drive.example.com")
             .login("stage1_user", "stage1_password")
 
         assertEquals("stage1_user", profile.username)
@@ -435,7 +435,7 @@ class BackendClientTest {
                 else -> error("Unexpected request ${request.url}")
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine),
             "https://drive.example.com",
             sessionStore,
@@ -459,7 +459,7 @@ class BackendClientTest {
         val engine = MockEngine {
             jsonResponse("""{"code":401002,"messageKey":"error.tokenRevoked"}""", HttpStatusCode.Unauthorized)
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com", sessionStore, FakeServerStore("https://drive.example.com"),
         )
         client.initialize()
@@ -479,7 +479,7 @@ class BackendClientTest {
                 jsonResponse("""{"code":419001,"messageKey":"error.storageQuotaExceeded"}""")
             }
         }
-        val client = BackendClient(HttpClient(engine), "https://drive.example.com")
+        val client = NetworkTestFacade(HttpClient(engine), "https://drive.example.com")
         client.login("user", "password")
 
         val error = assertFailsWith<ApiException> { client.listRootFiles() }
@@ -503,7 +503,7 @@ class BackendClientTest {
             }
             jsonResponse(content)
         }
-        val client = BackendClient(HttpClient(engine), "https://drive.example.com")
+        val client = NetworkTestFacade(HttpClient(engine), "https://drive.example.com")
         client.login("user", "password")
 
         val config = client.loadTeamOffice(teamId = 10, fileId = 7)
@@ -536,7 +536,7 @@ class BackendClientTest {
                 else -> error("unexpected ${request.url}")
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com",
             FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
             FakeServerStore("https://drive.example.com"),
@@ -568,7 +568,7 @@ class BackendClientTest {
                 else -> error("Unexpected request ${request.url}")
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com", store,
             FakeServerStore("https://drive.example.com"), now = { 100_000 },
         )
@@ -581,7 +581,7 @@ class BackendClientTest {
     @Test
     fun switchingServerClearsServerBoundSession() = runTest {
         val store = FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://one.example.com"))
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(MockEngine { error("network should not be used") }),
             "https://one.example.com", store, FakeServerStore("https://one.example.com"),
         )
@@ -596,7 +596,7 @@ class BackendClientTest {
     @Test
     fun logoutAlwaysClearsLocalSessionWhenServerFails() = runTest {
         val store = FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com"))
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(MockEngine { error("offline") }), "https://drive.example.com", store,
             FakeServerStore("https://drive.example.com"),
         )
@@ -610,7 +610,7 @@ class BackendClientTest {
     @Test
     fun cancellationDuringRestoreIsNotConvertedToOfflineState() = runTest {
         val store = FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com"))
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(MockEngine { throw CancellationException("cancel test") }),
             "https://drive.example.com", store, FakeServerStore("https://drive.example.com"),
         )
@@ -628,7 +628,7 @@ class BackendClientTest {
                 error("offline")
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com", store, FakeServerStore("https://drive.example.com"),
         )
 
@@ -639,7 +639,7 @@ class BackendClientTest {
     @Test
     fun refreshFailureInvalidatesSession() = runTest {
         val store = FakeSessionStore(StoredSession("old", "refresh", 1, "https://drive.example.com"))
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(MockEngine { error("offline") }), "https://drive.example.com", store,
             FakeServerStore("https://drive.example.com"), now = { 100_000 },
         )
@@ -652,7 +652,7 @@ class BackendClientTest {
     fun transientRestoreFailureKeepsEncryptedSessionForRetry() = runTest {
         val original = StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")
         val store = FakeSessionStore(original)
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(MockEngine { error("offline") }), "https://drive.example.com", store,
             FakeServerStore("https://drive.example.com"),
         )
@@ -678,7 +678,7 @@ class BackendClientTest {
                 }
             }
         }
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(engine), "https://drive.example.com", store, FakeServerStore("https://drive.example.com"),
         )
         client.initialize()
@@ -691,7 +691,7 @@ class BackendClientTest {
 
     @Test
     fun productionPolicyRejectsCleartextServer() {
-        val client = BackendClient(
+        val client = NetworkTestFacade(
             HttpClient(MockEngine { error("unused") }), "https://drive.example.com",
             allowCleartextServer = false,
         )

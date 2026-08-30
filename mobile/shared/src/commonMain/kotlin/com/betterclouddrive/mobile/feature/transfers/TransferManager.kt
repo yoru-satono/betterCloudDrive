@@ -1,6 +1,6 @@
 package com.betterclouddrive.mobile.feature.transfers
 
-import com.betterclouddrive.mobile.core.network.BackendClient
+import com.betterclouddrive.mobile.core.network.TransferApi
 import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.core.platform.TransferFileAccess
 import com.betterclouddrive.mobile.core.platform.TransferScheduler
@@ -12,7 +12,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.random.Random
 
 class TransferManager(
-    private val backend: BackendClient,
+    private val backend: TransferApi,
     private val repository: TransferRepository,
     private val scheduler: TransferScheduler,
     private val files: TransferFileAccess,

@@ -1,5 +1,8 @@
 package com.betterclouddrive.mobile.app
 
+import com.betterclouddrive.mobile.feature.auth.AuthState
+import com.betterclouddrive.mobile.feature.diagnostics.DiagnosticsState
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -217,7 +220,7 @@ private fun TransferRow(
 
 @Composable
 fun ProfileScreen(
-    state: AppUiState,
+    state: AuthState,
     debugToolsEnabled: Boolean,
     onOpenDiagnostics: () -> Unit,
     onRefresh: () -> Unit,
@@ -388,7 +391,8 @@ private fun InfoRow(label: String, value: String) {
 
 @Composable
 fun DiagnosticsScreen(
-    state: AppUiState,
+    state: DiagnosticsState,
+    username: String,
     officeRenderer: OfficeRenderer,
     roomTaskCount: suspend () -> Int,
     onLoadOffice: (Long, Long) -> Unit,
@@ -449,7 +453,7 @@ fun DiagnosticsScreen(
                         onClick = { onLoadOffice(teamId.toLong(), fileId.toLong()) },
                         modifier = Modifier.testTag("diagnostics-office-load"),
                     ) { Text(strings[MobileString.LoadReadOnlyDocument]) }
-                    state.diagnostics.office?.let { office ->
+                    state.office?.let { office ->
                         Box(Modifier.fillMaxWidth().height(480.dp).testTag("diagnostics-office-renderer")) {
                             officeRenderer.Render(
                                 office,
@@ -458,8 +462,8 @@ fun DiagnosticsScreen(
                             )
                         }
                     }
-                    Text(strings.resolve(state.diagnostics.status).orEmpty(), modifier = Modifier.testTag("diagnostics-office-status"))
-                    Text(strings.format(MobileString.CurrentUser, state.user?.username.orEmpty()))
+                    Text(strings.resolve(state.status).orEmpty(), modifier = Modifier.testTag("diagnostics-office-status"))
+                    Text(strings.format(MobileString.CurrentUser, username))
                 }
             }
         }

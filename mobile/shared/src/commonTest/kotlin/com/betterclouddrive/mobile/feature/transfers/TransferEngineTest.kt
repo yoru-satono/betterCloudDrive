@@ -3,7 +3,7 @@ package com.betterclouddrive.mobile.feature.transfers
 import com.betterclouddrive.mobile.core.database.TransferTaskDao
 import com.betterclouddrive.mobile.core.database.TransferTaskEntity
 import com.betterclouddrive.mobile.core.model.StoredSession
-import com.betterclouddrive.mobile.core.network.BackendClient
+import com.betterclouddrive.mobile.core.network.NetworkTestFacade
 import com.betterclouddrive.mobile.core.platform.SecureSessionStore
 import com.betterclouddrive.mobile.core.platform.ServerSettingsStore
 import com.betterclouddrive.mobile.core.platform.TransferFileAccess
@@ -236,9 +236,9 @@ class TransferEngineTest {
         assertEquals(1, files.deleteCount)
     }
 
-    private suspend fun authenticatedBackend(engine: MockEngine): BackendClient {
+    private suspend fun authenticatedBackend(engine: MockEngine): NetworkTestFacade {
         val server = "https://drive.example.com"
-        return BackendClient(
+        return NetworkTestFacade(
             HttpClient(engine), server,
             TestSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, server)),
             TestServerStore(server),

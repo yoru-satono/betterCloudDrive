@@ -38,129 +38,47 @@ import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.mobileStringsFor
 import com.betterclouddrive.mobile.core.localization.MobileLocale
+import com.betterclouddrive.mobile.feature.auth.AppPhase
+import com.betterclouddrive.mobile.feature.auth.AuthState
+import com.betterclouddrive.mobile.feature.auth.PasswordResetStep
+import com.betterclouddrive.mobile.feature.auth.PublicAuthPage
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun BetterCloudDriveApp(container: AppContainer, debugToolsEnabled: Boolean) {
-    val controller = container.controller
-    val state by controller.state.collectAsState()
-    LaunchedEffect(controller) { controller.start() }
+    val auth = container.authStore
+    val coordinator = container.coordinator
+    val state by auth.state.collectAsState()
+    LaunchedEffect(coordinator) { coordinator.start() }
 
     val strings = mobileStringsFor(container.localeProvider.preferredLanguageTags())
     CompositionLocalProvider(LocalMobileStrings provides strings) {
         BetterCloudDriveTheme(state.account.themeMode) {
             BackHandler(
                 enabled = state.phase == AppPhase.LOGGED_OUT && state.account.publicPage != PublicAuthPage.LOGIN,
-                onBack = controller::showLogin,
+                onBack = auth::showLogin,
             )
             Surface(Modifier.fillMaxSize()) {
                 when (state.phase) {
                     AppPhase.LOADING -> StartupLoadingScreen()
-                    AppPhase.RESTORE_FAILED -> RestoreFailedScreen(state, controller)
+                    AppPhase.RESTORE_FAILED -> RestoreFailedScreen(
+                        state, coordinator::retryRestore, coordinator::discardSession,
+                    )
                     AppPhase.LOGGED_OUT -> when (state.account.publicPage) {
-                        PublicAuthPage.LOGIN -> LoginScreen(state, controller)
-                        PublicAuthPage.REGISTER -> RegistrationScreen(state, controller)
-                        PublicAuthPage.FORGOT_PASSWORD -> ForgotPasswordScreen(state, controller)
+                        PublicAuthPage.LOGIN -> LoginScreen(
+                            state, auth::selectPublicLocale, coordinator::login,
+                            auth::showRegistration, auth::showForgotPassword,
+                        )
+                        PublicAuthPage.REGISTER -> RegistrationScreen(
+                            state, auth::selectPublicLocale, auth::sendRegistrationCode,
+                            auth::register, auth::showLogin,
+                        )
+                        PublicAuthPage.FORGOT_PASSWORD -> ForgotPasswordScreen(
+                            state, auth::requestPasswordReset, auth::resetPassword, auth::showLogin,
+                        )
                     }
                     AppPhase.LOGGED_IN -> ProductShell(
-                        state = state,
-                        documentPicker = container.documentPicker,
-                        officeRenderer = container.officeRenderer,
-                         mediaPreviewRenderer = container.mediaPreviewRenderer,
-                         clipboard = container.clipboard,
-                         localDateTime = container.localDateTime,
-                        roomTaskCount = { container.database.transferTaskDao().count() },
-                        actions = ProductShellActions(
-                            activatePersonalRoute = controller::activatePersonalRoute,
-                            prepareOpenFolder = controller::openPersonalFolder,
-                            refreshFiles = controller::refreshFiles,
-                            loadMoreFiles = controller::loadMoreFiles,
-                            changeFileSort = controller::changeFileSort,
-                            changeFileViewMode = controller::changeFileViewMode,
-                            selectPersonalFile = controller::selectPersonalFile,
-                            togglePersonalSelection = controller::togglePersonalSelection,
-                            clearPersonalSelection = controller::clearSelection,
-                            clearPersonalTransientUi = controller::clearPersonalTransientUi,
-                            createPersonalFolder = controller::createPersonalFolder,
-                            renamePersonalFile = controller::renamePersonalFile,
-                            deletePersonalFiles = controller::deletePersonalFiles,
-                            openFolderPicker = controller::openFolderPicker,
-                            openPickerFolder = controller::openPickerFolder,
-                            pickerBack = controller::pickerBack,
-                            retryFolderPicker = controller::retryFolderPicker,
-                            closeFolderPicker = controller::closeFolderPicker,
-                            confirmFolderPicker = controller::confirmFolderPicker,
-                            consumeFileFeedback = controller::consumeFileFeedback,
-                            updatePersonalScrollAnchor = controller::updatePersonalScrollAnchor,
-                            updateSearchQuery = controller::updateSearchQuery,
-                            submitSearch = controller::submitSearch,
-                            retrySearch = controller::retrySearch,
-                            loadMoreSearch = controller::loadMoreSearch,
-                            updateSearchScrollAnchor = controller::updateSearchScrollAnchor,
-                            prepareOpenSearchLocation = controller::prepareOpenSearchLocation,
-                            activateFavorites = controller::activateFavorites,
-                            updateFavoritesQuery = controller::updateFavoritesQuery,
-                            refreshFavorites = controller::refreshFavorites,
-                            loadMoreFavorites = controller::loadMoreFavorites,
-                            updateFavoritesScrollAnchor = controller::updateFavoritesScrollAnchor,
-                            loadFavoriteStatus = controller::loadFavoriteStatus,
-                            toggleFavorite = controller::toggleFavorite,
-                            consumeFavoriteFeedback = controller::consumeFavoriteFeedback,
-                            activateTags = controller::activateTags,
-                            updateTagsQuery = controller::updateTagsQuery,
-                            refreshTags = controller::refreshTags,
-                            createPersonalTag = controller::createPersonalTag,
-                            updatePersonalTag = controller::updatePersonalTag,
-                            deletePersonalTag = controller::deletePersonalTag,
-                            activateTagFiles = controller::activateTagFiles,
-                            updateTagFilesQuery = controller::updateTagFilesQuery,
-                            refreshTagFiles = controller::refreshTagFiles,
-                            loadMoreTagFiles = controller::loadMoreTagFiles,
-                            updateTagFilesScrollAnchor = controller::updateTagFilesScrollAnchor,
-                            removeFileFromActiveTag = controller::removeFileFromActiveTag,
-                            openFileTagEditor = controller::openFileTagEditor,
-                            toggleFileTag = controller::toggleFileTag,
-                            saveFileTags = controller::saveFileTags,
-                            createTagInEditor = controller::createTagInEditor,
-                            closeFileTagEditor = controller::closeFileTagEditor,
-                             consumeTagFeedback = controller::consumeTagFeedback,
-                             activateShares = controller::activateShares,
-                             updateSharesQuery = controller::updateSharesQuery,
-                             setShareFilters = controller::setShareFilters,
-                             refreshShares = controller::refreshShares,
-                             loadMoreShares = controller::loadMoreShares,
-                             openShareCreator = controller::openShareCreator,
-                             closeShareCreator = controller::closeShareCreator,
-                             createPersonalShare = controller::createPersonalShare,
-                             openShareDetail = controller::openShareDetail,
-                             closeShareDetail = controller::closeShareDetail,
-                             toggleSharePassword = controller::toggleSharePassword,
-                             updatePersonalShare = controller::updatePersonalShare,
-                             cancelPersonalShare = controller::cancelPersonalShare,
-                             consumeShareFeedback = controller::consumeShareFeedback,
-                            openPreview = controller::openPreview,
-                            retryPreview = controller::retryPreview,
-                            closePreview = controller::closePreview,
-                            updatePreviewPosition = controller::updatePreviewPosition,
-                            reportPreviewError = controller::reportPreviewError,
-                            upload = controller::upload,
-                            consumeTransferFeedback = controller::consumeTransferFeedback,
-                            download = controller::download,
-                            pause = controller::pause,
-                            resume = controller::resume,
-                            cancel = controller::cancel,
-                            retry = controller::retry,
-                            clearFinishedTransfers = controller::clearFinishedTransfers,
-                            refreshProfile = controller::refreshProfile,
-                            updateAccountLocale = controller::updateAccountLocale,
-                            setThemeMode = controller::setThemeMode,
-                            requestServerSwitch = controller::requestServerSwitch,
-                            cancelServerSwitch = controller::cancelServerSwitch,
-                            confirmServerSwitch = controller::confirmServerSwitch,
-                            logout = controller::logout,
-                            loadDiagnosticOffice = controller::loadDiagnosticOffice,
-                            updateDiagnosticStatus = controller::updateDiagnosticStatus,
-                        ),
+                        container = container,
                         debugToolsEnabled = debugToolsEnabled,
                     )
                 }
@@ -180,7 +98,7 @@ private fun StartupLoadingScreen() {
 }
 
 @Composable
-private fun RestoreFailedScreen(state: AppUiState, controller: AppController) {
+private fun RestoreFailedScreen(state: AuthState, onRetry: () -> Unit, onDiscard: () -> Unit) {
     val strings = LocalMobileStrings.current
     Column(
         Modifier.fillMaxSize().padding(24.dp).testTag("restore-failed"),
@@ -191,18 +109,24 @@ private fun RestoreFailedScreen(state: AppUiState, controller: AppController) {
         Text(strings.resolve(state.sessionError) ?: strings[MobileString.SessionPreserved])
         Spacer(Modifier.height(16.dp))
         Button(
-            onClick = controller::retryRestore,
+            onClick = onRetry,
             modifier = Modifier.fillMaxWidth().testTag("restore-retry"),
         ) { Text(strings[MobileString.Retry]) }
         OutlinedButton(
-            onClick = controller::discardSession,
+            onClick = onDiscard,
             modifier = Modifier.fillMaxWidth().testTag("restore-discard"),
         ) { Text(strings[MobileString.UseAnotherAccount]) }
     }
 }
 
 @Composable
-private fun LoginScreen(state: AppUiState, controller: AppController) {
+private fun LoginScreen(
+    state: AuthState,
+    onLocale: (MobileLocale) -> Unit,
+    onLogin: (String, String, String) -> Unit,
+    onRegister: (String) -> Unit,
+    onForgotPassword: (String) -> Unit,
+) {
     val strings = LocalMobileStrings.current
     var server by rememberSaveable(state.server) { mutableStateOf(state.server) }
     var username by rememberSaveable(state.account.loginUsername) { mutableStateOf(state.account.loginUsername) }
@@ -213,7 +137,7 @@ private fun LoginScreen(state: AppUiState, controller: AppController) {
     ) {
         Text(strings[MobileString.AppName], style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
         Text(strings[MobileString.StageLabel])
-        LocaleChoices(state.account.locale, controller::selectPublicLocale)
+        LocaleChoices(state.account.locale, onLocale)
         Spacer(Modifier.height(20.dp))
         OutlinedTextField(
             value = server,
@@ -243,7 +167,7 @@ private fun LoginScreen(state: AppUiState, controller: AppController) {
         Spacer(Modifier.height(12.dp))
         Button(
             enabled = !state.loginBusy && username.isNotBlank() && password.isNotBlank(),
-            onClick = { controller.login(server, username, password) },
+            onClick = { onLogin(server, username, password) },
             modifier = Modifier.fillMaxWidth().testTag("login-submit"),
         ) {
             if (state.loginBusy) {
@@ -253,10 +177,10 @@ private fun LoginScreen(state: AppUiState, controller: AppController) {
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = { controller.showRegistration(server) }, modifier = Modifier.testTag("login-register")) {
+            TextButton(onClick = { onRegister(server) }, modifier = Modifier.testTag("login-register")) {
                 Text(strings[MobileString.Register])
             }
-            TextButton(onClick = { controller.showForgotPassword(server) }, modifier = Modifier.testTag("login-forgot")) {
+            TextButton(onClick = { onForgotPassword(server) }, modifier = Modifier.testTag("login-forgot")) {
                 Text(strings[MobileString.ForgotPassword])
             }
         }
@@ -285,7 +209,13 @@ private fun LocaleChoices(selected: MobileLocale, onSelect: (MobileLocale) -> Un
 }
 
 @Composable
-private fun RegistrationScreen(state: AppUiState, controller: AppController) {
+private fun RegistrationScreen(
+    state: AuthState,
+    onLocale: (MobileLocale) -> Unit,
+    onSendCode: (String) -> Unit,
+    onRegister: (String, String, String, String, String) -> Unit,
+    onBack: () -> Unit,
+) {
     val strings = LocalMobileStrings.current
     var username by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
@@ -297,12 +227,12 @@ private fun RegistrationScreen(state: AppUiState, controller: AppController) {
         verticalArrangement = Arrangement.Center,
     ) {
         Text(strings[MobileString.Register], style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
-        LocaleChoices(state.account.locale, controller::selectPublicLocale)
+        LocaleChoices(state.account.locale, onLocale)
         OutlinedTextField(username, { username = it }, label = { Text(strings[MobileString.Username]) }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(email, { email = it }, label = { Text(strings[MobileString.Email]) }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(code, { code = it }, label = { Text(strings[MobileString.VerificationCode]) }, modifier = Modifier.fillMaxWidth())
         OutlinedButton(
-            onClick = { controller.sendRegistrationCode(email) },
+            onClick = { onSendCode(email) },
             enabled = !state.account.registrationCodeBusy && state.account.registrationCodeSeconds == 0 && email.isNotBlank(),
             modifier = Modifier.fillMaxWidth().testTag("register-send-code"),
         ) {
@@ -314,16 +244,21 @@ private fun RegistrationScreen(state: AppUiState, controller: AppController) {
         OutlinedTextField(confirmation, { confirmation = it }, label = { Text(strings[MobileString.ConfirmPassword]) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
         state.account.registrationError?.let { Text(strings.resolve(it).orEmpty(), color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
         Button(
-            onClick = { controller.register(username, email, code, password, confirmation) },
+            onClick = { onRegister(username, email, code, password, confirmation) },
             enabled = !state.account.registerBusy,
             modifier = Modifier.fillMaxWidth().testTag("register-submit"),
         ) { Text(strings[MobileString.Register]) }
-        TextButton(onClick = controller::showLogin, modifier = Modifier.fillMaxWidth()) { Text(strings[MobileString.BackToLogin]) }
+        TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(strings[MobileString.BackToLogin]) }
     }
 }
 
 @Composable
-private fun ForgotPasswordScreen(state: AppUiState, controller: AppController) {
+private fun ForgotPasswordScreen(
+    state: AuthState,
+    onRequest: (String) -> Unit,
+    onReset: (String, String, String) -> Unit,
+    onBack: () -> Unit,
+) {
     val strings = LocalMobileStrings.current
     var email by rememberSaveable(state.account.resetEmail) { mutableStateOf(state.account.resetEmail) }
     var code by rememberSaveable { mutableStateOf("") }
@@ -337,7 +272,7 @@ private fun ForgotPasswordScreen(state: AppUiState, controller: AppController) {
         if (state.account.resetStep == PasswordResetStep.EMAIL) {
             OutlinedTextField(email, { email = it }, label = { Text(strings[MobileString.Email]) }, modifier = Modifier.fillMaxWidth())
             Button(
-                onClick = { controller.requestPasswordReset(email) },
+                onClick = { onRequest(email) },
                 enabled = !state.account.resetBusy && email.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().testTag("forgot-send"),
             ) { Text(strings[MobileString.SendCode]) }
@@ -347,12 +282,12 @@ private fun ForgotPasswordScreen(state: AppUiState, controller: AppController) {
             OutlinedTextField(password, { password = it }, label = { Text(strings[MobileString.NewPassword]) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
             OutlinedTextField(confirmation, { confirmation = it }, label = { Text(strings[MobileString.ConfirmPassword]) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
             Button(
-                onClick = { controller.resetPassword(code, password, confirmation) },
+                onClick = { onReset(code, password, confirmation) },
                 enabled = !state.account.resetBusy,
                 modifier = Modifier.fillMaxWidth().testTag("forgot-reset"),
             ) { Text(strings[MobileString.ResetPassword]) }
         }
         state.account.resetError?.let { Text(strings.resolve(it).orEmpty(), color = androidx.compose.material3.MaterialTheme.colorScheme.error) }
-        TextButton(onClick = controller::showLogin, modifier = Modifier.fillMaxWidth()) { Text(strings[MobileString.BackToLogin]) }
+        TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text(strings[MobileString.BackToLogin]) }
     }
 }

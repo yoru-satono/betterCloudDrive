@@ -1,0 +1,324 @@
+package com.betterclouddrive.mobile.core.network
+
+import com.betterclouddrive.mobile.core.model.*
+import com.betterclouddrive.mobile.feature.transfers.TransferScope
+import io.ktor.client.request.delete
+import io.ktor.client.request.forms.InputProvider
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
+
+class AuthApi(private val http: AuthenticatedHttpClient) {
+    val sessionInvalidations = http.sessionInvalidations
+    val serverBaseUrl get() = http.serverBaseUrl
+    fun normalizeServer(input: String) = http.normalizeServer(input)
+    suspend fun updateServer(input: String) = http.updateServer(input)
+
+    suspend fun login(username: String, password: String): UserProfile = http.run {
+        val tokens: AuthTokens = publicEnvelope { client ->
+            client.post(url("auth/login")) { jsonBody(LoginRequest(username, password)) }
+        }
+        saveTokens(tokens)
+        try {
+            getMe()
+        } catch (cancelled: CancellationException) {
+            clearSessionSilently(); throw cancelled
+        } catch (error: Throwable) {
+            clearSessionSilently(); throw error
+        }
+    }
+
+    suspend fun restoreUser(): SessionRestoreResult {
+        val restored = http.initialize() ?: return SessionRestoreResult.NoSession
+        return try {
+            http.ensureSession()
+            SessionRestoreResult.Restored(getMe())
+        } catch (_: SessionExpiredException) {
+            SessionRestoreResult.Invalidated(SessionInvalidationReason.EXPIRED)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            SessionRestoreResult.RetryableFailure()
+        }
+    }
+
+    suspend fun getMe(): UserProfile = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("auth/me")) { bearer(token) } }
+    }
+
+    suspend fun updatePreferredLocale(locale: String): UserProfile = http.run {
+        authenticatedEnvelope { client, token ->
+            client.put(url("auth/preferences/locale")) { bearer(token); jsonBody(UpdateLocaleRequest(locale)) }
+        }
+    }
+
+    suspend fun logout() {
+        try {
+            http.run { authenticatedNoData { client, token -> client.post(url("auth/logout")) { bearer(token) } } }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            // Local logout remains authoritative.
+        } finally {
+            http.clearSession(SessionInvalidationReason.LOGOUT)
+        }
+    }
+
+    suspend fun sendRegistrationCode(email: String, preferredLocale: String) = http.run {
+        publicNoData { client ->
+            client.post(url("auth/register-code/send")) { jsonBody(RegisterCodeRequest(email, preferredLocale)) }
+        }
+    }
+
+    suspend fun register(
+        username: String,
+        password: String,
+        email: String,
+        verificationCode: String,
+        preferredLocale: String,
+    ): RegistrationResult = http.run {
+        publicEnvelope { client ->
+            client.post(url("auth/register")) {
+                jsonBody(RegisterRequest(username, password, email, verificationCode, preferredLocale))
+            }
+        }
+    }
+
+    suspend fun forgotPassword(email: String) = http.run {
+        publicNoData { client -> client.post(url("auth/forgot-password")) { jsonBody(ForgotPasswordRequest(email)) } }
+    }
+
+    suspend fun resetPassword(email: String, code: String, newPassword: String) = http.run {
+        publicNoData { client ->
+            client.post(url("auth/reset-password")) { jsonBody(ResetPasswordRequest(email, code, newPassword)) }
+        }
+    }
+}
+
+class PersonalFilesApi(private val http: AuthenticatedHttpClient) {
+    suspend fun list(parentId: Long?, page: Int, size: Int, sortBy: String, order: String): PageResult<FileItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("files")) {
+            bearer(token); url {
+                parentId?.let { parameters.append("parentId", it.toString()) }
+                parameters.append("page", page.toString()); parameters.append("size", size.toString())
+                parameters.append("sortBy", sortBy); parameters.append("order", order)
+            }
+        } }
+    }
+
+    suspend fun get(fileId: Long): FileItem = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("files/$fileId")) { bearer(token) } }
+    }
+
+    suspend fun search(query: String, page: Int, size: Int): PageResult<FileItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("files/search")) {
+            bearer(token); url {
+                parameters.append("q", query); parameters.append("page", page.toString()); parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun createFolder(parentId: Long?, name: String): FileItem = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("files/folder")) {
+            bearer(token); jsonBody(CreatePersonalFolderRequest(parentId, name))
+        } }
+    }
+
+    suspend fun rename(fileId: Long, name: String): FileItem = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("files/$fileId")) {
+            bearer(token); jsonBody(RenamePersonalFileRequest(name))
+        } }
+    }
+
+    suspend fun move(fileId: Long, parentId: Long?) = destination("files/$fileId/move", parentId)
+    suspend fun copy(fileId: Long, parentId: Long?) = destination("files/$fileId/copy", parentId)
+
+    private suspend fun destination(path: String, parentId: Long?) = http.run {
+        authenticatedNoData { client, token -> client.post(url(path)) {
+            bearer(token); jsonBody(PersonalFileDestinationRequest(parentId))
+        } }
+    }
+
+    suspend fun delete(fileIds: List<Long>) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("files")) {
+            bearer(token); jsonBody(DeletePersonalFilesRequest(fileIds.distinct()))
+        } }
+    }
+}
+
+class PersonalOrganizationApi(private val http: AuthenticatedHttpClient) {
+    suspend fun listFavorites(query: String?, page: Int, size: Int): PageResult<FileItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("favorites")) {
+            bearer(token); url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                parameters.append("page", page.toString()); parameters.append("size", size.toString())
+            }
+        } }
+    }
+    suspend fun favoriteStatus(fileId: Long): Boolean = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("favorites/$fileId/status")) { bearer(token) } }
+    }
+    suspend fun addFavorite(fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.post(url("favorites/$fileId")) { bearer(token) } }
+    }
+    suspend fun removeFavorite(fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("favorites/$fileId")) { bearer(token) } }
+    }
+    suspend fun listTags(query: String?): List<PersonalTag> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("tags")) {
+            bearer(token); url { query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) } }
+        } }
+    }
+    suspend fun createTag(name: String, color: String): PersonalTag = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("tags")) { bearer(token); jsonBody(CreatePersonalTagRequest(name, color)) } }
+    }
+    suspend fun updateTag(id: Long, name: String, color: String): PersonalTag = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("tags/$id")) { bearer(token); jsonBody(UpdatePersonalTagRequest(name, color)) } }
+    }
+    suspend fun deleteTag(id: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("tags/$id")) { bearer(token) } }
+    }
+    suspend fun filesByTag(id: Long, query: String?, page: Int, size: Int): PageResult<FileItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("tags/$id/files")) {
+            bearer(token); url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                parameters.append("page", page.toString()); parameters.append("size", size.toString())
+            }
+        } }
+    }
+    suspend fun fileTags(fileId: Long): List<PersonalTag> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("files/$fileId/tags")) { bearer(token) } }
+    }
+    suspend fun replaceFileTags(fileId: Long, ids: List<Long>): List<PersonalTag> = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("files/$fileId/tags")) {
+            bearer(token); jsonBody(ReplacePersonalFileTagsRequest(ids.distinct()))
+        } }
+    }
+    suspend fun removeFileTag(tagId: Long, fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("tags/$tagId/files/$fileId")) { bearer(token) } }
+    }
+}
+
+class PersonalSharesApi(private val http: AuthenticatedHttpClient) {
+    suspend fun create(request: CreatePersonalShareRequest): ShareLink = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("shares")) { bearer(token); jsonBody(request) } }
+    }
+    suspend fun list(
+        query: String?, passwordProtected: Boolean?, expiration: ShareExpirationFilter, page: Int, size: Int,
+    ): PageResult<ShareLink> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("shares")) {
+            bearer(token); url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                passwordProtected?.let { parameters.append("passwordProtected", it.toString()) }
+                expiration.apiValue?.let { parameters.append("expirationStatus", it) }
+                parameters.append("page", page.toString()); parameters.append("size", size.toString())
+            }
+        } }
+    }
+    suspend fun get(id: Long): ShareLink = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("shares/$id")) { bearer(token) } }
+    }
+    suspend fun password(id: Long): String? = http.run {
+        authenticatedEnvelope<SharePasswordResponse> { client, token -> client.get(url("shares/$id/password")) { bearer(token) } }.password
+    }
+    suspend fun update(id: Long, request: UpdatePersonalShareRequest): ShareLink = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("shares/$id")) { bearer(token); jsonBody(request) } }
+    }
+    suspend fun cancel(id: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("shares/$id")) { bearer(token) } }
+    }
+}
+
+class PreviewApi(private val http: AuthenticatedHttpClient) {
+    suspend fun ticket(fileId: Long): String = http.run {
+        val response: DownloadTicketResponse = authenticatedEnvelope { client, token ->
+            client.post(url("download/$fileId/ticket")) { bearer(token) }
+        }
+        when {
+            response.url.startsWith("http://") || response.url.startsWith("https://") -> response.url
+            response.url.startsWith("/") -> serverBaseUrl.trimEnd('/') + response.url
+            else -> ServerAddress.apiUrl(serverBaseUrl, response.url, allowCleartextServer)
+        }
+    }
+    suspend fun personalOffice(fileId: Long): OfficeConfig = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("office/files/$fileId/config")) {
+            bearer(token); url { parameters.append("mobile", "true") }
+        } }
+    }
+    suspend fun teamOffice(teamId: Long, fileId: Long): OfficeConfig = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/office/files/$fileId/config")) {
+            bearer(token); url { parameters.append("mobile", "true") }
+        } }
+    }
+    suspend fun text(fileId: Long, maxBytes: Int): ByteArray {
+        require(maxBytes > 0) { "preview.invalidTextLimit" }
+        return http.authenticatedStream("download/$fileId", "bytes=0-${maxBytes - 1}") { status, headers, channel ->
+            if (status == HttpStatusCode.RequestedRangeNotSatisfiable && headers[HttpHeaders.ContentRange]?.endsWith("/0") == true) {
+                return@authenticatedStream ByteArray(0)
+            }
+            if (status != HttpStatusCode.OK && status != HttpStatusCode.PartialContent) throw ApiException(status.value, "error.previewFailed")
+            val output = ByteArray(maxBytes); var offset = 0
+            while (offset < output.size) {
+                val count = channel.readAvailable(output, offset, output.size - offset)
+                if (count < 0) break
+                offset += count
+            }
+            output.copyOf(offset)
+        }
+    }
+}
+
+open class TransferApi(private val http: AuthenticatedHttpClient) {
+    val serverBaseUrl get() = http.serverBaseUrl
+
+    suspend fun instantUpload(scope: TransferScope, fileName: String, fileSize: Long, md5: String): Long = http.run {
+        authenticatedEnvelope<InstantUploadResult> { client, token -> client.post(url(scope.path("upload/instant"))) {
+            bearer(token); jsonBody(InstantUploadRequest(scope.parentId, fileName, fileSize, md5))
+        } }.fileId
+    }
+    suspend fun initUpload(scope: TransferScope, fileName: String, fileSize: Long, md5: String, chunks: Int): InitUploadResult = http.run {
+        authenticatedEnvelope { client, token -> client.post(url(scope.path("upload/init"))) {
+            bearer(token); jsonBody(InitUploadRequest(scope.parentId, fileName, fileSize, md5, chunks))
+        } }
+    }
+    suspend fun uploadStatus(scope: TransferScope, sessionId: String): UploadStatusResult = http.run {
+        authenticatedEnvelope { client, token -> client.get(url(scope.path("upload/$sessionId/status"))) { bearer(token) } }
+    }
+    suspend fun uploadChunk(scope: TransferScope, sessionId: String, number: Int, fileName: String, provider: InputProvider) = http.run {
+        authenticatedEnvelope<UploadChunkResult> { client, token -> client.post(url(scope.path("upload/$sessionId/chunk"))) {
+            bearer(token); url { parameters.append("chunkNumber", number.toString()) }
+            setBody(MultiPartFormDataContent(formData { append("file", provider, Headers.build {
+                append(HttpHeaders.ContentType, "application/octet-stream")
+                append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
+            }) }))
+        } }
+    }
+    suspend fun completeUpload(scope: TransferScope, sessionId: String): Long = http.run {
+        authenticatedEnvelope<CompleteResult> { client, token -> client.post(url(scope.path("upload/$sessionId/complete"))) { bearer(token) } }.fileId
+    }
+    suspend fun cancelUpload(scope: TransferScope, sessionId: String) = http.run {
+        authenticatedNoData { client, token -> client.post(url(scope.path("upload/$sessionId/cancel"))) { bearer(token) } }
+    }
+    suspend fun <T> download(
+        scope: TransferScope, fileId: Long, rangeStart: Long,
+        consume: suspend (HttpStatusCode, Headers, ByteReadChannel) -> T,
+    ): T = http.authenticatedStream(scope.downloadPath(fileId), if (rangeStart > 0) "bytes=$rangeStart-" else null, consume)
+
+    private fun TransferScope.path(suffix: String) = when (this) {
+        is TransferScope.Personal -> suffix
+        is TransferScope.Team -> "teams/$teamId/$suffix"
+    }
+    private fun TransferScope.downloadPath(fileId: Long) = when (this) {
+        is TransferScope.Personal -> "download/$fileId"
+        is TransferScope.Team -> "teams/$teamId/download/$fileId"
+    }
+}

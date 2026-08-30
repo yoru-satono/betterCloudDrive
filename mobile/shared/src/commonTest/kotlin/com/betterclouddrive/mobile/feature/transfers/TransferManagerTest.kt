@@ -2,7 +2,7 @@ package com.betterclouddrive.mobile.feature.transfers
 
 import com.betterclouddrive.mobile.core.database.TransferTaskDao
 import com.betterclouddrive.mobile.core.database.TransferTaskEntity
-import com.betterclouddrive.mobile.core.network.BackendClient
+import com.betterclouddrive.mobile.core.network.NetworkTestFacade
 import com.betterclouddrive.mobile.core.platform.FileDigest
 import com.betterclouddrive.mobile.core.platform.PickedDocument
 import com.betterclouddrive.mobile.core.platform.TransferFileAccess
@@ -89,7 +89,7 @@ class TransferManagerTest {
         val repository = TransferRepository(dao, purgeDeletedContent = { purgeCalls++ }, now = { 1_000 })
         val scheduler = ManagerFakeScheduler(scheduleSucceeds)
         val files = ManagerFakeFiles()
-        val backend = BackendClient(HttpClient(MockEngine { respondOk() }), initialServerBaseUrl = "http://test")
+        val backend = NetworkTestFacade(HttpClient(MockEngine { respondOk() }), initialServerBaseUrl = "http://test")
         return Fixture(
             backend, repository, scheduler, files,
             TransferManager(backend, repository, scheduler, files),
@@ -99,7 +99,7 @@ class TransferManagerTest {
 }
 
 private data class Fixture(
-    val backend: BackendClient,
+    val backend: NetworkTestFacade,
     val repository: TransferRepository,
     val scheduler: ManagerFakeScheduler,
     val files: ManagerFakeFiles,

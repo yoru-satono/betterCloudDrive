@@ -1,5 +1,11 @@
 package com.betterclouddrive.mobile.app
 
+import com.betterclouddrive.mobile.feature.files.PersonalFilesState
+import com.betterclouddrive.mobile.feature.files.DirectoryPageState
+import com.betterclouddrive.mobile.feature.files.FileMutationKind
+import com.betterclouddrive.mobile.feature.files.FolderPickerState
+import com.betterclouddrive.mobile.feature.organization.FavoritesState
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -88,8 +94,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun PersonalSpaceScreen(
-    state: PersonalFilesUiState,
-    favorites: FavoritesUiState,
+    state: PersonalFilesState,
+    favorites: FavoritesState,
     documentPicker: DocumentPicker,
     onUpload: (Long?, UploadPickResult) -> Unit,
     onDownload: (FileItem, String) -> Unit,
@@ -249,8 +255,8 @@ fun PersonalSpaceScreen(
 
 @Composable
 private fun PersonalDirectoryContent(
-    state: PersonalFilesUiState,
-    favorites: FavoritesUiState,
+    state: PersonalFilesState,
+    favorites: FavoritesState,
     onUpload: () -> Unit,
     onDownload: (FileItem) -> Unit,
     onOpenFolder: (FileItem) -> Unit,
@@ -336,8 +342,8 @@ private fun PersonalDirectoryContent(
 
 @Composable
 private fun PersonalList(
-    state: PersonalFilesUiState,
-    favorites: FavoritesUiState,
+    state: PersonalFilesState,
+    favorites: FavoritesState,
     onOpenFolder: (FileItem) -> Unit,
     onSelectFile: (FileItem?) -> Unit,
     onLoadMore: () -> Unit,
@@ -402,8 +408,8 @@ private fun PersonalList(
 
 @Composable
 private fun PersonalGrid(
-    state: PersonalFilesUiState,
-    favorites: FavoritesUiState,
+    state: PersonalFilesState,
+    favorites: FavoritesState,
     onOpenFolder: (FileItem) -> Unit,
     onSelectFile: (FileItem?) -> Unit,
     onLoadMore: () -> Unit,
@@ -930,7 +936,7 @@ private fun EmptyDetail() {
 @Composable
 private fun FileDetailContent(
     file: FileItem,
-    favorites: FavoritesUiState,
+    favorites: FavoritesState,
     onDownload: (FileItem) -> Unit,
     onPreview: (FileItem) -> Unit,
     onLoadFavoriteStatus: (Long) -> Unit,

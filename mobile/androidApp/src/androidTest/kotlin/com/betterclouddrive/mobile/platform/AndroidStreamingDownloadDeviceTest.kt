@@ -2,7 +2,8 @@ package com.betterclouddrive.mobile.platform
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.betterclouddrive.mobile.core.model.StoredSession
-import com.betterclouddrive.mobile.core.network.BackendClient
+import com.betterclouddrive.mobile.core.network.AuthenticatedHttpClient
+import com.betterclouddrive.mobile.core.network.TransferApi
 import com.betterclouddrive.mobile.core.platform.SecureSessionStore
 import com.betterclouddrive.mobile.core.platform.ServerSettingsStore
 import com.betterclouddrive.mobile.feature.transfers.TransferScope
@@ -41,7 +42,7 @@ class AndroidStreamingDownloadDeviceTest {
         val sessionStore = DeviceSessionStore(
             StoredSession("access", "refresh", Long.MAX_VALUE, baseUrl),
         )
-        val client = BackendClient(
+        val http = AuthenticatedHttpClient(
             HttpClient(OkHttp),
             initialServerBaseUrl = baseUrl,
             secureSessionStore = sessionStore,
@@ -53,7 +54,8 @@ class AndroidStreamingDownloadDeviceTest {
         )
         val taskId = "stream-device-${System.nanoTime()}"
         try {
-            client.initialize()
+            http.initialize()
+            val client = TransferApi(http)
             server.enqueue(
                 MockResponse.Builder()
                     .code(200)

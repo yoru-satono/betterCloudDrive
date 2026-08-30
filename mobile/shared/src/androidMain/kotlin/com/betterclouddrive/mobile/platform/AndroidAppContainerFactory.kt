@@ -12,9 +12,19 @@ import com.betterclouddrive.mobile.core.localization.loadMobileStrings
 import com.betterclouddrive.mobile.core.localization.resolveMobileLocale
 import com.betterclouddrive.mobile.core.localization.MobileLocale
 import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
-import com.betterclouddrive.mobile.core.network.BackendClient
+import com.betterclouddrive.mobile.core.network.AuthenticatedHttpClient
+import com.betterclouddrive.mobile.core.network.AuthApi
+import com.betterclouddrive.mobile.core.network.PersonalFilesApi
+import com.betterclouddrive.mobile.core.network.PersonalOrganizationApi
+import com.betterclouddrive.mobile.core.network.PersonalSharesApi
+import com.betterclouddrive.mobile.core.network.PreviewApi
+import com.betterclouddrive.mobile.core.network.TransferApi
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
-import com.betterclouddrive.mobile.feature.files.FileRepository
+import com.betterclouddrive.mobile.feature.files.PersonalFilesRepositoryImpl
+import com.betterclouddrive.mobile.feature.files.FavoritesRepositoryImpl
+import com.betterclouddrive.mobile.feature.files.TagsRepositoryImpl
+import com.betterclouddrive.mobile.feature.files.PersonalSharesRepositoryImpl
+import com.betterclouddrive.mobile.feature.files.PersonalPreviewRepositoryImpl
 import com.betterclouddrive.mobile.feature.transfers.TransferEngine
 import com.betterclouddrive.mobile.feature.transfers.TransferManager
 import com.betterclouddrive.mobile.feature.transfers.TransferRepository
@@ -47,7 +57,7 @@ object AndroidAppContainerFactory {
             appContext.packageName,
         )
         val debuggable = appContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-        val backend = BackendClient(
+        val http = AuthenticatedHttpClient(
             HttpClient(OkHttp),
             secureSessionStore = sessions,
             serverSettingsStore = settings,
@@ -65,12 +75,22 @@ object AndroidAppContainerFactory {
             purgeDeletedContent = database::purgeDeletedTransferContent,
         )
         val scheduler = AndroidTransferScheduler(appContext)
-        val engine = TransferEngine(backend, repository, fileAccess)
-        val manager = TransferManager(backend, repository, scheduler, fileAccess)
+        val authApi = AuthApi(http)
+        val filesApi = PersonalFilesApi(http)
+        val organizationApi = PersonalOrganizationApi(http)
+        val sharesApi = PersonalSharesApi(http)
+        val previewApi = PreviewApi(http)
+        val transferApi = TransferApi(http)
+        val engine = TransferEngine(transferApi, repository, fileAccess)
+        val manager = TransferManager(transferApi, repository, scheduler, fileAccess)
         return AppContainer(
-            backend = backend,
-            auth = AuthRepository(backend),
-            files = FileRepository(backend),
+            http = http,
+            auth = AuthRepository(authApi),
+            personalFiles = PersonalFilesRepositoryImpl(filesApi),
+            favorites = FavoritesRepositoryImpl(organizationApi),
+            tags = TagsRepositoryImpl(organizationApi),
+            shares = PersonalSharesRepositoryImpl(sharesApi),
+            preview = PersonalPreviewRepositoryImpl(filesApi, previewApi),
             database = database,
             transfers = manager,
             transferEngine = engine,

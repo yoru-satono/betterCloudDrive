@@ -6,22 +6,38 @@ import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
 import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
 import com.betterclouddrive.mobile.core.platform.ClipboardService
 import com.betterclouddrive.mobile.core.platform.LocalDateTimeService
-import com.betterclouddrive.mobile.core.network.BackendClient
+import com.betterclouddrive.mobile.core.network.AuthenticatedHttpClient
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
 import com.betterclouddrive.mobile.core.platform.MediaPreviewRenderer
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
-import com.betterclouddrive.mobile.feature.files.FileRepository
+import com.betterclouddrive.mobile.feature.files.PersonalFilesRepository
+import com.betterclouddrive.mobile.feature.files.FavoritesRepository
+import com.betterclouddrive.mobile.feature.files.TagsRepository
+import com.betterclouddrive.mobile.feature.files.PersonalSharesRepository
+import com.betterclouddrive.mobile.feature.files.PreviewRepository
 import com.betterclouddrive.mobile.feature.transfers.TransferEngine
 import com.betterclouddrive.mobile.feature.transfers.TransferManager
-import com.betterclouddrive.mobile.core.model.SessionInvalidationReason
+import com.betterclouddrive.mobile.feature.transfers.TransferQueueStore
+import com.betterclouddrive.mobile.feature.auth.AuthStore
+import com.betterclouddrive.mobile.feature.files.PersonalBrowserStore
+import com.betterclouddrive.mobile.feature.files.PersonalSearchStore
+import com.betterclouddrive.mobile.feature.files.PersonalPreviewStore
+import com.betterclouddrive.mobile.feature.organization.FavoritesStore
+import com.betterclouddrive.mobile.feature.organization.TagsStore
+import com.betterclouddrive.mobile.feature.shares.PersonalSharesStore
+import com.betterclouddrive.mobile.feature.diagnostics.DiagnosticsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 class AppContainer(
-    val backend: BackendClient,
+    val http: AuthenticatedHttpClient,
     val auth: AuthRepository,
-    val files: FileRepository,
+    val personalFiles: PersonalFilesRepository,
+    val favorites: FavoritesRepository,
+    val tags: TagsRepository,
+    val shares: PersonalSharesRepository,
+    val preview: PreviewRepository,
     val database: MobileDatabase,
     val transfers: TransferManager,
     val transferEngine: TransferEngine,
@@ -35,24 +51,26 @@ class AppContainer(
     val localDateTime: LocalDateTimeService,
     private val applicationScope: CoroutineScope,
 ) {
-    val controller: AppController by lazy {
-        AppController(auth, files, transfers, applicationScope, localeController, themePreferences)
+    val transferQueue = TransferQueueStore(transfers, applicationScope)
+    val favoritesStore = FavoritesStore(favorites, applicationScope)
+    val tagsStore = TagsStore(tags, applicationScope)
+    val browserStore = PersonalBrowserStore(personalFiles, transferQueue, applicationScope) {
+        favoritesStore.invalidate()
+        tagsStore.invalidateFiles()
     }
-
-    init {
-        applicationScope.launch {
-            backend.sessionInvalidations.collect { reason ->
-                if (reason in setOf(
-                        SessionInvalidationReason.EXPIRED,
-                        SessionInvalidationReason.REVOKED,
-                        SessionInvalidationReason.CORRUPT_STORAGE,
-                    )
-                ) {
-                    transfers.waitForLogin()
-                }
-            }
-        }
-    }
+    val searchStore = PersonalSearchStore(personalFiles, applicationScope)
+    val previewStore = PersonalPreviewStore(preview, applicationScope)
+    val sharesStore = PersonalSharesStore(shares, applicationScope)
+    val diagnosticsStore = DiagnosticsStore(preview, applicationScope)
+    val authStore = AuthStore(auth, applicationScope, localeController, themePreferences)
+    val coordinator = AppCoordinator(
+        authStore,
+        auth,
+        browserStore,
+        transferQueue,
+        listOf(browserStore, searchStore, favoritesStore, tagsStore, sharesStore, previewStore, diagnosticsStore, transferQueue),
+        applicationScope,
+    )
 
     fun reconcileTransfers() {
         applicationScope.launch { transfers.reconcile() }

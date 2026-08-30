@@ -15,14 +15,16 @@
 mobile/
 ├── androidApp/                         # Android Application、Activity、Manifest、设备测试
 └── shared/src/
-    ├── commonMain/.../core/            # DTO、网络、Room、窄平台接口
-    ├── commonMain/.../app/             # 类型安全路由、产品外壳和页面状态
+    ├── commonMain/.../core/            # DTO、认证 HTTP 核心、Room、窄平台接口
+    ├── commonMain/.../app/             # 手动容器、协调器、类型安全路由和外壳
     ├── commonMain/.../designsystem/    # Compose Multiplatform 浅色/深色主题
-    ├── commonMain/.../feature/         # 文件与可恢复传输状态机
+    ├── commonMain/.../feature/         # 各业务域 Repository、Store 与可恢复传输状态机
     └── androidMain/.../platform/       # Keystore、SAF、UIDT/WorkManager、WebView
 ```
 
-依赖由手动 `AppContainer` 创建，不引入第三方 DI。共享 UI 使用 Navigation Compose 2.9.2 类型安全路由；Activity 只提供 Compose 入口和 Android 平台服务。传输任务完整保存到 Room；一次用户操作最多形成一个包含 100 个任务 ID 的系统批次，批次执行器仍通过全局互斥逐项传输。Android 14+ 使用 UIDT，Android 13 及以下使用 WorkManager。下载通过 Ktor `prepareGet().execute {}` 在响应作用域内直接写入应用私有 `.part`，通知进度最多每秒投递一次，Compose 和 Room 进度不受影响。完成或取消的任务会释放 SAF 权限，传输页可确认后清除全部终态任务。
+依赖由手动 `AppContainer` 创建，不引入第三方 DI。`AuthenticatedHttpClient` 是唯一 Token 所有者，其上按认证、个人文件、整理、分享、预览和传输划分领域 API 与窄 Repository。各功能分别暴露自己的 `StateFlow` Store；`AppCoordinator` 只协调启动、会话失效、退出和换服务器时的全局清理，不持有文件、标签、分享或预览状态。根组件只收集认证、主题和未结束传输数，各目的地只收集对应 Store。
+
+共享 UI 使用 Navigation Compose 2.9.2 类型安全路由；Activity 只提供 Compose 入口和 Android 平台服务。传输任务完整保存到 Room；一次用户操作最多形成一个包含 100 个任务 ID 的系统批次，批次执行器仍通过全局互斥逐项传输。Android 14+ 使用 UIDT，Android 13 及以下使用 WorkManager。下载通过 Ktor `prepareGet().execute {}` 在响应作用域内直接写入应用私有 `.part`，通知进度最多每秒投递一次，Compose 和 Room 进度不受影响。完成或取消的任务会释放 SAF 权限，传输页可确认后清除全部终态任务。
 
 共享文案按 Compose Multiplatform 标准目录组织：`values` 保存默认英语，`values-zh-rCN` 与 `values-zh-rSG` 保存两套同名简体中文资源。当前仅 `zh-CN`、`zh-SG` 及带对应地区的 `zh-Hans` 标签选择简体中文；无地区 `zh-Hans`、繁体中文及其他语言回退英语。认证页和“我的”提供三个明确地区选项，Android 13+ 系统“应用语言”页面使用相同列表；登录后以账号精确地区为准，历史账号值 `zh-Hans` 兼容映射为 `zh-CN`。`checkMobileI18n` 同时阻止生产 Kotlin 界面硬编码，并校验各翻译目录的键和格式参数一致。
 
@@ -63,4 +65,6 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 
 截至 2026-08-28，阶段 11 已完成 105 个个人分享的三页真实后端旅程，覆盖密码和过期筛选、个人/团队隔离、文件与文件夹分享、限制编辑与清空、公开访问和下载计数、访问上限、幂等取消及链接立即失效；API 28/34 设备矩阵、Web/Tauri、发布构建、黑盒和可观测性门槛均通过。
 
-当前个人分享边界见[阶段 11 个人分享](docs/stage-11-personal-sharing.md)，收藏与标签边界见[阶段 10 个人收藏与标签](docs/stage-10-personal-organization.md)，账号与设置边界见[阶段 9 账号生命周期与个人设置](docs/stage-9-account-settings.md)。
+截至 2026-08-30，阶段 11.5 已完成 KMP 架构边界收口：认证 HTTP 核心、领域 API、窄 Repository、独立 Store、会话协调器和 feature 导航图已替代旧聚合边界；74 项主机测试、API 28/34 各 27 项设备测试套件、发布构建、iOS 元数据、完整 Docker 栈和 API 34 真实会话恢复旅程均通过。
+
+当前架构边界见[阶段 11.5 KMP 架构边界收口](docs/stage-11-5-architecture-boundaries.md)，个人分享边界见[阶段 11 个人分享](docs/stage-11-personal-sharing.md)，收藏与标签边界见[阶段 10 个人收藏与标签](docs/stage-10-personal-organization.md)。

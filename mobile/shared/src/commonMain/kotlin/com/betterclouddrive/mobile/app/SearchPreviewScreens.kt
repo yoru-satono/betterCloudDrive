@@ -1,5 +1,8 @@
 package com.betterclouddrive.mobile.app
 
+import com.betterclouddrive.mobile.feature.files.PersonalSearchState
+import com.betterclouddrive.mobile.feature.files.PersonalPreviewState
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -77,7 +80,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun PersonalSearchScreen(
-    state: PersonalSearchUiState,
+    state: PersonalSearchState,
     documentPicker: DocumentPicker,
     onBack: () -> Unit,
     onQueryChanged: (String) -> Unit,
@@ -154,7 +157,7 @@ fun PersonalSearchScreen(
 
 @Composable
 private fun SearchResults(
-    state: PersonalSearchUiState,
+    state: PersonalSearchState,
     modifier: Modifier,
     onLoadMore: () -> Unit,
     onRetry: () -> Unit,
@@ -265,7 +268,7 @@ private fun SearchResultRow(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun PersonalPreviewScreen(
-    state: PersonalPreviewUiState,
+    state: PersonalPreviewState,
     documentPicker: DocumentPicker,
     officeRenderer: OfficeRenderer,
     mediaRenderer: MediaPreviewRenderer,
@@ -342,7 +345,7 @@ fun PersonalPreviewScreen(
 }
 
 @Composable
-private fun TextPreviewContent(state: PersonalPreviewUiState) {
+private fun TextPreviewContent(state: PersonalPreviewState) {
     val strings = LocalMobileStrings.current
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         if (state.textTruncated) Text(

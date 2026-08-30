@@ -1,5 +1,7 @@
 package com.betterclouddrive.mobile.app
 
+import com.betterclouddrive.mobile.feature.shares.PersonalSharesState
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,7 +73,7 @@ private enum class SharePasswordEdit { KEEP, SET, REMOVE }
 
 @Composable
 fun SharesScreen(
-    state: PersonalSharesUiState,
+    state: PersonalSharesState,
     dateTime: LocalDateTimeService,
     clipboard: ClipboardService,
     onQuery: (String) -> Unit,
@@ -197,7 +199,7 @@ private fun ShareCard(share: ShareLink, dateTime: LocalDateTimeService, onOpen: 
 
 @Composable
 fun ShareDetailScreen(
-    state: PersonalSharesUiState,
+    state: PersonalSharesState,
     dateTime: LocalDateTimeService,
     clipboard: ClipboardService,
     onRevealPassword: () -> Unit,
@@ -274,7 +276,7 @@ fun ShareDetailScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareCreatorOverlay(
-    state: PersonalSharesUiState,
+    state: PersonalSharesState,
     wide: Boolean,
     dateTime: LocalDateTimeService,
     clipboard: ClipboardService,
@@ -298,7 +300,7 @@ fun ShareCreatorOverlay(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShareCreateContent(
-    state: PersonalSharesUiState,
+    state: PersonalSharesState,
     dateTime: LocalDateTimeService,
     clipboard: ClipboardService,
     onCreate: (String?, Long?, Int?) -> Unit,
@@ -361,7 +363,7 @@ private fun ShareCreateContent(
 @Composable
 private fun ShareEditDialog(
     share: ShareLink,
-    state: PersonalSharesUiState,
+    state: PersonalSharesState,
     dateTime: LocalDateTimeService,
     onDismiss: () -> Unit,
     onSave: (UpdatePersonalShareRequest) -> Unit,

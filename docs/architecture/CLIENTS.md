@@ -71,12 +71,17 @@ Compose Screen
 新移动端位于 `mobile/`，采用 Kotlin Multiplatform、Compose Multiplatform、Ktor、Room 和手动 `AppContainer`。Android 是当前交付目标；iOS 只保留公共代码编译能力，不实现平台服务。
 
 ```text
-Compose Screen / StateFlow holder
-  -> Repository / TransferEngine
-  -> Ktor / Room / narrow platform interfaces
+Compose Screen
+  -> feature Store / AppCoordinator（仅会话协调）
+  -> narrow Repository / TransferEngine
+  -> domain API / AuthenticatedHttpClient / Room
   -> Android Keystore、SAF、UIDT 或 WorkManager
 ```
 
+- `AppContainer` 显式创建认证 HTTP 核心、领域 API、窄 Repository 和业务 Store。不存在聚合全应用状态的 Controller，页面也不接收全局 actions 集合。
+- `AuthStore`、`PersonalBrowserStore`、`PersonalSearchStore`、`FavoritesStore`、`TagsStore`、`PersonalSharesStore`、`PersonalPreviewStore`、`TransferQueueStore` 和 `DiagnosticsStore` 各自拥有独立 `StateFlow`、作业、缓存与重置边界，不直接读写其他 Store。
+- `AppCoordinator` 只负责启动、会话生命周期和全局重置。跨域行为使用明确窄端口或事件：例如上传结束事件只让个人浏览 Store 失效对应目录。
+- `AuthenticatedHttpClient` 是唯一 Token 所有者，集中实现单飞刷新、一次重放、统一 envelope/错误解析和受控流式响应。各领域 API 不自行保存或刷新 Token。
 - DataStore 保存服务器设置，完整 Token 对由 Android Keystore AES-256-GCM 加密后原子保存。
 - 认证层合并并发刷新，旋转 Token 后最多重放原请求一次；登出或切换服务器会清除服务器绑定的令牌、任务和临时文件。
 - Room 是传输状态事实来源。Android 14+ 使用 UIDT，较低版本回退 WorkManager；一次可见用户操作提交一个最多包含 100 个任务 ID 的系统批次，真实参数仍从 Room 读取，全局传输互斥保证逐项执行。

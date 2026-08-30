@@ -13,7 +13,7 @@ $env:ANDROID_SERIAL = '<adb 设备序列号>'
 .\mobile\gradlew.bat -p mobile :androidApp:assembleRelease
 ```
 
-KMP 当前个人分享见[阶段 11 个人分享](../../mobile/docs/stage-11-personal-sharing.md)，个人收藏和标签见[阶段 10 个人收藏与标签](../../mobile/docs/stage-10-personal-organization.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
+KMP 当前依赖与状态边界见[阶段 11.5 架构收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，个人分享见[阶段 11 个人分享](../../mobile/docs/stage-11-personal-sharing.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
 
 ## 工具与构建
 
@@ -96,7 +96,9 @@ KMP 登录后的共享产品外壳使用 Navigation Compose 类型安全路由�
 
 个人文件夹同样使用类型安全路由。目录请求固定每页 50 条，接近列表或网格末尾时加载下一页；请求必须携带白名单排序字段和方向。快速切换目录、排序或刷新时取消旧任务并忽略迟到响应。目录返回栈缓存仅保留当前面包屑分支，滚动位置使用首个可见文件 ID 作为锚点。所有个人目录均显示上传入口，目标目录必须在打开系统选择器时冻结；批次完成后只刷新对应目录一次。
 
-个人文件修改统一通过共享 `FileRepository` 和 `AppController`：同一时间只提交一个变更，成功后按原已加载页数刷新当前目录并尽量保留滚动锚点。移动和复制使用独立文件夹选择器，选择器每页读取 100 条并只展示文件夹；文件夹源在选择器中隐藏，客户端禁用同父目录移动，但服务端仍是权限、冲突和非法目标的最终裁决者。多选集合只包含当前目录已加载项目，并且只允许批量移入回收站。
+KMP 不使用全应用 Controller 或单体 Repository。`AuthenticatedHttpClient` 集中管理 Token、单飞刷新和一次重放；认证、个人文件、整理、分享、预览和传输各自使用领域 API 与窄 Repository。页面只收集对应 Store 的 `StateFlow`；`AppCoordinator` 只在启动、会话失效、退出和换服务器时协调重置。新功能应建立自己的 Store/Repository/API 边界，禁止向根状态或全局 actions 集合追加字段。
+
+个人文件修改由 `PersonalBrowserStore` 通过窄 `PersonalFilesRepository` 串行提交，成功后按原已加载页数刷新当前目录并尽量保留滚动锚点。移动和复制使用独立文件夹选择器，选择器每页读取 100 条并只展示文件夹；文件夹源在选择器中隐藏，客户端禁用同父目录移动，但服务端仍是权限、冲突和非法目标的最终裁决者。多选集合只包含当前目录已加载项目，并且只允许批量移入回收站。
 
 个人收藏与标签入口位于个人空间顶栏菜单，不增加新的顶层导航项。收藏状态只在打开菜单或详情时按需读取，禁止在目录列表逐项请求。标签分配一次处理一个个人项目，先并行读取个人标签和项目当前关联，再通过 `PUT /files/{fileId}/tags` 原子替换；团队项目和团队标签不得进入此流程。
 
