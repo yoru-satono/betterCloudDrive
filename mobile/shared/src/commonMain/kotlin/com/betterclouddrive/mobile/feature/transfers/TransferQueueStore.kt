@@ -27,10 +27,22 @@ interface PersonalTransferOperations {
     ): TransferTask
 }
 
+interface VersionTransferOperations {
+    suspend fun enqueueVersionDownload(
+        fileId: Long,
+        versionNumber: Int,
+        fileName: String,
+        fileSize: Long,
+        mimeType: String?,
+        destinationHandle: String,
+        expectedMd5: String?,
+    ): TransferTask
+}
+
 class TransferQueueStore(
     private val manager: TransferManager,
     parentScope: CoroutineScope,
-) : ResettableStore, TransferSessionPort, PersonalTransferOperations {
+) : ResettableStore, TransferSessionPort, PersonalTransferOperations, VersionTransferOperations {
     private val scope = parentScope.storeChildScope()
     private val mutableState = MutableStateFlow<List<TransferTask>>(emptyList())
     val state: StateFlow<List<TransferTask>> = mutableState.asStateFlow()
@@ -68,6 +80,19 @@ class TransferQueueStore(
     override suspend fun enqueueDownload(
         fileId: Long, fileName: String, fileSize: Long, mimeType: String?, destinationHandle: String, expectedMd5: String?,
     ) = manager.enqueueDownload(fileId, fileName, fileSize, mimeType, destinationHandle, expectedMd5 = expectedMd5)
+
+    override suspend fun enqueueVersionDownload(
+        fileId: Long,
+        versionNumber: Int,
+        fileName: String,
+        fileSize: Long,
+        mimeType: String?,
+        destinationHandle: String,
+        expectedMd5: String?,
+    ) = manager.enqueueDownload(
+        fileId, fileName, fileSize, mimeType, destinationHandle,
+        expectedMd5 = expectedMd5, versionNumber = versionNumber,
+    )
 
     fun pause(taskId: String) { scope.launch { manager.pause(taskId) } }
     fun resume(taskId: String) { scope.launch { manager.resume(taskId) } }

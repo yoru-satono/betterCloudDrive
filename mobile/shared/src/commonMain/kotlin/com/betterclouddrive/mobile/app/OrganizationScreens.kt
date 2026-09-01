@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -94,6 +95,7 @@ fun FavoritesScreen(
     onManageTags: (FileItem) -> Unit,
     onCreateShare: (FileItem) -> Unit,
     onConsumeFeedback: () -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
@@ -134,6 +136,7 @@ fun FavoritesScreen(
                     onDownload = { download(file) },
                     onManageTags = { onManageTags(file) },
                     onCreateShare = { onCreateShare(file) },
+                    onOpenVersions = { onOpenVersions(file) },
                     trailingLabel = MobileString.RemoveFavorite,
                     trailingIcon = { Icon(Icons.Default.Star, null) },
                     onTrailing = { onToggleFavorite(file) },
@@ -149,6 +152,7 @@ fun FavoritesScreen(
             onPreview = { selected = null; onPreview(file) },
             onDownload = { download(file) },
             onCreateShare = { selected = null; onCreateShare(file) },
+            onOpenVersions = { selected = null; onOpenVersions(file) },
         )
     }
 }
@@ -265,6 +269,7 @@ fun TagFilesScreen(
     onCreateShare: (FileItem) -> Unit,
     onRemove: (FileItem) -> Unit,
     onConsumeFeedback: () -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var pendingDownload by remember { mutableStateOf<FileItem?>(null) }
@@ -295,6 +300,7 @@ fun TagFilesScreen(
             onClick = { if (it.isFolder) onOpenFolder(it) else onPreview(it) },
             menu = { file -> OrganizationFileMenu(
                 file, { onOpenLocation(file) }, { onPreview(file) }, { download(file) }, { onManageTags(file) }, { onCreateShare(file) },
+                { onOpenVersions(file) },
                 MobileString.RemoveFromTag, { Icon(Icons.Default.Label, null) }, { onRemove(file) },
             ) },
         )
@@ -459,6 +465,7 @@ private fun OrganizationFileMenu(
     onDownload: () -> Unit,
     onManageTags: () -> Unit,
     onCreateShare: () -> Unit,
+    onOpenVersions: () -> Unit,
     trailingLabel: MobileString,
     trailingIcon: @Composable () -> Unit,
     onTrailing: () -> Unit,
@@ -485,6 +492,9 @@ private fun OrganizationFileMenu(
             DropdownMenuItem(text = { Text(strings[MobileString.CreateShare]) }, leadingIcon = {
                 Icon(Icons.Default.Share, null)
             }, onClick = { expanded = false; onCreateShare() })
+            if (!file.isFolder) DropdownMenuItem(text = { Text(strings[MobileString.VersionHistory]) }, leadingIcon = {
+                Icon(Icons.Default.History, null)
+            }, onClick = { expanded = false; onOpenVersions() })
             DropdownMenuItem(text = { Text(strings[trailingLabel]) }, leadingIcon = trailingIcon,
                 onClick = { expanded = false; onTrailing() })
         }
@@ -589,6 +599,7 @@ private fun OrganizationFileDetail(
     onPreview: () -> Unit,
     onDownload: () -> Unit,
     onCreateShare: () -> Unit,
+    onOpenVersions: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     AlertDialog(
@@ -602,6 +613,7 @@ private fun OrganizationFileDetail(
         confirmButton = { if (!file.isFolder) Button(onClick = onPreview) { Text(strings[MobileString.Preview]) } },
         dismissButton = { Row {
             TextButton(onClick = onCreateShare) { Text(strings[MobileString.CreateShare]) }
+            if (!file.isFolder) TextButton(onClick = onOpenVersions) { Text(strings[MobileString.VersionHistory]) }
             if (!file.isFolder) TextButton(onClick = onDownload) { Text(strings[MobileString.Download]) }
             TextButton(onClick = onDismiss) { Text(strings[MobileString.Close]) }
         } },

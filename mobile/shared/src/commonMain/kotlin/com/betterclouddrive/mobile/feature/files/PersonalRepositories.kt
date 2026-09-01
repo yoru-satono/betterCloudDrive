@@ -14,6 +14,9 @@ import com.betterclouddrive.mobile.core.network.PersonalFilesApi
 import com.betterclouddrive.mobile.core.network.PersonalOrganizationApi
 import com.betterclouddrive.mobile.core.network.PersonalSharesApi
 import com.betterclouddrive.mobile.core.network.PreviewApi
+import com.betterclouddrive.mobile.core.network.PersonalRecoveryApi
+import com.betterclouddrive.mobile.core.model.RecycleBinItem
+import com.betterclouddrive.mobile.core.model.PersonalFileVersion
 
 interface PersonalFilesRepository {
     suspend fun listPersonalFiles(parentId: Long?, page: Int, size: Int, sortBy: String, order: String): PageResult<FileItem>
@@ -61,6 +64,37 @@ interface PreviewRepository {
     suspend fun loadPersonalText(file: FileItem): TextPreview
     suspend fun loadPersonalOffice(fileId: Long): OfficeConfig
     suspend fun loadTeamOffice(teamId: Long, fileId: Long): OfficeConfig
+}
+
+interface RecycleBinRepository {
+    suspend fun list(query: String?, page: Int, size: Int): PageResult<RecycleBinItem>
+    suspend fun restore(fileId: Long)
+    suspend fun permanentlyDelete(fileId: Long)
+    suspend fun empty()
+}
+
+interface PersonalVersionsRepository {
+    suspend fun file(fileId: Long): FileItem
+    suspend fun list(fileId: Long): List<PersonalFileVersion>
+    suspend fun restore(fileId: Long, versionNumber: Int): FileItem
+    suspend fun delete(fileId: Long, versionNumber: Int)
+}
+
+class RecycleBinRepositoryImpl(private val api: PersonalRecoveryApi) : RecycleBinRepository {
+    override suspend fun list(query: String?, page: Int, size: Int) = api.listRecycleBin(query, page, size)
+    override suspend fun restore(fileId: Long) = api.restoreRecycleItem(fileId)
+    override suspend fun permanentlyDelete(fileId: Long) = api.permanentlyDeleteRecycleItem(fileId)
+    override suspend fun empty() = api.emptyRecycleBin()
+}
+
+class PersonalVersionsRepositoryImpl(
+    private val files: PersonalFilesApi,
+    private val api: PersonalRecoveryApi,
+) : PersonalVersionsRepository {
+    override suspend fun file(fileId: Long) = files.get(fileId)
+    override suspend fun list(fileId: Long) = api.listVersions(fileId)
+    override suspend fun restore(fileId: Long, versionNumber: Int) = api.restoreVersion(fileId, versionNumber)
+    override suspend fun delete(fileId: Long, versionNumber: Int) = api.deleteVersion(fileId, versionNumber)
 }
 
 class PersonalFilesRepositoryImpl(private val api: PersonalFilesApi) : PersonalFilesRepository {

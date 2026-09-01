@@ -208,7 +208,7 @@ GET /api/v1/files/{fileId}/versions
 Authorization: Bearer <accessToken>
 ```
 
-返回该文件的所有历史版本，按 `versionNumber` 降序排列。
+仅接受当前用户未删除的个人普通文件。返回服务端保留的历史版本，按 `versionNumber` 降序排列，最多 10 条；文件夹、团队项目、已删除文件和无权访问的版本统一隐藏。
 
 **Response `200`:**
 ```json
@@ -223,7 +223,6 @@ Authorization: Bearer <accessToken>
       "versionNumber": 2,
       "fileSize": 204800,
       "md5Hash": "d41d8cd9...",
-      "storagePath": "1/2026/06/v2_report.pdf",
       "createdAt": "2026-06-09T14:00:00"
     },
     {
@@ -232,12 +231,13 @@ Authorization: Bearer <accessToken>
       "versionNumber": 1,
       "fileSize": 102400,
       "md5Hash": "a1b2c3d4...",
-      "storagePath": "1/2026/06/v1_report.pdf",
       "createdAt": "2026-06-08T10:00:00"
     }
   ]
 }
 ```
+
+响应是安全 DTO，不返回 `storagePath`、`userId` 等存储实现字段。
 
 ---
 
@@ -248,7 +248,7 @@ DELETE /api/v1/files/{fileId}/versions/{versionNumber}
 Authorization: Bearer <accessToken>
 ```
 
-> 如果文件仅剩一个版本，删除操作返回 409（不能删除唯一版本）。`419009` 表示创建新版本时达到服务端版本数量上限，不用于删除冲突。
+> 删除会扣减该历史对象占用并重新计算 `versionCount`。如果仅剩一条可保留的历史记录，返回 `409003 / error.cannotDeleteOnlyVersion`。`419009` 表示创建新版本时达到服务端版本数量上限，不用于删除冲突。
 
 ---
 
@@ -261,6 +261,12 @@ Authorization: Bearer <accessToken>
 
 仅文件所有者可下载。成功时返回二进制附件，文件名以 `v{versionNumber}_` 为前缀；响应不是统一 JSON 信封。
 
+- 无 `Range` 时返回 `200`、`Content-Length`、`Accept-Ranges: bytes` 和版本 MD5。
+- 合法 `Range` 返回 `206`、严格的 `Content-Range` 与范围长度。
+- 非法范围返回 `416` 和 `Content-Range: bytes */{total}`。
+
+客户端可以据此使用与普通文件下载相同的 `.part`、暂停、恢复和完整性校验流程。
+
 ---
 
 ### 13.4 恢复版本
@@ -270,6 +276,6 @@ POST /api/v1/files/{fileId}/versions/{versionNumber}/restore
 Authorization: Bearer <accessToken>
 ```
 
-恢复指定历史版本为当前内容，并返回更新后的 `FileEntity`。恢复过程会保留恢复前的当前内容，使其仍可作为历史版本访问。
+恢复指定历史版本为当前内容，并返回更新后的文件元数据。恢复前会锁定文件、检查新增当前对象所需配额，并把恢复前的当前内容保存为新历史版本；成功后重新计算版本数量。
 
 ---

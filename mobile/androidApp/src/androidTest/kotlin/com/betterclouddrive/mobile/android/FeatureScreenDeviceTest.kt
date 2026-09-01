@@ -188,6 +188,7 @@ class FeatureScreenDeviceTest {
                         Box(Modifier.fillMaxSize().testTag("tags-wide-detail")) {
                             TagFilesScreen(
                                 tag, state, NoopDocumentPicker, {}, {}, {}, {}, {}, {}, {}, { _, _ -> }, {}, {}, {}, {},
+                                {},
                             )
                         }
                     }
@@ -212,6 +213,7 @@ class FeatureScreenDeviceTest {
                 onBack = {}, onQueryChanged = {}, onSubmit = {}, onLoadMore = {}, onRetry = {}, onScrollAnchor = {},
                 onOpenFolder = {}, onOpenLocation = {}, onPreview = { previewed = it.id }, onDownload = { _, _ -> },
                 onCreateShare = {},
+                onOpenVersions = {},
             )
         } }
         composeRule.onNodeWithTag("search-result-71").performClick()
@@ -255,6 +257,7 @@ class FeatureScreenDeviceTest {
             onClosePicker = {}, onConfirmPicker = {}, onConsumeFeedback = {}, onConsumeTransferFeedback = {},
             onOpenTransfers = {}, onPreview = {}, onLoadFavoriteStatus = {}, onToggleFavorite = {},
             onManageTags = {}, onCreateShare = {},
+            onOpenVersions = {},
         )
     }
 

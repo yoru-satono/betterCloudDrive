@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
@@ -161,6 +162,8 @@ fun ProductShell(
     fun openFavorites() = navController.navigate(PersonalFavoritesRoute) { launchSingleTop = true }
     fun openTags() = navController.navigate(PersonalTagsRoute) { launchSingleTop = true }
     fun openShares() = navController.navigate(PersonalSharesRoute) { launchSingleTop = true }
+    fun openRecycleBin() = navController.navigate(PersonalRecycleBinRoute) { launchSingleTop = true }
+    fun openVersions(file: FileItem) = navController.navigate(PersonalVersionsRoute(file.id))
     fun openPreview(file: FileItem) = navController.navigate(PersonalPreviewRoute(file.id))
     fun closePreview() {
         container.previewStore.close()
@@ -185,6 +188,7 @@ fun ProductShell(
             onClosePreview = ::closePreview,
             onOpenSearchLocation = ::openSearchLocation,
             onOpenShareDetail = { navController.navigate(PersonalShareDetailRoute(it)) },
+            onOpenVersions = ::openVersions,
         )
     }
 
@@ -201,6 +205,7 @@ fun ProductShell(
                     onOpenFavorites = ::openFavorites,
                     onOpenTags = ::openTags,
                     onOpenShares = ::openShares,
+                    onOpenRecycleBin = ::openRecycleBin,
                     showTopBar = !isSearch,
                     modifier = Modifier.weight(1f),
                     content = { Content(it, true) },
@@ -215,6 +220,7 @@ fun ProductShell(
                 onOpenFavorites = ::openFavorites,
                 onOpenTags = ::openTags,
                 onOpenShares = ::openShares,
+                onOpenRecycleBin = ::openRecycleBin,
                 showTopBar = !isSearch && !isPreview,
                 bottomBar = { if (!isDiagnostics && !isPreview) MainNavigationBar(destination, transfers.activeCount, ::navigateTopLevel) },
                 modifier = Modifier.fillMaxSize().testTag("product-shell-compact"),
@@ -251,6 +257,7 @@ private fun ShellScaffold(
     onOpenFavorites: () -> Unit,
     onOpenTags: () -> Unit,
     onOpenShares: () -> Unit,
+    onOpenRecycleBin: () -> Unit,
     showTopBar: Boolean = true,
     modifier: Modifier = Modifier,
     bottomBar: @Composable () -> Unit = {},
@@ -278,7 +285,7 @@ private fun ShellScaffold(
                 },
                 actions = {
                     if (destination.isPersonalDirectory()) PersonalTopActions(
-                        browserState, browser, onOpenSearch, onOpenFavorites, onOpenTags, onOpenShares,
+                        browserState, browser, onOpenSearch, onOpenFavorites, onOpenTags, onOpenShares, onOpenRecycleBin,
                     )
                 },
             )
@@ -332,6 +339,7 @@ private fun PersonalTopActions(
     onOpenFavorites: () -> Unit,
     onOpenTags: () -> Unit,
     onOpenShares: () -> Unit,
+    onOpenRecycleBin: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var sortExpanded by remember { mutableStateOf(false) }
@@ -418,6 +426,12 @@ private fun PersonalTopActions(
                 onClick = { organizeExpanded = false; onOpenShares() },
                 modifier = Modifier.testTag("personal-open-shares"),
             )
+            DropdownMenuItem(
+                text = { Text(strings[MobileString.RecycleBinTitle]) },
+                leadingIcon = { Icon(Icons.Default.DeleteSweep, null) },
+                onClick = { organizeExpanded = false; onOpenRecycleBin() },
+                modifier = Modifier.testTag("personal-open-recycle-bin"),
+            )
         }
     }
 }
@@ -438,13 +452,15 @@ private fun AppNavHost(
     onClosePreview: () -> Unit,
     onOpenSearchLocation: (FileItem) -> Unit,
     onOpenShareDetail: (Long) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     NavHost(navController, startDestination = PersonalRoute, modifier = modifier) {
-        personalBrowserGraph(container, onOpenFolder, onGoRoot, onOpenTransfers, onOpenPreview)
-        personalSearchGraph(navController, container, onOpenSearchLocation, onOpenPreview)
-        personalOrganizationGraph(navController, container, wide, onOpenFolder, onOpenSearchLocation, onOpenPreview)
+        personalBrowserGraph(container, onOpenFolder, onGoRoot, onOpenTransfers, onOpenPreview, onOpenVersions)
+        personalSearchGraph(navController, container, onOpenSearchLocation, onOpenPreview, onOpenVersions)
+        personalOrganizationGraph(navController, container, wide, onOpenFolder, onOpenSearchLocation, onOpenPreview, onOpenVersions)
         personalSharesGraph(navController, container, wide, onOpenShareDetail)
         personalPreviewGraph(container, onClosePreview)
+        personalRecoveryGraph(container, onOpenTransfers)
         productUtilityGraph(container, debugToolsEnabled, onOpenDiagnostics)
     }
 }
@@ -515,6 +531,8 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
     PersonalSharesRoute -> this?.hasRoute<PersonalSharesRoute>() == true
     is PersonalShareDetailRoute -> this?.hasRoute<PersonalShareDetailRoute>() == true
     is PersonalPreviewRoute -> this?.hasRoute<PersonalPreviewRoute>() == true
+    PersonalRecycleBinRoute -> this?.hasRoute<PersonalRecycleBinRoute>() == true
+    is PersonalVersionsRoute -> this?.hasRoute<PersonalVersionsRoute>() == true
     TeamsRoute -> this?.hasRoute<TeamsRoute>() == true
     TransfersRoute -> this?.hasRoute<TransfersRoute>() == true
     ProfileRoute -> this?.hasRoute<ProfileRoute>() == true
@@ -526,7 +544,8 @@ private fun NavDestination?.isPersonal(): Boolean =
         this?.hasRoute<PersonalSearchRoute>() == true || this?.hasRoute<PersonalPreviewRoute>() == true ||
         this?.hasRoute<PersonalFavoritesRoute>() == true || this?.hasRoute<PersonalTagsRoute>() == true ||
         this?.hasRoute<PersonalTagFilesRoute>() == true
-        || this?.hasRoute<PersonalSharesRoute>() == true || this?.hasRoute<PersonalShareDetailRoute>() == true
+        || this?.hasRoute<PersonalSharesRoute>() == true || this?.hasRoute<PersonalShareDetailRoute>() == true ||
+        this?.hasRoute<PersonalRecycleBinRoute>() == true || this?.hasRoute<PersonalVersionsRoute>() == true
 
 private fun NavDestination?.isPersonalDirectory(): Boolean =
     this?.hasRoute<PersonalRoute>() == true || this?.hasRoute<PersonalFolderRoute>() == true
@@ -536,13 +555,16 @@ private fun NavDestination?.isPersonalFolder(): Boolean = this?.hasRoute<Persona
 private fun NavDestination?.isPersonalOrganization(): Boolean =
     this?.hasRoute<PersonalFavoritesRoute>() == true || this?.hasRoute<PersonalTagsRoute>() == true ||
         this?.hasRoute<PersonalTagFilesRoute>() == true
-        || this?.hasRoute<PersonalSharesRoute>() == true || this?.hasRoute<PersonalShareDetailRoute>() == true
+        || this?.hasRoute<PersonalSharesRoute>() == true || this?.hasRoute<PersonalShareDetailRoute>() == true ||
+        this?.hasRoute<PersonalRecycleBinRoute>() == true || this?.hasRoute<PersonalVersionsRoute>() == true
 
 private fun NavDestination?.title(strings: MobileStrings): String = when {
     matches(PersonalSearchRoute) -> strings[MobileString.SearchFiles]
     matches(PersonalFavoritesRoute) -> strings[MobileString.FavoritesTitle]
     matches(PersonalTagsRoute) || this?.hasRoute<PersonalTagFilesRoute>() == true -> strings[MobileString.TagsTitle]
     matches(PersonalSharesRoute) || this?.hasRoute<PersonalShareDetailRoute>() == true -> strings[MobileString.SharesTitle]
+    matches(PersonalRecycleBinRoute) -> strings[MobileString.RecycleBinTitle]
+    this?.hasRoute<PersonalVersionsRoute>() == true -> strings[MobileString.VersionHistory]
     matches(TeamsRoute) -> strings[MobileString.TeamsTitle]
     matches(TransfersRoute) -> strings[MobileString.TransferQueueTitle]
     matches(ProfileRoute) -> strings[MobileString.Profile]

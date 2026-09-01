@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.betterclouddrive.mobile.app.AppContainer
 import com.betterclouddrive.mobile.core.database.MobileDatabase
+import com.betterclouddrive.mobile.core.database.MobileDatabaseMigration1To2
 import com.betterclouddrive.mobile.core.localization.PlatformLocaleProvider
 import com.betterclouddrive.mobile.core.localization.MobileStrings
 import com.betterclouddrive.mobile.core.localization.loadMobileStrings
@@ -19,12 +20,15 @@ import com.betterclouddrive.mobile.core.network.PersonalOrganizationApi
 import com.betterclouddrive.mobile.core.network.PersonalSharesApi
 import com.betterclouddrive.mobile.core.network.PreviewApi
 import com.betterclouddrive.mobile.core.network.TransferApi
+import com.betterclouddrive.mobile.core.network.PersonalRecoveryApi
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
 import com.betterclouddrive.mobile.feature.files.PersonalFilesRepositoryImpl
 import com.betterclouddrive.mobile.feature.files.FavoritesRepositoryImpl
 import com.betterclouddrive.mobile.feature.files.TagsRepositoryImpl
 import com.betterclouddrive.mobile.feature.files.PersonalSharesRepositoryImpl
 import com.betterclouddrive.mobile.feature.files.PersonalPreviewRepositoryImpl
+import com.betterclouddrive.mobile.feature.files.RecycleBinRepositoryImpl
+import com.betterclouddrive.mobile.feature.files.PersonalVersionsRepositoryImpl
 import com.betterclouddrive.mobile.feature.transfers.TransferEngine
 import com.betterclouddrive.mobile.feature.transfers.TransferManager
 import com.betterclouddrive.mobile.feature.transfers.TransferRepository
@@ -67,6 +71,7 @@ object AndroidAppContainerFactory {
             context = appContext,
             name = appContext.getDatabasePath("bcd-mobile.db").absolutePath,
         ).setDriver(BundledSQLiteDriver())
+            .addMigrations(MobileDatabaseMigration1To2)
             .setQueryCoroutineContext(Dispatchers.IO)
             .build()
         val fileAccess = AndroidTransferFileAccess(appContext)
@@ -81,6 +86,7 @@ object AndroidAppContainerFactory {
         val sharesApi = PersonalSharesApi(http)
         val previewApi = PreviewApi(http)
         val transferApi = TransferApi(http)
+        val recoveryApi = PersonalRecoveryApi(http)
         val engine = TransferEngine(transferApi, repository, fileAccess)
         val manager = TransferManager(transferApi, repository, scheduler, fileAccess)
         return AppContainer(
@@ -91,6 +97,8 @@ object AndroidAppContainerFactory {
             tags = TagsRepositoryImpl(organizationApi),
             shares = PersonalSharesRepositoryImpl(sharesApi),
             preview = PersonalPreviewRepositoryImpl(filesApi, previewApi),
+            recycleBin = RecycleBinRepositoryImpl(recoveryApi),
+            personalVersions = PersonalVersionsRepositoryImpl(filesApi, recoveryApi),
             database = database,
             transfers = manager,
             transferEngine = engine,

@@ -11,6 +11,7 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.betterclouddrive.mobile.core.model.StoredSession
 import com.betterclouddrive.mobile.core.model.SessionStorageInvalidException
 import com.betterclouddrive.mobile.core.database.MobileDatabase
+import com.betterclouddrive.mobile.core.database.MobileDatabaseMigration1To2
 import com.betterclouddrive.mobile.core.database.TransferTaskEntity
 import com.betterclouddrive.mobile.core.platform.TransferScheduleSpec
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
@@ -31,6 +32,29 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AndroidSecurityDeviceTest {
+    @Test
+    fun roomMigrationFromV1PreservesTransferAndAddsNullableVersion() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val name = "migration-${System.nanoTime()}.db"
+        val path = context.getDatabasePath(name)
+        path.parentFile?.mkdirs()
+        android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(path, null).use { db ->
+            db.execSQL("""CREATE TABLE transfer_tasks (id TEXT NOT NULL PRIMARY KEY, direction TEXT NOT NULL, status TEXT NOT NULL, serverBaseUrl TEXT NOT NULL, teamId INTEGER, remoteParentId INTEGER, remoteFileId INTEGER, remoteResultFileId INTEGER, fileName TEXT NOT NULL, mimeType TEXT, bytesDone INTEGER NOT NULL, bytesTotal INTEGER NOT NULL, sourceHandle TEXT, destinationHandle TEXT, sessionId TEXT, chunkSize INTEGER NOT NULL, totalChunks INTEGER NOT NULL, md5Hash TEXT, retryCount INTEGER NOT NULL, errorKey TEXT, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)""")
+            db.execSQL("CREATE TABLE room_master_table (id INTEGER PRIMARY KEY, identity_hash TEXT)")
+            db.execSQL("INSERT OR REPLACE INTO room_master_table (id, identity_hash) VALUES (42, 'a19ad84c772ff8128c3da35468336d08')")
+            db.execSQL("""INSERT INTO transfer_tasks (id,direction,status,serverBaseUrl,fileName,bytesDone,bytesTotal,chunkSize,totalChunks,retryCount,createdAt,updatedAt) VALUES ('old','DOWNLOAD','PAUSED','https://drive.example.com','old.bin',4,8,5242880,1,0,1,2)""")
+            db.version = 1
+        }
+
+        val database = openDatabase(context, name)
+        val task = database.transferTaskDao().find("old")
+        assertEquals("old.bin", task?.fileName)
+        assertEquals(4L, task?.bytesDone)
+        assertEquals(null, task?.remoteVersionNumber)
+        database.close()
+        databaseFiles(context, name).forEach { it.delete() }
+    }
+
     @Test
     fun encryptedSessionRoundTripsWithoutPlaintextAndCorruptionLogsOut() = runTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -196,6 +220,7 @@ class AndroidSecurityDeviceTest {
     private fun openDatabase(context: android.content.Context, name: String): MobileDatabase =
         Room.databaseBuilder<MobileDatabase>(context, context.getDatabasePath(name).absolutePath)
             .setDriver(BundledSQLiteDriver())
+            .addMigrations(MobileDatabaseMigration1To2)
             .setQueryCoroutineContext(Dispatchers.IO)
             .build()
 

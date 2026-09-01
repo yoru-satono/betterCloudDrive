@@ -283,7 +283,7 @@ Authorization: Bearer <accessToken>
 ### 5.1 回收站列表
 
 ```
-GET /api/v1/recycle-bin?page=1&size=20
+GET /api/v1/recycle-bin?q=photo&page=1&size=20
 Authorization: Bearer <accessToken>
 ```
 
@@ -312,6 +312,10 @@ Authorization: Bearer <accessToken>
 }
 ```
 
+`q` 会先去除首尾空白并按名称匹配。列表只返回当前用户个人空间的“删除根”，固定按 `deletedAt DESC, id DESC` 排序；删除文件夹时，其后代不会作为独立回收站记录出现。响应使用客户端 DTO，不包含 `storagePath`、`userId` 等内部字段。
+
+文件夹软删除会让整棵活动子树从直接访问、搜索、收藏、标签、分享、预览和下载中隐藏。回收站内容不计入已用容量，恢复时按当前子树大小重新校验配额。
+
 ---
 
 ### 5.2 恢复文件
@@ -329,6 +333,8 @@ Authorization: Bearer <accessToken>
   "messageParams": {}
 }
 ```
+
+原父目录仍存在且可用时恢复到原位置，否则恢复到个人根目录。目标位置已有同名项目时返回 `409001 / error.fileNameConflict`，配额不足返回 `419001`，失败时项目继续留在回收站。
 
 ---
 
@@ -348,7 +354,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> 物理删除，不可恢复。同时删除存储中的文件对象和历史版本。
+> 物理删除，不可恢复。文件夹会递归删除整棵子树、缩略图、当前对象和历史版本对象。
 
 ---
 
@@ -368,7 +374,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> 物理删除回收站中当前用户的所有文件，不可恢复。
+> 物理删除回收站中当前用户的所有删除根，不可恢复。手动清空和定时过期清理复用同一递归删除语义。
 
 ---
 

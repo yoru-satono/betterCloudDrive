@@ -24,6 +24,7 @@ public enum ApiCode {
     CONFLICT(409, "resource conflict"),
     FILE_NAME_CONFLICT(409001, "file name already exists in this folder"),
     TAG_NAME_CONFLICT(409002, "tag name already exists"),
+    VERSION_DELETE_CONFLICT(409003, "cannot delete the only historical version"),
     RATE_LIMITED(429, "too many requests"),
 
     // ==================== Business Errors (419) ====================

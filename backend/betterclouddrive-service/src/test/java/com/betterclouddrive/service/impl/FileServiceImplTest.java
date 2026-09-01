@@ -479,7 +479,7 @@ class FileServiceImplTest {
         LocalDateTime now = LocalDateTime.now();
         FileEntity file = FileEntity.builder()
                 .id(1L).userId(1L).isDeleted(true).deletedAt(now).build();
-        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(file));
         when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
 
         fileService.restoreFile(1L, 1L);
@@ -492,7 +492,7 @@ class FileServiceImplTest {
     void listRecycleBin_shouldReturnDeletedFiles() {
         FileEntity file = FileEntity.builder().id(1L).fileName("deleted.txt").build();
         Page<FileEntity> page = new PageImpl<>(List.of(file), PageRequest.of(0, 20), 1);
-        when(fileRepository.findAll(any(Specification.class), any(PageRequest.class))).thenReturn(page);
+        when(fileRepository.findPersonalRecycleRoots(eq(1L), eq("deleted"), any(PageRequest.class))).thenReturn(page);
 
         PageResult<FileEntity> result = fileService.listRecycleBin(1L, "deleted", 1, 20);
 
@@ -503,7 +503,7 @@ class FileServiceImplTest {
     @Test
     void permanentDelete_shouldRemoveFromDb() {
         FileEntity file = FileEntity.builder().id(1L).userId(1L).isDeleted(true).build();
-        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(file));
         when(fileRepository.findAll(any(Specification.class))).thenReturn(List.of());
         when(fileVersionRepository.findByFileIdOrderByVersionNumberDesc(1L)).thenReturn(List.of());
 
@@ -522,7 +522,7 @@ class FileServiceImplTest {
                 .thumbnailPath("thumbnails/users/1/1.jpg")
                 .isDeleted(true)
                 .build();
-        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(file));
         when(fileRepository.findAll(any(Specification.class))).thenReturn(List.of());
         when(fileVersionRepository.findByFileIdOrderByVersionNumberDesc(1L)).thenReturn(List.of());
 

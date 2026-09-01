@@ -171,7 +171,7 @@ class TransferEngine(
         }
         repository.updateActive(initial.id) { it.copy(bytesDone = offset, status = TransferStatus.RUNNING) }
         var expectedTotal = initial.bytesTotal.takeIf { it > 0 }
-        backend.download(initial.scope, fileId, offset) { status, headers, channel ->
+        backend.download(initial.scope, fileId, offset, initial.remoteVersionNumber) { status, headers, channel ->
             when (status) {
                 HttpStatusCode.OK -> {
                     if (offset > 0) {

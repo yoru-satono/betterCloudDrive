@@ -49,6 +49,7 @@ class TransferRepository(
         destinationHandle: String,
         scope: TransferScope,
         mimeType: String?,
+        versionNumber: Int? = null,
     ): TransferTask {
         val timestamp = now()
         val task = TransferTask(
@@ -58,6 +59,7 @@ class TransferRepository(
             serverBaseUrl = server,
             scope = scope,
             remoteFileId = fileId,
+            remoteVersionNumber = versionNumber,
             fileName = fileName,
             mimeType = mimeType,
             bytesTotal = fileSize,
@@ -139,6 +141,7 @@ private fun TransferTaskEntity.toModel(): TransferTask = TransferTask(
     scope = if (teamId == null) TransferScope.Personal(remoteParentId) else TransferScope.Team(teamId, remoteParentId),
     remoteFileId = remoteFileId,
     remoteResultFileId = remoteResultFileId,
+    remoteVersionNumber = remoteVersionNumber,
     fileName = fileName,
     mimeType = mimeType,
     bytesDone = bytesDone,
@@ -164,6 +167,7 @@ private fun TransferTask.toEntity(): TransferTaskEntity = TransferTaskEntity(
     remoteParentId = scope.parentId,
     remoteFileId = remoteFileId,
     remoteResultFileId = remoteResultFileId,
+    remoteVersionNumber = remoteVersionNumber,
     fileName = fileName,
     mimeType = mimeType,
     bytesDone = bytesDone,

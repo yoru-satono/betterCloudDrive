@@ -1,13 +1,13 @@
 # BetterCloudDrive KMP 移动端
 
-这是 Android 优先的 Kotlin Multiplatform 重写工程。当前版本在个人文件浏览、管理、传输、搜索和只读预览基础上，补齐了账号生命周期、个人设置、收藏、标签与个人分享管理。共享国际化资源支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
+这是 Android 优先的 Kotlin Multiplatform 重写工程。当前版本已覆盖个人文件浏览、管理、传输、搜索、只读预览、账号设置、收藏、标签、分享、回收站与历史版本。共享国际化资源支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
 
 ## 目标与范围
 
 - Android 是当前唯一可运行、可交付的平台。
 - `iosArm64` 和 `iosSimulatorArm64` 通过 `-PenableIos=true` 保留公共代码与 Framework 编译能力，阶段 1 不提供 iOS 平台服务或宿主应用。
 - 不配置桌面、JVM 应用、JS、Wasm 或 Web 目标。
-- 当前可见功能包括启动恢复、登录、注册与密码找回、个人目录浏览与管理、分页与排序、列表/网格、全局文件名搜索、只读文件详情与预览、任意目录多文件上传、单文件下载、独立传输队列、个人收藏、标签及原子标签分配、个人分享生命周期、账号资料与容量、语言、主题、服务器切换和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
+- 当前可见功能包括启动恢复、登录、注册与密码找回、个人目录浏览与管理、分页与排序、列表/网格、全局文件名搜索、只读文件详情与预览、任意目录多文件上传、普通及历史版本下载、独立传输队列、个人收藏、标签、分享、回收站、版本恢复与删除、账号资料与容量、语言、主题、服务器切换和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
 
 ## 工程结构
 
@@ -24,7 +24,7 @@ mobile/
 
 依赖由手动 `AppContainer` 创建，不引入第三方 DI。`AuthenticatedHttpClient` 是唯一 Token 所有者，其上按认证、个人文件、整理、分享、预览和传输划分领域 API 与窄 Repository。各功能分别暴露自己的 `StateFlow` Store；`AppCoordinator` 只协调启动、会话失效、退出和换服务器时的全局清理，不持有文件、标签、分享或预览状态。根组件只收集认证、主题和未结束传输数，各目的地只收集对应 Store。
 
-共享 UI 使用 Navigation Compose 2.9.2 类型安全路由；Activity 只提供 Compose 入口和 Android 平台服务。传输任务完整保存到 Room；一次用户操作最多形成一个包含 100 个任务 ID 的系统批次，批次执行器仍通过全局互斥逐项传输。Android 14+ 使用 UIDT，Android 13 及以下使用 WorkManager。下载通过 Ktor `prepareGet().execute {}` 在响应作用域内直接写入应用私有 `.part`，通知进度最多每秒投递一次，Compose 和 Room 进度不受影响。完成或取消的任务会释放 SAF 权限，传输页可确认后清除全部终态任务。
+共享 UI 使用 Navigation Compose 2.9.2 类型安全路由；Activity 只提供 Compose 入口和 Android 平台服务。传输任务完整保存到 Room v2，`remoteVersionNumber` 用于区分普通文件与历史版本下载；v1→v2 迁移保留已有任务。一次用户操作最多形成一个包含 100 个任务 ID 的系统批次，批次执行器仍通过全局互斥逐项传输。Android 14+ 使用 UIDT，Android 13 及以下使用 WorkManager。下载通过 Ktor `prepareGet().execute {}` 在响应作用域内直接写入应用私有 `.part`，通知进度最多每秒投递一次，Compose 和 Room 进度不受影响。完成或取消的任务会释放 SAF 权限，传输页可确认后清除全部终态任务。
 
 共享文案按 Compose Multiplatform 标准目录组织：`values` 保存默认英语，`values-zh-rCN` 与 `values-zh-rSG` 保存两套同名简体中文资源。当前仅 `zh-CN`、`zh-SG` 及带对应地区的 `zh-Hans` 标签选择简体中文；无地区 `zh-Hans`、繁体中文及其他语言回退英语。认证页和“我的”提供三个明确地区选项，Android 13+ 系统“应用语言”页面使用相同列表；登录后以账号精确地区为准，历史账号值 `zh-Hans` 兼容映射为 `zh-CN`。`checkMobileI18n` 同时阻止生产 Kotlin 界面硬编码，并校验各翻译目录的键和格式参数一致。
 
@@ -55,7 +55,7 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 .\scripts\verify-all.ps1 -Module mobile-android -AndroidSerial '<adb 设备序列号>'
 ```
 
-阶段 11 已在 Android 9/API 28 和 Android 14/API 34 上完成设备测试，覆盖个人“整理”导航、收藏、标签、分享创建与管理、手机与宽屏布局，并继续回归 WorkManager/UIDT、Keystore、Room 与 SAF。标准 Android Emulator 可使用 `http://10.0.2.2:8080` 访问宿主机；若模拟器厂商没有该别名，则在登录页使用开发机局域网地址。Debug 允许本地 HTTP，Release 强制 HTTPS。
+阶段 12 已在 Android 9/API 28 和 Android 14/API 34 上完成设备测试，覆盖个人“整理”导航、回收站、文件版本、手机与宽屏布局，并继续回归 WorkManager/UIDT、Keystore、Room v1→v2 与 SAF。标准 Android Emulator 可使用 `http://10.0.2.2:8080` 访问宿主机；若模拟器厂商没有该别名，则在登录页使用开发机局域网地址。Debug 允许本地 HTTP，Release 强制 HTTPS。
 
 截至 2026-08-25，阶段 7/8 已完成 API 34 的 64 MiB 分片续传、非零 Range 下载与 MD5 联合旅程，以及三页搜索、图片、文本、视频和 OnlyOffice 只读预览旅程；API 28/34 自动化、完整 Docker 栈、黑盒与可观测性门槛均通过。
 
@@ -67,4 +67,6 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 
 截至 2026-08-30，阶段 11.5 已完成 KMP 架构边界收口：认证 HTTP 核心、领域 API、窄 Repository、独立 Store、会话协调器和 feature 导航图已替代旧聚合边界；74 项主机测试、API 28/34 各 27 项设备测试套件、发布构建、iOS 元数据、完整 Docker 栈和 API 34 真实会话恢复旅程均通过。
 
-当前架构边界见[阶段 11.5 KMP 架构边界收口](docs/stage-11-5-architecture-boundaries.md)，个人分享边界见[阶段 11 个人分享](docs/stage-11-personal-sharing.md)，收藏与标签边界见[阶段 10 个人收藏与标签](docs/stage-10-personal-organization.md)。
+截至 2026-09-01，阶段 12 已完成个人回收站与文件版本：删除根可见性、递归恢复和清理、安全版本 DTO、版本恢复与最后版本保护、Room v1→v2 和历史版本可恢复下载均通过。API 34 的 64 MiB 历史版本 SAF 下载在两次强制停止后分别从非零偏移恢复，最终 MD5 与源文件一致；后端、Web/Tauri、API 28/34、黑盒和完整可观测性门槛均通过，个人功能对等里程碑达成。
+
+当前恢复与版本边界见[阶段 12 个人回收站与文件版本](docs/stage-12-personal-recovery-versions.md)，架构边界见[阶段 11.5 KMP 架构边界收口](docs/stage-11-5-architecture-boundaries.md)。

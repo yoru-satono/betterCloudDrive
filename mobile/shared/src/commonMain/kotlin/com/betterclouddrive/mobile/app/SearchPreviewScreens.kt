@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -93,6 +94,7 @@ fun PersonalSearchScreen(
     onPreview: (FileItem) -> Unit,
     onDownload: (FileItem, String) -> Unit,
     onCreateShare: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var pendingDownload by remember { mutableStateOf<FileItem?>(null) }
@@ -146,6 +148,7 @@ fun PersonalSearchScreen(
             onPreview = onPreview,
             onDownload = ::download,
             onCreateShare = onCreateShare,
+            onOpenVersions = onOpenVersions,
         )
     }
     detail?.let { file ->
@@ -167,6 +170,7 @@ private fun SearchResults(
     onPreview: (FileItem) -> Unit,
     onDownload: (FileItem) -> Unit,
     onCreateShare: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     when {
@@ -192,7 +196,7 @@ private fun SearchResults(
             LazyColumn(modifier.testTag("search-results"), state = listState) {
                 item { Text(strings.format(MobileString.SearchResultCount, state.total), Modifier.padding(16.dp)) }
                 items(state.items, key = FileItem::id) { file ->
-                    SearchResultRow(file, onOpen, onOpenLocation, onPreview, onDownload, onCreateShare)
+                    SearchResultRow(file, onOpen, onOpenLocation, onPreview, onDownload, onCreateShare, onOpenVersions)
                     HorizontalDivider()
                 }
                 item {
@@ -218,6 +222,7 @@ private fun SearchResultRow(
     onPreview: (FileItem) -> Unit,
     onDownload: (FileItem) -> Unit,
     onCreateShare: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var expanded by remember { mutableStateOf(false) }
@@ -248,6 +253,12 @@ private fun SearchResultRow(
                         leadingIcon = { Icon(Icons.Default.Download, null) },
                         onClick = { expanded = false; onDownload(file) },
                         modifier = Modifier.testTag("search-download-${file.id}"),
+                    )
+                    if (!file.isFolder) DropdownMenuItem(
+                        text = { Text(strings[MobileString.VersionHistory]) },
+                        leadingIcon = { Icon(Icons.Default.History, null) },
+                        onClick = { expanded = false; onOpenVersions(file) },
+                        modifier = Modifier.testTag("search-versions-${file.id}"),
                     )
                     DropdownMenuItem(
                         text = { Text(strings[MobileString.CreateShare]) },

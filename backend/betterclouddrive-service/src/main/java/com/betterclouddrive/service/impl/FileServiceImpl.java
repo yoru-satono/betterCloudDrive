@@ -4,6 +4,7 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
@@ -174,51 +175,62 @@ public class FileServiceImpl implements FileService {
     @Transactional
     public void deleteFiles(Long userId, List<Long> fileIds) {
         lockPersonalMutations(userId);
-        for (Long fileId : new LinkedHashSet<>(fileIds)) {
-            FileEntity file = getFile(userId, fileId);
-            file.setIsDeleted(true);
-            file.setDeletedAt(LocalDateTime.now());
-            fileRepository.save(file);
-            if ("file".equals(file.getFileType()) && file.getFileSize() > 0) {
-                redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, -file.getFileSize());
-            }
+        List<FileEntity> requested = new LinkedHashSet<>(fileIds).stream()
+                .map(fileId -> getFile(userId, fileId))
+                .toList();
+        java.util.Set<Long> requestedIds = requested.stream()
+                .map(FileEntity::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        List<FileEntity> roots = requested.stream()
+                .filter(file -> !hasSelectedAncestor(file, requestedIds))
+                .toList();
+        LocalDateTime deletedAt = LocalDateTime.now();
+        long releasedBytes = 0;
+        for (FileEntity root : roots) {
+            releasedBytes = Math.addExact(releasedBytes, activeTreeStoredBytes(root));
+            softDeleteTree(root, deletedAt);
+        }
+        if (releasedBytes > 0) {
+            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, -releasedBytes);
         }
     }
 
     @Override
     @Transactional
     public void restoreFile(Long userId, Long fileId) {
-        FileEntity file = fileRepository.findById(fileId).orElse(null);
-        if (file == null || !file.getUserId().equals(userId) || !file.getIsDeleted()) {
+        lockPersonalMutations(userId);
+        FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
+        if (file == null || file.getTeamId() != null || !file.getUserId().equals(userId) || !isRecycleRoot(file)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
-        file.setIsDeleted(false);
-        file.setDeletedAt(null);
-        fileRepository.save(file);
+        Long targetParentId = validRestoreParent(userId, file.getParentId()) ? file.getParentId() : null;
+        if (nameExists(userId, targetParentId, file.getFileName())) {
+            throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
+        }
+        long restoredBytes = deletedTreeStoredBytes(file, file.getDeletedAt());
+        if (restoredBytes > 0) {
+            checkStorageQuota(userId, restoredBytes);
+        }
+        file.setParentId(targetParentId);
+        restoreDeletedTree(file, file.getDeletedAt());
+        if (restoredBytes > 0) {
+            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, restoredBytes);
+        }
     }
 
     @Override
     public PageResult<FileEntity> listRecycleBin(Long userId, String keyword, int page, int size) {
-        Specification<FileEntity> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            predicates.add(cb.equal(root.get("userId"), userId));
-            predicates.add(cb.isNull(root.get("teamId")));
-            predicates.add(cb.equal(root.get("isDeleted"), true));
-            if (StringUtils.hasText(keyword)) {
-                predicates.add(cb.like(cb.lower(root.get("fileName")), "%" + keyword.trim().toLowerCase() + "%"));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "deletedAt"));
-        Page<FileEntity> result = fileRepository.findAll(spec, pageable);
+        String normalized = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        PageRequest pageable = PageRequest.of(page - 1, size);
+        Page<FileEntity> result = fileRepository.findPersonalRecycleRoots(userId, normalized, pageable);
         return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
     }
 
     @Override
     @Transactional
     public void permanentDelete(Long userId, Long fileId) {
-        FileEntity file = fileRepository.findById(fileId).orElse(null);
-        if (file == null || file.getTeamId() != null || !file.getUserId().equals(userId) || !file.getIsDeleted()) {
+        FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
+        if (file == null || file.getTeamId() != null || !file.getUserId().equals(userId) || !isRecycleRoot(file)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         deleteTree(file);
@@ -227,7 +239,17 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void emptyRecycleBin(Long userId) {
-        listDeletedFiles(null, userId).forEach(this::deleteTree);
+        listDeletedFiles(null, userId).stream().filter(this::isRecycleRoot).forEach(this::deleteTree);
+    }
+
+    @Override
+    @Transactional
+    public void purgeExpiredRecycleRoot(Long fileId) {
+        FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
+        if (file == null || !file.getIsDeleted()) {
+            return;
+        }
+        deleteTree(file);
     }
 
     @Override
@@ -690,5 +712,96 @@ public class FileServiceImpl implements FileService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
         return fileRepository.findAll(spec);
+    }
+
+    private boolean hasSelectedAncestor(FileEntity file, java.util.Set<Long> selectedIds) {
+        Long parentId = file.getParentId();
+        while (parentId != null) {
+            if (selectedIds.contains(parentId)) {
+                return true;
+            }
+            FileEntity parent = fileRepository.findById(parentId).orElse(null);
+            if (parent == null || parent.getTeamId() != null || !Objects.equals(parent.getUserId(), file.getUserId())) {
+                return false;
+            }
+            parentId = parent.getParentId();
+        }
+        return false;
+    }
+
+    private long activeTreeStoredBytes(FileEntity file) {
+        if (file.getIsDeleted()) {
+            return 0;
+        }
+        long total = storedBytes(file);
+        for (FileEntity child : activeChildrenOf(file)) {
+            total = Math.addExact(total, activeTreeStoredBytes(child));
+        }
+        return total;
+    }
+
+    private long deletedTreeStoredBytes(FileEntity file, LocalDateTime deletionMarker) {
+        long total = file.getIsDeleted() && Objects.equals(file.getDeletedAt(), deletionMarker) ? storedBytes(file) : 0;
+        for (FileEntity child : childrenOf(file)) {
+            total = Math.addExact(total, deletedTreeStoredBytes(child, deletionMarker));
+        }
+        return total;
+    }
+
+    private long storedBytes(FileEntity file) {
+        if (!"file".equals(file.getFileType())) {
+            return 0;
+        }
+        long total = Math.max(0L, file.getFileSize() == null ? 0L : file.getFileSize());
+        for (FileVersionEntity version : fileVersionRepository.findByFileIdOrderByVersionNumberDesc(file.getId())) {
+            total = Math.addExact(total, Math.max(0L, version.getFileSize() == null ? 0L : version.getFileSize()));
+        }
+        return total;
+    }
+
+    private void softDeleteTree(FileEntity file, LocalDateTime deletedAt) {
+        if (file.getIsDeleted()) {
+            return;
+        }
+        file.setIsDeleted(true);
+        file.setDeletedAt(deletedAt);
+        fileRepository.save(file);
+        for (FileEntity child : activeChildrenOf(file)) {
+            softDeleteTree(child, deletedAt);
+        }
+    }
+
+    private void restoreDeletedTree(FileEntity file, LocalDateTime deletionMarker) {
+        if (file.getIsDeleted() && Objects.equals(file.getDeletedAt(), deletionMarker)) {
+            file.setIsDeleted(false);
+            file.setDeletedAt(null);
+            fileRepository.save(file);
+        }
+        for (FileEntity child : childrenOf(file)) {
+            restoreDeletedTree(child, deletionMarker);
+        }
+    }
+
+    private boolean validRestoreParent(Long userId, Long parentId) {
+        if (parentId == null) {
+            return true;
+        }
+        FileEntity parent = fileRepository.findById(parentId).orElse(null);
+        return parent != null
+                && parent.getTeamId() == null
+                && Objects.equals(parent.getUserId(), userId)
+                && !parent.getIsDeleted()
+                && "folder".equals(parent.getFileType());
+    }
+
+    private boolean isRecycleRoot(FileEntity file) {
+        if (!file.getIsDeleted()) {
+            return false;
+        }
+        if (file.getParentId() == null) {
+            return true;
+        }
+        FileEntity parent = fileRepository.findById(file.getParentId()).orElse(null);
+        return parent == null || !parent.getIsDeleted();
     }
 }

@@ -26,12 +26,13 @@ internal fun NavGraphBuilder.personalBrowserGraph(
     onGoRoot: () -> Unit,
     onOpenTransfers: () -> Unit,
     onOpenPreview: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     composable<PersonalRoute> {
-        PersonalDestination(container, onOpenFolder, onGoRoot, onOpenTransfers, onOpenPreview)
+        PersonalDestination(container, onOpenFolder, onGoRoot, onOpenTransfers, onOpenPreview, onOpenVersions)
     }
     composable<PersonalFolderRoute> {
-        PersonalDestination(container, onOpenFolder, onGoRoot, onOpenTransfers, onOpenPreview)
+        PersonalDestination(container, onOpenFolder, onGoRoot, onOpenTransfers, onOpenPreview, onOpenVersions)
     }
 }
 
@@ -42,6 +43,7 @@ private fun PersonalDestination(
     onGoRoot: () -> Unit,
     onOpenTransfers: () -> Unit,
     onOpenPreview: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val state by container.browserStore.state.collectAsState()
     val favorites by container.favoritesStore.state.collectAsState()
@@ -56,6 +58,7 @@ private fun PersonalDestination(
         container.browserStore::consumeFeedback, container.browserStore::consumeTransferFeedback, onOpenTransfers, onOpenPreview,
         container.favoritesStore::loadStatus, container.favoritesStore::toggle, container.tagsStore::openEditor,
         container.sharesStore::openCreator,
+        onOpenVersions,
     )
 }
 
@@ -64,6 +67,7 @@ internal fun NavGraphBuilder.personalSearchGraph(
     container: AppContainer,
     onOpenLocation: (FileItem) -> Unit,
     onOpenPreview: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     composable<PersonalSearchRoute> {
         val state by container.searchStore.state.collectAsState()
@@ -79,6 +83,7 @@ internal fun NavGraphBuilder.personalSearchGraph(
             onPreview = onOpenPreview,
             onDownload = container.browserStore::download,
             onCreateShare = container.sharesStore::openCreator,
+            onOpenVersions = onOpenVersions,
         )
     }
 }
@@ -90,6 +95,7 @@ internal fun NavGraphBuilder.personalOrganizationGraph(
     onOpenFolder: (FileItem) -> Unit,
     onOpenLocation: (FileItem) -> Unit,
     onOpenPreview: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     composable<PersonalFavoritesRoute> {
         val state by container.favoritesStore.state.collectAsState()
@@ -100,6 +106,7 @@ internal fun NavGraphBuilder.personalOrganizationGraph(
             container.favoritesStore::updateScrollAnchor, onOpenFolder, onOpenLocation, onOpenPreview,
             container.browserStore::download, container.favoritesStore::toggle, container.tagsStore::openEditor,
             container.sharesStore::openCreator, container.favoritesStore::consumeFeedback,
+            onOpenVersions,
         )
     }
     composable<PersonalTagsRoute> {
@@ -121,7 +128,7 @@ internal fun NavGraphBuilder.personalOrganizationGraph(
                 VerticalDivider()
                 Box(Modifier.weight(0.58f).testTag("tags-wide-detail")) {
                     TagFilesDestination(state.activeTagId, state.tags.firstOrNull { it.id == state.activeTagId }, container, state,
-                        onOpenFolder, onOpenLocation, onOpenPreview)
+                        onOpenFolder, onOpenLocation, onOpenPreview, onOpenVersions)
                 }
             }
         }
@@ -131,7 +138,7 @@ internal fun NavGraphBuilder.personalOrganizationGraph(
         val tagId = entry.toRoute<PersonalTagFilesRoute>().tagId
         LaunchedEffect(tagId) { container.tagsStore.activate(); container.tagsStore.activateFiles(tagId) }
         TagFilesDestination(tagId, state.tags.firstOrNull { it.id == tagId }, container, state,
-            onOpenFolder, onOpenLocation, onOpenPreview)
+            onOpenFolder, onOpenLocation, onOpenPreview, onOpenVersions)
     }
 }
 
@@ -144,6 +151,7 @@ private fun TagFilesDestination(
     onOpenFolder: (FileItem) -> Unit,
     onOpenLocation: (FileItem) -> Unit,
     onOpenPreview: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     if (tagId != null && state.activeTagId != tagId) return
     TagFilesScreen(
@@ -152,6 +160,7 @@ private fun TagFilesDestination(
         container.tagsStore::updateFilesScrollAnchor, onOpenFolder, onOpenLocation, onOpenPreview,
         container.browserStore::download, container.tagsStore::openEditor, container.sharesStore::openCreator,
         container.tagsStore::removeFile, container.tagsStore::consumeFeedback,
+        onOpenVersions,
     )
 }
 
@@ -217,6 +226,42 @@ internal fun NavGraphBuilder.personalPreviewGraph(
             state, container.documentPicker, container.officeRenderer, container.mediaPreviewRenderer,
             onClose, container.previewStore::retry, container.browserStore::download,
             container.previewStore::updatePosition, container.previewStore::reportRendererError,
+        )
+    }
+}
+
+internal fun NavGraphBuilder.personalRecoveryGraph(
+    container: AppContainer,
+    onOpenTransfers: () -> Unit,
+) {
+    composable<PersonalRecycleBinRoute> {
+        val state by container.recycleBinStore.state.collectAsState()
+        LaunchedEffect(Unit) { container.recycleBinStore.activate() }
+        PersonalRecycleBinScreen(
+            state,
+            container.recycleBinStore::updateQuery,
+            container.recycleBinStore::refresh,
+            container.recycleBinStore::loadMore,
+            container.recycleBinStore::restore,
+            container.recycleBinStore::permanentlyDelete,
+            container.recycleBinStore::empty,
+            container.recycleBinStore::consumeFeedback,
+        )
+    }
+    composable<PersonalVersionsRoute> { entry ->
+        val state by container.versionsStore.state.collectAsState()
+        val fileId = entry.toRoute<PersonalVersionsRoute>().fileId
+        LaunchedEffect(fileId) { container.versionsStore.open(fileId) }
+        PersonalVersionsScreen(
+            state,
+            container.documentPicker,
+            container.versionsStore::retry,
+            container.versionsStore::download,
+            container.versionsStore::restore,
+            container.versionsStore::delete,
+            onOpenTransfers,
+            container.versionsStore::consumeFeedback,
+            container.versionsStore::consumeTransferFeedback,
         )
     }
 }

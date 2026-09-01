@@ -28,6 +28,7 @@ data class TransferTask(
     val scope: TransferScope,
     val remoteFileId: Long? = null,
     val remoteResultFileId: Long? = null,
+    val remoteVersionNumber: Int? = null,
     val fileName: String,
     val mimeType: String? = null,
     val bytesDone: Long = 0,

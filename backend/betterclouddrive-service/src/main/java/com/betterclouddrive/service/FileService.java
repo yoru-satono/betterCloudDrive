@@ -17,6 +17,8 @@ public interface FileService {
     PageResult<FileEntity> listRecycleBin(Long userId, String keyword, int page, int size);
     void permanentDelete(Long userId, Long fileId);
     void emptyRecycleBin(Long userId);
+    /** Scheduler-only cleanup using the same recursive object/version deletion path as manual cleanup. */
+    void purgeExpiredRecycleRoot(Long fileId);
     PageResult<FileEntity> searchFiles(Long userId, String keyword, int page, int size);
 
     PageResult<FileEntity> listTeamFiles(Long userId, Long teamId, Long parentId, int page, int size, String sortBy, String order);

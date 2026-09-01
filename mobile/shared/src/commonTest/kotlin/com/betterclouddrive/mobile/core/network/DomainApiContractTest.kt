@@ -38,6 +38,50 @@ import kotlin.test.assertTrue
 
 class NetworkTestFacadeTest {
     @Test
+    fun recycleBinVersionsAndVersionRangeDownloadUseStableContracts() = runTest {
+        val observed = mutableListOf<Pair<HttpMethod, String>>()
+        val engine = MockEngine { request ->
+            observed += request.method to request.url.toString()
+            when {
+                request.url.encodedPath == "/api/v1/recycle-bin" && request.method == HttpMethod.Get ->
+                    jsonResponse("""{"code":200,"data":{"records":[{"id":8,"fileName":"old.txt","fileType":"file","deletedAt":"2026-08-30T10:00:00"}],"total":1,"page":1,"size":50,"pages":1}}""")
+                request.url.encodedPath == "/api/v1/files/9/versions" ->
+                    jsonResponse("""{"code":200,"data":[{"id":3,"fileId":9,"versionNumber":2,"fileSize":4,"md5Hash":"abcd"}]}""")
+                request.url.encodedPath.endsWith("/restore") && request.url.encodedPath.contains("versions") ->
+                    jsonResponse("""{"code":200,"data":{"id":9,"fileName":"doc.txt","fileType":"file"}}""")
+                request.url.encodedPath == "/api/v1/files/9/versions/2/download" -> {
+                    assertEquals("bytes=4-", request.headers[HttpHeaders.Range])
+                    respond("tail", HttpStatusCode.PartialContent, headersOf(
+                        HttpHeaders.ContentRange to listOf("bytes 4-7/8"),
+                        HttpHeaders.ContentLength to listOf("4"),
+                    ))
+                }
+                else -> jsonResponse("""{"code":200}""")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals("old.txt", client.listRecycleBin(" old ", 1, 50).records.single().fileName)
+        client.restoreRecycleItem(8)
+        client.permanentlyDeleteRecycleItem(8)
+        client.emptyRecycleBin()
+        assertEquals(2, client.listVersions(9).single().versionNumber)
+        client.restoreVersion(9, 2)
+        client.deleteVersion(9, 2)
+        val body = client.download(TransferScope.Personal(null), 9, 4, 2) { _, _, channel ->
+            val bytes = ByteArray(4); channel.readAvailable(bytes); bytes.decodeToString()
+        }
+        assertEquals("tail", body)
+        assertTrue(observed.any { it.second.contains("/recycle-bin?q=old&page=1&size=50") })
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.contains("/files/9/versions/2/download") })
+    }
+
+    @Test
     fun publicAccountLifecycleRequestsAreUnauthenticatedAndPreserveExactLocale() = runTest {
         val observed = mutableListOf<Triple<HttpMethod, String, String>>()
         val engine = MockEngine { request ->

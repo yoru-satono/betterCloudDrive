@@ -13,7 +13,7 @@ $env:ANDROID_SERIAL = '<adb 设备序列号>'
 .\mobile\gradlew.bat -p mobile :androidApp:assembleRelease
 ```
 
-KMP 当前依赖与状态边界见[阶段 11.5 架构收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，个人分享见[阶段 11 个人分享](../../mobile/docs/stage-11-personal-sharing.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
+KMP 当前依赖与状态边界见[阶段 11.5 架构收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，个人恢复与版本见[阶段 12 个人回收站与文件版本](../../mobile/docs/stage-12-personal-recovery-versions.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
 
 ## 工具与构建
 
@@ -88,6 +88,8 @@ KMP 端完整任务状态保存在 Room；上传源和下载目标使用可持�
 
 WorkManager 与 UIDT 的批次通知最多每秒更新一次，应用内 Room 进度保持实时。成功或取消会释放不再使用的 URI 权限；失败、暂停和等待登录保留权限以便恢复。用户确认清除终态任务时还要删除失败下载临时文件、尽力取消遗留上传会话并释放权限。退出登录和切换服务器会取消全部平台任务、清除传输记录及临时文件。OnlyOffice 手工探针仅位于 Debug 诊断页；个人 Office 文件也可从产品预览页只读打开，两者都必须原样使用后端签名的移动配置。
 
+Room schema 当前为 v2。`remoteVersionNumber=null` 表示普通文件下载，非空时 `TransferApi` 使用历史版本下载 URL；完整 v1→v2 migration 必须保留既有上传、下载进度、会话和 SAF 句柄。历史版本下载与普通下载共用 `.part`、Range 校验、暂停、恢复、后台调度和终态清理，平台 Worker/Job 仍只接收任务 ID。
+
 KMP 个人搜索调用现有 `/files/search`，输入停止 300 ms 后请求，每页 50 项。搜索和预览路由只能携带文件 ID 等稳定标识，不能携带下载 ticket。图片由 Coil 加载并禁用 ticket URL 的磁盘缓存；视频由无缓存的 Media3 播放器执行 Range 请求，页面离开前台时暂停，销毁时释放。UTF-8 文本通过认证 Range 请求最多读取前 512 KiB。个人 Office 预览固定请求 `mobile=true`，Android WebView 不覆盖签名配置中的任何字段。
 
 清除终态传输时，除删除 Room 行、临时文件和 URI 权限外，还必须截断 SQLite WAL 并压缩数据库，避免已删除的 SAF 句柄继续残留在数据库旁路文件中。该行为由 API 28/34 设备测试覆盖。
@@ -103,6 +105,8 @@ KMP 不使用全应用 Controller 或单体 Repository。`AuthenticatedHttpClien
 个人收藏与标签入口位于个人空间顶栏菜单，不增加新的顶层导航项。收藏状态只在打开菜单或详情时按需读取，禁止在目录列表逐项请求。标签分配一次处理一个个人项目，先并行读取个人标签和项目当前关联，再通过 `PUT /files/{fileId}/tags` 原子替换；团队项目和团队标签不得进入此流程。
 
 个人分享管理同样从个人空间“整理”菜单进入。客户端必须使用后端返回的 `shareUrl`，不能根据 API 地址推断 Web 端口。分享密码只能在当前详情页按需读取并存在内存，离开详情、登出或切换服务器时立即清除；密码、链接均不得写入日志、路由或持久存储。自定义过期时间由 Android 日期选择器按设备时区转换为 epoch 毫秒，非法过去时间在提交前拦截。
+
+个人回收站和文件版本分别由独立 Store 管理。恢复、永久删除、清空或版本恢复成功后，通过容器提供的内容变更端口统一失效浏览、搜索、收藏、标签、分享和预览缓存；Store 之间不得直接改写状态。回收站只展示删除根，版本入口只对普通个人文件可见。
 
 ## 测试
 

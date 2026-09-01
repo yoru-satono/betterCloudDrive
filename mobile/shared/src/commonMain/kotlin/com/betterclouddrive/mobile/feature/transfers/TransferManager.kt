@@ -60,10 +60,11 @@ class TransferManager(
         destinationHandle: String,
         scope: TransferScope = TransferScope.Personal(),
         expectedMd5: String? = null,
+        versionNumber: Int? = null,
     ): TransferTask {
         files.validateWritable(destinationHandle)
         val task = repository.enqueueDownload(
-            backend.serverBaseUrl, fileId, fileName, fileSize, destinationHandle, scope, mimeType,
+            backend.serverBaseUrl, fileId, fileName, fileSize, destinationHandle, scope, mimeType, versionNumber,
         )
         val enriched = if (expectedMd5 == null) task else repository.update(task.id) { it.copy(md5Hash = expectedMd5) } ?: task
         scheduleBatch(listOf(enriched))

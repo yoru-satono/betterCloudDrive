@@ -69,7 +69,7 @@ def versioned_file(client, auth_headers, uploaded_file, test_user):
     FROM files CROSS JOIN (VALUES (1), (2)) AS versions(version_number)
     WHERE id = {file_id}
     ON CONFLICT (file_id, version_number) DO NOTHING;
-    UPDATE files SET version_count = 2 WHERE id = {file_id};
+    UPDATE files SET version_count = 3 WHERE id = {file_id};
     """
     result = subprocess.run(
         ["docker", "compose", "exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1",
@@ -79,7 +79,7 @@ def versioned_file(client, auth_headers, uploaded_file, test_user):
     assert result.returncode == 0, result.stdout + result.stderr
     versions = client.get(f"/api/v1/files/{file_id}/versions", headers=auth_headers).json()
     assert versions["code"] == 200 and len(versions["data"]) >= 2, versions
-    return {**uploaded_file, "contents": (b"version-one", b"version-two")}
+    return uploaded_file
 
 
 def _retry_create_folder(client, auth_headers, parent_id, folder_name, max_retries=3):
@@ -120,7 +120,12 @@ def uploaded_file(client, auth_headers, created_folder, sample_file):
     data = _chunked_upload(client, auth_headers, created_folder["id"], file_name, content)
     file_id = data.get("fileId", data.get("id"))
     assert file_id is not None, data
-    yield {"fileId": file_id, "fileName": data.get("fileName", file_name), "fileSize": len(content)}
+    yield {
+        "fileId": file_id,
+        "fileName": data.get("fileName", file_name),
+        "fileSize": len(content),
+        "content": content,
+    }
 
     cleanup = client.request("DELETE", "/api/v1/files", json={"fileIds": [file_id]}, headers=auth_headers)
     assert cleanup.status_code == 200, cleanup.text

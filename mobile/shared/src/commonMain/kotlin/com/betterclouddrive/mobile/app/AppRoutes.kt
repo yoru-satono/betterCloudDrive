@@ -33,6 +33,12 @@ data class PersonalShareDetailRoute(val shareId: Long) : AppRoute
 data class PersonalPreviewRoute(val fileId: Long) : AppRoute
 
 @Serializable
+data object PersonalRecycleBinRoute : AppRoute
+
+@Serializable
+data class PersonalVersionsRoute(val fileId: Long) : AppRoute
+
+@Serializable
 data object TeamsRoute : AppRoute
 
 @Serializable

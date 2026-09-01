@@ -93,6 +93,33 @@ data class FileItem(
     val isFolder: Boolean get() = fileType == "folder"
 }
 
+@Serializable
+data class RecycleBinItem(
+    val id: Long = 0,
+    @SerialName("parentId") val parentId: Long? = null,
+    @SerialName("fileName") val fileName: String = "",
+    @SerialName("fileType") val fileType: String = "file",
+    @SerialName("mimeType") val mimeType: String? = null,
+    @SerialName("fileSize") val fileSize: Long = 0,
+    @SerialName("md5Hash") val md5Hash: String? = null,
+    @SerialName("versionCount") val versionCount: Int = 1,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+    @SerialName("deletedAt") val deletedAt: String? = null,
+) {
+    val isFolder: Boolean get() = fileType == "folder"
+}
+
+@Serializable
+data class PersonalFileVersion(
+    val id: Long = 0,
+    @SerialName("fileId") val fileId: Long = 0,
+    @SerialName("versionNumber") val versionNumber: Int = 0,
+    @SerialName("fileSize") val fileSize: Long = 0,
+    @SerialName("md5Hash") val md5Hash: String? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+)
+
 enum class PreviewKind { OFFICE, IMAGE, TEXT, VIDEO, UNSUPPORTED }
 
 @Serializable

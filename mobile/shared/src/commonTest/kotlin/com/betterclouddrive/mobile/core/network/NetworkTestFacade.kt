@@ -27,6 +27,7 @@ class NetworkTestFacade private constructor(
     private val organization = PersonalOrganizationApi(http)
     private val shares = PersonalSharesApi(http)
     private val preview = PreviewApi(http)
+    private val recovery = PersonalRecoveryApi(http)
 
     val sessionInvalidations get() = http.sessionInvalidations
     suspend fun initialize() = http.initialize()
@@ -78,6 +79,13 @@ class NetworkTestFacade private constructor(
     suspend fun loadPersonalOffice(fileId: Long) = preview.personalOffice(fileId)
     suspend fun loadTeamOffice(teamId: Long, fileId: Long) = preview.teamOffice(teamId, fileId)
     suspend fun readPersonalText(id: Long, maxBytes: Int) = preview.text(id, maxBytes)
+    suspend fun listRecycleBin(query: String?, page: Int, size: Int) = recovery.listRecycleBin(query, page, size)
+    suspend fun restoreRecycleItem(id: Long) = recovery.restoreRecycleItem(id)
+    suspend fun permanentlyDeleteRecycleItem(id: Long) = recovery.permanentlyDeleteRecycleItem(id)
+    suspend fun emptyRecycleBin() = recovery.emptyRecycleBin()
+    suspend fun listVersions(id: Long) = recovery.listVersions(id)
+    suspend fun restoreVersion(id: Long, version: Int) = recovery.restoreVersion(id, version)
+    suspend fun deleteVersion(id: Long, version: Int) = recovery.deleteVersion(id, version)
 
     companion object {
         const val DEFAULT_SERVER = NetworkDefaults.DEFAULT_SERVER

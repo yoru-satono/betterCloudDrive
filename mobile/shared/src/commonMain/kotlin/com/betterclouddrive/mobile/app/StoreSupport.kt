@@ -34,6 +34,7 @@ internal fun uiError(error: Throwable): UiMessage = when (error) {
         "error.storageQuotaExceeded" -> UiMessage(MobileString.ErrorQuota)
         "error.fileNameExists", "error.fileNameConflict" -> UiMessage(MobileString.ErrorNameConflict)
         "error.tagNameConflict" -> UiMessage(MobileString.ErrorTagNameConflict)
+        "error.cannotDeleteOnlyVersion" -> UiMessage(MobileString.ErrorCannotDeleteOnlyVersion)
         "error.invalidTagName" -> UiMessage(MobileString.ErrorInvalidTagName)
         "error.invalidTagColor" -> UiMessage(MobileString.ErrorInvalidTagColor)
         "error.invalidFileDestination" -> UiMessage(MobileString.ErrorInvalidDestination)

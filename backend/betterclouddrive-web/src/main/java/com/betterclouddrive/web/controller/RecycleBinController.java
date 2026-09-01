@@ -4,6 +4,7 @@ import com.betterclouddrive.common.dto.ApiResponse;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.service.FileService;
+import com.betterclouddrive.web.dto.response.RecycleBinItemResponse;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -17,12 +18,15 @@ public class RecycleBinController {
     private final FileService fileService;
 
     @GetMapping
-    public ApiResponse<PageResult<FileEntity>> listRecycleBin(
+    public ApiResponse<PageResult<RecycleBinItemResponse>> listRecycleBin(
             @CurrentUser UserPrincipal user,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ApiResponse.success(fileService.listRecycleBin(user.getUserId(), q, page, size));
+        PageResult<FileEntity> result = fileService.listRecycleBin(user.getUserId(), q, page, size);
+        return ApiResponse.success(PageResult.of(
+                result.getRecords().stream().map(RecycleBinItemResponse::from).toList(),
+                result.getTotal(), result.getPage(), result.getSize()));
     }
 
     @PostMapping("/{fileId}/restore")

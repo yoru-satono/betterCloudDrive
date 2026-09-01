@@ -16,6 +16,8 @@ import com.betterclouddrive.mobile.feature.files.FavoritesRepository
 import com.betterclouddrive.mobile.feature.files.TagsRepository
 import com.betterclouddrive.mobile.feature.files.PersonalSharesRepository
 import com.betterclouddrive.mobile.feature.files.PreviewRepository
+import com.betterclouddrive.mobile.feature.files.RecycleBinRepository
+import com.betterclouddrive.mobile.feature.files.PersonalVersionsRepository
 import com.betterclouddrive.mobile.feature.transfers.TransferEngine
 import com.betterclouddrive.mobile.feature.transfers.TransferManager
 import com.betterclouddrive.mobile.feature.transfers.TransferQueueStore
@@ -27,6 +29,8 @@ import com.betterclouddrive.mobile.feature.organization.FavoritesStore
 import com.betterclouddrive.mobile.feature.organization.TagsStore
 import com.betterclouddrive.mobile.feature.shares.PersonalSharesStore
 import com.betterclouddrive.mobile.feature.diagnostics.DiagnosticsStore
+import com.betterclouddrive.mobile.feature.recovery.PersonalRecycleBinStore
+import com.betterclouddrive.mobile.feature.recovery.PersonalVersionsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -38,6 +42,8 @@ class AppContainer(
     val tags: TagsRepository,
     val shares: PersonalSharesRepository,
     val preview: PreviewRepository,
+    val recycleBin: RecycleBinRepository,
+    val personalVersions: PersonalVersionsRepository,
     val database: MobileDatabase,
     val transfers: TransferManager,
     val transferEngine: TransferEngine,
@@ -62,13 +68,26 @@ class AppContainer(
     val previewStore = PersonalPreviewStore(preview, applicationScope)
     val sharesStore = PersonalSharesStore(shares, applicationScope)
     val diagnosticsStore = DiagnosticsStore(preview, applicationScope)
+    private fun invalidatePersonalContent() {
+        favoritesStore.invalidate()
+        tagsStore.invalidateFiles()
+        searchStore.reset()
+        previewStore.reset()
+        sharesStore.reset()
+        browserStore.refresh()
+    }
+    val recycleBinStore = PersonalRecycleBinStore(recycleBin, applicationScope, ::invalidatePersonalContent)
+    val versionsStore = PersonalVersionsStore(personalVersions, transferQueue, applicationScope, ::invalidatePersonalContent)
     val authStore = AuthStore(auth, applicationScope, localeController, themePreferences)
     val coordinator = AppCoordinator(
         authStore,
         auth,
         browserStore,
         transferQueue,
-        listOf(browserStore, searchStore, favoritesStore, tagsStore, sharesStore, previewStore, diagnosticsStore, transferQueue),
+        listOf(
+            browserStore, searchStore, favoritesStore, tagsStore, sharesStore, previewStore,
+            recycleBinStore, versionsStore, diagnosticsStore, transferQueue,
+        ),
         applicationScope,
     )
 

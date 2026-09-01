@@ -238,6 +238,42 @@ class PersonalSharesApi(private val http: AuthenticatedHttpClient) {
     }
 }
 
+class PersonalRecoveryApi(private val http: AuthenticatedHttpClient) {
+    suspend fun listRecycleBin(query: String?, page: Int, size: Int): PageResult<RecycleBinItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("recycle-bin")) {
+            bearer(token); url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun restoreRecycleItem(fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.post(url("recycle-bin/$fileId/restore")) { bearer(token) } }
+    }
+
+    suspend fun permanentlyDeleteRecycleItem(fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("recycle-bin/$fileId")) { bearer(token) } }
+    }
+
+    suspend fun emptyRecycleBin() = http.run {
+        authenticatedNoData { client, token -> client.delete(url("recycle-bin")) { bearer(token) } }
+    }
+
+    suspend fun listVersions(fileId: Long): List<PersonalFileVersion> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("files/$fileId/versions")) { bearer(token) } }
+    }
+
+    suspend fun restoreVersion(fileId: Long, versionNumber: Int): FileItem = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("files/$fileId/versions/$versionNumber/restore")) { bearer(token) } }
+    }
+
+    suspend fun deleteVersion(fileId: Long, versionNumber: Int) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("files/$fileId/versions/$versionNumber")) { bearer(token) } }
+    }
+}
+
 class PreviewApi(private val http: AuthenticatedHttpClient) {
     suspend fun ticket(fileId: Long): String = http.run {
         val response: DownloadTicketResponse = authenticatedEnvelope { client, token ->
@@ -309,16 +345,19 @@ open class TransferApi(private val http: AuthenticatedHttpClient) {
         authenticatedNoData { client, token -> client.post(url(scope.path("upload/$sessionId/cancel"))) { bearer(token) } }
     }
     suspend fun <T> download(
-        scope: TransferScope, fileId: Long, rangeStart: Long,
+        scope: TransferScope, fileId: Long, rangeStart: Long, versionNumber: Int? = null,
         consume: suspend (HttpStatusCode, Headers, ByteReadChannel) -> T,
-    ): T = http.authenticatedStream(scope.downloadPath(fileId), if (rangeStart > 0) "bytes=$rangeStart-" else null, consume)
+    ): T = http.authenticatedStream(
+        scope.downloadPath(fileId, versionNumber), if (rangeStart > 0) "bytes=$rangeStart-" else null, consume,
+    )
 
     private fun TransferScope.path(suffix: String) = when (this) {
         is TransferScope.Personal -> suffix
         is TransferScope.Team -> "teams/$teamId/$suffix"
     }
-    private fun TransferScope.downloadPath(fileId: Long) = when (this) {
-        is TransferScope.Personal -> "download/$fileId"
-        is TransferScope.Team -> "teams/$teamId/download/$fileId"
+    private fun TransferScope.downloadPath(fileId: Long, versionNumber: Int?) = when (this) {
+        is TransferScope.Personal -> versionNumber?.let { "files/$fileId/versions/$it/download" } ?: "download/$fileId"
+        is TransferScope.Team -> versionNumber?.let { "teams/$teamId/files/$fileId/versions/$it/download" }
+            ?: "teams/$teamId/download/$fileId"
     }
 }

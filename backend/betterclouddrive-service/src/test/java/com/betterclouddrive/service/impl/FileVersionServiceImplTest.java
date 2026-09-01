@@ -9,10 +9,13 @@ import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
+import com.betterclouddrive.dal.repository.UserRepository;
+import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.storage.StorageService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -30,12 +33,20 @@ class FileVersionServiceImplTest {
 
     @Mock private FileVersionRepository fileVersionRepository;
     @Mock private FileRepository fileRepository;
+    @Mock private UserRepository userRepository;
     @Mock private StorageService storageService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private TeamAuditService teamAuditService;
     @Mock private NotificationService notificationService;
     @InjectMocks private FileVersionServiceImpl fileVersionService;
+
+    @BeforeEach
+    void quotaDefaults() {
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(userRepository.findById(anyLong())).thenReturn(Optional.of(
+                UserEntity.builder().id(1L).storageUsed(0L).storageQuota(Long.MAX_VALUE).build()));
+    }
 
     private FileEntity ownedFile(Long fileId, Long userId) {
         return FileEntity.builder()
@@ -113,7 +124,7 @@ class FileVersionServiceImplTest {
     @Test
     void deleteVersion_shouldRemoveVersionAndDecrementCount() {
         FileEntity file = ownedFile(1L, 1L);
-        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(file));
         List<FileVersionEntity> versions = List.of(version(2, "path/v2"), version(1, "path/v1"));
         when(fileVersionRepository.findTopVersionsByFileId(eq(1L), any(PageRequest.class)))
                 .thenReturn(versions);
@@ -123,12 +134,12 @@ class FileVersionServiceImplTest {
 
         verify(storageService).deleteObject("path/v1");
         verify(fileVersionRepository).deleteById(1L);
-        assertThat(file.getVersionCount()).isEqualTo(1);
+        assertThat(file.getVersionCount()).isEqualTo(2);
     }
 
     @Test
     void deleteVersion_shouldThrowWhenVersionNotFound() {
-        when(fileRepository.findById(1L)).thenReturn(Optional.of(ownedFile(1L, 1L)));
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(ownedFile(1L, 1L)));
         when(fileVersionRepository.findTopVersionsByFileId(eq(1L), any(PageRequest.class)))
                 .thenReturn(List.of(version(1, "path/v1")));
 
@@ -138,7 +149,7 @@ class FileVersionServiceImplTest {
 
     @Test
     void deleteVersion_shouldThrowWhenOnlyOneVersionExists() {
-        when(fileRepository.findById(1L)).thenReturn(Optional.of(ownedFile(1L, 1L)));
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(ownedFile(1L, 1L)));
         when(fileVersionRepository.findTopVersionsByFileId(eq(1L), any(PageRequest.class)))
                 .thenReturn(List.of(version(1, "path/v1")));
 

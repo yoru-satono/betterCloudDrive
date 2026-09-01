@@ -13,6 +13,8 @@ import androidx.room.RoomDatabase
 import androidx.room.RoomDatabaseConstructor
 import androidx.room.execSQL
 import androidx.room.useWriterConnection
+import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "transfer_tasks")
@@ -25,6 +27,7 @@ data class TransferTaskEntity(
     val remoteParentId: Long?,
     val remoteFileId: Long?,
     val remoteResultFileId: Long?,
+    val remoteVersionNumber: Int? = null,
     val fileName: String,
     val mimeType: String?,
     val bytesDone: Long,
@@ -75,7 +78,7 @@ interface TransferTaskDao {
     suspend fun deleteAll()
 }
 
-@Database(entities = [TransferTaskEntity::class], version = 1, exportSchema = true)
+@Database(entities = [TransferTaskEntity::class], version = 2, exportSchema = true)
 @ConstructedBy(MobileDatabaseConstructor::class)
 abstract class MobileDatabase : RoomDatabase() {
     abstract fun transferTaskDao(): TransferTaskDao
@@ -84,6 +87,14 @@ abstract class MobileDatabase : RoomDatabase() {
         useWriterConnection { connection ->
             connection.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
             connection.execSQL("VACUUM")
+        }
+    }
+}
+
+object MobileDatabaseMigration1To2 : Migration(1, 2) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.prepare("ALTER TABLE transfer_tasks ADD COLUMN remoteVersionNumber INTEGER").use { statement ->
+            statement.step()
         }
     }
 }

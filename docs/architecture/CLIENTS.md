@@ -79,12 +79,12 @@ Compose Screen
 ```
 
 - `AppContainer` 显式创建认证 HTTP 核心、领域 API、窄 Repository 和业务 Store。不存在聚合全应用状态的 Controller，页面也不接收全局 actions 集合。
-- `AuthStore`、`PersonalBrowserStore`、`PersonalSearchStore`、`FavoritesStore`、`TagsStore`、`PersonalSharesStore`、`PersonalPreviewStore`、`TransferQueueStore` 和 `DiagnosticsStore` 各自拥有独立 `StateFlow`、作业、缓存与重置边界，不直接读写其他 Store。
+- `AuthStore`、`PersonalBrowserStore`、`PersonalSearchStore`、`FavoritesStore`、`TagsStore`、`PersonalSharesStore`、`PersonalPreviewStore`、`PersonalRecycleBinStore`、`PersonalVersionsStore`、`TransferQueueStore` 和 `DiagnosticsStore` 各自拥有独立 `StateFlow`、作业、缓存与重置边界，不直接读写其他 Store。
 - `AppCoordinator` 只负责启动、会话生命周期和全局重置。跨域行为使用明确窄端口或事件：例如上传结束事件只让个人浏览 Store 失效对应目录。
 - `AuthenticatedHttpClient` 是唯一 Token 所有者，集中实现单飞刷新、一次重放、统一 envelope/错误解析和受控流式响应。各领域 API 不自行保存或刷新 Token。
 - DataStore 保存服务器设置，完整 Token 对由 Android Keystore AES-256-GCM 加密后原子保存。
 - 认证层合并并发刷新，旋转 Token 后最多重放原请求一次；登出或切换服务器会清除服务器绑定的令牌、任务和临时文件。
-- Room 是传输状态事实来源。Android 14+ 使用 UIDT，较低版本回退 WorkManager；一次可见用户操作提交一个最多包含 100 个任务 ID 的系统批次，真实参数仍从 Room 读取，全局传输互斥保证逐项执行。
+- Room v2 是传输状态事实来源，v1→v2 迁移为任务增加可空历史版本号并保留旧任务。Android 14+ 使用 UIDT，较低版本回退 WorkManager；一次可见用户操作提交一个最多包含 100 个任务 ID 的系统批次，真实参数仍从 Room 读取，全局传输互斥保证逐项执行。
 - 上传按 5 MiB 流式分片并通过 `missingChunks` 恢复；下载通过受控流式响应先写私有 `.part`，校验 Range、长度和可选 MD5 后再提交到 SAF 目标。Android 9 WorkManager 与 Android 14 UIDT 的进程重建续传均已验收。
 - 界面、无障碍描述、稳定错误和 Android 通知通过共享 Compose Multiplatform 资源本地化。默认目录保存英语，CN 与 SG 地区目录使用相同稳定键保存简体中文；繁体中文、无地区中文及其他未支持语言回退英语。认证页和“我的”提供 `en-US`、`zh-CN`、`zh-SG`，登录后精确同步账号偏好；历史 `zh-Hans` 账号在 KMP 中映射为 `zh-CN`。
 - “我的”按独立状态加载只读账号资料和容量，设备主题支持跟随系统、浅色与深色。切换服务器先确认，再清除旧服务器会话、后台任务、Room 传输和临时文件；语言与主题作为设备偏好保留。
@@ -93,14 +93,15 @@ Compose Screen
 - 个人文件分支使用类型安全文件夹路由。每个目录按 50 条滚动分页，固定文件夹优先并支持名称、修改时间和大小升降序；目录返回栈分别保留内容、分页与滚动锚点。
 - 个人收藏和标签属于个人导航分支，通过个人空间顶栏的“整理”菜单进入。收藏与标签文件按 50 条分页并支持 300 ms 防抖搜索；手机使用独立页面，宽屏标签页采用标签与文件双栏。文件标签保存使用一次读取和一次原子替换，避免逐标签请求产生部分成功。
 - 个人分享也属于个人导航分支。创建入口复用于目录、搜索、收藏、标签文件和详情，管理列表按 50 条分页并支持搜索与密码/过期筛选。分享完整链接以服务端 `shareUrl` 为准；明文密码仅在用户主动查看后短期保留于详情状态，离开页面立即清除，剪贴板写入也必须由用户主动触发。
+- 个人回收站从“整理”菜单进入，按删除根分页和搜索，支持单项恢复、永久删除及清空。普通文件的各入口可打开版本历史；版本下载作为带 `remoteVersionNumber` 的普通传输任务进入同一可恢复队列，继续使用 SAF、`.part`、Range、MD5 和后台调度。
 - 个人搜索也是类型安全的个人导航分支：输入防抖 300 ms，每页 50 项并按 ID 去重；打开文件夹或所在位置时只导航到目标目录，不把临时下载凭证写入路由。
 - KMP 个人预览按 Office、图片、UTF-8 文本、视频和不支持类型分类。图片与视频复用内存中的下载 ticket，Coil 禁用 ticket 磁盘缓存，Media3 不启用媒体缓存；文本只读取前 512 KiB；OnlyOffice 原样使用后端签名的 `mobile=true` 只读配置。
 - 普通文件详情只展示服务端元数据和单文件下载：手机使用底部页，宽度不小于 600dp 时使用右侧详情栏。个人目录支持新建文件夹，以及单项重命名、移动、递归复制和删除；长按进入的多选模式只提供批量移入回收站。文件修改后重新加载当前已加载页并保持滚动锚点，目标目录缓存同步失效。
 - OnlyOffice 诊断探针只在独立 Debug 诊断页出现；个人 Office 文件则可从产品预览页加载。两者都原样使用后端签名的 `mobile=true` 只读配置，Release 不注册诊断入口和诊断路由。
 
-在新应用达到业务功能对等前，`android/` 旧应用不删除、不替换。当前个人分享边界见[阶段 11 个人分享](../../mobile/docs/stage-11-personal-sharing.md)，个人整理能力见[阶段 10 个人收藏与标签](../../mobile/docs/stage-10-personal-organization.md)。
+在新应用达到团队业务功能对等前，`android/` 旧应用不删除、不替换。当前个人恢复与版本边界见[阶段 12 个人回收站与文件版本](../../mobile/docs/stage-12-personal-recovery-versions.md)，架构边界见[阶段 11.5 KMP 架构边界收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)。
 
-阶段 7/8 已在 Android 14 上完成 64 MiB 上传会话恢复、非零 Range 下载、三页搜索和全部当前预览类型的真实旅程，并在 Android 9/14 设备矩阵回归。个人空间已具备日常浏览、管理、传输、搜索和只读查看能力；团队业务及个人功能对等范围仍按后续阶段推进。
+阶段 7/8 已在 Android 14 上完成 64 MiB 上传会话恢复、非零 Range 下载、三页搜索和全部当前预览类型的真实旅程，并在 Android 9/14 设备矩阵回归。阶段 12 又完成了 64 MiB 历史版本下载的两次进程中断与非零 Range 恢复、Room v1→v2 和回收站删除根真实验收。个人空间已达到旧 Android 的主要个人功能对等；团队业务仍按后续阶段推进。
 
 ## 能力矩阵
 
