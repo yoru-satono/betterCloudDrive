@@ -24,7 +24,7 @@ public class ObservabilityProperties {
         private int maxBodyBytes = 8192;
         private List<String> sensitiveFields = new ArrayList<>(List.of(
                 "password", "newPassword", "oldPassword", "token", "accessToken", "refreshToken",
-                "authorization", "cookie", "secret", "key", "sharePassword", "passwordCiphertext"
+                "authorization", "cookie", "secret", "key", "ticket", "sharePassword", "passwordCiphertext"
         ));
         private List<String> bodyExcludedPathPrefixes = new ArrayList<>(List.of(
                 "/api/v1/upload/",

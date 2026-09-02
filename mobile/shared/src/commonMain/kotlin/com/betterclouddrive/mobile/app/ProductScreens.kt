@@ -21,7 +21,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ClearAll
@@ -64,17 +63,6 @@ import com.betterclouddrive.mobile.feature.transfers.TransferStatus
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
 import kotlinx.coroutines.launch
-
-@Composable
-fun TeamsPlaceholderScreen() {
-    val strings = LocalMobileStrings.current
-    EmptyPane(
-        icon = Icons.Default.Groups,
-        title = strings[MobileString.TeamsTitle],
-        detail = strings[MobileString.TeamsComingSoon],
-        modifier = Modifier.fillMaxSize().padding(24.dp).testTag("teams-placeholder"),
-    )
-}
 
 @Composable
 fun TransferQueueScreen(

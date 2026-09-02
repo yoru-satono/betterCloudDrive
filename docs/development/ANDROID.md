@@ -94,7 +94,9 @@ KMP 个人搜索调用现有 `/files/search`，输入停止 300 ms 后请求，�
 
 清除终态传输时，除删除 Room 行、临时文件和 URI 权限外，还必须截断 SQLite WAL 并压缩数据库，避免已删除的 SAF 句柄继续残留在数据库旁路文件中。该行为由 API 28/34 设备测试覆盖。
 
-KMP 登录后的共享产品外壳使用 Navigation Compose 类型安全路由。个人、团队、传输和我的始终具有固定顶层位置；团队页在接入团队业务前不得请求接口。窗口宽度小于 600dp 时使用底部导航栏，宽窗口使用侧边导航栏。页面 Composable 只接收状态和事件，不持有 `NavController` 或完整 `AppContainer`。
+KMP 登录后的共享产品外壳使用 Navigation Compose 类型安全路由。个人、团队、传输和我的始终具有固定顶层位置；窗口宽度小于 600dp 时使用底部导航栏，宽窗口使用侧边导航栏。页面 Composable 只接收状态和事件，不持有 `NavController` 或完整 `AppContainer`。
+
+团队分支使用 `TeamsRoute`、`TeamWorkspaceRoute`、`TeamFolderRoute`、`TeamSearchRoute` 和 `TeamPreviewRoute`。团队列表、目录、搜索和预览分别由独立 Store 管理；团队切换取消旧请求，退出或换服务器清除全部团队缓存和 ticket。阶段 13 不显示团队上传、下载和修改入口，也不得向 Room 写入团队传输任务。团队文本通过认证 Range 最多读取 512 KiB，图片/视频 ticket 不持久化，OnlyOffice 固定请求 `mobile=true` 并原样渲染签名配置。
 
 个人文件夹同样使用类型安全路由。目录请求固定每页 50 条，接近列表或网格末尾时加载下一页；请求必须携带白名单排序字段和方向。快速切换目录、排序或刷新时取消旧任务并忽略迟到响应。目录返回栈缓存仅保留当前面包屑分支，滚动位置使用首个可见文件 ID 作为锚点。所有个人目录均显示上传入口，目标目录必须在打开系统选择器时冻结；批次完成后只刷新对应目录一次。
 

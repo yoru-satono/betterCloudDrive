@@ -37,7 +37,7 @@ public interface TeamRepository extends JpaRepository<TeamEntity, Long>, JpaSpec
             SELECT t FROM TeamEntity t
             JOIN TeamMemberEntity tm ON tm.teamId = t.id
             WHERE tm.userId = :userId AND tm.status = 1 AND t.deletedAt IS NULL AND t.archivedAt IS NULL
-            ORDER BY t.name ASC
+            ORDER BY t.name ASC, t.id ASC
             """)
     Page<TeamEntity> findActiveTeamsForUser(@Param("userId") Long userId, Pageable pageable);
 

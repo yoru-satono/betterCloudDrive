@@ -155,6 +155,96 @@ class PersonalFilesApi(private val http: AuthenticatedHttpClient) {
     }
 }
 
+class TeamWorkspaceApi(private val http: AuthenticatedHttpClient) {
+    suspend fun listTeams(page: Int, size: Int): PageResult<TeamSummary> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams")) {
+            bearer(token); url {
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun createTeam(name: String): TeamSummary = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("teams")) {
+            bearer(token); jsonBody(CreateTeamRequest(name))
+        } }
+    }
+
+    suspend fun getTeam(teamId: Long): TeamSummary = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId")) { bearer(token) } }
+    }
+
+    suspend fun listFiles(
+        teamId: Long, parentId: Long?, page: Int, size: Int, sortBy: String, order: String,
+    ): PageResult<FileItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/files")) {
+            bearer(token); url {
+                parentId?.let { parameters.append("parentId", it.toString()) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+                parameters.append("sortBy", sortBy)
+                parameters.append("order", order)
+            }
+        } }
+    }
+
+    suspend fun getFile(teamId: Long, fileId: Long): FileItem = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/files/$fileId")) { bearer(token) } }
+    }
+
+    suspend fun search(teamId: Long, query: String, page: Int, size: Int): PageResult<FileItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/files/search")) {
+            bearer(token); url {
+                parameters.append("q", query.trim())
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+}
+
+class TeamPreviewApi(private val http: AuthenticatedHttpClient) {
+    suspend fun ticket(teamId: Long, fileId: Long): String = http.run {
+        val response: DownloadTicketResponse = authenticatedEnvelope { client, token ->
+            client.post(url("teams/$teamId/download/$fileId/ticket")) { bearer(token) }
+        }
+        when {
+            response.url.startsWith("http://") || response.url.startsWith("https://") -> response.url
+            response.url.startsWith("/") -> serverBaseUrl.trimEnd('/') + response.url
+            else -> ServerAddress.apiUrl(serverBaseUrl, response.url, allowCleartextServer)
+        }
+    }
+
+    suspend fun office(teamId: Long, fileId: Long): OfficeConfig = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/office/files/$fileId/config")) {
+            bearer(token); url { parameters.append("mobile", "true") }
+        } }
+    }
+
+    suspend fun text(teamId: Long, fileId: Long, maxBytes: Int): ByteArray {
+        require(maxBytes > 0) { "preview.invalidTextLimit" }
+        return http.authenticatedStream(
+            "teams/$teamId/download/$fileId", "bytes=0-${maxBytes - 1}",
+        ) { status, headers, channel ->
+            if (status == HttpStatusCode.RequestedRangeNotSatisfiable &&
+                headers[HttpHeaders.ContentRange]?.endsWith("/0") == true
+            ) return@authenticatedStream ByteArray(0)
+            if (status != HttpStatusCode.OK && status != HttpStatusCode.PartialContent) {
+                throw ApiException(status.value, "error.previewFailed")
+            }
+            val output = ByteArray(maxBytes)
+            var offset = 0
+            while (offset < output.size) {
+                val count = channel.readAvailable(output, offset, output.size - offset)
+                if (count < 0) break
+                offset += count
+            }
+            output.copyOf(offset)
+        }
+    }
+}
+
 class PersonalOrganizationApi(private val http: AuthenticatedHttpClient) {
     suspend fun listFavorites(query: String?, page: Int, size: Int): PageResult<FileItem> = http.run {
         authenticatedEnvelope { client, token -> client.get(url("favorites")) {

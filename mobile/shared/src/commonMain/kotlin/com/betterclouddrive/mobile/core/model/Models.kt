@@ -94,6 +94,23 @@ data class FileItem(
 }
 
 @Serializable
+enum class TeamRole { OWNER, ADMIN, EDITOR, VIEWER }
+
+@Serializable
+data class TeamSummary(
+    val id: Long = 0,
+    val name: String = "",
+    @SerialName("ownerId") val ownerId: Long = 0,
+    @SerialName("storageQuota") val storageQuota: Long = 0,
+    @SerialName("storageUsed") val storageUsed: Long = 0,
+    val role: TeamRole = TeamRole.VIEWER,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+)
+
+@Serializable data class CreateTeamRequest(val name: String)
+
+@Serializable
 data class RecycleBinItem(
     val id: Long = 0,
     @SerialName("parentId") val parentId: Long? = null,

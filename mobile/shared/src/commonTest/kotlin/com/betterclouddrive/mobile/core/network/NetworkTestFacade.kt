@@ -28,6 +28,8 @@ class NetworkTestFacade private constructor(
     private val shares = PersonalSharesApi(http)
     private val preview = PreviewApi(http)
     private val recovery = PersonalRecoveryApi(http)
+    private val teams = TeamWorkspaceApi(http)
+    private val teamPreview = TeamPreviewApi(http)
 
     val sessionInvalidations get() = http.sessionInvalidations
     suspend fun initialize() = http.initialize()
@@ -86,6 +88,16 @@ class NetworkTestFacade private constructor(
     suspend fun listVersions(id: Long) = recovery.listVersions(id)
     suspend fun restoreVersion(id: Long, version: Int) = recovery.restoreVersion(id, version)
     suspend fun deleteVersion(id: Long, version: Int) = recovery.deleteVersion(id, version)
+    suspend fun listTeams(page: Int, size: Int) = teams.listTeams(page, size)
+    suspend fun createTeam(name: String) = teams.createTeam(name)
+    suspend fun getTeam(id: Long) = teams.getTeam(id)
+    suspend fun listTeamFiles(teamId: Long, parentId: Long?, page: Int, size: Int, sortBy: String, order: String) =
+        teams.listFiles(teamId, parentId, page, size, sortBy, order)
+    suspend fun getTeamFile(teamId: Long, fileId: Long) = teams.getFile(teamId, fileId)
+    suspend fun searchTeamFiles(teamId: Long, query: String, page: Int, size: Int) = teams.search(teamId, query, page, size)
+    suspend fun createTeamDownloadTicket(teamId: Long, fileId: Long) = teamPreview.ticket(teamId, fileId)
+    suspend fun readTeamText(teamId: Long, fileId: Long, maxBytes: Int) = teamPreview.text(teamId, fileId, maxBytes)
+    suspend fun loadTeamPreviewOffice(teamId: Long, fileId: Long) = teamPreview.office(teamId, fileId)
 
     companion object {
         const val DEFAULT_SERVER = NetworkDefaults.DEFAULT_SERVER

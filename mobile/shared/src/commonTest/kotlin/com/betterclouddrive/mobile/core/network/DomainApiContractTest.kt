@@ -558,6 +558,51 @@ class NetworkTestFacadeTest {
     }
 
     @Test
+    fun teamWorkspaceAndPreviewUseReadOnlyStageThirteenContracts() = runTest {
+        val observed = mutableListOf<Pair<String, String?>>()
+        val engine = MockEngine { request ->
+            observed += request.url.toString() to request.headers[HttpHeaders.Range]
+            when (request.url.encodedPath) {
+                "/api/v1/teams" -> if (request.method == HttpMethod.Post) {
+                    val body = (request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()
+                    assertTrue(body.contains("\"name\":\"New team\""))
+                    jsonResponse("""{"code":200,"data":{"id":11,"name":"New team","role":"OWNER"}}""")
+                } else jsonResponse("""{"code":200,"data":{"records":[{"id":10,"name":"Alpha","role":"VIEWER"}],"total":1,"page":1,"size":50,"pages":1}}""")
+                "/api/v1/teams/10" -> jsonResponse("""{"code":200,"data":{"id":10,"name":"Alpha","role":"VIEWER"}}""")
+                "/api/v1/teams/10/files" -> jsonResponse("""{"code":200,"data":{"records":[{"id":7,"fileName":"folder","fileType":"folder"}],"total":1,"page":2,"size":50,"pages":2}}""")
+                "/api/v1/teams/10/files/7" -> jsonResponse("""{"code":200,"data":{"id":7,"fileName":"note.txt","fileType":"file"}}""")
+                "/api/v1/teams/10/files/search" -> jsonResponse("""{"code":200,"data":{"records":[{"id":7,"fileName":"note.txt","fileType":"file"}],"total":1,"page":1,"size":50,"pages":1}}""")
+                "/api/v1/teams/10/download/7/ticket" -> jsonResponse("""{"code":200,"data":{"url":"/api/v1/teams/10/download/7?ticket=secret"}}""")
+                "/api/v1/teams/10/download/7" -> respond("hello", HttpStatusCode.PartialContent)
+                "/api/v1/teams/10/office/files/7/config" -> jsonResponse("""{"code":200,"data":{"documentServerUrl":"https://office.example.com","editable":false,"config":{"type":"mobile"}}}""")
+                else -> error("unexpected ${request.url}")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals("Alpha", client.listTeams(1, 50).records.single().name)
+        assertEquals(11, client.createTeam("New team").id)
+        assertEquals(10, client.getTeam(10).id)
+        assertEquals(7, client.listTeamFiles(10, 3, 2, 50, "updatedAt", "desc").records.single().id)
+        assertEquals(7, client.getTeamFile(10, 7).id)
+        assertEquals(7, client.searchTeamFiles(10, " note ", 1, 50).records.single().id)
+        assertTrue(client.createTeamDownloadTicket(10, 7).contains("ticket=secret"))
+        assertEquals("hello", client.readTeamText(10, 7, 512 * 1024).decodeToString())
+        assertFalse(client.loadTeamPreviewOffice(10, 7).editable)
+
+        assertTrue(observed.any { it.first.endsWith("/teams?page=1&size=50") })
+        assertTrue(observed.any { it.first.endsWith("/teams/10/files?parentId=3&page=2&size=50&sortBy=updatedAt&order=desc") })
+        assertTrue(observed.any { it.first.endsWith("/teams/10/files/search?q=note&page=1&size=50") })
+        assertTrue(observed.any { it.first.endsWith("/teams/10/download/7") && it.second == "bytes=0-524287" })
+        assertTrue(observed.any { it.first.endsWith("/teams/10/office/files/7/config?mobile=true") })
+    }
+
+    @Test
     fun searchTicketTextRangeAndPersonalOfficeUseStableContracts() = runTest {
         val observed = mutableListOf<Pair<String, String?>>()
         val engine = MockEngine { request ->

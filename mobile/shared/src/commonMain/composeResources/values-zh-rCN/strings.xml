@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP 移动端 · 阶段 9</string>
+    <string name="stage_label">KMP 移动端 · 阶段 13</string>
     <string name="restore_title">暂时无法连接服务器</string>
     <string name="session_preserved">本地会话仍已加密保存</string>
     <string name="retry">重试</string>
@@ -323,4 +323,24 @@
     <string name="version_deleted">版本已删除</string>
     <string name="version_download_queued">版本下载已加入传输队列</string>
     <string name="error_cannot_delete_only_version">不能删除唯一保留的历史版本。</string>
+    <string name="teams_empty">暂无团队</string>
+    <string name="teams_empty_detail">创建团队以开始使用共享工作区。</string>
+    <string name="create_team">创建团队</string>
+    <string name="team_name">团队名称</string>
+    <string name="team_created">团队已创建</string>
+    <string name="team_workspace_unavailable">该工作区不可用，或你已无权访问。</string>
+    <string name="team_read_only">移动端只读</string>
+    <string name="team_root">团队根目录</string>
+    <string name="team_directory_empty">此目录为空</string>
+    <string name="team_directory_empty_detail">共享文件会显示在这里。</string>
+    <string name="team_search">搜索团队文件</string>
+    <string name="team_search_hint">搜索当前工作区</string>
+    <string name="team_search_initial">输入文件或文件夹名称。</string>
+    <string name="team_search_empty">没有匹配的团队项目</string>
+    <string name="team_role_owner">所有者</string>
+    <string name="team_role_admin">管理员</string>
+    <string name="team_role_editor">编辑者</string>
+    <string name="team_role_viewer">查看者</string>
+    <string name="team_quota">已使用 {0} / {1}</string>
+    <string name="back_to_teams">返回团队列表</string>
 </resources>

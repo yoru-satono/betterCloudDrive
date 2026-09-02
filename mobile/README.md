@@ -1,13 +1,13 @@
 # BetterCloudDrive KMP 移动端
 
-这是 Android 优先的 Kotlin Multiplatform 重写工程。当前版本已覆盖个人文件浏览、管理、传输、搜索、只读预览、账号设置、收藏、标签、分享、回收站与历史版本。共享国际化资源支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
+这是 Android 优先的 Kotlin Multiplatform 重写工程。当前版本已覆盖个人文件完整工作流，以及团队列表、创建、只读目录浏览、搜索和预览。共享国际化资源支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，继续作为行为参考和回滚方案。
 
 ## 目标与范围
 
 - Android 是当前唯一可运行、可交付的平台。
 - `iosArm64` 和 `iosSimulatorArm64` 通过 `-PenableIos=true` 保留公共代码与 Framework 编译能力，阶段 1 不提供 iOS 平台服务或宿主应用。
 - 不配置桌面、JVM 应用、JS、Wasm 或 Web 目标。
-- 当前可见功能包括启动恢复、登录、注册与密码找回、个人目录浏览与管理、分页与排序、列表/网格、全局文件名搜索、只读文件详情与预览、任意目录多文件上传、普通及历史版本下载、独立传输队列、个人收藏、标签、分享、回收站、版本恢复与删除、账号资料与容量、语言、主题、服务器切换和独立 Debug 诊断；团队入口仍只显示占位状态，不请求团队接口。
+- 当前可见功能包括启动恢复、登录、注册与密码找回、个人目录浏览与管理、分页与排序、列表/网格、全局文件名搜索、只读文件详情与预览、任意目录多文件上传、普通及历史版本下载、独立传输队列、个人收藏、标签、分享、回收站、版本恢复与删除、账号资料与容量、语言、主题、服务器切换和独立 Debug 诊断。团队入口支持团队分页、创建、工作区切换、只读目录浏览、搜索、详情及图片/文本/视频/OnlyOffice 预览；团队文件写入和下载尚未开放。
 
 ## 工程结构
 
@@ -22,7 +22,7 @@ mobile/
     └── androidMain/.../platform/       # Keystore、SAF、UIDT/WorkManager、WebView
 ```
 
-依赖由手动 `AppContainer` 创建，不引入第三方 DI。`AuthenticatedHttpClient` 是唯一 Token 所有者，其上按认证、个人文件、整理、分享、预览和传输划分领域 API 与窄 Repository。各功能分别暴露自己的 `StateFlow` Store；`AppCoordinator` 只协调启动、会话失效、退出和换服务器时的全局清理，不持有文件、标签、分享或预览状态。根组件只收集认证、主题和未结束传输数，各目的地只收集对应 Store。
+依赖由手动 `AppContainer` 创建，不引入第三方 DI。`AuthenticatedHttpClient` 是唯一 Token 所有者，其上按认证、个人文件、个人整理、团队工作区、预览和传输划分领域 API 与窄 Repository。个人与团队功能分别暴露自己的 `StateFlow` Store；`AppCoordinator` 只协调启动、会话失效、退出和换服务器时的全局清理，不持有文件、标签、分享或预览状态。根组件只收集认证、主题和未结束传输数，各目的地只收集对应 Store。
 
 共享 UI 使用 Navigation Compose 2.9.2 类型安全路由；Activity 只提供 Compose 入口和 Android 平台服务。传输任务完整保存到 Room v2，`remoteVersionNumber` 用于区分普通文件与历史版本下载；v1→v2 迁移保留已有任务。一次用户操作最多形成一个包含 100 个任务 ID 的系统批次，批次执行器仍通过全局互斥逐项传输。Android 14+ 使用 UIDT，Android 13 及以下使用 WorkManager。下载通过 Ktor `prepareGet().execute {}` 在响应作用域内直接写入应用私有 `.part`，通知进度最多每秒投递一次，Compose 和 Room 进度不受影响。完成或取消的任务会释放 SAF 权限，传输页可确认后清除全部终态任务。
 
@@ -69,4 +69,6 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 
 截至 2026-09-01，阶段 12 已完成个人回收站与文件版本：删除根可见性、递归恢复和清理、安全版本 DTO、版本恢复与最后版本保护、Room v1→v2 和历史版本可恢复下载均通过。API 34 的 64 MiB 历史版本 SAF 下载在两次强制停止后分别从非零偏移恢复，最终 MD5 与源文件一致；后端、Web/Tauri、API 28/34、黑盒和完整可观测性门槛均通过，个人功能对等里程碑达成。
 
-当前恢复与版本边界见[阶段 12 个人回收站与文件版本](docs/stage-12-personal-recovery-versions.md)，架构边界见[阶段 11.5 KMP 架构边界收口](docs/stage-11-5-architecture-boundaries.md)。
+截至 2026-09-02，阶段 13 已完成团队工作区与只读浏览：团队稳定分页和创建、三级目录、排序、列表/网格、全局搜索、打开所在位置及图片、文本、视频和 OnlyOffice 预览均通过。API 28/34 设备矩阵、发布构建、完整 Docker 栈和可观测性门槛通过；团队浏览不会创建传输任务，媒体 ticket 在客户端仅驻留内存并在后端审计日志中统一脱敏。
+
+当前团队只读边界见[阶段 13 团队工作区与只读浏览](docs/stage-13-team-workspace.md)，恢复与版本边界见[阶段 12 个人回收站与文件版本](docs/stage-12-personal-recovery-versions.md)。

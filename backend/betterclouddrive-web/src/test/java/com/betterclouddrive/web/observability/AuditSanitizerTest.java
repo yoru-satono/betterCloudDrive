@@ -45,7 +45,7 @@ class AuditSanitizerTest {
     void shouldNeverReturnUnparseableBodyAndShouldSanitizeQuery() {
         assertThat(sanitizer.sanitizeBody("password=secret".getBytes(StandardCharsets.UTF_8)))
                 .isEqualTo("***REDACTED***");
-        assertThat(sanitizer.sanitizeQuery("page=1&accessToken=secret&name=alice"))
-                .isEqualTo("page=1&accessToken=***REDACTED***&name=alice");
+        assertThat(sanitizer.sanitizeQuery("page=1&accessToken=secret&ticket=preview-secret&name=alice"))
+                .isEqualTo("page=1&accessToken=***REDACTED***&ticket=***REDACTED***&name=alice");
     }
 }

@@ -31,6 +31,12 @@ import com.betterclouddrive.mobile.feature.shares.PersonalSharesStore
 import com.betterclouddrive.mobile.feature.diagnostics.DiagnosticsStore
 import com.betterclouddrive.mobile.feature.recovery.PersonalRecycleBinStore
 import com.betterclouddrive.mobile.feature.recovery.PersonalVersionsStore
+import com.betterclouddrive.mobile.feature.teams.TeamBrowserStore
+import com.betterclouddrive.mobile.feature.teams.TeamPreviewRepository
+import com.betterclouddrive.mobile.feature.teams.TeamPreviewStore
+import com.betterclouddrive.mobile.feature.teams.TeamSearchStore
+import com.betterclouddrive.mobile.feature.teams.TeamWorkspaceRepository
+import com.betterclouddrive.mobile.feature.teams.TeamsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -44,6 +50,8 @@ class AppContainer(
     val preview: PreviewRepository,
     val recycleBin: RecycleBinRepository,
     val personalVersions: PersonalVersionsRepository,
+    val teamWorkspace: TeamWorkspaceRepository,
+    val teamPreview: TeamPreviewRepository,
     val database: MobileDatabase,
     val transfers: TransferManager,
     val transferEngine: TransferEngine,
@@ -68,6 +76,10 @@ class AppContainer(
     val previewStore = PersonalPreviewStore(preview, applicationScope)
     val sharesStore = PersonalSharesStore(shares, applicationScope)
     val diagnosticsStore = DiagnosticsStore(preview, applicationScope)
+    val teamsStore = TeamsStore(teamWorkspace, applicationScope)
+    val teamBrowserStore = TeamBrowserStore(teamWorkspace, applicationScope)
+    val teamSearchStore = TeamSearchStore(teamWorkspace, applicationScope)
+    val teamPreviewStore = TeamPreviewStore(teamPreview, applicationScope)
     private fun invalidatePersonalContent() {
         favoritesStore.invalidate()
         tagsStore.invalidateFiles()
@@ -87,6 +99,7 @@ class AppContainer(
         listOf(
             browserStore, searchStore, favoritesStore, tagsStore, sharesStore, previewStore,
             recycleBinStore, versionsStore, diagnosticsStore, transferQueue,
+            teamsStore, teamBrowserStore, teamSearchStore, teamPreviewStore,
         ),
         applicationScope,
     )

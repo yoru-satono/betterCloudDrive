@@ -271,7 +271,6 @@ internal fun NavGraphBuilder.productUtilityGraph(
     debugToolsEnabled: Boolean,
     onOpenDiagnostics: () -> Unit,
 ) {
-    composable<TeamsRoute> { TeamsPlaceholderScreen() }
     composable<TransfersRoute> {
         val state by container.transferQueue.state.collectAsState()
         TransferQueueScreen(
@@ -298,4 +297,118 @@ internal fun NavGraphBuilder.productUtilityGraph(
             container.diagnosticsStore::loadOffice, container.diagnosticsStore::updateStatus,
         )
     }
+}
+
+internal fun NavGraphBuilder.teamWorkspaceGraph(
+    navController: NavHostController,
+    container: AppContainer,
+    wide: Boolean,
+    onBackToPersonal: () -> Unit,
+) {
+    composable<TeamsRoute> {
+        val state by container.teamsStore.state.collectAsState()
+        LaunchedEffect(Unit) { container.teamsStore.activate() }
+        LaunchedEffect(state.createdTeam?.id) {
+            state.createdTeam?.let { created ->
+                container.teamsStore.consumeCreatedTeam()
+                navController.navigate(TeamWorkspaceRoute(created.id))
+            }
+        }
+        TeamsScreen(
+            state = state,
+            wide = wide,
+            onBack = onBackToPersonal,
+            onRefresh = container.teamsStore::refresh,
+            onLoadMore = container.teamsStore::loadMore,
+            onCreate = container.teamsStore::create,
+            onClearCreateError = container.teamsStore::clearCreateError,
+            onOpenTeam = { navController.navigate(TeamWorkspaceRoute(it.id)) },
+        )
+    }
+    composable<TeamWorkspaceRoute> { entry ->
+        TeamBrowserDestination(
+            teamId = entry.toRoute<TeamWorkspaceRoute>().teamId,
+            folderId = null,
+            navController = navController,
+            container = container,
+            wide = wide,
+        )
+    }
+    composable<TeamFolderRoute> { entry ->
+        val route = entry.toRoute<TeamFolderRoute>()
+        TeamBrowserDestination(route.teamId, route.folderId, navController, container, wide)
+    }
+    composable<TeamSearchRoute> { entry ->
+        val teamId = entry.toRoute<TeamSearchRoute>().teamId
+        val state by container.teamSearchStore.state.collectAsState()
+        LaunchedEffect(teamId) { container.teamSearchStore.activate(teamId) }
+        TeamSearchScreen(
+            state = state,
+            onBack = navController::popBackStack,
+            onQuery = container.teamSearchStore::updateQuery,
+            onSubmit = container.teamSearchStore::submit,
+            onRetry = container.teamSearchStore::retry,
+            onLoadMore = container.teamSearchStore::loadMore,
+            onOpenFolder = { navController.navigate(TeamFolderRoute(teamId, it.id)) },
+            onOpenLocation = { file ->
+                container.teamBrowserStore.prepareOpenLocation(file)
+                navController.navigate(file.parentId?.let { TeamFolderRoute(teamId, it) } ?: TeamWorkspaceRoute(teamId))
+            },
+            onPreview = { navController.navigate(TeamPreviewRoute(teamId, it.id)) },
+        )
+    }
+    composable<TeamPreviewRoute> { entry ->
+        val route = entry.toRoute<TeamPreviewRoute>()
+        val state by container.teamPreviewStore.state.collectAsState()
+        LaunchedEffect(route.teamId, route.fileId) { container.teamPreviewStore.open(route.teamId, route.fileId) }
+        DisposableEffect(route.teamId, route.fileId) { onDispose { container.teamPreviewStore.close() } }
+        TeamPreviewScreen(
+            state = state,
+            officeRenderer = container.officeRenderer,
+            mediaRenderer = container.mediaPreviewRenderer,
+            onBack = navController::popBackStack,
+            onRetry = container.teamPreviewStore::retry,
+            onPositionChanged = container.teamPreviewStore::updatePosition,
+            onRendererError = container.teamPreviewStore::reportRendererError,
+        )
+    }
+}
+
+@Composable
+private fun TeamBrowserDestination(
+    teamId: Long,
+    folderId: Long?,
+    navController: NavHostController,
+    container: AppContainer,
+    wide: Boolean,
+) {
+    val state by container.teamBrowserStore.state.collectAsState()
+    LaunchedEffect(teamId, folderId) { container.teamBrowserStore.activate(teamId, folderId) }
+    TeamBrowserScreen(
+        state = state,
+        wide = wide,
+        onBack = navController::popBackStack,
+        onBackToTeams = {
+            navController.navigate(TeamsRoute) {
+                popUpTo<TeamsRoute> { inclusive = false }
+                launchSingleTop = true
+            }
+        },
+        onBreadcrumb = { target ->
+            val route: AppRoute = target?.let { TeamFolderRoute(teamId, it) } ?: TeamWorkspaceRoute(teamId)
+            navController.navigate(route) { launchSingleTop = true }
+        },
+        onOpenFolder = { file ->
+            container.teamBrowserStore.openFolder(file)
+            navController.navigate(TeamFolderRoute(teamId, file.id))
+        },
+        onOpenSearch = { navController.navigate(TeamSearchRoute(teamId)) },
+        onRetryWorkspace = { container.teamBrowserStore.activate(teamId, folderId) },
+        onRefresh = container.teamBrowserStore::refresh,
+        onLoadMore = container.teamBrowserStore::loadMore,
+        onSort = container.teamBrowserStore::changeSort,
+        onViewMode = container.teamBrowserStore::changeViewMode,
+        onSelect = container.teamBrowserStore::selectFile,
+        onPreview = { navController.navigate(TeamPreviewRoute(teamId, it.id)) },
+    )
 }

@@ -109,8 +109,9 @@ fun ProductShell(
     val destination = backStackEntry?.destination
     val transfers by container.transferQueue.state.collectAsState()
     val isDiagnostics = destination.matches(DiagnosticsRoute)
-    val isPreview = destination?.hasRoute<PersonalPreviewRoute>() == true
-    val isSearch = destination?.hasRoute<PersonalSearchRoute>() == true
+    val isPreview = destination?.hasRoute<PersonalPreviewRoute>() == true || destination?.hasRoute<TeamPreviewRoute>() == true
+    val isSearch = destination?.hasRoute<PersonalSearchRoute>() == true || destination?.hasRoute<TeamSearchRoute>() == true
+    val isTeamFeature = destination.isTeam()
 
     LaunchedEffect(backStackEntry) {
         when {
@@ -128,9 +129,20 @@ fun ProductShell(
         }
     }
 
+    fun goTeamsRoot() {
+        navController.navigate(TeamsRoute) {
+            popUpTo<TeamsRoute> { inclusive = false }
+            launchSingleTop = true
+        }
+    }
+
     fun navigateTopLevel(route: AppRoute) {
         if (route == PersonalRoute && destination.isPersonal() && destination?.hasRoute<PersonalRoute>() != true) {
             goPersonalRoot()
+            return
+        }
+        if (route == TeamsRoute && destination.isTeam() && destination?.hasRoute<TeamsRoute>() != true) {
+            goTeamsRoot()
             return
         }
         container.browserStore.clearTransientUi()
@@ -206,7 +218,7 @@ fun ProductShell(
                     onOpenTags = ::openTags,
                     onOpenShares = ::openShares,
                     onOpenRecycleBin = ::openRecycleBin,
-                    showTopBar = !isSearch,
+                    showTopBar = !isSearch && !isTeamFeature,
                     modifier = Modifier.weight(1f),
                     content = { Content(it, true) },
                 )
@@ -221,7 +233,7 @@ fun ProductShell(
                 onOpenTags = ::openTags,
                 onOpenShares = ::openShares,
                 onOpenRecycleBin = ::openRecycleBin,
-                showTopBar = !isSearch && !isPreview,
+                showTopBar = !isSearch && !isPreview && !isTeamFeature,
                 bottomBar = { if (!isDiagnostics && !isPreview) MainNavigationBar(destination, transfers.activeCount, ::navigateTopLevel) },
                 modifier = Modifier.fillMaxSize().testTag("product-shell-compact"),
                 content = { Content(it, false) },
@@ -461,6 +473,12 @@ private fun AppNavHost(
         personalSharesGraph(navController, container, wide, onOpenShareDetail)
         personalPreviewGraph(container, onClosePreview)
         personalRecoveryGraph(container, onOpenTransfers)
+        teamWorkspaceGraph(navController, container, wide) {
+            navController.navigate(PersonalRoute) {
+                popUpTo<PersonalRoute> { inclusive = false }
+                launchSingleTop = true
+            }
+        }
         productUtilityGraph(container, debugToolsEnabled, onOpenDiagnostics)
     }
 }
@@ -473,7 +491,12 @@ private fun MainNavigationBar(destination: NavDestination?, activeTransfers: Int
             val selected = destination.matches(item.route)
             NavigationBarItem(
                 selected = selected,
-                onClick = { if (!selected || (item.route == PersonalRoute && destination?.hasRoute<PersonalRoute>() != true)) onNavigate(item.route) },
+                onClick = {
+                    if (!selected ||
+                        (item.route == PersonalRoute && destination?.hasRoute<PersonalRoute>() != true) ||
+                        (item.route == TeamsRoute && destination?.hasRoute<TeamsRoute>() != true)
+                    ) onNavigate(item.route)
+                },
                 icon = { NavigationIcon(item, selected, activeTransfers, strings) },
                 label = { Text(strings[item.label]) },
                 modifier = Modifier.testTag(item.testTag),
@@ -491,7 +514,12 @@ private fun MainNavigationRail(destination: NavDestination?, activeTransfers: In
             val selected = destination.matches(item.route)
             NavigationRailItem(
                 selected = selected,
-                onClick = { if (!selected || (item.route == PersonalRoute && destination?.hasRoute<PersonalRoute>() != true)) onNavigate(item.route) },
+                onClick = {
+                    if (!selected ||
+                        (item.route == PersonalRoute && destination?.hasRoute<PersonalRoute>() != true) ||
+                        (item.route == TeamsRoute && destination?.hasRoute<TeamsRoute>() != true)
+                    ) onNavigate(item.route)
+                },
                 icon = { NavigationIcon(item, selected, activeTransfers, strings) },
                 label = { Text(strings[item.label]) },
                 modifier = Modifier.testTag(item.testTag),
@@ -533,7 +561,11 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
     is PersonalPreviewRoute -> this?.hasRoute<PersonalPreviewRoute>() == true
     PersonalRecycleBinRoute -> this?.hasRoute<PersonalRecycleBinRoute>() == true
     is PersonalVersionsRoute -> this?.hasRoute<PersonalVersionsRoute>() == true
-    TeamsRoute -> this?.hasRoute<TeamsRoute>() == true
+    TeamsRoute -> isTeam()
+    is TeamWorkspaceRoute -> this?.hasRoute<TeamWorkspaceRoute>() == true
+    is TeamFolderRoute -> this?.hasRoute<TeamFolderRoute>() == true
+    is TeamSearchRoute -> this?.hasRoute<TeamSearchRoute>() == true
+    is TeamPreviewRoute -> this?.hasRoute<TeamPreviewRoute>() == true
     TransfersRoute -> this?.hasRoute<TransfersRoute>() == true
     ProfileRoute -> this?.hasRoute<ProfileRoute>() == true
     DiagnosticsRoute -> this?.hasRoute<DiagnosticsRoute>() == true
@@ -546,6 +578,11 @@ private fun NavDestination?.isPersonal(): Boolean =
         this?.hasRoute<PersonalTagFilesRoute>() == true
         || this?.hasRoute<PersonalSharesRoute>() == true || this?.hasRoute<PersonalShareDetailRoute>() == true ||
         this?.hasRoute<PersonalRecycleBinRoute>() == true || this?.hasRoute<PersonalVersionsRoute>() == true
+
+private fun NavDestination?.isTeam(): Boolean =
+    this?.hasRoute<TeamsRoute>() == true || this?.hasRoute<TeamWorkspaceRoute>() == true ||
+        this?.hasRoute<TeamFolderRoute>() == true || this?.hasRoute<TeamSearchRoute>() == true ||
+        this?.hasRoute<TeamPreviewRoute>() == true
 
 private fun NavDestination?.isPersonalDirectory(): Boolean =
     this?.hasRoute<PersonalRoute>() == true || this?.hasRoute<PersonalFolderRoute>() == true

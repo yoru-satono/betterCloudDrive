@@ -307,7 +307,7 @@ public class FileServiceImpl implements FileService {
         };
 
         List<FileEntity> readable = fileRepository
-                .findAll(spec, Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()))
+                .findAll(spec, personalFileSort(sortBy, order))
                 .stream()
                 .filter(file -> canRead(userId, teamId, file.getId()))
                 .toList();
@@ -448,13 +448,20 @@ public class FileServiceImpl implements FileService {
 
     @Override
     public PageResult<FileEntity> searchTeamFiles(Long userId, Long teamId, String keyword, int page, int size) {
+        String normalized = StringUtils.hasText(keyword) ? keyword.trim() : "";
+        if (normalized.isEmpty()) {
+            return PageResult.of(List.of(), 0, page, size);
+        }
         Specification<FileEntity> spec = (root, query, cb) -> cb.and(
                 cb.equal(root.get("teamId"), teamId),
                 cb.equal(root.get("isDeleted"), false),
-                cb.like(cb.lower(root.get("fileName")), "%" + keyword.toLowerCase() + "%")
+                cb.like(cb.lower(root.get("fileName")), "%" + normalized.toLowerCase() + "%")
         );
         List<FileEntity> readable = fileRepository
-                .findAll(spec, Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()))
+                .findAll(spec, Sort.by(
+                        Sort.Order.desc("fileType"),
+                        Sort.Order.asc("fileName"),
+                        Sort.Order.asc("id")))
                 .stream()
                 .filter(file -> canRead(userId, teamId, file.getId()))
                 .toList();

@@ -93,7 +93,7 @@ class ProductShellDeviceTest {
         setShellContent(wide = false, debugToolsEnabled = true)
         composeRule.onNodeWithTag("main-navigation-bar").assertIsDisplayed()
         composeRule.onNodeWithTag("nav-teams").performClick()
-        composeRule.onNodeWithTag("teams-placeholder").assertIsDisplayed()
+        composeRule.onNodeWithTag("teams-screen").assertIsDisplayed()
         composeRule.runOnUiThread { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
         composeRule.onNodeWithTag("personal-content").assertIsDisplayed()
 

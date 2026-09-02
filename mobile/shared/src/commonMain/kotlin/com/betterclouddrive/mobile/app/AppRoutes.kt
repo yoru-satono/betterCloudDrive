@@ -42,6 +42,18 @@ data class PersonalVersionsRoute(val fileId: Long) : AppRoute
 data object TeamsRoute : AppRoute
 
 @Serializable
+data class TeamWorkspaceRoute(val teamId: Long) : AppRoute
+
+@Serializable
+data class TeamFolderRoute(val teamId: Long, val folderId: Long) : AppRoute
+
+@Serializable
+data class TeamSearchRoute(val teamId: Long) : AppRoute
+
+@Serializable
+data class TeamPreviewRoute(val teamId: Long, val fileId: Long) : AppRoute
+
+@Serializable
 data object TransfersRoute : AppRoute
 
 @Serializable

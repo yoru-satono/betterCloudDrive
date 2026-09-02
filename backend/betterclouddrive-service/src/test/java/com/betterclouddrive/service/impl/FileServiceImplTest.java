@@ -188,6 +188,52 @@ class FileServiceImplTest {
     }
 
     @Test
+    void listTeamFiles_shouldUseRequestedStableFolderFirstSortBeforePermissionFiltering() {
+        when(fileRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of());
+
+        fileService.listTeamFiles(7L, 10L, null, 1, 50, "fileSize", "desc");
+
+        ArgumentCaptor<Sort> captor = ArgumentCaptor.forClass(Sort.class);
+        verify(fileRepository).findAll(any(Specification.class), captor.capture());
+        assertThat(captor.getValue().stream())
+                .extracting(Sort.Order::getProperty, Sort.Order::getDirection)
+                .containsExactly(
+                        tuple("fileType", Sort.Direction.DESC),
+                        tuple("fileSize", Sort.Direction.DESC),
+                        tuple("fileName", Sort.Direction.ASC),
+                        tuple("id", Sort.Direction.ASC));
+    }
+
+    @Test
+    void searchTeamFiles_shouldTrimAndUseStableFolderFirstOrder() {
+        FileEntity visible = FileEntity.builder().id(2L).teamId(10L).fileName("notes.txt").fileType("file").build();
+        when(fileRepository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of(visible));
+        when(teamPermissionService.effectivePermissions(7L, 10L, 2L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<FileEntity> result = fileService.searchTeamFiles(7L, 10L, " notes ", 1, 50);
+
+        assertThat(result.getRecords()).containsExactly(visible);
+        ArgumentCaptor<Sort> captor = ArgumentCaptor.forClass(Sort.class);
+        verify(fileRepository).findAll(any(Specification.class), captor.capture());
+        assertThat(captor.getValue().stream())
+                .extracting(Sort.Order::getProperty, Sort.Order::getDirection)
+                .containsExactly(
+                        tuple("fileType", Sort.Direction.DESC),
+                        tuple("fileName", Sort.Direction.ASC),
+                        tuple("id", Sort.Direction.ASC));
+    }
+
+    @Test
+    void searchTeamFiles_shouldReturnEmptyPageForBlankQueryWithoutScanningFiles() {
+        PageResult<FileEntity> result = fileService.searchTeamFiles(7L, 10L, "   ", 2, 50);
+
+        assertThat(result.getRecords()).isEmpty();
+        assertThat(result.getTotal()).isZero();
+        assertThat(result.getPage()).isEqualTo(2);
+        verify(fileRepository, never()).findAll(any(Specification.class), any(Sort.class));
+    }
+
+    @Test
     void getFile_shouldThrowForTeamFile() {
         FileEntity file = FileEntity.builder().id(1L).userId(1L).teamId(10L).isDeleted(false).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));

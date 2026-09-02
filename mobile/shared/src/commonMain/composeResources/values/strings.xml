@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP mobile · Stage 9</string>
+    <string name="stage_label">KMP mobile · Stage 13</string>
     <string name="restore_title">Can&apos;t connect to the server</string>
     <string name="session_preserved">Your local session remains encrypted</string>
     <string name="retry">Retry</string>
@@ -323,4 +323,24 @@
     <string name="version_deleted">Version deleted</string>
     <string name="version_download_queued">Version download added to transfers</string>
     <string name="error_cannot_delete_only_version">The only retained history version cannot be deleted.</string>
+    <string name="teams_empty">No teams yet</string>
+    <string name="teams_empty_detail">Create a team to start a shared workspace.</string>
+    <string name="create_team">Create team</string>
+    <string name="team_name">Team name</string>
+    <string name="team_created">Team created</string>
+    <string name="team_workspace_unavailable">This workspace is unavailable or you no longer have access.</string>
+    <string name="team_read_only">Read-only on mobile</string>
+    <string name="team_root">Team root</string>
+    <string name="team_directory_empty">This folder is empty</string>
+    <string name="team_directory_empty_detail">Shared files will appear here.</string>
+    <string name="team_search">Search team files</string>
+    <string name="team_search_hint">Search this workspace</string>
+    <string name="team_search_initial">Enter a file or folder name.</string>
+    <string name="team_search_empty">No matching team items</string>
+    <string name="team_role_owner">Owner</string>
+    <string name="team_role_admin">Administrator</string>
+    <string name="team_role_editor">Editor</string>
+    <string name="team_role_viewer">Viewer</string>
+    <string name="team_quota">{0} of {1} used</string>
+    <string name="back_to_teams">Back to teams</string>
 </resources>
