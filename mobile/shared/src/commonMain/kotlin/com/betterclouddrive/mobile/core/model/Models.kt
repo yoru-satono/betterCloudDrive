@@ -108,6 +108,21 @@ data class TeamSummary(
     @SerialName("updatedAt") val updatedAt: String? = null,
 )
 
+@Serializable
+data class TeamEffectivePermission(
+    @SerialName("canRead") val canRead: Boolean = false,
+    @SerialName("canWrite") val canWrite: Boolean = false,
+    @SerialName("canShare") val canShare: Boolean = false,
+    @SerialName("canDelete") val canDelete: Boolean = false,
+    @SerialName("canManage") val canManage: Boolean = false,
+    @SerialName("sourceType") val sourceType: String = "UNSPECIFIED",
+)
+
+@Serializable data class CreateTeamFolderRequest(@SerialName("parentId") val parentId: Long? = null, @SerialName("folderName") val folderName: String)
+@Serializable data class RenameTeamFileRequest(@SerialName("newName") val newName: String)
+@Serializable data class MoveTeamFileRequest(@SerialName("targetParentId") val targetParentId: Long? = null)
+@Serializable data class DeleteTeamFilesRequest(@SerialName("fileIds") val fileIds: List<Long>)
+
 @Serializable data class CreateTeamRequest(val name: String)
 
 @Serializable

@@ -32,6 +32,7 @@ import com.betterclouddrive.mobile.feature.diagnostics.DiagnosticsStore
 import com.betterclouddrive.mobile.feature.recovery.PersonalRecycleBinStore
 import com.betterclouddrive.mobile.feature.recovery.PersonalVersionsStore
 import com.betterclouddrive.mobile.feature.teams.TeamBrowserStore
+import com.betterclouddrive.mobile.feature.teams.TeamFileActionsStore
 import com.betterclouddrive.mobile.feature.teams.TeamPreviewRepository
 import com.betterclouddrive.mobile.feature.teams.TeamPreviewStore
 import com.betterclouddrive.mobile.feature.teams.TeamSearchStore
@@ -80,6 +81,13 @@ class AppContainer(
     val teamBrowserStore = TeamBrowserStore(teamWorkspace, applicationScope)
     val teamSearchStore = TeamSearchStore(teamWorkspace, applicationScope)
     val teamPreviewStore = TeamPreviewStore(teamPreview, applicationScope)
+    private fun invalidateTeamContent(teamId: Long, folderIds: Set<Long?>) {
+        teamBrowserStore.invalidate(teamId, folderIds)
+        teamSearchStore.reset()
+        teamPreviewStore.reset()
+        teamsStore.refresh()
+    }
+    val teamFileActionsStore = TeamFileActionsStore(teamWorkspace, transferQueue, applicationScope, ::invalidateTeamContent)
     private fun invalidatePersonalContent() {
         favoritesStore.invalidate()
         tagsStore.invalidateFiles()
@@ -100,6 +108,7 @@ class AppContainer(
             browserStore, searchStore, favoritesStore, tagsStore, sharesStore, previewStore,
             recycleBinStore, versionsStore, diagnosticsStore, transferQueue,
             teamsStore, teamBrowserStore, teamSearchStore, teamPreviewStore,
+            teamFileActionsStore,
         ),
         applicationScope,
     )

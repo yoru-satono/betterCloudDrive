@@ -39,6 +39,7 @@ internal fun uiError(error: Throwable): UiMessage = when (error) {
         "error.invalidTagColor" -> UiMessage(MobileString.ErrorInvalidTagColor)
         "error.invalidFileDestination" -> UiMessage(MobileString.ErrorInvalidDestination)
         "error.invalidFileName", "error.validation", "error.invalidParameter" -> UiMessage(MobileString.ErrorInvalidFileName)
+        "error.forbidden" -> UiMessage(MobileString.ErrorPermissionChanged)
         "error.fileNotFound", "error.notFound" -> UiMessage(MobileString.ErrorNotFound)
         "error.rateLimited" -> UiMessage(MobileString.ErrorRateLimited)
         "error.emailCodeExpired" -> UiMessage(MobileString.ErrorVerificationExpired)

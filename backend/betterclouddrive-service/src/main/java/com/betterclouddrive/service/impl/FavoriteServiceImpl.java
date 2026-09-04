@@ -101,9 +101,17 @@ public class FavoriteServiceImpl implements FavoriteService {
                 ? favoriteRepository.findTeamFavoriteFiles(userId, teamId)
                 : favoriteRepository.findTeamFavoriteFilesByKeyword(userId, teamId, normalizedKeyword))
                 .stream()
-                .filter(file -> teamPermissionService.effectivePermissions(userId, teamId, file.getId()).canRead())
+                .filter(file -> canReadTeamFile(userId, teamId, file.getId()))
                 .toList();
         return PageResults.fromFiltered(readable, page, size);
+    }
+
+    private boolean canReadTeamFile(Long userId, Long teamId, Long fileId) {
+        try {
+            return teamPermissionService.effectivePermissions(userId, teamId, fileId).canRead();
+        } catch (BusinessException exception) {
+            return false;
+        }
     }
 
     private void saveFavoriteIfNeeded(Long userId, Long fileId) {

@@ -2,7 +2,9 @@
 
 package com.betterclouddrive.mobile.app
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,12 +31,19 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -52,6 +61,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -77,14 +89,19 @@ import com.betterclouddrive.mobile.core.model.TeamSummary
 import com.betterclouddrive.mobile.core.platform.MediaPreviewRenderer
 import com.betterclouddrive.mobile.core.platform.MediaPreviewRequest
 import com.betterclouddrive.mobile.core.platform.OfficeRenderer
+import com.betterclouddrive.mobile.core.platform.DocumentPicker
+import com.betterclouddrive.mobile.core.platform.DownloadRequest
 import com.betterclouddrive.mobile.feature.files.FileViewMode
 import com.betterclouddrive.mobile.feature.files.PersonalFileSort
 import com.betterclouddrive.mobile.feature.files.SortDirection
 import com.betterclouddrive.mobile.feature.files.previewKind
 import com.betterclouddrive.mobile.feature.teams.TeamBrowserState
+import com.betterclouddrive.mobile.feature.teams.TeamFileActionsState
+import com.betterclouddrive.mobile.feature.teams.TeamFolderPickerState
 import com.betterclouddrive.mobile.feature.teams.TeamPreviewState
 import com.betterclouddrive.mobile.feature.teams.TeamSearchState
 import com.betterclouddrive.mobile.feature.teams.TeamsState
+import com.betterclouddrive.mobile.feature.transfers.MAX_UPLOAD_SELECTION
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -168,7 +185,6 @@ private fun TeamCard(team: TeamSummary, onOpen: (TeamSummary) -> Unit) {
                     Text(team.name, style = MaterialTheme.typography.titleMedium)
                     Text(strings[team.role.stringKey()], style = MaterialTheme.typography.labelMedium)
                 }
-                Text(strings[MobileString.TeamReadOnly], style = MaterialTheme.typography.labelSmall)
             }
             LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
             Text(strings.format(MobileString.TeamQuota, formatFileSize(team.storageUsed), formatFileSize(team.storageQuota)))
@@ -211,11 +227,13 @@ private fun TeamCreateOverlay(
     else ModalBottomSheet(onDismissRequest = onDismiss) { content() }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-internal fun TeamBrowserScreen(
+fun TeamBrowserScreen(
     state: TeamBrowserState,
+    actions: TeamFileActionsState,
     wide: Boolean,
+    documentPicker: DocumentPicker,
     onBack: () -> Unit,
     onBackToTeams: () -> Unit,
     onBreadcrumb: (Long?) -> Unit,
@@ -228,12 +246,79 @@ internal fun TeamBrowserScreen(
     onViewMode: (FileViewMode) -> Unit,
     onSelect: (FileItem?) -> Unit,
     onPreview: (FileItem) -> Unit,
+    onRequestPermission: (FileItem) -> Unit,
+    onToggleSelection: (FileItem) -> Unit,
+    onClearSelection: () -> Unit,
+    onCreateFolder: (String) -> Unit,
+    onRename: (FileItem, String) -> Unit,
+    onDelete: (Set<Long>) -> Unit,
+    onOpenMovePicker: (FileItem) -> Unit,
+    onOpenPickerFolder: (FileItem) -> Unit,
+    onPickerBack: () -> Unit,
+    onRetryPicker: () -> Unit,
+    onClosePicker: () -> Unit,
+    onConfirmMove: () -> Unit,
+    onUpload: (com.betterclouddrive.mobile.core.platform.UploadPickResult) -> Unit,
+    onDownload: (FileItem, String) -> Unit,
+    onConsumeFeedback: () -> Unit,
+    onConsumeTransferFeedback: () -> Unit,
+    onClearPermissionError: () -> Unit,
+    onOpenTransfers: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
+    val snackbar = remember { SnackbarHostState() }
     var sortMenu by remember { mutableStateOf(false) }
-    BackHandler(onBack = onBack)
+    var createDialog by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<FileItem?>(null) }
+    var deleteTargets by remember { mutableStateOf<List<FileItem>>(emptyList()) }
+    var pendingDownload by remember { mutableStateOf<FileItem?>(null) }
+    val uploadLauncher = documentPicker.rememberUploadLauncher(MAX_UPLOAD_SELECTION, onUpload)
+    val downloadLauncher = documentPicker.rememberDownloadLauncher { target ->
+        pendingDownload?.let { onDownload(it, target.handle) }
+        pendingDownload = null
+    }
+    fun download(file: FileItem) {
+        if (file.isFolder) return
+        pendingDownload = file
+        downloadLauncher(DownloadRequest(file.fileName, file.mimeType))
+    }
+    BackHandler(enabled = actions.folderPicker != null || actions.selectedIds.isNotEmpty()) {
+        if (actions.folderPicker != null) onClosePicker() else onClearSelection()
+    }
+    BackHandler(enabled = actions.folderPicker == null && actions.selectedIds.isEmpty(), onBack = onBack)
+    LaunchedEffect(actions.feedback?.id) {
+        actions.feedback?.let {
+            if (!it.isError) { createDialog = false; renameTarget = null; deleteTargets = emptyList() }
+            snackbar.showSnackbar(strings.resolve(it.message).orEmpty())
+            onConsumeFeedback()
+        }
+    }
+    LaunchedEffect(actions.transferFeedback?.id) {
+        actions.transferFeedback?.let {
+            val result = snackbar.showSnackbar(
+                strings.resolve(it.message).orEmpty(),
+                strings[MobileString.ViewTransfers].takeIf { _ -> it.canOpenTransfers },
+            )
+            onConsumeTransferFeedback()
+            if (result == SnackbarResult.ActionPerformed) onOpenTransfers()
+        }
+    }
+    LaunchedEffect(actions.permissionError) {
+        actions.permissionError?.let {
+            snackbar.showSnackbar(strings.resolve(it).orEmpty())
+            onClearPermissionError()
+        }
+    }
+    LaunchedEffect(actions.mutationError, actions.mutationErrorKind) {
+        if (actions.mutationErrorKind == com.betterclouddrive.mobile.feature.files.FileMutationKind.MOVE ||
+            actions.mutationErrorKind == com.betterclouddrive.mobile.feature.files.FileMutationKind.DELETE
+        ) {
+            actions.mutationError?.let { snackbar.showSnackbar(strings.resolve(it).orEmpty()) }
+        }
+    }
     Scaffold(
         modifier = Modifier.testTag("team-browser-screen"),
+        snackbarHost = { SnackbarHost(snackbar, Modifier.testTag("team-feedback")) },
         topBar = { TopAppBar(
             title = { TeamBreadcrumb(state, onBreadcrumb) },
             navigationIcon = { IconButton(onBack, Modifier.testTag("team-browser-back")) {
@@ -275,26 +360,97 @@ internal fun TeamBrowserScreen(
                         Button(onRetryWorkspace, Modifier.testTag("team-workspace-retry")) { Text(strings[MobileString.Retry]) }
                         OutlinedButton(onBackToTeams) { Text(strings[MobileString.BackToTeams]) }
                     }
-                    else -> TeamDirectoryContent(state, onOpenFolder, onSelect, onLoadMore)
+                    else -> Column(Modifier.fillMaxSize()) {
+                        if (actions.selectedIds.isNotEmpty()) Row(
+                            Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(strings.format(MobileString.SelectedCount, actions.selectedIds.size), Modifier.weight(1f))
+                            OutlinedButton(onClearSelection) { Text(strings[MobileString.Cancel]) }
+                            Button({ deleteTargets = state.current.items.filter { it.id in actions.selectedIds } }, Modifier.testTag("team-delete-selected")) {
+                                Icon(Icons.Default.Delete, null); Text(strings[MobileString.Delete])
+                            }
+                        } else Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            if (actions.permissionLoading) Text(strings[MobileString.TeamPermissionLoading])
+                            if (actions.directoryPermission?.canWrite == true) {
+                                OutlinedButton({ createDialog = true }, Modifier.testTag("team-create-folder")) {
+                                    Icon(Icons.Default.Add, null); Text(strings[MobileString.CreateFolder])
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Button(uploadLauncher, Modifier.testTag("team-upload")) {
+                                    Icon(Icons.Default.Upload, null); Text(strings[MobileString.Upload])
+                                }
+                            }
+                        }
+                        TeamDirectoryContent(
+                            state, actions, onOpenFolder, onSelect, onLoadMore, onRequestPermission,
+                            onToggleSelection, { renameTarget = it }, onOpenMovePicker,
+                            { deleteTargets = listOf(it) }, ::download,
+                        )
+                    }
                 }
             }
             if (wide && state.selectedFile != null) {
                 HorizontalDivider(Modifier.width(1.dp).fillMaxSize())
-                TeamFileDetails(state.selectedFile, onPreview, Modifier.weight(.38f).fillMaxSize())
+                TeamFileDetails(
+                    state.selectedFile, actions, onPreview, onRequestPermission,
+                    { renameTarget = it }, onOpenMovePicker, { deleteTargets = listOf(it) }, ::download,
+                    Modifier.weight(.38f).fillMaxSize(),
+                )
             }
         }
     }
     if (!wide && state.selectedFile != null) ModalBottomSheet(onDismissRequest = { onSelect(null) }) {
-        TeamFileDetails(state.selectedFile, onPreview, Modifier.fillMaxWidth())
+        TeamFileDetails(
+            state.selectedFile, actions, onPreview, onRequestPermission,
+            { renameTarget = it }, onOpenMovePicker, { deleteTargets = listOf(it) }, ::download,
+            Modifier.fillMaxWidth(),
+        )
     }
+    if (createDialog) TeamNameDialog(
+        strings[MobileString.CreateFolder], "", actions.mutation == com.betterclouddrive.mobile.feature.files.FileMutationKind.CREATE_FOLDER,
+        actions.mutationError.takeIf { actions.mutationErrorKind == com.betterclouddrive.mobile.feature.files.FileMutationKind.CREATE_FOLDER },
+        { createDialog = false }, onCreateFolder,
+    )
+    renameTarget?.let { file -> TeamNameDialog(
+        strings[MobileString.Rename], file.fileName,
+        actions.mutation == com.betterclouddrive.mobile.feature.files.FileMutationKind.RENAME,
+        actions.mutationError.takeIf { actions.mutationErrorKind == com.betterclouddrive.mobile.feature.files.FileMutationKind.RENAME },
+        { renameTarget = null }, { onRename(file, it) },
+    ) }
+    if (deleteTargets.isNotEmpty()) AlertDialog(
+        onDismissRequest = { if (actions.mutation == null) deleteTargets = emptyList() },
+        title = { Text(if (deleteTargets.size == 1) strings.format(MobileString.DeleteSingleTitle, deleteTargets.single().fileName)
+            else strings[MobileString.DeleteMultipleTitle]) },
+        text = { Text(if (deleteTargets.size == 1) strings[MobileString.DeleteSingleMessage]
+            else strings.format(MobileString.DeleteMultipleMessage, deleteTargets.size)) },
+        confirmButton = { Button(
+            { onDelete(deleteTargets.map(FileItem::id).toSet()) }, enabled = actions.mutation == null,
+            modifier = Modifier.testTag("team-delete-confirm"),
+        ) { Text(strings[MobileString.Delete]) } },
+        dismissButton = { OutlinedButton({ deleteTargets = emptyList() }, enabled = actions.mutation == null) { Text(strings[MobileString.Cancel]) } },
+    )
+    actions.folderPicker?.let { TeamMovePicker(
+        it, wide, actions.mutation != null, onOpenPickerFolder, onPickerBack,
+        onRetryPicker, onClosePicker, onConfirmMove,
+    ) }
 }
 
 @Composable
 private fun TeamDirectoryContent(
     state: TeamBrowserState,
+    actions: TeamFileActionsState,
     onOpenFolder: (FileItem) -> Unit,
     onSelect: (FileItem) -> Unit,
     onLoadMore: () -> Unit,
+    onRequestPermission: (FileItem) -> Unit,
+    onToggleSelection: (FileItem) -> Unit,
+    onRename: (FileItem) -> Unit,
+    onMove: (FileItem) -> Unit,
+    onDelete: (FileItem) -> Unit,
+    onDownload: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     val current = state.current
@@ -304,14 +460,22 @@ private fun TeamDirectoryContent(
         current.hasLoaded && current.items.isEmpty() -> TeamEmptyPane(MobileString.TeamDirectoryEmpty, MobileString.TeamDirectoryEmptyDetail)
         state.viewMode == FileViewMode.LIST -> LazyColumn(Modifier.fillMaxSize().testTag("team-file-list")) {
             items(current.items, key = FileItem::id) { file ->
-                TeamFileRow(file) { if (file.isFolder) onOpenFolder(file) else onSelect(file) }
+                TeamFileRow(
+                    file, file.id in actions.selectedIds, actions.itemPermissions[file.id],
+                    { if (actions.selectedIds.isNotEmpty()) onToggleSelection(file) else if (file.isFolder) onOpenFolder(file) else onSelect(file) },
+                    { onToggleSelection(file) }, { onRequestPermission(file) }, onRename, onMove, onDelete, onDownload,
+                )
                 if (file.id == current.items.lastOrNull()?.id && current.hasMore) LaunchedEffect(file.id) { onLoadMore() }
             }
             teamLoadMoreFooter(current.loadingMore, current.loadMoreError, onLoadMore)
         }
         else -> LazyVerticalGrid(GridCells.Adaptive(150.dp), Modifier.fillMaxSize().testTag("team-file-grid")) {
             items(current.items, key = FileItem::id) { file ->
-                TeamFileCard(file) { if (file.isFolder) onOpenFolder(file) else onSelect(file) }
+                TeamFileCard(
+                    file, file.id in actions.selectedIds, actions.itemPermissions[file.id],
+                    { if (actions.selectedIds.isNotEmpty()) onToggleSelection(file) else if (file.isFolder) onOpenFolder(file) else onSelect(file) },
+                    { onToggleSelection(file) }, { onRequestPermission(file) }, onRename, onMove, onDelete, onDownload,
+                )
                 if (file.id == current.items.lastOrNull()?.id && current.hasMore) LaunchedEffect(file.id) { onLoadMore() }
             }
             if (current.loadingMore) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
@@ -328,37 +492,54 @@ private fun androidx.compose.foundation.lazy.LazyListScope.teamLoadMoreFooter(
     } }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TeamFileRow(file: FileItem, onClick: () -> Unit) {
+private fun TeamFileRow(
+    file: FileItem, selected: Boolean, permission: com.betterclouddrive.mobile.core.model.TeamEffectivePermission?,
+    onClick: () -> Unit, onLongClick: () -> Unit, onRequestPermission: () -> Unit,
+    onRename: (FileItem) -> Unit, onMove: (FileItem) -> Unit, onDelete: (FileItem) -> Unit, onDownload: (FileItem) -> Unit,
+) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp).testTag("team-file-${file.id}"),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp).testTag("team-file-${file.id}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(if (file.isFolder) Icons.Default.Folder else Icons.Default.Description, null)
+        Icon(if (selected) Icons.Default.Delete else if (file.isFolder) Icons.Default.Folder else Icons.Default.Description, null)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(formatFileSize(file.fileSize)) }
+        TeamFileActionMenu(file, permission, onRequestPermission, onRename, onMove, onDelete, onDownload)
     }
     HorizontalDivider()
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TeamFileCard(file: FileItem, onClick: () -> Unit) {
-    Card(Modifier.padding(8.dp).clickable(onClick = onClick).testTag("team-grid-${file.id}")) {
+private fun TeamFileCard(
+    file: FileItem, selected: Boolean, permission: com.betterclouddrive.mobile.core.model.TeamEffectivePermission?,
+    onClick: () -> Unit, onLongClick: () -> Unit, onRequestPermission: () -> Unit,
+    onRename: (FileItem) -> Unit, onMove: (FileItem) -> Unit, onDelete: (FileItem) -> Unit, onDownload: (FileItem) -> Unit,
+) {
+    Card(Modifier.padding(8.dp).combinedClickable(onClick = onClick, onLongClick = onLongClick).testTag("team-grid-${file.id}")) {
         Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(if (file.isFolder) Icons.Default.Folder else Icons.Default.Description, null)
+            Icon(if (selected) Icons.Default.Delete else if (file.isFolder) Icons.Default.Folder else Icons.Default.Description, null)
             Text(file.fileName, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(formatFileSize(file.fileSize), style = MaterialTheme.typography.labelSmall)
+            TeamFileActionMenu(file, permission, onRequestPermission, onRename, onMove, onDelete, onDownload)
         }
     }
 }
 
 @Composable
-private fun TeamFileDetails(file: FileItem?, onPreview: (FileItem) -> Unit, modifier: Modifier) {
+private fun TeamFileDetails(
+    file: FileItem?, actions: TeamFileActionsState, onPreview: (FileItem) -> Unit,
+    onRequestPermission: (FileItem) -> Unit, onRename: (FileItem) -> Unit,
+    onMove: (FileItem) -> Unit, onDelete: (FileItem) -> Unit, onDownload: (FileItem) -> Unit,
+    modifier: Modifier,
+) {
     val strings = LocalMobileStrings.current
     if (file == null) return
     Column(modifier.padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(file.fileName, style = MaterialTheme.typography.titleLarge)
-        Text(strings[MobileString.TeamReadOnly], color = MaterialTheme.colorScheme.secondary)
         TeamDetailRow(strings[MobileString.Type], file.mimeType ?: file.fileType)
         TeamDetailRow(strings[MobileString.Size], formatFileSize(file.fileSize))
         TeamDetailRow(strings[MobileString.CreatedAt], formatDate(file.createdAt))
@@ -367,7 +548,121 @@ private fun TeamFileDetails(file: FileItem?, onPreview: (FileItem) -> Unit, modi
         if (!file.isFolder && file.previewKind() != PreviewKind.UNSUPPORTED) Button(
             onClick = { onPreview(file) }, modifier = Modifier.testTag("team-preview-${file.id}"),
         ) { Icon(Icons.Default.Visibility, null); Text(strings[MobileString.Preview]) }
+        if (!file.isFolder) OutlinedButton({ onDownload(file) }, Modifier.testTag("team-download-${file.id}")) {
+            Icon(Icons.Default.Download, null); Text(strings[MobileString.Download])
+        }
+        TeamFileActionMenu(file, actions.itemPermissions[file.id], { onRequestPermission(file) }, onRename, onMove, onDelete, onDownload)
     }
+}
+
+@Composable
+private fun TeamFileActionMenu(
+    file: FileItem,
+    permission: com.betterclouddrive.mobile.core.model.TeamEffectivePermission?,
+    onRequestPermission: () -> Unit,
+    onRename: (FileItem) -> Unit,
+    onMove: (FileItem) -> Unit,
+    onDelete: (FileItem) -> Unit,
+    onDownload: (FileItem) -> Unit,
+) {
+    val strings = LocalMobileStrings.current
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton({ onRequestPermission(); expanded = true }, Modifier.testTag("team-more-${file.id}")) {
+            Icon(Icons.Default.MoreVert, strings[MobileString.MoreActions])
+        }
+        DropdownMenu(expanded, { expanded = false }) {
+            if (!file.isFolder) DropdownMenuItem(
+                text = { Text(strings[MobileString.Download]) }, leadingIcon = { Icon(Icons.Default.Download, null) },
+                onClick = { expanded = false; onDownload(file) },
+            )
+            if (permission?.canWrite == true) {
+                DropdownMenuItem(
+                    text = { Text(strings[MobileString.Rename]) }, leadingIcon = { Icon(Icons.Default.Edit, null) },
+                    onClick = { expanded = false; onRename(file) },
+                )
+                DropdownMenuItem(
+                    text = { Text(strings[MobileString.Move]) }, leadingIcon = { Icon(Icons.Default.DriveFileMove, null) },
+                    onClick = { expanded = false; onMove(file) },
+                )
+            }
+            if (permission?.canDelete == true) DropdownMenuItem(
+                text = { Text(strings[MobileString.Delete]) }, leadingIcon = { Icon(Icons.Default.Delete, null) },
+                onClick = { expanded = false; onDelete(file) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TeamNameDialog(
+    title: String, initial: String, busy: Boolean, error: UiMessage?,
+    onDismiss: () -> Unit, onConfirm: (String) -> Unit,
+) {
+    val strings = LocalMobileStrings.current
+    var value by remember(initial) { mutableStateOf(initial) }
+    val normalized = value.trim()
+    val localError = when {
+        normalized.isEmpty() -> MobileString.NameRequired
+        normalized.length > 255 -> MobileString.NameTooLong
+        else -> null
+    }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() }, title = { Text(title) },
+        text = { OutlinedTextField(
+            value, { value = it }, enabled = !busy, singleLine = true,
+            label = { Text(strings[MobileString.NewName]) }, isError = error != null || localError != null,
+            supportingText = {
+                if (error != null) Text(strings.resolve(error).orEmpty())
+                else localError?.let { Text(strings[it]) }
+            },
+            modifier = Modifier.fillMaxWidth().testTag("team-name-input"),
+        ) },
+        confirmButton = { Button({ onConfirm(value) }, enabled = !busy && localError == null, modifier = Modifier.testTag("team-name-confirm")) {
+            Text(strings[MobileString.Confirm])
+        } },
+        dismissButton = { OutlinedButton(onDismiss, enabled = !busy) { Text(strings[MobileString.Cancel]) } },
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TeamMovePicker(
+    picker: TeamFolderPickerState, wide: Boolean, busy: Boolean,
+    onOpenFolder: (FileItem) -> Unit, onBack: () -> Unit, onRetry: () -> Unit,
+    onDismiss: () -> Unit, onConfirm: () -> Unit,
+) {
+    val strings = LocalMobileStrings.current
+    val content: @Composable () -> Unit = {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(strings[MobileString.ChooseDestination], style = MaterialTheme.typography.titleLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onBack, enabled = picker.breadcrumb.size > 1) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
+                Text(picker.breadcrumb.lastOrNull()?.name?.ifBlank { strings[MobileString.DestinationRoot] }.orEmpty())
+            }
+            when {
+                picker.loading -> CircularProgressIndicator()
+                picker.error != null -> OutlinedButton(onRetry) { Text(strings[MobileString.Retry]) }
+                picker.folders.isEmpty() -> Text(strings[MobileString.DestinationEmpty])
+                else -> LazyColumn(Modifier.fillMaxWidth().height(320.dp)) {
+                    items(picker.folders, key = FileItem::id) { folder ->
+                        Row(Modifier.fillMaxWidth().clickable { onOpenFolder(folder) }.padding(12.dp)) {
+                            Icon(Icons.Default.Folder, null); Spacer(Modifier.width(8.dp)); Text(folder.fileName)
+                        }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onDismiss, enabled = !busy) { Text(strings[MobileString.Cancel]) }
+                Spacer(Modifier.width(8.dp))
+                Button(onConfirm, enabled = !busy && picker.canConfirm, modifier = Modifier.testTag("team-move-confirm")) {
+                    Text(strings[MobileString.Move])
+                }
+            }
+        }
+    }
+    if (wide) AlertDialog(onDismissRequest = onDismiss, confirmButton = {}, text = content)
+    else ModalBottomSheet(onDismissRequest = onDismiss) { content() }
 }
 
 @Composable
@@ -379,6 +674,7 @@ private fun TeamDetailRow(label: String, value: String) {
 @Composable
 internal fun TeamSearchScreen(
     state: TeamSearchState,
+    documentPicker: DocumentPicker,
     onBack: () -> Unit,
     onQuery: (String) -> Unit,
     onSubmit: () -> Unit,
@@ -387,9 +683,20 @@ internal fun TeamSearchScreen(
     onOpenFolder: (FileItem) -> Unit,
     onOpenLocation: (FileItem) -> Unit,
     onPreview: (FileItem) -> Unit,
+    onDownload: (FileItem, String) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var selectedUnsupported by remember { mutableStateOf<FileItem?>(null) }
+    var pendingDownload by remember { mutableStateOf<FileItem?>(null) }
+    val downloadLauncher = documentPicker.rememberDownloadLauncher { target ->
+        pendingDownload?.let { onDownload(it, target.handle) }
+        pendingDownload = null
+    }
+    fun download(file: FileItem) {
+        if (file.isFolder) return
+        pendingDownload = file
+        downloadLauncher(DownloadRequest(file.fileName, file.mimeType))
+    }
     BackHandler(onBack = onBack)
     Scaffold(
         modifier = Modifier.testTag("team-search-screen"),
@@ -414,14 +721,18 @@ internal fun TeamSearchScreen(
             else -> LazyColumn(Modifier.fillMaxSize().testTag("team-search-results")) {
                 items(state.items, key = FileItem::id) { file ->
                     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                        TeamFileRow(file) {
-                            if (file.isFolder) onOpenFolder(file)
-                            else if (file.previewKind() != PreviewKind.UNSUPPORTED) onPreview(file)
-                            else selectedUnsupported = file
-                        }
+                        TeamFileRow(
+                            file, false, null,
+                            {
+                                if (file.isFolder) onOpenFolder(file)
+                                else if (file.previewKind() != PreviewKind.UNSUPPORTED) onPreview(file)
+                                else selectedUnsupported = file
+                            }, {}, {}, {}, {}, {}, ::download,
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton({ onOpenLocation(file) }, Modifier.testTag("team-open-location-${file.id}")) { Text(strings[MobileString.OpenLocation]) }
                             if (!file.isFolder && file.previewKind() != PreviewKind.UNSUPPORTED) OutlinedButton({ onPreview(file) }) { Text(strings[MobileString.Preview]) }
+                            if (!file.isFolder) OutlinedButton({ download(file) }) { Text(strings[MobileString.Download]) }
                         }
                     }
                     if (file.id == state.items.lastOrNull()?.id && state.hasMore) LaunchedEffect(file.id) { onLoadMore() }
@@ -436,7 +747,9 @@ internal fun TeamSearchScreen(
         }
     } }
     selectedUnsupported?.let { file -> ModalBottomSheet(onDismissRequest = { selectedUnsupported = null }) {
-        TeamFileDetails(file, onPreview, Modifier.fillMaxWidth())
+        TeamFileDetails(
+            file, TeamFileActionsState(), onPreview, {}, {}, {}, {}, ::download, Modifier.fillMaxWidth(),
+        )
     } }
 }
 
@@ -444,21 +757,31 @@ internal fun TeamSearchScreen(
 @Composable
 internal fun TeamPreviewScreen(
     state: TeamPreviewState,
+    documentPicker: DocumentPicker,
     officeRenderer: OfficeRenderer,
     mediaRenderer: MediaPreviewRenderer,
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onPositionChanged: (Long) -> Unit,
     onRendererError: (UiMessage) -> Unit,
+    onDownload: (FileItem, String) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var officeStatus by remember(state.teamId, state.fileId) { mutableStateOf<UiMessage?>(null) }
+    var pendingDownload by remember { mutableStateOf<FileItem?>(null) }
+    val downloadLauncher = documentPicker.rememberDownloadLauncher { target ->
+        pendingDownload?.let { onDownload(it, target.handle) }
+        pendingDownload = null
+    }
     BackHandler(onBack = onBack)
     Scaffold(
         modifier = Modifier.testTag("team-preview-screen"),
         topBar = { TopAppBar(
             title = { Column { Text(state.file?.fileName ?: strings[MobileString.Preview]); Text(strings[MobileString.TeamReadOnly], style = MaterialTheme.typography.labelSmall) } },
             navigationIcon = { IconButton(onBack, Modifier.testTag("team-preview-back")) { Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent]) } },
+            actions = { state.file?.takeIf { !it.isFolder }?.let { file -> IconButton({
+                pendingDownload = file; downloadLauncher(DownloadRequest(file.fileName, file.mimeType))
+            }, Modifier.testTag("team-preview-download")) { Icon(Icons.Default.Download, strings[MobileString.Download]) } } },
         ) },
     ) { padding -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
         when {

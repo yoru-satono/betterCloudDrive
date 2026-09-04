@@ -1,10 +1,12 @@
 package com.betterclouddrive.dal.repository;
 
 import com.betterclouddrive.dal.entity.TeamEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,10 @@ import java.util.Optional;
 public interface TeamRepository extends JpaRepository<TeamEntity, Long>, JpaSpecificationExecutor<TeamEntity> {
 
     Optional<TeamEntity> findByIdAndDeletedAtIsNull(Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM TeamEntity t WHERE t.id = :teamId AND t.deletedAt IS NULL")
+    Optional<TeamEntity> findActiveByIdForUpdate(@Param("teamId") Long teamId);
 
     List<TeamEntity> findByDeletedAtIsNull();
 

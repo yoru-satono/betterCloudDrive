@@ -8,6 +8,7 @@ import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.FileService;
 import com.betterclouddrive.service.TeamAuditService;
@@ -43,6 +44,7 @@ public class FileServiceImpl implements FileService {
     private final FileVersionRepository fileVersionRepository;
     private final TeamAuditService teamAuditService;
     private final TeamPermissionService teamPermissionService;
+    private final TeamRepository teamRepository;
 
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
     private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
@@ -294,6 +296,10 @@ public class FileServiceImpl implements FileService {
 
     @Override
     public PageResult<FileEntity> listTeamFiles(Long userId, Long teamId, Long parentId, int page, int size, String sortBy, String order) {
+        if (parentId != null) {
+            FileEntity parent = getTeamFile(teamId, parentId);
+            if (!"folder".equals(parent.getFileType())) throw new BusinessException(ApiCode.FILE_NOT_FOUND);
+        }
         Specification<FileEntity> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.equal(root.get("teamId"), teamId));
@@ -309,6 +315,7 @@ public class FileServiceImpl implements FileService {
         List<FileEntity> readable = fileRepository
                 .findAll(spec, personalFileSort(sortBy, order))
                 .stream()
+                .filter(this::hasActiveAncestors)
                 .filter(file -> canRead(userId, teamId, file.getId()))
                 .toList();
         return PageResults.fromFiltered(readable, page, size);
@@ -317,7 +324,7 @@ public class FileServiceImpl implements FileService {
     @Override
     public FileEntity getTeamFile(Long teamId, Long fileId) {
         FileEntity file = fileRepository.findById(fileId).orElse(null);
-        if (file == null || !Objects.equals(file.getTeamId(), teamId) || file.getIsDeleted()) {
+        if (file == null || !Objects.equals(file.getTeamId(), teamId) || file.getIsDeleted() || !hasActiveAncestors(file)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         return file;
@@ -326,6 +333,9 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileEntity createTeamFolder(Long teamId, Long userId, Long parentId, String folderName) {
+        lockTeamMutations(teamId);
+        teamPermissionService.requireParentWrite(userId, teamId, parentId);
+        folderName = normalizeFileName(folderName);
         validateTeamTargetParent(teamId, parentId);
         if (teamNameExists(teamId, parentId, folderName)) {
             throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
@@ -350,7 +360,13 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public FileEntity renameTeamFile(Long teamId, Long actorUserId, Long fileId, String newName) {
+        lockTeamMutations(teamId);
+        teamPermissionService.requireWrite(actorUserId, teamId, fileId);
+        newName = normalizeFileName(newName);
         FileEntity file = getTeamFile(teamId, fileId);
+        if (Objects.equals(file.getFileName(), newName)) {
+            return file;
+        }
         if (!Objects.equals(file.getFileName(), newName) && teamNameExists(teamId, file.getParentId(), newName)) {
             throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
         }
@@ -364,10 +380,16 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void moveTeamFile(Long teamId, Long actorUserId, Long fileId, Long targetParentId) {
+        lockTeamMutations(teamId);
+        teamPermissionService.requireWrite(actorUserId, teamId, fileId);
+        teamPermissionService.requireParentWrite(actorUserId, teamId, targetParentId);
         FileEntity file = getTeamFile(teamId, fileId);
+        if (Objects.equals(file.getParentId(), targetParentId)) {
+            return;
+        }
         FileEntity targetParent = validateTeamTargetParent(teamId, targetParentId);
         if ("folder".equals(file.getFileType()) && targetParent != null && isSameOrDescendant(targetParent, file)) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Cannot move a folder into itself or its subfolder");
+            throw invalidDestination("Cannot move a folder into itself or its descendant");
         }
         if (!Objects.equals(file.getParentId(), targetParentId) && teamNameExists(teamId, targetParentId, file.getFileName())) {
             throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
@@ -381,15 +403,27 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void deleteTeamFiles(Long teamId, Long actorUserId, List<Long> fileIds) {
-        for (Long fileId : fileIds) {
-            FileEntity file = getTeamFile(teamId, fileId);
-            file.setIsDeleted(true);
-            file.setDeletedAt(LocalDateTime.now());
-            fileRepository.save(file);
-            teamAuditService.record(teamId, actorUserId, "FILE_DELETE", "FILE", fileId, file.getFileName());
-            if ("file".equals(file.getFileType()) && file.getFileSize() > 0) {
-                redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, -file.getFileSize());
-            }
+        lockTeamMutations(teamId);
+        List<FileEntity> requested = new LinkedHashSet<>(fileIds).stream()
+                .map(fileId -> getTeamFile(teamId, fileId))
+                .toList();
+        java.util.Set<Long> requestedIds = requested.stream().map(FileEntity::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        List<FileEntity> roots = requested.stream()
+                .filter(file -> !hasSelectedTeamAncestor(file, requestedIds))
+                .toList();
+        for (FileEntity root : roots) {
+            requireDeleteTree(actorUserId, teamId, root);
+        }
+        LocalDateTime deletedAt = LocalDateTime.now();
+        long releasedBytes = 0;
+        for (FileEntity root : roots) {
+            releasedBytes = Math.addExact(releasedBytes, activeTreeStoredBytes(root));
+            softDeleteTree(root, deletedAt);
+            teamAuditService.record(teamId, actorUserId, "FILE_DELETE", "FILE", root.getId(), root.getFileName());
+        }
+        if (releasedBytes > 0) {
+            redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, -releasedBytes);
         }
     }
 
@@ -463,6 +497,7 @@ public class FileServiceImpl implements FileService {
                         Sort.Order.asc("fileName"),
                         Sort.Order.asc("id")))
                 .stream()
+                .filter(this::hasActiveAncestors)
                 .filter(file -> canRead(userId, teamId, file.getId()))
                 .toList();
         return PageResults.fromFiltered(readable, page, size);
@@ -642,6 +677,7 @@ public class FileServiceImpl implements FileService {
         if (targetParent == null
                 || targetParent.getIsDeleted()
                 || !Objects.equals(targetParent.getTeamId(), teamId)
+                || !hasActiveAncestors(targetParent)
                 || !"folder".equals(targetParent.getFileType())) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
@@ -721,6 +757,12 @@ public class FileServiceImpl implements FileService {
         return fileRepository.findAll(spec);
     }
 
+    private void lockTeamMutations(Long teamId) {
+        if (teamRepository.findActiveByIdForUpdate(teamId).isEmpty()) {
+            throw new BusinessException(ApiCode.NOT_FOUND, "Team not found");
+        }
+    }
+
     private boolean hasSelectedAncestor(FileEntity file, java.util.Set<Long> selectedIds) {
         Long parentId = file.getParentId();
         while (parentId != null) {
@@ -734,6 +776,35 @@ public class FileServiceImpl implements FileService {
             parentId = parent.getParentId();
         }
         return false;
+    }
+
+    private boolean hasSelectedTeamAncestor(FileEntity file, java.util.Set<Long> selectedIds) {
+        Long parentId = file.getParentId();
+        while (parentId != null) {
+            if (selectedIds.contains(parentId)) return true;
+            FileEntity parent = fileRepository.findById(parentId).orElse(null);
+            if (parent == null || !Objects.equals(parent.getTeamId(), file.getTeamId())) return false;
+            parentId = parent.getParentId();
+        }
+        return false;
+    }
+
+    private void requireDeleteTree(Long userId, Long teamId, FileEntity file) {
+        teamPermissionService.requireDelete(userId, teamId, file.getId());
+        for (FileEntity child : activeChildrenOf(file)) {
+            requireDeleteTree(userId, teamId, child);
+        }
+    }
+
+    private boolean hasActiveAncestors(FileEntity file) {
+        Long parentId = file.getParentId();
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        while (parentId != null && seen.add(parentId)) {
+            FileEntity parent = fileRepository.findById(parentId).orElse(null);
+            if (parent == null || parent.getIsDeleted() || !sameFileSpace(parent, file)) return false;
+            parentId = parent.getParentId();
+        }
+        return parentId == null;
     }
 
     private long activeTreeStoredBytes(FileEntity file) {

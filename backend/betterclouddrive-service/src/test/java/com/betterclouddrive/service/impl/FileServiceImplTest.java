@@ -7,9 +7,11 @@ import static org.mockito.Mockito.*;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
@@ -60,6 +62,9 @@ class FileServiceImplTest {
     private TeamPermissionService teamPermissionService;
 
     @Mock
+    private TeamRepository teamRepository;
+
+    @Mock
     private ValueOperations<String, String> valueOps;
 
     @InjectMocks
@@ -69,6 +74,8 @@ class FileServiceImplTest {
     void allowPersonalMutationLock() {
         lenient().when(userRepository.findByIdForUpdate(anyLong()))
                 .thenReturn(Optional.of(UserEntity.builder().id(1L).build()));
+        lenient().when(teamRepository.findActiveByIdForUpdate(anyLong()))
+                .thenReturn(Optional.of(TeamEntity.builder().id(10L).build()));
     }
 
     @Test
@@ -294,6 +301,26 @@ class FileServiceImplTest {
         assertThat(folder.getTeamId()).isEqualTo(10L);
         assertThat(folder.getUserId()).isEqualTo(2L);
         assertThat(folder.getFileType()).isEqualTo("folder");
+    }
+
+    @Test
+    void createTeamFolder_shouldTrimAndValidateName() {
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        FileEntity folder = fileService.createTeamFolder(10L, 2L, null, "  Docs  ");
+        assertThat(folder.getFileName()).isEqualTo("Docs");
+        assertThatThrownBy(() -> fileService.createTeamFolder(10L, 2L, null, "   "))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getMessageKey()).isEqualTo("error.invalidFileName"));
+    }
+
+    @Test
+    void renameTeamFile_shouldBeIdempotentAfterNormalization() {
+        FileEntity file = FileEntity.builder().id(1L).teamId(10L).fileName("old.txt").isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        FileEntity unchanged = fileService.renameTeamFile(10L, 2L, 1L, " old.txt ");
+        assertThat(unchanged).isSameAs(file);
+        verify(fileRepository, never()).save(any());
+        verify(teamAuditService, never()).record(eq(10L), eq(2L), eq("FILE_RENAME"), any(), any(), any());
     }
 
     @Test
@@ -617,6 +644,20 @@ class FileServiceImplTest {
 
         assertThat(file.getIsDeleted()).isTrue();
         verify(valueOps).increment("team:storage:incr:10", -2048L);
+        verify(teamPermissionService).requireDelete(2L, 10L, 1L);
+    }
+
+    @Test
+    void deleteTeamFiles_shouldDeduplicateIdsBeforePermissionAndMutation() {
+        FileEntity file = FileEntity.builder()
+                .id(1L).userId(100L).teamId(10L).fileType("file").fileSize(0L).isDeleted(false).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
+
+        fileService.deleteTeamFiles(10L, 2L, List.of(1L, 1L));
+
+        verify(teamPermissionService, times(1)).requireDelete(2L, 10L, 1L);
+        verify(fileRepository, times(1)).save(file);
     }
 
     @Test

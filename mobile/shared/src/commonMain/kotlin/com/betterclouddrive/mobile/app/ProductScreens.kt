@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ClearAll
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -62,6 +63,7 @@ import com.betterclouddrive.mobile.core.platform.ThemeMode
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
+import com.betterclouddrive.mobile.feature.transfers.TransferScope
 import kotlinx.coroutines.launch
 
 @Composable
@@ -75,9 +77,16 @@ fun TransferQueueScreen(
 ) {
     val strings = LocalMobileStrings.current
     var selectedDirection by rememberSaveable { mutableStateOf(TransferDirection.UPLOAD) }
+    var selectedScope by rememberSaveable { mutableStateOf(TransferScopeFilter.ALL) }
     var confirmClear by remember { mutableStateOf(false) }
     val terminal = tasks.filter { it.status in TERMINAL_TRANSFER_STATUSES }
-    val visible = tasks.filter { it.direction == selectedDirection }.sortedWith(
+    val visible = tasks.filter { task ->
+        task.direction == selectedDirection && when (selectedScope) {
+            TransferScopeFilter.ALL -> true
+            TransferScopeFilter.PERSONAL -> task.scope is TransferScope.Personal
+            TransferScopeFilter.TEAM -> task.scope is TransferScope.Team
+        }
+    }.sortedWith(
         compareBy<TransferTask> { it.status in TERMINAL_TRANSFER_STATUSES }
             .thenComparator { left, right ->
                 if (left.status in TERMINAL_TRANSFER_STATUSES) right.updatedAt.compareTo(left.updatedAt)
@@ -107,6 +116,24 @@ fun TransferQueueScreen(
                     onClick = { selectedDirection = direction },
                     text = { Text(strings.format(label, tasks.count { it.direction == direction })) },
                     modifier = Modifier.testTag("transfer-tab-${direction.name.lowercase()}"),
+                )
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            TransferScopeFilter.entries.forEach { filter ->
+                val key = when (filter) {
+                    TransferScopeFilter.ALL -> MobileString.TransferScopeAll
+                    TransferScopeFilter.PERSONAL -> MobileString.TransferScopePersonal
+                    TransferScopeFilter.TEAM -> MobileString.TransferScopeTeam
+                }
+                AssistChip(
+                    onClick = { selectedScope = filter },
+                    label = { Text(strings[key]) },
+                    leadingIcon = if (selectedScope == filter) ({ Icon(Icons.Default.Check, contentDescription = null) }) else null,
+                    modifier = Modifier.testTag("transfer-scope-${filter.name.lowercase()}"),
                 )
             }
         }
@@ -163,6 +190,14 @@ private fun TransferRow(
                 Text(task.fileName, Modifier.weight(1f).padding(horizontal = 8.dp))
                 AssistChip(onClick = {}, label = { Text(strings[statusKey(task.status)]) })
             }
+            Text(
+                when (val scope = task.scope) {
+                    is TransferScope.Personal -> strings[MobileString.TransferScopePersonal]
+                    is TransferScope.Team -> strings.format(MobileString.TransferTeamId, scope.teamId)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.testTag("transfer-scope-label-${task.id}"),
+            )
             Text(
                 strings.format(MobileString.TransferBytes, formatFileSize(task.bytesDone), formatFileSize(task.bytesTotal), task.progressPercent()),
                 style = MaterialTheme.typography.bodySmall,
@@ -359,6 +394,8 @@ fun ProfileScreen(
     }
 }
 
+private enum class TransferScopeFilter { ALL, PERSONAL, TEAM }
+
 private fun formatBytes(value: Long): String {
     if (value < 1024) return "$value B"
     val units = listOf("KiB", "MiB", "GiB", "TiB")
@@ -527,6 +564,7 @@ private fun transferErrorKey(key: String): MobileString = when (key) {
     "error.unauthorized" -> MobileString.ErrorUnauthorized
     "error.storageQuotaExceeded" -> MobileString.ErrorQuota
     "error.fileNameExists" -> MobileString.ErrorNameConflict
+    "error.forbidden" -> MobileString.ErrorPermissionChanged
     "error.network", "error.interrupted" -> MobileString.ErrorNetworkRetry
     "error.serverChanged" -> MobileString.ErrorServerChanged
     "error.invalidTransfer" -> MobileString.ErrorInvalidTransfer

@@ -53,6 +53,8 @@ public class UploadServiceImpl implements UploadService {
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
     private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
     private static final int CHUNK_SIZE = 5242880;
+    private static final int MAX_FILE_NAME_LENGTH = 255;
+    private static final String INVALID_FILE_NAME = "error.invalidFileName";
 
     @Override
     @Transactional
@@ -226,8 +228,12 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public UploadSessionEntity initTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash, int totalChunks) {
+        lockTeamMutations(teamId);
+        teamPermissionService.requireParentWrite(userId, teamId, parentId);
+        fileName = normalizeFileName(fileName);
         validateUploadShape(fileSize, totalChunks);
         validateTeamParent(teamId, parentId);
+        requireTeamNameAvailable(teamId, parentId, fileName);
         checkTeamStorageQuota(teamId, fileSize);
 
         String sessionId = UUID.randomUUID().toString();
@@ -300,6 +306,7 @@ public class UploadServiceImpl implements UploadService {
     @Transactional
     public Long completeTeamUpload(Long teamId, String sessionId, Long userId) {
         UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
+        lockTeamMutations(teamId);
         teamPermissionService.requireParentWrite(userId, teamId, session.getParentId());
         if (Objects.equals(session.getStatus(), 2)) {
             return resolveCompletedFileId(session, userId, teamId);
@@ -307,6 +314,9 @@ public class UploadServiceImpl implements UploadService {
         if (!Objects.equals(session.getStatus(), 1)) {
             throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Upload session is not active");
         }
+        String normalizedFileName = normalizeFileName(session.getFileName());
+        requireTeamNameAvailable(teamId, session.getParentId(), normalizedFileName);
+        session.setFileName(normalizedFileName);
         String bitmapKey = UPLOAD_BITMAP_PREFIX + sessionId;
         for (int i = 0; i < session.getTotalChunks(); i++) {
             Boolean bit = redisTemplate.opsForValue().getBit(bitmapKey, i);
@@ -360,7 +370,11 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public Long instantTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash) {
+        lockTeamMutations(teamId);
+        teamPermissionService.requireParentWrite(userId, teamId, parentId);
+        fileName = normalizeFileName(fileName);
         validateTeamParent(teamId, parentId);
+        requireTeamNameAvailable(teamId, parentId, fileName);
         checkTeamStorageQuota(teamId, fileSize);
 
         FileEntity existing = fileRepository.findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc(md5Hash).orElse(null);
@@ -635,9 +649,42 @@ public class UploadServiceImpl implements UploadService {
         if (parent == null
                 || parent.getIsDeleted()
                 || !Objects.equals(parent.getTeamId(), teamId)
+                || !hasActiveTeamAncestors(parent)
                 || !"folder".equals(parent.getFileType())) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
+    }
+
+    private boolean hasActiveTeamAncestors(FileEntity file) {
+        Long parentId = file.getParentId();
+        Set<Long> seen = new HashSet<>();
+        while (parentId != null && seen.add(parentId)) {
+            FileEntity parent = fileRepository.findById(parentId).orElse(null);
+            if (parent == null || parent.getIsDeleted() || !Objects.equals(parent.getTeamId(), file.getTeamId())) return false;
+            parentId = parent.getParentId();
+        }
+        return parentId == null;
+    }
+
+    private void lockTeamMutations(Long teamId) {
+        if (teamRepository.findActiveByIdForUpdate(teamId).isEmpty()) {
+            throw new BusinessException(ApiCode.NOT_FOUND, "Team not found");
+        }
+    }
+
+    private String normalizeFileName(String fileName) {
+        String normalized = fileName == null ? "" : fileName.trim();
+        if (normalized.isEmpty() || normalized.length() > MAX_FILE_NAME_LENGTH) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, INVALID_FILE_NAME, Map.of());
+        }
+        return normalized;
+    }
+
+    private void requireTeamNameAvailable(Long teamId, Long parentId, String fileName) {
+        boolean exists = parentId == null
+                ? fileRepository.existsByTeamIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(teamId, fileName)
+                : fileRepository.existsByTeamIdAndParentIdAndFileNameAndIsDeletedFalse(teamId, parentId, fileName);
+        if (exists) throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
     }
 
     private void validatePersonalParent(Long userId, Long parentId) {

@@ -114,7 +114,7 @@ public class ShareServiceImpl implements ShareService {
         List<ShareLinkEntity> readable = shareLinkRepository
                 .findAll(spec, Sort.by(Sort.Direction.DESC, "createdAt"))
                 .stream()
-                .filter(share -> teamPermissionService.effectivePermissions(userId, teamId, share.getFileId()).canRead())
+                .filter(share -> canReadTeamFile(userId, teamId, share.getFileId()))
                 .toList();
         return PageResults.fromFiltered(readable, page, size);
     }
@@ -297,7 +297,7 @@ public class ShareServiceImpl implements ShareService {
         ShareLinkEntity share = validateShareAccess(shareCode, password, true);
 
         FileEntity file = fileRepository.findById(share.getFileId()).orElse(null);
-        if (file == null || file.getIsDeleted()) {
+        if (!isActiveInFileSpace(file)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         return file;
@@ -343,7 +343,7 @@ public class ShareServiceImpl implements ShareService {
     public FileEntity saveSharedItem(String shareCode, Long fileId, Long targetParentId, Long userId, String password) {
         ShareLinkEntity share = validateShareAccess(shareCode, password, true);
         FileEntity sharedRoot = fileRepository.findById(share.getFileId()).orElse(null);
-        if (sharedRoot == null || sharedRoot.getIsDeleted()) {
+        if (!isActiveInFileSpace(sharedRoot)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
 
@@ -449,7 +449,7 @@ public class ShareServiceImpl implements ShareService {
         FileEntity sharedFile = fileRepository.findById(share.getFileId()).orElse(null);
         FileEntity downloadFile = fileRepository.findById(fileId).orElse(null);
 
-        if (sharedFile == null || sharedFile.getIsDeleted() || downloadFile == null || downloadFile.getIsDeleted()) {
+        if (!isActiveInFileSpace(sharedFile) || !isActiveInFileSpace(downloadFile)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         if (!isWithinSharedScope(sharedFile, downloadFile)) {
@@ -463,7 +463,7 @@ public class ShareServiceImpl implements ShareService {
             return sharedRoot;
         }
         FileEntity source = fileRepository.findById(fileId).orElse(null);
-        if (source == null || source.getIsDeleted() || !isWithinSharedScope(sharedRoot, source)) {
+        if (!isActiveInFileSpace(source) || !isWithinSharedScope(sharedRoot, source)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         return source;
@@ -581,7 +581,7 @@ public class ShareServiceImpl implements ShareService {
         ShareLinkEntity share = validateShareAccess(shareCode, password, true);
 
         FileEntity sharedFile = fileRepository.findById(share.getFileId()).orElse(null);
-        if (sharedFile == null || sharedFile.getIsDeleted()) {
+        if (!isActiveInFileSpace(sharedFile)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
 
@@ -612,6 +612,30 @@ public class ShareServiceImpl implements ShareService {
                 Sort.by("fileType").ascending().and(Sort.by("fileName").ascending()));
         Page<FileEntity> result = fileRepository.findAll(spec, pageable);
         return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
+    }
+
+    private boolean canReadTeamFile(Long userId, Long teamId, Long fileId) {
+        try {
+            return teamPermissionService.effectivePermissions(userId, teamId, fileId).canRead();
+        } catch (BusinessException exception) {
+            return false;
+        }
+    }
+
+    private boolean isActiveInFileSpace(FileEntity file) {
+        if (file == null || Boolean.TRUE.equals(file.getIsDeleted())) {
+            return false;
+        }
+        FileEntity cursor = file;
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        while (cursor.getParentId() != null && seen.add(cursor.getId())) {
+            FileEntity parent = fileRepository.findById(cursor.getParentId()).orElse(null);
+            if (parent == null || Boolean.TRUE.equals(parent.getIsDeleted()) || !sameFileSpace(file, parent)) {
+                return false;
+            }
+            cursor = parent;
+        }
+        return cursor.getParentId() == null;
     }
 
     private String generateShareCode() {

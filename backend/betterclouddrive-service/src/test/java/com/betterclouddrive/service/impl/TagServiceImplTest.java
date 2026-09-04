@@ -253,4 +253,20 @@ class TagServiceImplTest {
         assertThat(result.getTotal()).isEqualTo(2);
         assertThat(result.getPages()).isEqualTo(2);
     }
+
+    @Test
+    void listTeamFilesByTag_shouldHideFilesWhoseAncestorWasDeleted() {
+        TagEntity tag = TagEntity.builder().id(1L).teamId(10L).tagName("team").build();
+        FileEntity hidden = FileEntity.builder().id(20L).teamId(10L).fileName("hidden.txt").build();
+        FileEntity visible = FileEntity.builder().id(21L).teamId(10L).fileName("visible.txt").build();
+        when(tagRepository.findById(1L)).thenReturn(Optional.of(tag));
+        when(fileTagRepository.findTeamTaggedFiles(10L, 1L)).thenReturn(List.of(hidden, visible));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 20L))
+                .thenThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.FILE_NOT_FOUND));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 21L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<FileEntity> result = tagService.listTeamFilesByTag(2L, 10L, 1L, null, 1, 20);
+
+        assertThat(result.getRecords()).extracting(FileEntity::getId).containsExactly(21L);
+    }
 }

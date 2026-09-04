@@ -473,7 +473,7 @@ private fun AppNavHost(
         personalSharesGraph(navController, container, wide, onOpenShareDetail)
         personalPreviewGraph(container, onClosePreview)
         personalRecoveryGraph(container, onOpenTransfers)
-        teamWorkspaceGraph(navController, container, wide) {
+        teamWorkspaceGraph(navController, container, wide, onOpenTransfers) {
             navController.navigate(PersonalRoute) {
                 popUpTo<PersonalRoute> { inclusive = false }
                 launchSingleTop = true

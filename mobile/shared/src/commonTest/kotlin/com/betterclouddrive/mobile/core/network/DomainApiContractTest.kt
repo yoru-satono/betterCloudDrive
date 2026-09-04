@@ -38,6 +38,50 @@ import kotlin.test.assertTrue
 
 class NetworkTestFacadeTest {
     @Test
+    fun teamFileMutationsAndEffectivePermissionUseStableContracts() = runTest {
+        val observed = mutableListOf<Triple<HttpMethod, String, String>>()
+        val engine = MockEngine { request ->
+            val body = (request.body as? OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+            observed += Triple(request.method, request.url.encodedPath, body)
+            when {
+                request.url.encodedPath.endsWith("effective-permission") -> jsonResponse(
+                    """{"code":200,"data":{"canRead":true,"canWrite":true,"canDelete":true,"sourceType":"ROLE_OVERRIDE"}}""",
+                )
+                request.method == HttpMethod.Post && request.url.encodedPath.endsWith("/folder") -> jsonResponse(
+                    """{"code":200,"data":{"id":9,"parentId":7,"fileName":"Docs","fileType":"folder"}}""",
+                )
+                request.method == HttpMethod.Put -> jsonResponse(
+                    """{"code":200,"data":{"id":9,"parentId":7,"fileName":"Renamed","fileType":"folder"}}""",
+                )
+                else -> jsonResponse("""{"code":200}""")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertTrue(client.getTeamEffectivePermission(3, 9).canWrite)
+        assertEquals("Docs", client.createTeamFolder(3, 7, "Docs").fileName)
+        assertEquals("Renamed", client.renameTeamFile(3, 9, "Renamed").fileName)
+        client.moveTeamFile(3, 9, null)
+        client.deleteTeamFiles(3, listOf(9, 9, 10))
+
+        assertEquals(
+            listOf(
+                Triple(HttpMethod.Get, "/api/v1/teams/3/files/9/effective-permission", ""),
+                Triple(HttpMethod.Post, "/api/v1/teams/3/files/folder", """{"parentId":7,"folderName":"Docs"}"""),
+                Triple(HttpMethod.Put, "/api/v1/teams/3/files/9", """{"newName":"Renamed"}"""),
+                Triple(HttpMethod.Post, "/api/v1/teams/3/files/9/move", "{}"),
+                Triple(HttpMethod.Delete, "/api/v1/teams/3/files", """{"fileIds":[9,10]}"""),
+            ),
+            observed,
+        )
+    }
+
+    @Test
     fun recycleBinVersionsAndVersionRangeDownloadUseStableContracts() = runTest {
         val observed = mutableListOf<Pair<HttpMethod, String>>()
         val engine = MockEngine { request ->

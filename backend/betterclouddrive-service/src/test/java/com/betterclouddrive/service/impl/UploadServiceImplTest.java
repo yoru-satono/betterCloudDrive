@@ -15,6 +15,7 @@ import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.ThumbnailService;
 import com.betterclouddrive.storage.StorageService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -46,6 +47,12 @@ class UploadServiceImplTest {
     @Mock private TeamPermissionService teamPermissionService;
     @Mock private ThumbnailService thumbnailService;
     @InjectMocks private UploadServiceImpl uploadService;
+
+    @BeforeEach
+    void allowTeamMutationLock() {
+        lenient().when(teamRepository.findActiveByIdForUpdate(anyLong()))
+                .thenReturn(Optional.of(TeamEntity.builder().id(10L).build()));
+    }
 
     private UserEntity quotaUser(long quota, long used) {
         return UserEntity.builder().id(1L).storageQuota(quota).storageUsed(used).build();
@@ -151,6 +158,23 @@ class UploadServiceImplTest {
         assertThat(session.getTeamId()).isEqualTo(10L);
         assertThat(session.getUserId()).isEqualTo(2L);
         assertThat(session.getFileName()).isEqualTo("team.bin");
+    }
+
+    @Test
+    void initTeamUpload_shouldNormalizeNameAndRejectSiblingConflict() {
+        TeamEntity team = TeamEntity.builder().id(10L).storageQuota(1024L).storageUsed(0L).build();
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(uploadSessionRepository.save(any(UploadSessionEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UploadSessionEntity session = uploadService.initTeamUpload(10L, 2L, null, "  team.bin  ", 100L, "md5", 1);
+        assertThat(session.getFileName()).isEqualTo("team.bin");
+
+        when(fileRepository.existsByTeamIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(10L, "taken.bin"))
+                .thenReturn(true);
+        assertThatThrownBy(() -> uploadService.initTeamUpload(10L, 2L, null, "taken.bin", 100L, "md5", 1))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(409001));
     }
 
     // ── uploadChunk ───────────────────────────────────────────────────────────

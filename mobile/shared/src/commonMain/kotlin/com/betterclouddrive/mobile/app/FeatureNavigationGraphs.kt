@@ -303,6 +303,7 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
     navController: NavHostController,
     container: AppContainer,
     wide: Boolean,
+    onOpenTransfers: () -> Unit,
     onBackToPersonal: () -> Unit,
 ) {
     composable<TeamsRoute> {
@@ -332,11 +333,12 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             navController = navController,
             container = container,
             wide = wide,
+            onOpenTransfers = onOpenTransfers,
         )
     }
     composable<TeamFolderRoute> { entry ->
         val route = entry.toRoute<TeamFolderRoute>()
-        TeamBrowserDestination(route.teamId, route.folderId, navController, container, wide)
+        TeamBrowserDestination(route.teamId, route.folderId, navController, container, wide, onOpenTransfers)
     }
     composable<TeamSearchRoute> { entry ->
         val teamId = entry.toRoute<TeamSearchRoute>().teamId
@@ -344,6 +346,7 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
         LaunchedEffect(teamId) { container.teamSearchStore.activate(teamId) }
         TeamSearchScreen(
             state = state,
+            documentPicker = container.documentPicker,
             onBack = navController::popBackStack,
             onQuery = container.teamSearchStore::updateQuery,
             onSubmit = container.teamSearchStore::submit,
@@ -355,6 +358,7 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
                 navController.navigate(file.parentId?.let { TeamFolderRoute(teamId, it) } ?: TeamWorkspaceRoute(teamId))
             },
             onPreview = { navController.navigate(TeamPreviewRoute(teamId, it.id)) },
+            onDownload = container.teamFileActionsStore::download,
         )
     }
     composable<TeamPreviewRoute> { entry ->
@@ -364,12 +368,14 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
         DisposableEffect(route.teamId, route.fileId) { onDispose { container.teamPreviewStore.close() } }
         TeamPreviewScreen(
             state = state,
+            documentPicker = container.documentPicker,
             officeRenderer = container.officeRenderer,
             mediaRenderer = container.mediaPreviewRenderer,
             onBack = navController::popBackStack,
             onRetry = container.teamPreviewStore::retry,
             onPositionChanged = container.teamPreviewStore::updatePosition,
             onRendererError = container.teamPreviewStore::reportRendererError,
+            onDownload = container.teamFileActionsStore::download,
         )
     }
 }
@@ -381,12 +387,19 @@ private fun TeamBrowserDestination(
     navController: NavHostController,
     container: AppContainer,
     wide: Boolean,
+    onOpenTransfers: () -> Unit,
 ) {
     val state by container.teamBrowserStore.state.collectAsState()
+    val actions by container.teamFileActionsStore.state.collectAsState()
     LaunchedEffect(teamId, folderId) { container.teamBrowserStore.activate(teamId, folderId) }
+    LaunchedEffect(teamId, folderId, state.team?.role) {
+        container.teamFileActionsStore.activate(state.team, teamId, folderId)
+    }
     TeamBrowserScreen(
         state = state,
+        actions = actions,
         wide = wide,
+        documentPicker = container.documentPicker,
         onBack = navController::popBackStack,
         onBackToTeams = {
             navController.navigate(TeamsRoute) {
@@ -395,20 +408,40 @@ private fun TeamBrowserDestination(
             }
         },
         onBreadcrumb = { target ->
+            container.teamFileActionsStore.clearTransientUi()
             val route: AppRoute = target?.let { TeamFolderRoute(teamId, it) } ?: TeamWorkspaceRoute(teamId)
             navController.navigate(route) { launchSingleTop = true }
         },
         onOpenFolder = { file ->
+            container.teamFileActionsStore.clearTransientUi()
             container.teamBrowserStore.openFolder(file)
             navController.navigate(TeamFolderRoute(teamId, file.id))
         },
         onOpenSearch = { navController.navigate(TeamSearchRoute(teamId)) },
         onRetryWorkspace = { container.teamBrowserStore.activate(teamId, folderId) },
-        onRefresh = container.teamBrowserStore::refresh,
+        onRefresh = { container.teamFileActionsStore.clearSelection(); container.teamBrowserStore.refresh() },
         onLoadMore = container.teamBrowserStore::loadMore,
-        onSort = container.teamBrowserStore::changeSort,
+        onSort = { sort, direction -> container.teamFileActionsStore.clearSelection(); container.teamBrowserStore.changeSort(sort, direction) },
         onViewMode = container.teamBrowserStore::changeViewMode,
         onSelect = container.teamBrowserStore::selectFile,
         onPreview = { navController.navigate(TeamPreviewRoute(teamId, it.id)) },
+        onRequestPermission = container.teamFileActionsStore::requestItemPermission,
+        onToggleSelection = container.teamFileActionsStore::toggleSelection,
+        onClearSelection = container.teamFileActionsStore::clearSelection,
+        onCreateFolder = container.teamFileActionsStore::createFolder,
+        onRename = container.teamFileActionsStore::rename,
+        onDelete = container.teamFileActionsStore::delete,
+        onOpenMovePicker = container.teamFileActionsStore::openMovePicker,
+        onOpenPickerFolder = container.teamFileActionsStore::openPickerFolder,
+        onPickerBack = container.teamFileActionsStore::pickerBack,
+        onRetryPicker = container.teamFileActionsStore::retryPicker,
+        onClosePicker = container.teamFileActionsStore::closePicker,
+        onConfirmMove = container.teamFileActionsStore::confirmMove,
+        onUpload = container.teamFileActionsStore::upload,
+        onDownload = container.teamFileActionsStore::download,
+        onConsumeFeedback = container.teamFileActionsStore::consumeFeedback,
+        onConsumeTransferFeedback = container.teamFileActionsStore::consumeTransferFeedback,
+        onClearPermissionError = container.teamFileActionsStore::clearPermissionError,
+        onOpenTransfers = onOpenTransfers,
     )
 }

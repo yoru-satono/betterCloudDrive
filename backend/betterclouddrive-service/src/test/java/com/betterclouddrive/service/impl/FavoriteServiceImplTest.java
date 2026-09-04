@@ -133,4 +133,18 @@ class FavoriteServiceImplTest {
         assertThat(result.getPages()).isEqualTo(2);
     }
 
+    @Test
+    void listTeamFavorites_shouldHideFilesWhoseAncestorWasDeleted() {
+        FileEntity hidden = FileEntity.builder().id(10L).teamId(20L).fileName("hidden.txt").build();
+        FileEntity visible = FileEntity.builder().id(11L).teamId(20L).fileName("visible.txt").build();
+        when(favoriteRepository.findTeamFavoriteFiles(1L, 20L)).thenReturn(List.of(hidden, visible));
+        when(teamPermissionService.effectivePermissions(1L, 20L, 10L))
+                .thenThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.FILE_NOT_FOUND));
+        when(teamPermissionService.effectivePermissions(1L, 20L, 11L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<FileEntity> result = favoriteService.listTeamFavorites(1L, 20L, null, 1, 20);
+
+        assertThat(result.getRecords()).extracting(FileEntity::getId).containsExactly(11L);
+    }
+
 }

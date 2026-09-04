@@ -50,6 +50,9 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
             return withSources(base, "BASE_ROLE", sourceChain);
         }
         FileEntity file = requireTeamFileAnyState(teamId, fileId);
+        if (!Boolean.TRUE.equals(file.getIsDeleted()) && !hasActiveAncestors(teamId, file)) {
+            throw new BusinessException(ApiCode.FILE_NOT_FOUND);
+        }
         Set<Long> seen = new HashSet<>();
         FileEntity cursor = file;
         while (cursor != null && seen.add(cursor.getId())) {
@@ -310,6 +313,19 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         return file;
+    }
+
+    private boolean hasActiveAncestors(Long teamId, FileEntity file) {
+        Long parentId = file.getParentId();
+        Set<Long> seen = new HashSet<>();
+        while (parentId != null && seen.add(parentId)) {
+            FileEntity parent = fileRepository.findById(parentId).orElse(null);
+            if (parent == null || Boolean.TRUE.equals(parent.getIsDeleted()) || !Objects.equals(parent.getTeamId(), teamId)) {
+                return false;
+            }
+            parentId = parent.getParentId();
+        }
+        return parentId == null;
     }
 
     private String normalizeSubjectType(String subjectType) {

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP mobile · Stage 13</string>
+    <string name="stage_label">KMP mobile · Stage 14</string>
     <string name="restore_title">Can&apos;t connect to the server</string>
     <string name="session_preserved">Your local session remains encrypted</string>
     <string name="retry">Retry</string>
@@ -343,4 +343,11 @@
     <string name="team_role_viewer">Viewer</string>
     <string name="team_quota">{0} of {1} used</string>
     <string name="back_to_teams">Back to teams</string>
+    <string name="error_permission_changed">Your team permissions changed. Refresh and try again.</string>
+    <string name="transfer_scope_all">All</string>
+    <string name="transfer_scope_personal">Personal</string>
+    <string name="transfer_scope_team">Team</string>
+    <string name="transfer_team_id">Team #{0}</string>
+    <string name="team_upload_to_current_folder">Upload to this team folder</string>
+    <string name="team_permission_loading">Checking permissions…</string>
 </resources>

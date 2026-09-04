@@ -105,6 +105,23 @@ class ShareServiceImplTest {
     }
 
     @Test
+    void listTeamShares_shouldHideFilesWhoseAncestorWasDeleted() {
+        ShareLinkEntity hidden = activeShare("hidden1", 2L, 10L);
+        hidden.setTeamId(20L);
+        ShareLinkEntity visible = activeShare("visible1", 2L, 11L);
+        visible.setTeamId(20L);
+        when(shareLinkRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(hidden, visible));
+        when(teamPermissionService.effectivePermissions(7L, 20L, 10L))
+                .thenThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.FILE_NOT_FOUND));
+        when(teamPermissionService.effectivePermissions(7L, 20L, 11L)).thenReturn(TeamEffectivePermission.viewer());
+
+        PageResult<ShareLinkEntity> result = shareService.listTeamShares(7L, 20L, null, null, null, 1, 20);
+
+        assertThat(result.getRecords()).extracting(ShareLinkEntity::getFileId).containsExactly(11L);
+    }
+
+    @Test
     void createTeamShare_shouldWriteAuditLog() {
         when(fileRepository.findById(5L)).thenReturn(Optional.of(teamFile(5L, 2L, 10L)));
         when(shareLinkRepository.save(any(ShareLinkEntity.class))).thenAnswer(inv -> {
@@ -351,6 +368,22 @@ class ShareServiceImplTest {
 
         assertThat(result).isSameAs(file);
         verify(zSetOps).incrementScore("share:visits", "code1234", 1);
+    }
+
+    @Test
+    void accessShare_shouldHideFileUnderDeletedAncestor() {
+        ShareLinkEntity share = activeShare("deleted-parent", 1L, 10L);
+        FileEntity file = ownedFile(10L, 1L);
+        file.setParentId(9L);
+        FileEntity deletedParent = ownedFolder(9L, 1L);
+        deletedParent.setIsDeleted(true);
+        when(shareLinkRepository.findByShareCode("deleted-parent")).thenReturn(Optional.of(share));
+        when(fileRepository.findById(10L)).thenReturn(Optional.of(file));
+        when(fileRepository.findById(9L)).thenReturn(Optional.of(deletedParent));
+
+        assertThatThrownBy(() -> shareService.accessShare("deleted-parent", null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getCode()).isEqualTo(404001));
     }
 
     @Test

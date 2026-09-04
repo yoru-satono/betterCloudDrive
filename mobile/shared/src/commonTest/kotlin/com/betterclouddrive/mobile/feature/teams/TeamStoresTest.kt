@@ -3,13 +3,26 @@ package com.betterclouddrive.mobile.feature.teams
 import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.model.FileItem
+import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.TeamRole
 import com.betterclouddrive.mobile.core.model.TeamSummary
+import com.betterclouddrive.mobile.core.model.TeamEffectivePermission
 import com.betterclouddrive.mobile.core.model.TextPreview
 import com.betterclouddrive.mobile.feature.files.PersonalFileSort
 import com.betterclouddrive.mobile.feature.files.SortDirection
+import com.betterclouddrive.mobile.core.platform.UploadPickResult
+import com.betterclouddrive.mobile.core.platform.PickedDocument
+import com.betterclouddrive.mobile.feature.transfers.TeamTransferOperations
+import com.betterclouddrive.mobile.feature.transfers.TeamUploadFolder
+import com.betterclouddrive.mobile.feature.transfers.TransferTask
+import com.betterclouddrive.mobile.feature.transfers.TransferDirection
+import com.betterclouddrive.mobile.feature.transfers.TransferScope
+import com.betterclouddrive.mobile.feature.transfers.TransferStatus
+import com.betterclouddrive.mobile.feature.transfers.UploadEnqueueResult
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -22,6 +35,62 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TeamStoresTest {
+    @Test
+    fun fileActionsFailClosedUseEffectivePermissionAndResetSensitiveState() = runTest {
+        val repository = FakeTeamWorkspace()
+        val transfers = FakeTeamTransfers()
+        val changes = mutableListOf<Pair<Long, Set<Long?>>>()
+        val store = TeamFileActionsStore(repository, transfers, backgroundScope) { teamId, folders ->
+            changes += teamId to folders
+        }
+
+        store.activate(TEAM.copy(role = TeamRole.EDITOR), TEAM.id, null)
+        assertTrue(store.state.value.directoryPermission?.canWrite == true)
+        store.requestItemPermission(FILE); runCurrent()
+        store.toggleSelection(FILE)
+        assertEquals(setOf(FILE.id), store.state.value.selectedIds)
+
+        store.delete(setOf(FILE.id)); runCurrent()
+        assertEquals(listOf(FILE.id), repository.deletedIds)
+        assertEquals(TEAM.id to setOf<Long?>(null), changes.single())
+
+        store.activate(TEAM.copy(role = TeamRole.VIEWER), TEAM.id, null)
+        assertFalse(store.state.value.directoryPermission?.canWrite == true)
+        store.reset()
+        assertNull(store.state.value.teamId)
+        assertTrue(store.state.value.itemPermissions.isEmpty())
+    }
+
+    @Test
+    fun fileActionsUseTeamTransferScopeEmitSettledRefreshAndInvalidatePermissionOn403() = runTest {
+        val repository = FakeTeamWorkspace()
+        val transfers = FakeTeamTransfers()
+        val changes = mutableListOf<Pair<Long, Set<Long?>>>()
+        val store = TeamFileActionsStore(repository, transfers, backgroundScope) { teamId, folders ->
+            changes += teamId to folders
+        }
+        store.activate(TEAM.copy(role = TeamRole.EDITOR), TEAM.id, 12L); runCurrent()
+
+        store.upload(UploadPickResult(listOf(PickedDocument("content://source", "team.bin", 64)))); runCurrent()
+        assertEquals(Triple(TEAM.id, 12L, "team.bin"), transfers.uploaded)
+        store.download(FILE, "content://target"); runCurrent()
+        assertEquals(Triple(TEAM.id, FILE.id, "content://target"), transfers.downloaded)
+
+        transfers.settle(TeamUploadFolder(TEAM.id, 12L)); runCurrent()
+        assertEquals(TEAM.id to setOf<Long?>(12L), changes.single())
+
+        repository.effective = TeamEffectivePermission(true, false, false, false, false)
+        transfers.revoke(TEAM.id); runCurrent()
+        assertFalse(store.state.value.directoryPermission?.canWrite == true)
+        assertEquals(UiMessage(MobileString.ErrorPermissionChanged), store.state.value.permissionError)
+
+        store.requestItemPermission(FILE); runCurrent()
+        repository.renameFailure = ApiException(403, "error.forbidden")
+        store.rename(FILE, "renamed.txt"); runCurrent()
+        assertEquals(UiMessage(MobileString.ErrorPermissionChanged), store.state.value.permissionError)
+        assertTrue(store.state.value.itemPermissions.isEmpty())
+    }
+
     @Test
     fun teamsPageDeduplicatesCreatesTrimmedNameAndResetClearsSessionState() = runTest {
         val repository = FakeTeamWorkspace().apply {
@@ -111,6 +180,9 @@ class TeamStoresTest {
         val metadata = mutableMapOf<Long, FileItem>()
         val createdNames = mutableListOf<String>()
         val searchQueries = mutableListOf<String>()
+        val deletedIds = mutableListOf<Long>()
+        var renameFailure: Throwable? = null
+        var effective = TeamEffectivePermission(true, true, true, true, false)
 
         override suspend fun listTeams(page: Int, size: Int) = teamPages.removeFirst()
         override suspend fun createTeam(name: String): TeamSummary {
@@ -124,6 +196,40 @@ class TeamStoresTest {
         override suspend fun search(teamId: Long, query: String, page: Int, size: Int): PageResult<FileItem> {
             searchQueries += query
             return searches.removeFirst()
+        }
+        override suspend fun effectivePermission(teamId: Long, fileId: Long) = effective
+        override suspend fun createFolder(teamId: Long, parentId: Long?, name: String) = FILE.copy(id = 100, parentId = parentId, fileName = name, fileType = "folder")
+        override suspend fun rename(teamId: Long, fileId: Long, name: String): FileItem {
+            renameFailure?.let { throw it }
+            return getFile(teamId, fileId).copy(fileName = name)
+        }
+        override suspend fun move(teamId: Long, fileId: Long, parentId: Long?) = Unit
+        override suspend fun delete(teamId: Long, fileIds: List<Long>) { deletedIds += fileIds }
+    }
+
+    private class FakeTeamTransfers : TeamTransferOperations {
+        private val settled = MutableSharedFlow<TeamUploadFolder>()
+        private val revoked = MutableSharedFlow<Long>()
+        var uploaded: Triple<Long, Long?, String>? = null
+        var downloaded: Triple<Long, Long, String>? = null
+        override val teamUploadFoldersSettled: Flow<TeamUploadFolder> = settled
+        override val teamPermissionRevoked: Flow<Long> = revoked
+        suspend fun settle(folder: TeamUploadFolder) = settled.emit(folder)
+        suspend fun revoke(teamId: Long) = revoked.emit(teamId)
+        override suspend fun enqueueTeamUploads(teamId: Long, result: UploadPickResult, parentId: Long?): UploadEnqueueResult {
+            uploaded = Triple(teamId, parentId, result.documents.single().displayName)
+            return UploadEnqueueResult(emptyList(), result.rejectedCount, result.overflowCount)
+        }
+        override suspend fun enqueueTeamDownload(
+            teamId: Long, fileId: Long, fileName: String, fileSize: Long, mimeType: String?,
+            destinationHandle: String, expectedMd5: String?,
+        ): TransferTask {
+            downloaded = Triple(teamId, fileId, destinationHandle)
+            return TransferTask(
+                id = "team-download", direction = TransferDirection.DOWNLOAD, status = TransferStatus.QUEUED,
+                serverBaseUrl = "https://drive.example.com", scope = TransferScope.Team(teamId), fileName = fileName,
+                bytesTotal = fileSize, destinationHandle = destinationHandle, createdAt = 1, updatedAt = 1,
+            )
         }
     }
 

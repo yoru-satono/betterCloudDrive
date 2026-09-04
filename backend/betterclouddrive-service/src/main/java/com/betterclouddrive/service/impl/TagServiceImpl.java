@@ -310,9 +310,17 @@ public class TagServiceImpl implements TagService {
                 ? fileTagRepository.findTeamTaggedFiles(teamId, tagId)
                 : fileTagRepository.findTeamTaggedFilesByKeyword(teamId, tagId, normalizedKeyword))
                 .stream()
-                .filter(file -> teamPermissionService.effectivePermissions(userId, teamId, file.getId()).canRead())
+                .filter(file -> canReadTeamFile(userId, teamId, file.getId()))
                 .toList();
         return PageResults.fromFiltered(readable, page, size);
+    }
+
+    private boolean canReadTeamFile(Long userId, Long teamId, Long fileId) {
+        try {
+            return teamPermissionService.effectivePermissions(userId, teamId, fileId).canRead();
+        } catch (BusinessException exception) {
+            return false;
+        }
     }
 
     private TagEntity requireTeamTag(Long teamId, Long tagId) {

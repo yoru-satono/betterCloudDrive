@@ -250,6 +250,12 @@ class TeamBrowserStore(
         }
     }
 
+    fun invalidate(teamId: Long, folderIds: Set<Long?>) {
+        if (state.value.teamId != teamId) return
+        folderIds.forEach(cache::remove)
+        if (state.value.current.folderId in folderIds) refresh()
+    }
+
     override fun reset() {
         directoryJob?.cancel(); detailJob?.cancel(); cache.clear()
         mutableState.value = TeamBrowserState()

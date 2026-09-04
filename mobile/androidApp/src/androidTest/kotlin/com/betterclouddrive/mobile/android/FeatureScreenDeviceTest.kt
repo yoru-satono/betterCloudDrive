@@ -19,9 +19,12 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -31,11 +34,15 @@ import com.betterclouddrive.mobile.app.PersonalSpaceScreen
 import com.betterclouddrive.mobile.app.PersonalSearchScreen
 import com.betterclouddrive.mobile.app.TagFilesScreen
 import com.betterclouddrive.mobile.app.TagsScreen
+import com.betterclouddrive.mobile.app.TeamBrowserScreen
 import com.betterclouddrive.mobile.app.TransferQueueScreen
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.mobileStringsFor
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.PersonalTag
+import com.betterclouddrive.mobile.core.model.TeamEffectivePermission
+import com.betterclouddrive.mobile.core.model.TeamRole
+import com.betterclouddrive.mobile.core.model.TeamSummary
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.DownloadRequest
 import com.betterclouddrive.mobile.core.platform.PickedDestination
@@ -49,6 +56,8 @@ import com.betterclouddrive.mobile.feature.files.PersonalSearchState
 import com.betterclouddrive.mobile.feature.organization.FavoritesState
 import com.betterclouddrive.mobile.feature.organization.OrganizationFileListState
 import com.betterclouddrive.mobile.feature.organization.TagsState
+import com.betterclouddrive.mobile.feature.teams.TeamBrowserState
+import com.betterclouddrive.mobile.feature.teams.TeamFileActionsState
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferScope
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
@@ -68,6 +77,7 @@ class FeatureScreenDeviceTest {
         var cleared = 0
         val tasks = listOf(
             transfer("upload-active", TransferDirection.UPLOAD, TransferStatus.RUNNING, 25, 100),
+            transfer("team-upload", TransferDirection.UPLOAD, TransferStatus.QUEUED, 0, 512, TransferScope.Team(9, 3)),
             transfer("download-done", TransferDirection.DOWNLOAD, TransferStatus.SUCCEEDED, 200, 200),
         )
         composeRule.setContent { themed("en-US") {
@@ -75,7 +85,11 @@ class FeatureScreenDeviceTest {
         } }
         composeRule.onNodeWithTag("transfer-task-upload-active").assertIsDisplayed()
         composeRule.onNodeWithText("25 B / 100 B · 25%").assertIsDisplayed()
+        composeRule.onNodeWithTag("transfer-scope-team").performClick()
+        composeRule.onNodeWithTag("transfer-task-team-upload").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("transfer-task-upload-active").assertCountEquals(0)
         composeRule.onNodeWithTag("transfer-tab-download").performClick()
+        composeRule.onNodeWithTag("transfer-scope-all").performClick()
         composeRule.onNodeWithTag("transfer-task-download-done").assertIsDisplayed()
         composeRule.onNodeWithTag("transfer-clear-finished").performClick()
         composeRule.onNodeWithTag("transfer-clear-confirm").performClick()
@@ -116,6 +130,34 @@ class FeatureScreenDeviceTest {
         composeRule.onNodeWithTag("personal-selection-bar").assertIsDisplayed()
         composeRule.onNodeWithTag("personal-selection-delete").performClick()
         composeRule.onNodeWithTag("personal-delete-dialog").assertIsDisplayed()
+    }
+
+    @Test
+    fun teamBrowserFailsClosedAndShowsAuthorizedCollaborationActions() {
+        val file = FileItem(id = 41, fileName = "team-note.txt")
+        val browser = TeamBrowserState(
+            teamId = 9,
+            team = TeamSummary(9, "Team", role = TeamRole.EDITOR),
+            current = DirectoryPageState(items = listOf(file), hasLoaded = true, page = 1),
+        )
+        val actions = mutableStateOf(TeamFileActionsState(teamId = 9, folderId = null))
+        composeRule.setContent { themed("en-US") {
+            teamBrowser(browser, actions.value)
+        } }
+        composeRule.onAllNodesWithTag("team-create-folder").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("team-upload").assertCountEquals(0)
+        composeRule.onNodeWithTag("team-more-41").performClick()
+        composeRule.onNodeWithText("Download").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Rename").assertCountEquals(0)
+
+        val editable = TeamEffectivePermission(true, true, false, true, false)
+        composeRule.runOnIdle {
+            actions.value = TeamFileActionsState(
+                teamId = 9, folderId = null, directoryPermission = editable,
+                itemPermissions = mapOf(file.id to editable), selectedIds = setOf(file.id),
+            )
+        }
+        composeRule.onNodeWithTag("team-delete-selected").assertIsDisplayed()
     }
 
     @Test
@@ -262,6 +304,20 @@ class FeatureScreenDeviceTest {
     }
 
     @Composable
+    private fun teamBrowser(state: TeamBrowserState, actions: TeamFileActionsState) {
+        TeamBrowserScreen(
+            state = state, actions = actions, wide = false, documentPicker = NoopDocumentPicker,
+            onBack = {}, onBackToTeams = {}, onBreadcrumb = {}, onOpenFolder = {}, onOpenSearch = {},
+            onRetryWorkspace = {}, onRefresh = {}, onLoadMore = {}, onSort = { _, _ -> }, onViewMode = {},
+            onSelect = {}, onPreview = {}, onRequestPermission = {}, onToggleSelection = {}, onClearSelection = {},
+            onCreateFolder = {}, onRename = { _, _ -> }, onDelete = {}, onOpenMovePicker = {},
+            onOpenPickerFolder = {}, onPickerBack = {}, onRetryPicker = {}, onClosePicker = {},
+            onConfirmMove = {}, onUpload = {}, onDownload = { _, _ -> }, onConsumeFeedback = {},
+            onConsumeTransferFeedback = {}, onClearPermissionError = {}, onOpenTransfers = {},
+        )
+    }
+
+    @Composable
     private fun themed(locale: String, content: @Composable () -> Unit) {
         val configuration = Configuration(
             InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration,
@@ -278,9 +334,12 @@ class FeatureScreenDeviceTest {
         @Composable override fun rememberDownloadLauncher(onPicked: (PickedDestination) -> Unit): (DownloadRequest) -> Unit = {}
     }
 
-    private fun transfer(id: String, direction: TransferDirection, status: TransferStatus, done: Long, total: Long) = TransferTask(
+    private fun transfer(
+        id: String, direction: TransferDirection, status: TransferStatus, done: Long, total: Long,
+        scope: TransferScope = TransferScope.Personal(),
+    ) = TransferTask(
         id = id, direction = direction, status = status, serverBaseUrl = "https://drive.example.com",
-        scope = TransferScope.Personal(), fileName = "$id.bin", bytesDone = done, bytesTotal = total,
+        scope = scope, fileName = "$id.bin", bytesDone = done, bytesTotal = total,
         createdAt = 1, updatedAt = 2,
     )
 }
