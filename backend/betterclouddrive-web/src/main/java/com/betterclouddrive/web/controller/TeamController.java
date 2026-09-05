@@ -9,7 +9,6 @@ import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.FolderZipDownloadCacheEntity;
 import com.betterclouddrive.dal.entity.ShareLinkEntity;
 import com.betterclouddrive.dal.entity.TagEntity;
-import com.betterclouddrive.dal.entity.TeamFilePermissionEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
@@ -43,6 +42,7 @@ import com.betterclouddrive.web.dto.response.ShareLinkResponseMapper;
 import com.betterclouddrive.web.dto.response.SharePasswordResponse;
 import com.betterclouddrive.web.dto.response.TeamInviteResponse;
 import com.betterclouddrive.web.dto.response.TeamMemberResponse;
+import com.betterclouddrive.web.dto.response.TeamFilePermissionResponse;
 import com.betterclouddrive.web.dto.response.TeamResponse;
 import com.betterclouddrive.web.export.AuditCsvExporter;
 import com.betterclouddrive.web.security.CurrentUser;
@@ -491,27 +491,28 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}/files/{fileId}/permissions")
-    public ApiResponse<List<TeamFilePermissionEntity>> listPermissions(
+    public ApiResponse<List<TeamFilePermissionResponse>> listPermissions(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long fileId) {
-        return ApiResponse.success(teamPermissionService.listPermissions(user.getUserId(), teamId, fileId));
+        return ApiResponse.success(teamPermissionService.listPermissions(user.getUserId(), teamId, fileId)
+                .stream().map(TeamFilePermissionResponse::from).toList());
     }
 
     @PutMapping("/{teamId}/files/{fileId}/permissions")
-    public ApiResponse<TeamFilePermissionEntity> upsertPermission(
+    public ApiResponse<TeamFilePermissionResponse> upsertPermission(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long fileId,
             @RequestBody UpdateTeamFilePermissionRequest request) {
-        return ApiResponse.success(teamPermissionService.upsertPermission(
+        return ApiResponse.success(TeamFilePermissionResponse.from(teamPermissionService.upsertPermission(
                 user.getUserId(), teamId, fileId,
                 request.getSubjectType(), request.getSubjectUserId(), request.getSubjectRole(),
                 Boolean.TRUE.equals(request.getCanRead()),
                 Boolean.TRUE.equals(request.getCanWrite()),
                 Boolean.TRUE.equals(request.getCanShare()),
                 Boolean.TRUE.equals(request.getCanDelete()),
-                Boolean.TRUE.equals(request.getCanManage())));
+                Boolean.TRUE.equals(request.getCanManage()))));
     }
 
     @DeleteMapping("/{teamId}/files/{fileId}/permissions/{permissionId}")

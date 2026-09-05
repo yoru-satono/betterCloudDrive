@@ -38,6 +38,10 @@ import com.betterclouddrive.mobile.feature.teams.TeamPreviewStore
 import com.betterclouddrive.mobile.feature.teams.TeamSearchStore
 import com.betterclouddrive.mobile.feature.teams.TeamWorkspaceRepository
 import com.betterclouddrive.mobile.feature.teams.TeamsStore
+import com.betterclouddrive.mobile.feature.teams.TeamMembersRepository
+import com.betterclouddrive.mobile.feature.teams.TeamMembersStore
+import com.betterclouddrive.mobile.feature.teams.TeamPermissionsRepository
+import com.betterclouddrive.mobile.feature.teams.TeamPermissionsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -53,6 +57,8 @@ class AppContainer(
     val personalVersions: PersonalVersionsRepository,
     val teamWorkspace: TeamWorkspaceRepository,
     val teamPreview: TeamPreviewRepository,
+    val teamMembers: TeamMembersRepository,
+    val teamPermissions: TeamPermissionsRepository,
     val database: MobileDatabase,
     val transfers: TransferManager,
     val transferEngine: TransferEngine,
@@ -87,7 +93,12 @@ class AppContainer(
         teamPreviewStore.reset()
         teamsStore.refresh()
     }
-    val teamFileActionsStore = TeamFileActionsStore(teamWorkspace, transferQueue, applicationScope, ::invalidateTeamContent)
+    val teamFileActionsStore = TeamFileActionsStore(teamWorkspace, teamPermissions, transferQueue, applicationScope, ::invalidateTeamContent)
+    val teamMembersStore = TeamMembersStore(teamMembers, applicationScope)
+    val teamPermissionsStore = TeamPermissionsStore(teamPermissions, teamMembers, applicationScope) { teamId, fileId ->
+        teamFileActionsStore.invalidatePermission(teamId, fileId)
+        invalidateTeamContent(teamId, setOf(fileId))
+    }
     private fun invalidatePersonalContent() {
         favoritesStore.invalidate()
         tagsStore.invalidateFiles()
@@ -108,7 +119,7 @@ class AppContainer(
             browserStore, searchStore, favoritesStore, tagsStore, sharesStore, previewStore,
             recycleBinStore, versionsStore, diagnosticsStore, transferQueue,
             teamsStore, teamBrowserStore, teamSearchStore, teamPreviewStore,
-            teamFileActionsStore,
+            teamFileActionsStore, teamMembersStore, teamPermissionsStore,
         ),
         applicationScope,
     )

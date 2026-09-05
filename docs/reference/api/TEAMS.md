@@ -24,6 +24,8 @@
 
 **TeamResponse 字段:** `id`、`name`、`ownerId`、`storageQuota`、`storageUsed`、`role`、`createdAt`、`updatedAt`。
 
+成员列表只返回活动成员，固定按 `OWNER`、`ADMIN`、`EDITOR`、`VIEWER`、用户名、用户 ID 排序。OWNER 可以管理所有非 OWNER 成员；ADMIN 只能添加、修改或移除 EDITOR 和 VIEWER，不能授予 ADMIN，也不能修改或移除已有 ADMIN。OWNER 不能通过成员接口修改或移除，必须使用所有权转让流程。重复添加活动成员保持幂等并按同一角色矩阵处理角色变化；已移除成员可重新激活。
+
 **错误码:** 403（非成员或角色不足）、404（团队/成员不存在）、409（重名或状态冲突）。
 
 ### 16.2 邀请链接
@@ -186,7 +188,7 @@ Web/Tauri 与 Android 均展示该来源链；Android 团队文件页会标明�
 }
 ```
 
-`subjectType` 支持 `USER` 或 `ROLE`；用户维度使用 `subjectUserId`，角色维度使用 `subjectRole=ADMIN|EDITOR|VIEWER`。缺省布尔值按 `false` 处理。
+`subjectType` 支持 `USER` 或 `ROLE`；用户维度使用 `subjectUserId`，角色维度使用 `subjectRole=ADMIN|EDITOR|VIEWER`。缺省布尔值按 `false` 处理。权限列表和保存响应使用兼容 DTO，不包含数据库内部对象；修改或删除覆盖后会在同一事务中重新计算操作者的有效权限，任何导致操作者失去当前项目 `canManage` 的操作都会回滚。
 
 **错误码:** 400（subject 参数非法、自锁或 OWNER 覆盖被拒绝）、403（不可管理文件）、404（文件或权限规则不存在）。
 

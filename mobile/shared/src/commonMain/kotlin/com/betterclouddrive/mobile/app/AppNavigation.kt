@@ -566,6 +566,7 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
     is TeamFolderRoute -> this?.hasRoute<TeamFolderRoute>() == true
     is TeamSearchRoute -> this?.hasRoute<TeamSearchRoute>() == true
     is TeamPreviewRoute -> this?.hasRoute<TeamPreviewRoute>() == true
+    is TeamMembersRoute -> this?.hasRoute<TeamMembersRoute>() == true
     TransfersRoute -> this?.hasRoute<TransfersRoute>() == true
     ProfileRoute -> this?.hasRoute<ProfileRoute>() == true
     DiagnosticsRoute -> this?.hasRoute<DiagnosticsRoute>() == true
@@ -582,7 +583,7 @@ private fun NavDestination?.isPersonal(): Boolean =
 private fun NavDestination?.isTeam(): Boolean =
     this?.hasRoute<TeamsRoute>() == true || this?.hasRoute<TeamWorkspaceRoute>() == true ||
         this?.hasRoute<TeamFolderRoute>() == true || this?.hasRoute<TeamSearchRoute>() == true ||
-        this?.hasRoute<TeamPreviewRoute>() == true
+        this?.hasRoute<TeamPreviewRoute>() == true || this?.hasRoute<TeamMembersRoute>() == true
 
 private fun NavDestination?.isPersonalDirectory(): Boolean =
     this?.hasRoute<PersonalRoute>() == true || this?.hasRoute<PersonalFolderRoute>() == true
@@ -602,6 +603,7 @@ private fun NavDestination?.title(strings: MobileStrings): String = when {
     matches(PersonalSharesRoute) || this?.hasRoute<PersonalShareDetailRoute>() == true -> strings[MobileString.SharesTitle]
     matches(PersonalRecycleBinRoute) -> strings[MobileString.RecycleBinTitle]
     this?.hasRoute<PersonalVersionsRoute>() == true -> strings[MobileString.VersionHistory]
+    this?.hasRoute<TeamMembersRoute>() == true -> strings[MobileString.TeamMembers]
     matches(TeamsRoute) -> strings[MobileString.TeamsTitle]
     matches(TransfersRoute) -> strings[MobileString.TransferQueueTitle]
     matches(ProfileRoute) -> strings[MobileString.Profile]

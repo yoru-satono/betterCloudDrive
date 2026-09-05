@@ -423,6 +423,15 @@ class TestTeamPermissions:
         add_member(client, auth_headers, team_id, editor["username"], "EDITOR")
         add_member(client, auth_headers, team_id, viewer["username"], "VIEWER")
 
+        # Adding an already active member also acts as a role update. An ADMIN
+        # must not use this alternate endpoint to demote another ADMIN.
+        assert_api_error_in(client.post(
+            f"/api/v1/teams/{team_id}/members",
+            json={"username": team_admin["username"], "role": "EDITOR"},
+            headers=team_admin["headers"],
+        ), {403})
+        assert_member_role(client, auth_headers, team_id, team_admin["username"], "ADMIN")
+
         folder = create_team_folder(client, auth_headers, team_id)
         uploaded = upload_team_file(client, auth_headers, team_id, folder["id"], sample_file, name="matrix.docx")
         file_id = uploaded["fileId"]

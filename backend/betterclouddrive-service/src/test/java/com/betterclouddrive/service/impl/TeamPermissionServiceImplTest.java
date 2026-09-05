@@ -78,7 +78,7 @@ class TeamPermissionServiceImplTest {
                 .thenReturn(Optional.empty());
         when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectRole(anyLong(), anyLong(), anyString(), anyString()))
                 .thenReturn(Optional.empty());
-        when(permissionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(permissionRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
         when(teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(10L, 1))
                 .thenReturn(List.of(actor));
 
@@ -127,7 +127,7 @@ class TeamPermissionServiceImplTest {
                 .thenReturn(Optional.empty());
         when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectRole(anyLong(), anyLong(), anyString(), anyString()))
                 .thenReturn(Optional.empty());
-        when(permissionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(permissionRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
         when(teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(10L, 1))
                 .thenReturn(List.of(actor, editor, otherEditor, viewer));
 
@@ -191,6 +191,30 @@ class TeamPermissionServiceImplTest {
         assertThat(source.fileName()).isEqualTo("Docs");
         assertThat(source.subjectRole()).isEqualTo("EDITOR");
         assertThat(source.inherited()).isTrue();
+    }
+
+    @Test
+    void deletePermission_shouldRollbackWhenItWouldRemoveActorManagePermission() {
+        FileEntity file = teamFile();
+        TeamMemberEntity actor = TeamMemberEntity.builder().teamId(10L).userId(2L).role("EDITOR").status(1).build();
+        TeamFilePermissionEntity ownOverride = TeamFilePermissionEntity.builder()
+                .id(9L).teamId(10L).fileId(7L).subjectType("USER").subjectUserId(2L)
+                .canRead(true).canWrite(true).canShare(true).canDelete(true).canManage(true).build();
+        when(teamService.requireRead(2L, 10L)).thenReturn(actor);
+        when(fileRepository.findById(7L)).thenReturn(Optional.of(file));
+        when(permissionRepository.findById(9L)).thenReturn(Optional.of(ownOverride));
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectUserId(10L, 7L, "USER", 2L))
+                .thenReturn(Optional.of(ownOverride), Optional.empty());
+        when(permissionRepository.findByTeamIdAndFileIdAndSubjectTypeAndSubjectRole(10L, 7L, "ROLE", "EDITOR"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> permissionService.deletePermission(2L, 10L, 7L, 9L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("remove your own manage permission");
+
+        verify(permissionRepository).delete(ownOverride);
+        verify(permissionRepository).flush();
+        verify(teamAuditService, never()).record(anyLong(), anyLong(), anyString(), anyString(), anyLong(), any());
     }
 
     private FileEntity teamFile() {

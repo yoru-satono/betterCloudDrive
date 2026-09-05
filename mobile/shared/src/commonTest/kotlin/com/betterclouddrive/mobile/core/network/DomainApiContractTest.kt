@@ -6,6 +6,9 @@ import com.betterclouddrive.mobile.core.model.SessionRestoreResult
 import com.betterclouddrive.mobile.core.model.CreatePersonalShareRequest
 import com.betterclouddrive.mobile.core.model.ShareExpirationFilter
 import com.betterclouddrive.mobile.core.model.UpdatePersonalShareRequest
+import com.betterclouddrive.mobile.core.model.TeamPermissionSubjectType
+import com.betterclouddrive.mobile.core.model.TeamRole
+import com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest
 import com.betterclouddrive.mobile.core.platform.SecureSessionStore
 import com.betterclouddrive.mobile.core.platform.ServerSettingsStore
 import com.betterclouddrive.mobile.feature.transfers.TransferScope
@@ -644,6 +647,63 @@ class NetworkTestFacadeTest {
         assertTrue(observed.any { it.first.endsWith("/teams/10/files/search?q=note&page=1&size=50") })
         assertTrue(observed.any { it.first.endsWith("/teams/10/download/7") && it.second == "bytes=0-524287" })
         assertTrue(observed.any { it.first.endsWith("/teams/10/office/files/7/config?mobile=true") })
+    }
+
+    @Test
+    fun teamMembersAndPermissionsUseStageFifteenContracts() = runTest {
+        val observed = mutableListOf<Pair<HttpMethod, String>>()
+        val engine = MockEngine { request ->
+            observed += request.method to request.url.toString()
+            when (request.url.encodedPath) {
+                "/api/v1/teams/10/members" -> when (request.method) {
+                    HttpMethod.Get -> jsonResponse("""{"code":200,"data":{"records":[{"teamId":10,"userId":2,"username":"editor","role":"EDITOR"}],"total":1,"page":1,"size":50,"pages":1}}""")
+                    HttpMethod.Post -> {
+                        val body = (request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()
+                        assertTrue(body.contains("\"username\":\"viewer\"")); assertTrue(body.contains("\"role\":\"VIEWER\""))
+                        jsonResponse("""{"code":200,"data":{"teamId":10,"userId":3,"username":"viewer","role":"VIEWER"}}""")
+                    }
+                    else -> error("unexpected ${request.method}")
+                }
+                "/api/v1/teams/10/members/3" -> when (request.method) {
+                    HttpMethod.Put -> jsonResponse("""{"code":200,"data":{"teamId":10,"userId":3,"username":"viewer","role":"EDITOR"}}""")
+                    HttpMethod.Delete -> jsonResponse("""{"code":200,"data":null}""")
+                    else -> error("unexpected ${request.method}")
+                }
+                "/api/v1/teams/10/files/7/effective-permission" -> jsonResponse(
+                    """{"code":200,"data":{"canRead":true,"canWrite":false,"canShare":false,"canDelete":false,"canManage":true,"sourceType":"USER_OVERRIDE","sourceChain":[{"type":"BASE_ROLE","subjectType":"ROLE","subjectRole":"EDITOR","canRead":true,"canWrite":true,"canShare":true,"canDelete":true,"canManage":false}]}}""",
+                )
+                "/api/v1/teams/10/files/7/permissions" -> when (request.method) {
+                    HttpMethod.Get -> jsonResponse("""{"code":200,"data":[{"id":4,"teamId":10,"fileId":7,"subjectType":"ROLE","subjectRole":"VIEWER","canRead":true,"canWrite":false,"canShare":false,"canDelete":false,"canManage":false}]}""")
+                    HttpMethod.Put -> jsonResponse("""{"code":200,"data":{"id":5,"teamId":10,"fileId":7,"subjectType":"USER","subjectUserId":3,"canRead":true,"canWrite":false,"canShare":false,"canDelete":false,"canManage":false}}""")
+                    else -> error("unexpected ${request.method}")
+                }
+                "/api/v1/teams/10/files/7/permissions/5" -> jsonResponse("""{"code":200,"data":null}""")
+                else -> error("unexpected ${request.url}")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals("editor", client.listTeamMembers(10, 1, 50).records.single().username)
+        assertEquals(TeamRole.VIEWER, client.addTeamMember(10, "viewer", TeamRole.VIEWER).role)
+        assertEquals(TeamRole.EDITOR, client.updateTeamMember(10, 3, TeamRole.EDITOR).role)
+        client.removeTeamMember(10, 3)
+        assertEquals("USER_OVERRIDE", client.getTeamEffectivePermission(10, 7).sourceType)
+        assertEquals("EDITOR", client.getTeamEffectivePermission(10, 7).sourceChain.single().subjectRole)
+        assertEquals(4, client.listTeamPermissions(10, 7).single().id)
+        val request = UpdateTeamFilePermissionRequest(
+            TeamPermissionSubjectType.USER, subjectUserId = 3,
+            canRead = true, canWrite = false, canShare = false, canDelete = false, canManage = false,
+        )
+        assertEquals(5, client.saveTeamPermission(10, 7, request).id)
+        client.deleteTeamPermission(10, 7, 5)
+
+        assertTrue(observed.contains(HttpMethod.Get to "https://drive.example.com/api/v1/teams/10/members?page=1&size=50"))
+        assertTrue(observed.contains(HttpMethod.Delete to "https://drive.example.com/api/v1/teams/10/files/7/permissions/5"))
     }
 
     @Test

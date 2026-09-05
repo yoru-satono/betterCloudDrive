@@ -145,7 +145,10 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
         permission.setCanDelete(canDelete);
         permission.setCanManage(canManage);
         permission.setUpdatedAt(now);
-        TeamFilePermissionEntity saved = permissionRepository.save(permission);
+        TeamFilePermissionEntity saved = permissionRepository.saveAndFlush(permission);
+        if (!effectivePermissions(actorUserId, teamId, fileId).canManage()) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Permission change would remove your own manage permission");
+        }
         teamAuditService.record(teamId, actorUserId, "PERMISSION_UPDATE", "FILE", fileId,
                 normalizedType + ":" + (SUBJECT_USER.equals(normalizedType) ? subjectUserId : permission.getSubjectRole()));
         notifyPermissionChange(teamId, actorUserId, file, saved, "Team file permission updated");
@@ -162,6 +165,10 @@ public class TeamPermissionServiceImpl implements TeamPermissionService {
             throw new BusinessException(ApiCode.NOT_FOUND, "Permission not found");
         }
         permissionRepository.delete(permission);
+        permissionRepository.flush();
+        if (!effectivePermissions(actorUserId, teamId, fileId).canManage()) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Permission change would remove your own manage permission");
+        }
         teamAuditService.record(teamId, actorUserId, "PERMISSION_DELETE", "FILE", fileId, String.valueOf(permissionId));
         notifyPermissionChange(teamId, actorUserId, requireTeamFileAnyState(teamId, fileId), permission, "Team file permission removed");
     }

@@ -96,7 +96,7 @@ KMP 个人搜索调用现有 `/files/search`，输入停止 300 ms 后请求，�
 
 KMP 登录后的共享产品外壳使用 Navigation Compose 类型安全路由。个人、团队、传输和我的始终具有固定顶层位置；窗口宽度小于 600dp 时使用底部导航栏，宽窗口使用侧边导航栏。页面 Composable 只接收状态和事件，不持有 `NavController` 或完整 `AppContainer`。
 
-团队分支使用 `TeamsRoute`、`TeamWorkspaceRoute`、`TeamFolderRoute`、`TeamSearchRoute` 和 `TeamPreviewRoute`。团队列表、目录、文件操作、搜索和预览分别由独立 Store 管理；团队切换取消旧请求，退出或换服务器清除全部团队缓存和 ticket。`TeamFileActionsStore` 负责有效权限、当前目录选择、名称变更、移动选择器和传输入队，成功后通过明确内容变更回调使团队目录/搜索/预览缓存失效。团队文本通过认证 Range 最多读取 512 KiB，图片/视频 ticket 不持久化，OnlyOffice 固定请求 `mobile=true` 并原样渲染签名配置。
+团队分支使用 `TeamsRoute`、`TeamWorkspaceRoute`、`TeamFolderRoute`、`TeamSearchRoute`、`TeamPreviewRoute` 和 `TeamMembersRoute`。团队列表、目录、文件操作、成员、权限、搜索和预览分别由独立 Store 管理；团队切换取消旧请求，退出或换服务器清除全部团队缓存和 ticket。`TeamMembersStore` 按角色矩阵提供成员操作，`TeamPermissionsStore` 一次管理一个文件或文件夹的来源链和直接覆盖；保存后通过明确授权变更事件刷新 `TeamFileActionsStore`，不允许 Store 直接修改彼此状态。团队文本通过认证 Range 最多读取 512 KiB，图片/视频 ticket 不持久化，OnlyOffice 固定请求 `mobile=true` 并原样渲染签名配置。
 
 个人文件夹同样使用类型安全路由。目录请求固定每页 50 条，接近列表或网格末尾时加载下一页；请求必须携带白名单排序字段和方向。快速切换目录、排序或刷新时取消旧任务并忽略迟到响应。目录返回栈缓存仅保留当前面包屑分支，滚动位置使用首个可见文件 ID 作为锚点。所有个人目录均显示上传入口，目标目录必须在打开系统选择器时冻结；批次完成后只刷新对应目录一次。
 

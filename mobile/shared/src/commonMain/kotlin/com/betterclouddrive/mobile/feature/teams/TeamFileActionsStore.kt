@@ -57,6 +57,7 @@ data class TeamFileActionsState(
 
 class TeamFileActionsStore(
     private val repository: TeamWorkspaceRepository,
+    private val permissions: TeamPermissionsRepository,
     private val transfers: TeamTransferOperations,
     parentScope: CoroutineScope,
     private val onContentChanged: (Long, Set<Long?>) -> Unit = { _, _ -> },
@@ -127,7 +128,7 @@ class TeamFileActionsStore(
         mutableState.update { it.copy(loadingPermissionIds = it.loadingPermissionIds + file.id) }
         scope.launch {
             try {
-                val permission = repository.effectivePermission(teamId, file.id)
+                val permission = permissions.effective(teamId, file.id)
                 mutableState.update { state -> if (state.teamId == teamId) state.copy(
                     itemPermissions = state.itemPermissions + (file.id to permission),
                     loadingPermissionIds = state.loadingPermissionIds - file.id,
@@ -148,7 +149,7 @@ class TeamFileActionsStore(
             mutableState.update { it.copy(loadingPermissionIds = it.loadingPermissionIds + file.id) }
             scope.launch {
                 try {
-                    val loaded = repository.effectivePermission(teamId, file.id)
+                    val loaded = permissions.effective(teamId, file.id)
                     mutableState.update { it.copy(
                         itemPermissions = it.itemPermissions + (file.id to loaded),
                         loadingPermissionIds = it.loadingPermissionIds - file.id,
@@ -278,6 +279,15 @@ class TeamFileActionsStore(
     fun consumeTransferFeedback() = mutableState.update { it.copy(transferFeedback = null) }
     fun clearPermissionError() = mutableState.update { it.copy(permissionError = null) }
 
+    fun invalidatePermission(teamId: Long, fileId: Long) {
+        if (state.value.teamId != teamId) return
+        mutableState.update { current -> current.copy(
+            itemPermissions = current.itemPermissions - fileId,
+            directoryPermission = current.directoryPermission.takeUnless { current.folderId == fileId },
+        ) }
+        if (state.value.folderId == fileId) loadDirectoryPermission(teamId, fileId)
+    }
+
     override fun reset() {
         permissionJob?.cancel(); mutationJob?.cancel(); pickerJob?.cancel(); uploadRefreshJob?.cancel()
         ignoreTeamSummaryRole = false
@@ -299,7 +309,7 @@ class TeamFileActionsStore(
         permissionJob = scope.launch {
             try {
                 val root = repository.getTeam(teamId).role.rootPermission()
-                val directory = if (folderId == null) root else repository.effectivePermission(teamId, folderId)
+                val directory = if (folderId == null) root else permissions.effective(teamId, folderId)
                 mutableState.update { current -> if (current.teamId == teamId && current.folderId == folderId) current.copy(
                     rootPermission = root,
                     directoryPermission = directory,
@@ -323,7 +333,7 @@ class TeamFileActionsStore(
         ) }
         permissionJob = scope.launch {
             try {
-                val permission = repository.effectivePermission(teamId, folderId)
+                val permission = permissions.effective(teamId, folderId)
                 mutableState.update { if (it.teamId == teamId && it.folderId == folderId) it.copy(
                     directoryPermission = permission, permissionLoading = false,
                 ) else it }
@@ -350,7 +360,7 @@ class TeamFileActionsStore(
                     page++
                 } while (hasMore)
                 val permission = if (folderId == null) state.value.rootPermission
-                else repository.effectivePermission(teamId, folderId)
+                else permissions.effective(teamId, folderId)
                 mutableState.update { current -> current.copy(folderPicker = current.folderPicker?.copy(
                     breadcrumb = breadcrumb, currentFolderId = folderId, folders = folders.distinctBy(FileItem::id),
                     targetPermission = permission, loading = false,

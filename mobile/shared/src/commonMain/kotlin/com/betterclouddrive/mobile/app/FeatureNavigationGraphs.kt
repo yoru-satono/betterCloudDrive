@@ -378,6 +378,26 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             onDownload = container.teamFileActionsStore::download,
         )
     }
+    composable<TeamMembersRoute> { entry ->
+        val teamId = entry.toRoute<TeamMembersRoute>().teamId
+        val state by container.teamMembersStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val listedTeam = container.teamsStore.state.value.items.firstOrNull { it.id == teamId }
+        val role = browser.team?.takeIf { it.id == teamId }?.role ?: listedTeam?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
+        LaunchedEffect(teamId, role) { container.teamMembersStore.activate(teamId, role) }
+        TeamMembersScreen(
+            state = state,
+            wide = wide,
+            onBack = navController::popBackStack,
+            onRefresh = container.teamMembersStore::refresh,
+            onLoadMore = container.teamMembersStore::loadMore,
+            onAdd = container.teamMembersStore::add,
+            onUpdateRole = container.teamMembersStore::updateRole,
+            onRemove = container.teamMembersStore::remove,
+            onClearAddError = container.teamMembersStore::clearAddError,
+            onClearFeedback = container.teamMembersStore::clearFeedback,
+        )
+    }
 }
 
 @Composable
@@ -391,6 +411,8 @@ private fun TeamBrowserDestination(
 ) {
     val state by container.teamBrowserStore.state.collectAsState()
     val actions by container.teamFileActionsStore.state.collectAsState()
+    val permissions by container.teamPermissionsStore.state.collectAsState()
+    val auth by container.authStore.state.collectAsState()
     LaunchedEffect(teamId, folderId) { container.teamBrowserStore.activate(teamId, folderId) }
     LaunchedEffect(teamId, folderId, state.team?.role) {
         container.teamFileActionsStore.activate(state.team, teamId, folderId)
@@ -398,7 +420,9 @@ private fun TeamBrowserDestination(
     TeamBrowserScreen(
         state = state,
         actions = actions,
+        permissions = permissions,
         wide = wide,
+        actorUserId = auth.user?.id,
         documentPicker = container.documentPicker,
         onBack = navController::popBackStack,
         onBackToTeams = {
@@ -418,6 +442,7 @@ private fun TeamBrowserDestination(
             navController.navigate(TeamFolderRoute(teamId, file.id))
         },
         onOpenSearch = { navController.navigate(TeamSearchRoute(teamId)) },
+        onOpenMembers = { navController.navigate(TeamMembersRoute(teamId)) },
         onRetryWorkspace = { container.teamBrowserStore.activate(teamId, folderId) },
         onRefresh = { container.teamFileActionsStore.clearSelection(); container.teamBrowserStore.refresh() },
         onLoadMore = container.teamBrowserStore::loadMore,
@@ -442,6 +467,12 @@ private fun TeamBrowserDestination(
         onConsumeFeedback = container.teamFileActionsStore::consumeFeedback,
         onConsumeTransferFeedback = container.teamFileActionsStore::consumeTransferFeedback,
         onClearPermissionError = container.teamFileActionsStore::clearPermissionError,
+        onManagePermissions = { container.teamPermissionsStore.open(teamId, it) },
+        onRetryPermissions = container.teamPermissionsStore::retry,
+        onSavePermission = container.teamPermissionsStore::save,
+        onDeletePermission = container.teamPermissionsStore::delete,
+        onClosePermissions = container.teamPermissionsStore::close,
+        onClearPermissionsFeedback = container.teamPermissionsStore::clearFeedback,
         onOpenTransfers = onOpenTransfers,
     )
 }

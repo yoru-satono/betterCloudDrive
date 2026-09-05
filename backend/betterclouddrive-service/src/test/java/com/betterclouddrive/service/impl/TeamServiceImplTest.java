@@ -106,6 +106,25 @@ class TeamServiceImplTest {
     }
 
     @Test
+    void addMember_shouldRejectAdminChangingExistingAdmin() {
+        TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
+        TeamMemberEntity actor = TeamMemberEntity.builder()
+                .teamId(10L).userId(1L).role(TeamService.ROLE_ADMIN).status(1).build();
+        TeamMemberEntity targetMember = TeamMemberEntity.builder()
+                .teamId(10L).userId(2L).role(TeamService.ROLE_ADMIN).status(1).build();
+        UserEntity target = UserEntity.builder().id(2L).username("other-admin").build();
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(actor));
+        when(userRepository.findByUsername("other-admin")).thenReturn(Optional.of(target));
+        when(teamMemberRepository.findByTeamIdAndUserId(10L, 2L)).thenReturn(Optional.of(targetMember));
+
+        assertThatThrownBy(() -> teamService.addMember(1L, 10L, "other-admin", TeamService.ROLE_EDITOR))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(403));
+        verify(teamMemberRepository, never()).save(targetMember);
+    }
+
+    @Test
     void updateMember_shouldRejectOwnerRoleChange() {
         TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
         TeamMemberEntity owner = TeamMemberEntity.builder()
@@ -117,6 +136,23 @@ class TeamServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(403));
         verify(teamMemberRepository, never()).save(any());
+    }
+
+    @Test
+    void updateMember_shouldRejectAdminChangingAnotherAdmin() {
+        TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
+        TeamMemberEntity actor = TeamMemberEntity.builder()
+                .teamId(10L).userId(1L).role(TeamService.ROLE_ADMIN).status(1).build();
+        TeamMemberEntity target = TeamMemberEntity.builder()
+                .teamId(10L).userId(2L).role(TeamService.ROLE_ADMIN).status(1).build();
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(actor));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 2L, 1)).thenReturn(Optional.of(target));
+
+        assertThatThrownBy(() -> teamService.updateMember(1L, 10L, 2L, TeamService.ROLE_EDITOR))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(403));
+        verify(teamMemberRepository, never()).save(target);
     }
 
     @Test

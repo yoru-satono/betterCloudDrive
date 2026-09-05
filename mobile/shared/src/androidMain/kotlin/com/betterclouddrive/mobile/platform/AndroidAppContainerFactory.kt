@@ -23,6 +23,8 @@ import com.betterclouddrive.mobile.core.network.TransferApi
 import com.betterclouddrive.mobile.core.network.PersonalRecoveryApi
 import com.betterclouddrive.mobile.core.network.TeamPreviewApi
 import com.betterclouddrive.mobile.core.network.TeamWorkspaceApi
+import com.betterclouddrive.mobile.core.network.TeamMembersApi
+import com.betterclouddrive.mobile.core.network.TeamPermissionsApi
 import com.betterclouddrive.mobile.feature.auth.AuthRepository
 import com.betterclouddrive.mobile.feature.files.PersonalFilesRepositoryImpl
 import com.betterclouddrive.mobile.feature.files.FavoritesRepositoryImpl
@@ -36,6 +38,8 @@ import com.betterclouddrive.mobile.feature.transfers.TransferManager
 import com.betterclouddrive.mobile.feature.transfers.TransferRepository
 import com.betterclouddrive.mobile.feature.teams.TeamPreviewRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamWorkspaceRepositoryImpl
+import com.betterclouddrive.mobile.feature.teams.TeamMembersRepositoryImpl
+import com.betterclouddrive.mobile.feature.teams.TeamPermissionsRepositoryImpl
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CoroutineScope
@@ -93,6 +97,8 @@ object AndroidAppContainerFactory {
         val recoveryApi = PersonalRecoveryApi(http)
         val teamWorkspaceApi = TeamWorkspaceApi(http)
         val teamPreviewApi = TeamPreviewApi(http)
+        val teamMembersApi = TeamMembersApi(http)
+        val teamPermissionsApi = TeamPermissionsApi(http)
         val engine = TransferEngine(transferApi, repository, fileAccess)
         val manager = TransferManager(transferApi, repository, scheduler, fileAccess)
         return AppContainer(
@@ -107,6 +113,8 @@ object AndroidAppContainerFactory {
             personalVersions = PersonalVersionsRepositoryImpl(filesApi, recoveryApi),
             teamWorkspace = TeamWorkspaceRepositoryImpl(teamWorkspaceApi),
             teamPreview = TeamPreviewRepositoryImpl(teamWorkspaceApi, teamPreviewApi),
+            teamMembers = TeamMembersRepositoryImpl(teamMembersApi),
+            teamPermissions = TeamPermissionsRepositoryImpl(teamPermissionsApi),
             database = database,
             transfers = manager,
             transferEngine = engine,

@@ -203,12 +203,6 @@ class TeamWorkspaceApi(private val http: AuthenticatedHttpClient) {
         } }
     }
 
-    suspend fun effectivePermission(teamId: Long, fileId: Long): TeamEffectivePermission = http.run {
-        authenticatedEnvelope { client, token ->
-            client.get(url("teams/$teamId/files/$fileId/effective-permission")) { bearer(token) }
-        }
-    }
-
     suspend fun createFolder(teamId: Long, parentId: Long?, name: String): FileItem = http.run {
         authenticatedEnvelope { client, token -> client.post(url("teams/$teamId/files/folder")) {
             bearer(token); jsonBody(CreateTeamFolderRequest(parentId, name))
@@ -231,6 +225,61 @@ class TeamWorkspaceApi(private val http: AuthenticatedHttpClient) {
         authenticatedNoData { client, token -> client.delete(url("teams/$teamId/files")) {
             bearer(token); jsonBody(DeleteTeamFilesRequest(fileIds.distinct()))
         } }
+    }
+}
+
+class TeamMembersApi(private val http: AuthenticatedHttpClient) {
+    suspend fun list(teamId: Long, page: Int, size: Int): PageResult<TeamMember> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/members")) {
+            bearer(token); url {
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun add(teamId: Long, username: String, role: TeamRole): TeamMember = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("teams/$teamId/members")) {
+            bearer(token); jsonBody(AddTeamMemberRequest(username, role))
+        } }
+    }
+
+    suspend fun update(teamId: Long, userId: Long, role: TeamRole): TeamMember = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("teams/$teamId/members/$userId")) {
+            bearer(token); jsonBody(UpdateTeamMemberRequest(role))
+        } }
+    }
+
+    suspend fun remove(teamId: Long, userId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId/members/$userId")) { bearer(token) } }
+    }
+}
+
+class TeamPermissionsApi(private val http: AuthenticatedHttpClient) {
+    suspend fun effective(teamId: Long, fileId: Long): TeamEffectivePermission = http.run {
+        authenticatedEnvelope { client, token ->
+            client.get(url("teams/$teamId/files/$fileId/effective-permission")) { bearer(token) }
+        }
+    }
+
+    suspend fun list(teamId: Long, fileId: Long): List<TeamFilePermission> = http.run {
+        authenticatedEnvelope { client, token ->
+            client.get(url("teams/$teamId/files/$fileId/permissions")) { bearer(token) }
+        }
+    }
+
+    suspend fun upsert(
+        teamId: Long, fileId: Long, request: UpdateTeamFilePermissionRequest,
+    ): TeamFilePermission = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("teams/$teamId/files/$fileId/permissions")) {
+            bearer(token); jsonBody(request)
+        } }
+    }
+
+    suspend fun delete(teamId: Long, fileId: Long, permissionId: Long) = http.run {
+        authenticatedNoData { client, token ->
+            client.delete(url("teams/$teamId/files/$fileId/permissions/$permissionId")) { bearer(token) }
+        }
     }
 }
 

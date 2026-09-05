@@ -30,6 +30,8 @@ class NetworkTestFacade private constructor(
     private val recovery = PersonalRecoveryApi(http)
     private val teams = TeamWorkspaceApi(http)
     private val teamPreview = TeamPreviewApi(http)
+    private val teamPermissions = TeamPermissionsApi(http)
+    private val teamMembers = TeamMembersApi(http)
 
     val sessionInvalidations get() = http.sessionInvalidations
     suspend fun initialize() = http.initialize()
@@ -95,7 +97,16 @@ class NetworkTestFacade private constructor(
         teams.listFiles(teamId, parentId, page, size, sortBy, order)
     suspend fun getTeamFile(teamId: Long, fileId: Long) = teams.getFile(teamId, fileId)
     suspend fun searchTeamFiles(teamId: Long, query: String, page: Int, size: Int) = teams.search(teamId, query, page, size)
-    suspend fun getTeamEffectivePermission(teamId: Long, fileId: Long) = teams.effectivePermission(teamId, fileId)
+    suspend fun getTeamEffectivePermission(teamId: Long, fileId: Long) = teamPermissions.effective(teamId, fileId)
+    suspend fun listTeamMembers(teamId: Long, page: Int, size: Int) = teamMembers.list(teamId, page, size)
+    suspend fun addTeamMember(teamId: Long, username: String, role: TeamRole) = teamMembers.add(teamId, username, role)
+    suspend fun updateTeamMember(teamId: Long, userId: Long, role: TeamRole) = teamMembers.update(teamId, userId, role)
+    suspend fun removeTeamMember(teamId: Long, userId: Long) = teamMembers.remove(teamId, userId)
+    suspend fun listTeamPermissions(teamId: Long, fileId: Long) = teamPermissions.list(teamId, fileId)
+    suspend fun saveTeamPermission(teamId: Long, fileId: Long, request: UpdateTeamFilePermissionRequest) =
+        teamPermissions.upsert(teamId, fileId, request)
+    suspend fun deleteTeamPermission(teamId: Long, fileId: Long, permissionId: Long) =
+        teamPermissions.delete(teamId, fileId, permissionId)
     suspend fun createTeamFolder(teamId: Long, parentId: Long?, name: String) = teams.createFolder(teamId, parentId, name)
     suspend fun renameTeamFile(teamId: Long, fileId: Long, name: String) = teams.rename(teamId, fileId, name)
     suspend fun moveTeamFile(teamId: Long, fileId: Long, parentId: Long?) = teams.move(teamId, fileId, parentId)

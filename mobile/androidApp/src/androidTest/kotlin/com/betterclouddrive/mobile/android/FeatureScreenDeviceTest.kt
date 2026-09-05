@@ -35,14 +35,23 @@ import com.betterclouddrive.mobile.app.PersonalSearchScreen
 import com.betterclouddrive.mobile.app.TagFilesScreen
 import com.betterclouddrive.mobile.app.TagsScreen
 import com.betterclouddrive.mobile.app.TeamBrowserScreen
+import com.betterclouddrive.mobile.app.TeamMembersScreen
+import com.betterclouddrive.mobile.app.TeamPermissionsOverlay
 import com.betterclouddrive.mobile.app.TransferQueueScreen
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
+import com.betterclouddrive.mobile.core.localization.MobileString
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.localization.mobileStringsFor
 import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.model.TeamEffectivePermission
+import com.betterclouddrive.mobile.core.model.TeamFilePermission
+import com.betterclouddrive.mobile.core.model.TeamMember
+import com.betterclouddrive.mobile.core.model.TeamPermissionSource
+import com.betterclouddrive.mobile.core.model.TeamPermissionSubjectType
 import com.betterclouddrive.mobile.core.model.TeamRole
 import com.betterclouddrive.mobile.core.model.TeamSummary
+import com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.DownloadRequest
 import com.betterclouddrive.mobile.core.platform.PickedDestination
@@ -58,6 +67,8 @@ import com.betterclouddrive.mobile.feature.organization.OrganizationFileListStat
 import com.betterclouddrive.mobile.feature.organization.TagsState
 import com.betterclouddrive.mobile.feature.teams.TeamBrowserState
 import com.betterclouddrive.mobile.feature.teams.TeamFileActionsState
+import com.betterclouddrive.mobile.feature.teams.TeamMembersState
+import com.betterclouddrive.mobile.feature.teams.TeamPermissionsState
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferScope
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
@@ -158,6 +169,79 @@ class FeatureScreenDeviceTest {
             )
         }
         composeRule.onNodeWithTag("team-delete-selected").assertIsDisplayed()
+    }
+
+    @Test
+    fun teamMembersScreenEnforcesAdminRoleBoundary() {
+        val admin = TeamMember(userId = 2, username = "admin-user", role = TeamRole.ADMIN)
+        val editor = TeamMember(userId = 3, username = "editor-user", role = TeamRole.EDITOR)
+        var changed: Pair<Long, TeamRole>? = null
+        composeRule.setContent { themed("en-US") {
+            TeamMembersScreen(
+                state = TeamMembersState(teamId = 9, actorRole = TeamRole.ADMIN, items = listOf(admin, editor), page = 1),
+                wide = false,
+                onBack = {}, onRefresh = {}, onLoadMore = {}, onAdd = { _, _ -> },
+                onUpdateRole = { member, role -> changed = member.userId to role },
+                onRemove = {}, onClearAddError = {}, onClearFeedback = {},
+            )
+        } }
+        composeRule.onAllNodesWithTag("team-member-more-2").assertCountEquals(0)
+        composeRule.onNodeWithTag("team-member-more-3").performClick()
+        composeRule.onNodeWithTag("team-member-role-3-viewer").performClick()
+        composeRule.onNodeWithText("Confirm").performClick()
+        composeRule.runOnIdle { assertEquals(editor.userId to TeamRole.VIEWER, changed) }
+    }
+
+    @Test
+    fun teamMembersScreenClosesAddSheetAfterSuccess() {
+        val state = mutableStateOf(TeamMembersState(teamId = 9, actorRole = TeamRole.OWNER, page = 1))
+        composeRule.setContent { themed("en-US") {
+            TeamMembersScreen(
+                state = state.value,
+                wide = false,
+                onBack = {}, onRefresh = {}, onLoadMore = {}, onAdd = { _, _ -> },
+                onUpdateRole = { _, _ -> }, onRemove = {}, onClearAddError = {}, onClearFeedback = {},
+            )
+        } }
+        composeRule.onNodeWithTag("team-member-add").performClick()
+        composeRule.onNodeWithTag("team-member-username").assertIsDisplayed()
+        composeRule.runOnIdle {
+            state.value = state.value.copy(feedback = UiMessage(MobileString.TeamMemberAdded))
+        }
+        composeRule.onAllNodesWithTag("team-member-username").assertCountEquals(0)
+    }
+
+    @Test
+    fun permissionEditorKeepsReadWhenWriteIsEnabled() {
+        val member = TeamMember(userId = 3, username = "editor-user", role = TeamRole.EDITOR)
+        val effective = TeamEffectivePermission(
+            canRead = true, canWrite = true, canShare = false, canDelete = false, canManage = true,
+            sourceChain = listOf(TeamPermissionSource(type = "BASE_ROLE", subjectRole = "OWNER", canRead = true, canManage = true)),
+        )
+        val direct = TeamFilePermission(
+            id = 8, teamId = 9, fileId = 41, subjectType = TeamPermissionSubjectType.ROLE,
+            subjectRole = TeamRole.EDITOR, canRead = true, canWrite = true,
+        )
+        var saved: UpdateTeamFilePermissionRequest? = null
+        composeRule.setContent { themed("en-US") {
+            TeamPermissionsOverlay(
+                state = TeamPermissionsState(
+                    teamId = 9, target = FileItem(id = 41, fileName = "team-note.txt"), effective = effective,
+                    direct = listOf(direct), members = listOf(member),
+                ),
+                wide = false, actorUserId = 1, actorRole = TeamRole.OWNER,
+                onDismiss = {}, onRetry = {}, onSave = { saved = it }, onDelete = {}, onClearFeedback = {},
+            )
+        } }
+        composeRule.onNodeWithTag("team-permissions-sheet").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-permission-8").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-permission-add").performClick()
+        composeRule.onNodeWithTag("team-permission-write").performClick()
+        composeRule.onNodeWithTag("team-permission-save").performClick()
+        composeRule.runOnIdle {
+            assertEquals(true, saved?.canRead)
+            assertEquals(true, saved?.canWrite)
+        }
     }
 
     @Test
@@ -306,14 +390,18 @@ class FeatureScreenDeviceTest {
     @Composable
     private fun teamBrowser(state: TeamBrowserState, actions: TeamFileActionsState) {
         TeamBrowserScreen(
-            state = state, actions = actions, wide = false, documentPicker = NoopDocumentPicker,
+            state = state, actions = actions, permissions = TeamPermissionsState(), wide = false,
+            actorUserId = 1, documentPicker = NoopDocumentPicker,
             onBack = {}, onBackToTeams = {}, onBreadcrumb = {}, onOpenFolder = {}, onOpenSearch = {},
+            onOpenMembers = {},
             onRetryWorkspace = {}, onRefresh = {}, onLoadMore = {}, onSort = { _, _ -> }, onViewMode = {},
             onSelect = {}, onPreview = {}, onRequestPermission = {}, onToggleSelection = {}, onClearSelection = {},
             onCreateFolder = {}, onRename = { _, _ -> }, onDelete = {}, onOpenMovePicker = {},
             onOpenPickerFolder = {}, onPickerBack = {}, onRetryPicker = {}, onClosePicker = {},
             onConfirmMove = {}, onUpload = {}, onDownload = { _, _ -> }, onConsumeFeedback = {},
             onConsumeTransferFeedback = {}, onClearPermissionError = {}, onOpenTransfers = {},
+            onManagePermissions = {}, onRetryPermissions = {}, onSavePermission = {}, onDeletePermission = {},
+            onClosePermissions = {}, onClearPermissionsFeedback = {},
         )
     }
 

@@ -40,7 +40,8 @@ class TeamStoresTest {
         val repository = FakeTeamWorkspace()
         val transfers = FakeTeamTransfers()
         val changes = mutableListOf<Pair<Long, Set<Long?>>>()
-        val store = TeamFileActionsStore(repository, transfers, backgroundScope) { teamId, folders ->
+        val permissions = FakeTeamPermissions(repository)
+        val store = TeamFileActionsStore(repository, permissions, transfers, backgroundScope) { teamId, folders ->
             changes += teamId to folders
         }
 
@@ -66,7 +67,8 @@ class TeamStoresTest {
         val repository = FakeTeamWorkspace()
         val transfers = FakeTeamTransfers()
         val changes = mutableListOf<Pair<Long, Set<Long?>>>()
-        val store = TeamFileActionsStore(repository, transfers, backgroundScope) { teamId, folders ->
+        val permissions = FakeTeamPermissions(repository)
+        val store = TeamFileActionsStore(repository, permissions, transfers, backgroundScope) { teamId, folders ->
             changes += teamId to folders
         }
         store.activate(TEAM.copy(role = TeamRole.EDITOR), TEAM.id, 12L); runCurrent()
@@ -197,7 +199,6 @@ class TeamStoresTest {
             searchQueries += query
             return searches.removeFirst()
         }
-        override suspend fun effectivePermission(teamId: Long, fileId: Long) = effective
         override suspend fun createFolder(teamId: Long, parentId: Long?, name: String) = FILE.copy(id = 100, parentId = parentId, fileName = name, fileType = "folder")
         override suspend fun rename(teamId: Long, fileId: Long, name: String): FileItem {
             renameFailure?.let { throw it }
@@ -205,6 +206,17 @@ class TeamStoresTest {
         }
         override suspend fun move(teamId: Long, fileId: Long, parentId: Long?) = Unit
         override suspend fun delete(teamId: Long, fileIds: List<Long>) { deletedIds += fileIds }
+    }
+
+    private class FakeTeamPermissions(private val workspace: FakeTeamWorkspace) : TeamPermissionsRepository {
+        override suspend fun effective(teamId: Long, fileId: Long) = workspace.effective
+        override suspend fun list(teamId: Long, fileId: Long) = emptyList<com.betterclouddrive.mobile.core.model.TeamFilePermission>()
+        override suspend fun upsert(
+            teamId: Long,
+            fileId: Long,
+            request: com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest,
+        ) = error("not used")
+        override suspend fun delete(teamId: Long, fileId: Long, permissionId: Long) = Unit
     }
 
     private class FakeTeamTransfers : TeamTransferOperations {

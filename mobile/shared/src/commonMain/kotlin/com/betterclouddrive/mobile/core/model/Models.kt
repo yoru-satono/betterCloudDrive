@@ -116,6 +116,72 @@ data class TeamEffectivePermission(
     @SerialName("canDelete") val canDelete: Boolean = false,
     @SerialName("canManage") val canManage: Boolean = false,
     @SerialName("sourceType") val sourceType: String = "UNSPECIFIED",
+    @SerialName("sourceChain") val sourceChain: List<TeamPermissionSource> = emptyList(),
+)
+
+@Serializable
+data class TeamPermissionSource(
+    val type: String = "UNSPECIFIED",
+    @SerialName("fileId") val fileId: Long? = null,
+    @SerialName("fileName") val fileName: String? = null,
+    @SerialName("subjectType") val subjectType: String? = null,
+    @SerialName("subjectUserId") val subjectUserId: Long? = null,
+    @SerialName("subjectRole") val subjectRole: String? = null,
+    val inherited: Boolean = false,
+    @SerialName("canRead") val canRead: Boolean = false,
+    @SerialName("canWrite") val canWrite: Boolean = false,
+    @SerialName("canShare") val canShare: Boolean = false,
+    @SerialName("canDelete") val canDelete: Boolean = false,
+    @SerialName("canManage") val canManage: Boolean = false,
+    @SerialName("descriptionKey") val descriptionKey: String? = null,
+    @SerialName("descriptionParams") val descriptionParams: Map<String, String> = emptyMap(),
+)
+
+@Serializable
+data class TeamMember(
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("userId") val userId: Long = 0,
+    val username: String = "",
+    val email: String? = null,
+    val role: TeamRole = TeamRole.VIEWER,
+    val status: Int = 1,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+)
+
+@Serializable
+enum class TeamPermissionSubjectType { USER, ROLE }
+
+@Serializable
+data class TeamFilePermission(
+    val id: Long = 0,
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("fileId") val fileId: Long = 0,
+    @SerialName("subjectType") val subjectType: TeamPermissionSubjectType = TeamPermissionSubjectType.USER,
+    @SerialName("subjectUserId") val subjectUserId: Long? = null,
+    @SerialName("subjectRole") val subjectRole: TeamRole? = null,
+    @SerialName("canRead") val canRead: Boolean = false,
+    @SerialName("canWrite") val canWrite: Boolean = false,
+    @SerialName("canShare") val canShare: Boolean = false,
+    @SerialName("canDelete") val canDelete: Boolean = false,
+    @SerialName("canManage") val canManage: Boolean = false,
+    @SerialName("createdBy") val createdBy: Long? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+)
+
+@Serializable data class AddTeamMemberRequest(val username: String, val role: TeamRole)
+@Serializable data class UpdateTeamMemberRequest(val role: TeamRole)
+@Serializable
+data class UpdateTeamFilePermissionRequest(
+    @SerialName("subjectType") val subjectType: TeamPermissionSubjectType,
+    @SerialName("subjectUserId") val subjectUserId: Long? = null,
+    @SerialName("subjectRole") val subjectRole: TeamRole? = null,
+    @SerialName("canRead") val canRead: Boolean,
+    @SerialName("canWrite") val canWrite: Boolean,
+    @SerialName("canShare") val canShare: Boolean,
+    @SerialName("canDelete") val canDelete: Boolean,
+    @SerialName("canManage") val canManage: Boolean,
 )
 
 @Serializable data class CreateTeamFolderRequest(@SerialName("parentId") val parentId: Long? = null, @SerialName("folderName") val folderName: String)

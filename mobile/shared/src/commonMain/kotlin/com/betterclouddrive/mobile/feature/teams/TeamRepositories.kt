@@ -4,7 +4,6 @@ import com.betterclouddrive.mobile.core.model.FileItem
 import com.betterclouddrive.mobile.core.model.OfficeConfig
 import com.betterclouddrive.mobile.core.model.PageResult
 import com.betterclouddrive.mobile.core.model.TeamSummary
-import com.betterclouddrive.mobile.core.model.TeamEffectivePermission
 import com.betterclouddrive.mobile.core.model.TextPreview
 import com.betterclouddrive.mobile.core.network.TeamPreviewApi
 import com.betterclouddrive.mobile.core.network.TeamWorkspaceApi
@@ -19,7 +18,6 @@ interface TeamWorkspaceRepository {
     ): PageResult<FileItem>
     suspend fun getFile(teamId: Long, fileId: Long): FileItem
     suspend fun search(teamId: Long, query: String, page: Int, size: Int): PageResult<FileItem>
-    suspend fun effectivePermission(teamId: Long, fileId: Long): TeamEffectivePermission
     suspend fun createFolder(teamId: Long, parentId: Long?, name: String): FileItem
     suspend fun rename(teamId: Long, fileId: Long, name: String): FileItem
     suspend fun move(teamId: Long, fileId: Long, parentId: Long?)
@@ -43,7 +41,6 @@ class TeamWorkspaceRepositoryImpl(private val api: TeamWorkspaceApi) : TeamWorks
     override suspend fun getFile(teamId: Long, fileId: Long) = api.getFile(teamId, fileId)
     override suspend fun search(teamId: Long, query: String, page: Int, size: Int) =
         api.search(teamId, query, page, size)
-    override suspend fun effectivePermission(teamId: Long, fileId: Long) = api.effectivePermission(teamId, fileId)
     override suspend fun createFolder(teamId: Long, parentId: Long?, name: String) = api.createFolder(teamId, parentId, name)
     override suspend fun rename(teamId: Long, fileId: Long, name: String) = api.rename(teamId, fileId, name)
     override suspend fun move(teamId: Long, fileId: Long, parentId: Long?) = api.move(teamId, fileId, parentId)

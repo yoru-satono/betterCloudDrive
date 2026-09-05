@@ -23,6 +23,7 @@ import org.springframework.data.domain.PageRequest;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -128,7 +129,7 @@ public class TeamServiceImpl implements TeamService {
     @Override
     public PageResult<TeamMemberView> listMembers(Long userId, Long teamId, int page, int size) {
         requireRead(userId, teamId);
-        Page<TeamMemberEntity> memberPage = teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(
+        Page<TeamMemberEntity> memberPage = teamMemberRepository.findActiveMembersStable(
                 teamId, ACTIVE, PageRequest.of(Math.max(page - 1, 0), size));
         List<TeamMemberEntity> members = memberPage.getContent();
         Map<Long, UserEntity> users = userRepository.findAllById(
@@ -153,6 +154,10 @@ public class TeamServiceImpl implements TeamService {
         UserEntity user = userRepository.findByUsername(username.trim())
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "User not found"));
         TeamMemberEntity member = teamMemberRepository.findByTeamIdAndUserId(teamId, user.getId()).orElse(null);
+        if (member != null && Objects.equals(member.getStatus(), ACTIVE) &&
+                !ROLE_OWNER.equals(actor.getRole()) && ROLE_ADMIN.equals(member.getRole())) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Only owner can manage admins");
+        }
         LocalDateTime now = LocalDateTime.now();
         if (member == null) {
             member = TeamMemberEntity.builder()
@@ -187,8 +192,9 @@ public class TeamServiceImpl implements TeamService {
         if (ROLE_OWNER.equals(member.getRole())) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Owner role cannot be changed");
         }
-        if (!ROLE_OWNER.equals(actor.getRole()) && ROLE_ADMIN.equals(normalizedRole)) {
-            throw new BusinessException(ApiCode.FORBIDDEN, "Only owner can promote admins");
+        if (!ROLE_OWNER.equals(actor.getRole()) &&
+                (ROLE_ADMIN.equals(member.getRole()) || ROLE_ADMIN.equals(normalizedRole))) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Only owner can manage admins");
         }
         member.setRole(normalizedRole);
         member.setUpdatedAt(LocalDateTime.now());

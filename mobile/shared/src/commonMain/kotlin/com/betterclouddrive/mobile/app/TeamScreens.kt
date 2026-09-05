@@ -101,6 +101,9 @@ import com.betterclouddrive.mobile.feature.teams.TeamFolderPickerState
 import com.betterclouddrive.mobile.feature.teams.TeamPreviewState
 import com.betterclouddrive.mobile.feature.teams.TeamSearchState
 import com.betterclouddrive.mobile.feature.teams.TeamsState
+import com.betterclouddrive.mobile.feature.teams.TeamPermissionsState
+import com.betterclouddrive.mobile.core.model.TeamFilePermission
+import com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest
 import com.betterclouddrive.mobile.feature.transfers.MAX_UPLOAD_SELECTION
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -232,13 +235,16 @@ private fun TeamCreateOverlay(
 fun TeamBrowserScreen(
     state: TeamBrowserState,
     actions: TeamFileActionsState,
+    permissions: TeamPermissionsState,
     wide: Boolean,
+    actorUserId: Long?,
     documentPicker: DocumentPicker,
     onBack: () -> Unit,
     onBackToTeams: () -> Unit,
     onBreadcrumb: (Long?) -> Unit,
     onOpenFolder: (FileItem) -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenMembers: () -> Unit,
     onRetryWorkspace: () -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
@@ -263,6 +269,12 @@ fun TeamBrowserScreen(
     onConsumeFeedback: () -> Unit,
     onConsumeTransferFeedback: () -> Unit,
     onClearPermissionError: () -> Unit,
+    onManagePermissions: (FileItem) -> Unit,
+    onRetryPermissions: () -> Unit,
+    onSavePermission: (UpdateTeamFilePermissionRequest) -> Unit,
+    onDeletePermission: (TeamFilePermission) -> Unit,
+    onClosePermissions: () -> Unit,
+    onClearPermissionsFeedback: () -> Unit,
     onOpenTransfers: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
@@ -282,6 +294,7 @@ fun TeamBrowserScreen(
         pendingDownload = file
         downloadLauncher(DownloadRequest(file.fileName, file.mimeType))
     }
+    LaunchedEffect(state.selectedFile?.id) { state.selectedFile?.let(onRequestPermission) }
     BackHandler(enabled = actions.folderPicker != null || actions.selectedIds.isNotEmpty()) {
         if (actions.folderPicker != null) onClosePicker() else onClearSelection()
     }
@@ -325,6 +338,7 @@ fun TeamBrowserScreen(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent])
             } },
             actions = {
+                IconButton(onOpenMembers, Modifier.testTag("team-members-open")) { Icon(Icons.Default.Groups, strings[MobileString.TeamMembers]) }
                 IconButton(onOpenSearch, Modifier.testTag("team-search-open")) { Icon(Icons.Default.Search, strings[MobileString.TeamSearch]) }
                 Box {
                     IconButton({ sortMenu = true }, Modifier.testTag("team-sort")) { Icon(Icons.AutoMirrored.Filled.Sort, strings[MobileString.Sort]) }
@@ -387,7 +401,7 @@ fun TeamBrowserScreen(
                         TeamDirectoryContent(
                             state, actions, onOpenFolder, onSelect, onLoadMore, onRequestPermission,
                             onToggleSelection, { renameTarget = it }, onOpenMovePicker,
-                            { deleteTargets = listOf(it) }, ::download,
+                            { deleteTargets = listOf(it) }, ::download, onManagePermissions,
                         )
                     }
                 }
@@ -397,6 +411,7 @@ fun TeamBrowserScreen(
                 TeamFileDetails(
                     state.selectedFile, actions, onPreview, onRequestPermission,
                     { renameTarget = it }, onOpenMovePicker, { deleteTargets = listOf(it) }, ::download,
+                    onManagePermissions,
                     Modifier.weight(.38f).fillMaxSize(),
                 )
             }
@@ -406,6 +421,7 @@ fun TeamBrowserScreen(
         TeamFileDetails(
             state.selectedFile, actions, onPreview, onRequestPermission,
             { renameTarget = it }, onOpenMovePicker, { deleteTargets = listOf(it) }, ::download,
+            onManagePermissions,
             Modifier.fillMaxWidth(),
         )
     }
@@ -436,6 +452,17 @@ fun TeamBrowserScreen(
         it, wide, actions.mutation != null, onOpenPickerFolder, onPickerBack,
         onRetryPicker, onClosePicker, onConfirmMove,
     ) }
+    TeamPermissionsOverlay(
+        state = permissions,
+        wide = wide,
+        actorUserId = actorUserId,
+        actorRole = state.team?.role ?: TeamRole.VIEWER,
+        onDismiss = onClosePermissions,
+        onRetry = onRetryPermissions,
+        onSave = onSavePermission,
+        onDelete = onDeletePermission,
+        onClearFeedback = onClearPermissionsFeedback,
+    )
 }
 
 @Composable
@@ -451,6 +478,7 @@ private fun TeamDirectoryContent(
     onMove: (FileItem) -> Unit,
     onDelete: (FileItem) -> Unit,
     onDownload: (FileItem) -> Unit,
+    onManagePermissions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     val current = state.current
@@ -464,6 +492,7 @@ private fun TeamDirectoryContent(
                     file, file.id in actions.selectedIds, actions.itemPermissions[file.id],
                     { if (actions.selectedIds.isNotEmpty()) onToggleSelection(file) else if (file.isFolder) onOpenFolder(file) else onSelect(file) },
                     { onToggleSelection(file) }, { onRequestPermission(file) }, onRename, onMove, onDelete, onDownload,
+                    onManagePermissions,
                 )
                 if (file.id == current.items.lastOrNull()?.id && current.hasMore) LaunchedEffect(file.id) { onLoadMore() }
             }
@@ -475,6 +504,7 @@ private fun TeamDirectoryContent(
                     file, file.id in actions.selectedIds, actions.itemPermissions[file.id],
                     { if (actions.selectedIds.isNotEmpty()) onToggleSelection(file) else if (file.isFolder) onOpenFolder(file) else onSelect(file) },
                     { onToggleSelection(file) }, { onRequestPermission(file) }, onRename, onMove, onDelete, onDownload,
+                    onManagePermissions,
                 )
                 if (file.id == current.items.lastOrNull()?.id && current.hasMore) LaunchedEffect(file.id) { onLoadMore() }
             }
@@ -498,6 +528,7 @@ private fun TeamFileRow(
     file: FileItem, selected: Boolean, permission: com.betterclouddrive.mobile.core.model.TeamEffectivePermission?,
     onClick: () -> Unit, onLongClick: () -> Unit, onRequestPermission: () -> Unit,
     onRename: (FileItem) -> Unit, onMove: (FileItem) -> Unit, onDelete: (FileItem) -> Unit, onDownload: (FileItem) -> Unit,
+    onManagePermissions: (FileItem) -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)
@@ -507,7 +538,7 @@ private fun TeamFileRow(
         Icon(if (selected) Icons.Default.Delete else if (file.isFolder) Icons.Default.Folder else Icons.Default.Description, null)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(formatFileSize(file.fileSize)) }
-        TeamFileActionMenu(file, permission, onRequestPermission, onRename, onMove, onDelete, onDownload)
+        TeamFileActionMenu(file, permission, onRequestPermission, onRename, onMove, onDelete, onDownload, onManagePermissions)
     }
     HorizontalDivider()
 }
@@ -518,13 +549,14 @@ private fun TeamFileCard(
     file: FileItem, selected: Boolean, permission: com.betterclouddrive.mobile.core.model.TeamEffectivePermission?,
     onClick: () -> Unit, onLongClick: () -> Unit, onRequestPermission: () -> Unit,
     onRename: (FileItem) -> Unit, onMove: (FileItem) -> Unit, onDelete: (FileItem) -> Unit, onDownload: (FileItem) -> Unit,
+    onManagePermissions: (FileItem) -> Unit,
 ) {
     Card(Modifier.padding(8.dp).combinedClickable(onClick = onClick, onLongClick = onLongClick).testTag("team-grid-${file.id}")) {
         Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(if (selected) Icons.Default.Delete else if (file.isFolder) Icons.Default.Folder else Icons.Default.Description, null)
             Text(file.fileName, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(formatFileSize(file.fileSize), style = MaterialTheme.typography.labelSmall)
-            TeamFileActionMenu(file, permission, onRequestPermission, onRename, onMove, onDelete, onDownload)
+            TeamFileActionMenu(file, permission, onRequestPermission, onRename, onMove, onDelete, onDownload, onManagePermissions)
         }
     }
 }
@@ -534,6 +566,7 @@ private fun TeamFileDetails(
     file: FileItem?, actions: TeamFileActionsState, onPreview: (FileItem) -> Unit,
     onRequestPermission: (FileItem) -> Unit, onRename: (FileItem) -> Unit,
     onMove: (FileItem) -> Unit, onDelete: (FileItem) -> Unit, onDownload: (FileItem) -> Unit,
+    onManagePermissions: (FileItem) -> Unit,
     modifier: Modifier,
 ) {
     val strings = LocalMobileStrings.current
@@ -545,13 +578,30 @@ private fun TeamFileDetails(
         TeamDetailRow(strings[MobileString.CreatedAt], formatDate(file.createdAt))
         TeamDetailRow(strings[MobileString.UpdatedAt], formatDate(file.updatedAt))
         TeamDetailRow("MD5", file.md5Hash ?: "—")
+        actions.itemPermissions[file.id]?.let { permission ->
+            TeamDetailRow(strings[MobileString.EffectivePermission], listOfNotNull(
+                strings[MobileString.PermissionRead].takeIf { permission.canRead },
+                strings[MobileString.PermissionWrite].takeIf { permission.canWrite },
+                strings[MobileString.PermissionShare].takeIf { permission.canShare },
+                strings[MobileString.PermissionDelete].takeIf { permission.canDelete },
+                strings[MobileString.PermissionManage].takeIf { permission.canManage },
+            ).ifEmpty { listOf("—") }.joinToString(" · "))
+            permission.sourceChain.forEach { source ->
+                Text(if (source.type == "BASE_ROLE") strings.format(MobileString.PermissionBaseRole, source.subjectRole ?: "—")
+                else if (source.inherited) strings.format(MobileString.PermissionInherited, source.fileName ?: "—")
+                else strings[MobileString.PermissionCurrentOverride], style = MaterialTheme.typography.labelSmall)
+            }
+            if (permission.canManage) OutlinedButton({ onManagePermissions(file) }, Modifier.testTag("team-manage-permissions-${file.id}")) {
+                Text(strings[MobileString.ManagePermissions])
+            }
+        }
         if (!file.isFolder && file.previewKind() != PreviewKind.UNSUPPORTED) Button(
             onClick = { onPreview(file) }, modifier = Modifier.testTag("team-preview-${file.id}"),
         ) { Icon(Icons.Default.Visibility, null); Text(strings[MobileString.Preview]) }
         if (!file.isFolder) OutlinedButton({ onDownload(file) }, Modifier.testTag("team-download-${file.id}")) {
             Icon(Icons.Default.Download, null); Text(strings[MobileString.Download])
         }
-        TeamFileActionMenu(file, actions.itemPermissions[file.id], { onRequestPermission(file) }, onRename, onMove, onDelete, onDownload)
+        TeamFileActionMenu(file, actions.itemPermissions[file.id], { onRequestPermission(file) }, onRename, onMove, onDelete, onDownload, onManagePermissions)
     }
 }
 
@@ -564,6 +614,7 @@ private fun TeamFileActionMenu(
     onMove: (FileItem) -> Unit,
     onDelete: (FileItem) -> Unit,
     onDownload: (FileItem) -> Unit,
+    onManagePermissions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var expanded by remember { mutableStateOf(false) }
@@ -589,6 +640,10 @@ private fun TeamFileActionMenu(
             if (permission?.canDelete == true) DropdownMenuItem(
                 text = { Text(strings[MobileString.Delete]) }, leadingIcon = { Icon(Icons.Default.Delete, null) },
                 onClick = { expanded = false; onDelete(file) },
+            )
+            if (permission?.canManage == true) DropdownMenuItem(
+                text = { Text(strings[MobileString.ManagePermissions]) },
+                onClick = { expanded = false; onManagePermissions(file) },
             )
         }
     }
@@ -727,7 +782,7 @@ internal fun TeamSearchScreen(
                                 if (file.isFolder) onOpenFolder(file)
                                 else if (file.previewKind() != PreviewKind.UNSUPPORTED) onPreview(file)
                                 else selectedUnsupported = file
-                            }, {}, {}, {}, {}, {}, ::download,
+                            }, {}, {}, {}, {}, {}, ::download, {},
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton({ onOpenLocation(file) }, Modifier.testTag("team-open-location-${file.id}")) { Text(strings[MobileString.OpenLocation]) }
@@ -748,7 +803,7 @@ internal fun TeamSearchScreen(
     } }
     selectedUnsupported?.let { file -> ModalBottomSheet(onDismissRequest = { selectedUnsupported = null }) {
         TeamFileDetails(
-            file, TeamFileActionsState(), onPreview, {}, {}, {}, {}, ::download, Modifier.fillMaxWidth(),
+            file, TeamFileActionsState(), onPreview, {}, {}, {}, {}, ::download, {}, Modifier.fillMaxWidth(),
         )
     } }
 }
