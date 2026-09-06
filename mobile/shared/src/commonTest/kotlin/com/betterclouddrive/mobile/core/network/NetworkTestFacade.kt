@@ -32,6 +32,8 @@ class NetworkTestFacade private constructor(
     private val teamPreview = TeamPreviewApi(http)
     private val teamPermissions = TeamPermissionsApi(http)
     private val teamMembers = TeamMembersApi(http)
+    private val teamInvites = TeamInvitesApi(http)
+    private val notifications = NotificationsApi(http)
 
     val sessionInvalidations get() = http.sessionInvalidations
     suspend fun initialize() = http.initialize()
@@ -102,6 +104,18 @@ class NetworkTestFacade private constructor(
     suspend fun addTeamMember(teamId: Long, username: String, role: TeamRole) = teamMembers.add(teamId, username, role)
     suspend fun updateTeamMember(teamId: Long, userId: Long, role: TeamRole) = teamMembers.update(teamId, userId, role)
     suspend fun removeTeamMember(teamId: Long, userId: Long) = teamMembers.remove(teamId, userId)
+    suspend fun listTeamInvites(teamId: Long, page: Int, size: Int) = teamInvites.list(teamId, page, size)
+    suspend fun createTeamInvite(teamId: Long, email: String, role: TeamRole) = teamInvites.create(teamId, email, role)
+    suspend fun resendTeamInvite(teamId: Long, inviteId: Long) = teamInvites.resend(teamId, inviteId)
+    suspend fun cancelTeamInvite(teamId: Long, inviteId: Long) = teamInvites.cancel(teamId, inviteId)
+    suspend fun getIncomingInvite(token: String) = teamInvites.getIncoming(token)
+    suspend fun acceptIncomingInvite(token: String) = teamInvites.accept(token)
+    suspend fun rejectIncomingInvite(token: String) = teamInvites.reject(token)
+    suspend fun listNotifications(unreadOnly: Boolean?, type: String?, page: Int, size: Int) =
+        notifications.list(unreadOnly, type, page, size)
+    suspend fun notificationUnreadCount() = notifications.unreadCount()
+    suspend fun markNotificationRead(id: Long) = notifications.markRead(id)
+    suspend fun markAllNotificationsRead() = notifications.markAllRead()
     suspend fun listTeamPermissions(teamId: Long, fileId: Long) = teamPermissions.list(teamId, fileId)
     suspend fun saveTeamPermission(teamId: Long, fileId: Long, request: UpdateTeamFilePermissionRequest) =
         teamPermissions.upsert(teamId, fileId, request)

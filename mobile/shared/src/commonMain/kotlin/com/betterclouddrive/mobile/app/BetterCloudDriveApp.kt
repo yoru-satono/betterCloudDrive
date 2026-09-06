@@ -49,7 +49,13 @@ fun BetterCloudDriveApp(container: AppContainer, debugToolsEnabled: Boolean) {
     val auth = container.authStore
     val coordinator = container.coordinator
     val state by auth.state.collectAsState()
+    val incoming by container.incomingInviteStore.state.collectAsState()
     LaunchedEffect(coordinator) { coordinator.start() }
+    LaunchedEffect(state.phase, incoming.awaitingAuthentication) {
+        if (state.phase == AppPhase.LOGGED_IN && incoming.awaitingAuthentication) {
+            container.incomingInviteStore.resumeAfterAuthentication()
+        }
+    }
 
     val strings = mobileStringsFor(container.localeProvider.preferredLanguageTags())
     CompositionLocalProvider(LocalMobileStrings provides strings) {
@@ -59,7 +65,27 @@ fun BetterCloudDriveApp(container: AppContainer, debugToolsEnabled: Boolean) {
                 onBack = auth::showLogin,
             )
             Surface(Modifier.fillMaxSize()) {
-                when (state.phase) {
+                if (incoming.active && !incoming.awaitingAuthentication && state.phase !in setOf(AppPhase.LOADING, AppPhase.RESTORE_FAILED)) {
+                    IncomingInviteScreen(
+                        state = incoming,
+                        accountEmail = state.user?.email,
+                        loggedIn = state.phase == AppPhase.LOGGED_IN,
+                        onRetry = container.incomingInviteStore::retry,
+                        onLogin = { container.incomingInviteStore.requestAuthentication(); auth.showLogin() },
+                        onRegister = {
+                            container.incomingInviteStore.requestAuthentication()
+                            auth.showInvitationRegistration(state.server, incoming.invite?.email.orEmpty())
+                        },
+                        onAccept = { container.incomingInviteStore.accept(state.user?.email) },
+                        onReject = { container.incomingInviteStore.reject(state.user?.email) },
+                        onSwitchAccount = {
+                            container.incomingInviteStore.requestAuthentication()
+                            coordinator.switchAccountPreservingInvite()
+                        },
+                        onClose = container.incomingInviteStore::close,
+                        onContinue = container.incomingInviteStore::finish,
+                    )
+                } else when (state.phase) {
                     AppPhase.LOADING -> StartupLoadingScreen()
                     AppPhase.RESTORE_FAILED -> RestoreFailedScreen(
                         state, coordinator::retryRestore, coordinator::discardSession,
@@ -80,6 +106,8 @@ fun BetterCloudDriveApp(container: AppContainer, debugToolsEnabled: Boolean) {
                     AppPhase.LOGGED_IN -> ProductShell(
                         container = container,
                         debugToolsEnabled = debugToolsEnabled,
+                        initialTeamId = incoming.acceptedTeamId,
+                        onInitialTeamConsumed = container.incomingInviteStore::consumeAcceptedTeam,
                     )
                 }
             }
@@ -218,7 +246,7 @@ private fun RegistrationScreen(
 ) {
     val strings = LocalMobileStrings.current
     var username by rememberSaveable { mutableStateOf("") }
-    var email by rememberSaveable { mutableStateOf("") }
+    var email by rememberSaveable(state.account.registrationEmail) { mutableStateOf(state.account.registrationEmail) }
     var code by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var confirmation by rememberSaveable { mutableStateOf("") }
@@ -229,7 +257,10 @@ private fun RegistrationScreen(
         Text(strings[MobileString.Register], style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
         LocaleChoices(state.account.locale, onLocale)
         OutlinedTextField(username, { username = it }, label = { Text(strings[MobileString.Username]) }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(email, { email = it }, label = { Text(strings[MobileString.Email]) }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            email, { email = it }, enabled = !state.account.registrationEmailLocked,
+            label = { Text(strings[MobileString.Email]) }, modifier = Modifier.fillMaxWidth(),
+        )
         OutlinedTextField(code, { code = it }, label = { Text(strings[MobileString.VerificationCode]) }, modifier = Modifier.fillMaxWidth())
         OutlinedButton(
             onClick = { onSendCode(email) },

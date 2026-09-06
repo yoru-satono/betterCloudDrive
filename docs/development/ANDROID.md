@@ -98,6 +98,10 @@ KMP 登录后的共享产品外壳使用 Navigation Compose 类型安全路由�
 
 团队分支使用 `TeamsRoute`、`TeamWorkspaceRoute`、`TeamFolderRoute`、`TeamSearchRoute`、`TeamPreviewRoute` 和 `TeamMembersRoute`。团队列表、目录、文件操作、成员、权限、搜索和预览分别由独立 Store 管理；团队切换取消旧请求，退出或换服务器清除全部团队缓存和 ticket。`TeamMembersStore` 按角色矩阵提供成员操作，`TeamPermissionsStore` 一次管理一个文件或文件夹的来源链和直接覆盖；保存后通过明确授权变更事件刷新 `TeamFileActionsStore`，不允许 Store 直接修改彼此状态。团队文本通过认证 Range 最多读取 512 KiB，图片/视频 ticket 不持久化，OnlyOffice 固定请求 `mobile=true` 并原样渲染签名配置。
 
+团队邀请不把 token 放进 Navigation route。`MainActivity` 以 `singleTask` 接收冷启动和 `onNewIntent`，仅接受 `betterclouddrive://team-invites/{token}` 的严格格式；冷启动时先等待已保存服务器地址恢复完成，再把 token 交给 Application 生命周期内的 `IncomingInviteStore`。邀请续接中的普通登录必须使用当前服务器；用户修改服务器、普通退出、关闭流程或会话失效都会清除 token。Web 邮件链接仍是 HTTPS canonical 页面，自定义 scheme 只由页面中的显式按钮触发。
+
+站内通知只在已登录且 Activity 前台时建立 SSE。前台恢复先刷新未读数，每次建立或重建连接都先申请新的一次性 ticket；进入后台立即关闭连接。铃铛在个人与团队外壳中共用，通知页面保留来源顶层入口和返回栈。通知链接必须经白名单解析，禁止直接交给系统浏览器或通用 URI 启动器。
+
 个人文件夹同样使用类型安全路由。目录请求固定每页 50 条，接近列表或网格末尾时加载下一页；请求必须携带白名单排序字段和方向。快速切换目录、排序或刷新时取消旧任务并忽略迟到响应。目录返回栈缓存仅保留当前面包屑分支，滚动位置使用首个可见文件 ID 作为锚点。所有个人目录均显示上传入口，目标目录必须在打开系统选择器时冻结；批次完成后只刷新对应目录一次。
 
 KMP 不使用全应用 Controller 或单体 Repository。`AuthenticatedHttpClient` 集中管理 Token、单飞刷新和一次重放；认证、个人文件、整理、分享、预览和传输各自使用领域 API 与窄 Repository。页面只收集对应 Store 的 `StateFlow`；`AppCoordinator` 只在启动、会话失效、退出和换服务器时协调重置。新功能应建立自己的 Store/Repository/API 边界，禁止向根状态或全局 actions 集合追加字段。

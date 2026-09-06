@@ -150,6 +150,49 @@ data class TeamMember(
 )
 
 @Serializable
+enum class TeamInviteStatus { PENDING, ACCEPTED, REJECTED, CANCELED, EXPIRED }
+
+@Serializable
+data class TeamInvite(
+    val id: Long = 0,
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("teamName") val teamName: String? = null,
+    val email: String = "",
+    val role: TeamRole = TeamRole.VIEWER,
+    val status: TeamInviteStatus = TeamInviteStatus.PENDING,
+    @SerialName("invitedByUserId") val invitedByUserId: Long = 0,
+    @SerialName("invitedByUsername") val invitedByUsername: String? = null,
+    @SerialName("expiresAt") val expiresAt: String? = null,
+    @SerialName("acceptedAt") val acceptedAt: String? = null,
+    @SerialName("rejectedAt") val rejectedAt: String? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+)
+
+@Serializable data class CreateTeamInviteRequest(val email: String, val role: TeamRole)
+
+@Serializable
+data class NotificationItem(
+    val id: Long = 0,
+    @SerialName("userId") val userId: Long = 0,
+    @SerialName("teamId") val teamId: Long? = null,
+    val type: String = "",
+    @SerialName("titleKey") val titleKey: String = "",
+    @SerialName("contentKey") val contentKey: String = "",
+    @SerialName("messageParams") val messageParams: JsonObject = JsonObject(emptyMap()),
+    val link: String? = null,
+    @SerialName("readAt") val readAt: String? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("isRead") val isRead: Boolean = false,
+)
+
+@Serializable
+data class NotificationStreamTicket(
+    val ticket: String,
+    @SerialName("expiresAt") val expiresAt: String? = null,
+)
+
+@Serializable
 enum class TeamPermissionSubjectType { USER, ROLE }
 
 @Serializable

@@ -17,6 +17,8 @@
 
 **Notification 字段:** `id`、`userId`、`teamId`、`type`、`titleKey`、`contentKey`、`messageParams`、`link`、`readAt`、`createdAt`、`isRead`。
 
+列表只返回当前用户的安全 DTO，固定按 `createdAt DESC, id DESC` 排序；同一创建时间下以 ID 保证分页稳定。`unreadOnly=true` 只返回未读项，`type` 会修剪并按大写通知类型精确匹配。客户端必须使用 `titleKey`、`contentKey` 和 `messageParams` 本地化显示，未知键不得直接暴露给用户。
+
 示例：
 
 ```json
@@ -77,6 +79,8 @@
 event: notifications-changed
 data: {"unreadCount":3}
 ```
+
+SSE ticket 属于敏感查询参数，不得写入日志、持久状态或验收报告。移动端只在用户已登录且应用处于前台时保持连接；进入后台会立即断开，恢复前台时先刷新未读数，再为每次重连申请新 ticket。
 
 **错误码:** 400（不支持的通知偏好类型）、403（读取他人通知）、404（通知不存在）。
 

@@ -47,6 +47,8 @@ public class TraceAuditFilter extends OncePerRequestFilter {
     private static final Logger AUDIT_LOGGER = LoggerFactory.getLogger("AUDIT");
     private static final Pattern TRACE_ID_PATTERN = Pattern.compile("^[0-9a-fA-F]{32}$");
     private static final Pattern SPAN_ID_PATTERN = Pattern.compile("^[0-9a-fA-F]{16}$");
+    private static final Pattern TEAM_INVITE_TOKEN_PATH = Pattern.compile(
+            "(?i)(/api/v1/team-invites/)[^/]+(?=/|$)");
 
     private final ObservabilityProperties properties;
     private final AuditSanitizer auditSanitizer;
@@ -102,7 +104,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
         putMdc(RequestTraceContext.MDC_TRACE_ID, traceIds.traceId());
         putMdc(RequestTraceContext.MDC_SPAN_ID, traceIds.spanId());
         putMdc(RequestTraceContext.MDC_METHOD, request.getMethod());
-        putMdc(RequestTraceContext.MDC_PATH, request.getRequestURI());
+        putMdc(RequestTraceContext.MDC_PATH, sanitizePath(request.getRequestURI()));
         putMdc(RequestTraceContext.MDC_CLIENT_IP, clientIpResolver.resolve(request));
 
         putMdc("requestId", requestId);
@@ -164,7 +166,7 @@ public class TraceAuditFilter extends OncePerRequestFilter {
         event.put("action_type", action);
         event.put("target_type", targetType);
         event.put("method", request.getMethod());
-        event.put("path", request.getRequestURI());
+        event.put("path", sanitizePath(request.getRequestURI()));
         event.put("query", auditSanitizer.sanitizeQuery(request.getQueryString()));
         event.put("status", response.getStatus());
         event.put("result", failure == null && response.getStatus() < 400 ? "success" : "failure");
@@ -337,6 +339,11 @@ public class TraceAuditFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(value)) {
             MDC.put(key, value);
         }
+    }
+
+    static String sanitizePath(String path) {
+        if (path == null) return null;
+        return TEAM_INVITE_TOKEN_PATH.matcher(path).replaceFirst("$1***REDACTED***");
     }
 
     private record TraceIds(String traceId, String spanId, boolean incomingTraceparent) {

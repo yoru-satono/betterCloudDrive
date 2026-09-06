@@ -97,6 +97,8 @@ Compose Screen
 - 个人搜索也是类型安全的个人导航分支：输入防抖 300 ms，每页 50 项并按 ID 去重；打开文件夹或所在位置时只导航到目标目录，不把临时下载凭证写入路由。
 - KMP 个人预览按 Office、图片、UTF-8 文本、视频和不支持类型分类。图片与视频复用内存中的下载 ticket，Coil 禁用 ticket 磁盘缓存，Media3 不启用媒体缓存；文本只读取前 512 KiB；OnlyOffice 原样使用后端签名的 `mobile=true` 只读配置。
 - KMP 团队浏览、成员、权限和文件操作使用独立 API、Repository 与 Store，不复用个人状态。`TeamMembersStore` 管理分页成员及角色操作，`TeamPermissionsStore` 管理单个资源的有效权限、来源链和直接覆盖；授权变化通过显式事件使 `TeamFileActionsStore` 的权限缓存失效。按钮只用于降低误操作，后端 403 仍是最终裁决。团队目录支持新建文件夹、单项重命名与移动、当前目录多选删除、最多 100 个文件的当前目录上传及单文件下载；复制、文件夹 ZIP、团队版本和回收站 UI 暂不提供。图片和视频 ticket 仅存在 `TeamPreviewStore` 内存，媒体键包含团队 ID，文本限制为 512 KiB，OnlyOffice 仍原样使用后端签名的 `mobile=true` 配置。
+- `TeamInvitesStore` 管理成员页的邀请标签，`IncomingInviteStore` 只在内存中持有当前邀请 token；Android 仅接受严格匹配的 `betterclouddrive://team-invites/{token}`。未登录用户可先查看邀请并续接登录或锁定邀请邮箱的注册流程，换服务器、普通退出或会话失效会清除 token。
+- `NotificationsStore` 负责分页、筛选、已读状态、未读徽标和前台 SSE。流连接只在登录且应用前台时存在，每次连接使用新的单次 ticket，并按 1、2、5、10、30 秒上限退避；ticket 不进入路由、Room、DataStore 或日志。通知目标只解析邀请、团队目录和团队成员设置白名单，其他链接不会作为外部 URL 打开。
 - 顶层传输页是个人与团队任务的唯一管理入口，支持按方向和 `全部/个人/团队` 作用域过滤。团队任务在 Room 中保存 `teamId` 与目标父目录，继续复用同一全局串行引擎、UIDT/WorkManager、分片会话、Range、MD5、通知节流和 URI 生命周期；团队上传批次全部离开活动状态后只刷新目标目录一次。
 - 普通文件详情只展示服务端元数据和单文件下载：手机使用底部页，宽度不小于 600dp 时使用右侧详情栏。个人目录支持新建文件夹，以及单项重命名、移动、递归复制和删除；长按进入的多选模式只提供批量移入回收站。文件修改后重新加载当前已加载页并保持滚动锚点，目标目录缓存同步失效。
 - OnlyOffice 诊断探针只在独立 Debug 诊断页出现；个人 Office 文件则可从产品预览页加载。两者都原样使用后端签名的 `mobile=true` 只读配置，Release 不注册诊断入口和诊断路由。

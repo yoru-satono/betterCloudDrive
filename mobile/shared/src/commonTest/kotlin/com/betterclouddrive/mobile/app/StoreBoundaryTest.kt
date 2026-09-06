@@ -83,7 +83,9 @@ class StoreBoundaryTest {
         val transfers = FakeTransferPort()
         val first = CountingStore()
         val second = CountingStore()
-        val coordinator = AppCoordinator(auth, source, browser, transfers, listOf(first, second), backgroundScope)
+        val coordinator = AppCoordinator(
+            auth, source, browser, transfers, listOf(first, second), CountingStore(), FakeRealtime(), backgroundScope,
+        )
 
         coordinator.start(); runCurrent()
         assertEquals(1, browser.roots)
@@ -104,7 +106,9 @@ class StoreBoundaryTest {
         val source = FakeAuthSource(events = events)
         val auth = AuthStore(source, backgroundScope, FakeLocaleController(), FakeThemes())
         val transfers = FakeTransferPort(events)
-        val coordinator = AppCoordinator(auth, source, FakeBrowserPort(), transfers, emptyList(), backgroundScope)
+        val coordinator = AppCoordinator(
+            auth, source, FakeBrowserPort(), transfers, emptyList(), CountingStore(), FakeRealtime(), backgroundScope,
+        )
         auth.restore()
 
         auth.requestServerSwitch("https://drive.example.com/")
@@ -310,6 +314,10 @@ class StoreBoundaryTest {
     private class CountingStore : ResettableStore {
         var resets = 0
         override fun reset() { resets++ }
+    }
+    private class FakeRealtime : RealtimeSessionPort {
+        override fun startSession() = Unit
+        override fun stopSession() = Unit
     }
     private class FakePersonalTransfers : PersonalTransferOperations {
         override val uploadFoldersSettled = MutableSharedFlow<Long?>()

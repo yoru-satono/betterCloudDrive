@@ -36,13 +36,17 @@
 | GET | `/api/v1/teams/{teamId}/invites?page=1&size=20` | OWNER/ADMIN | 无 | 邀请分页列表，`size` 最大 100 |
 | POST | `/api/v1/teams/{teamId}/invites/{inviteId}/resend` | OWNER/ADMIN | 无 | 重新发送后的邀请 |
 | DELETE | `/api/v1/teams/{teamId}/invites/{inviteId}` | OWNER/ADMIN | 无 | 取消邀请 |
-| GET | `/api/v1/team-invites/{token}` | 登录用户 | 无 | 邀请详情 |
+| GET | `/api/v1/team-invites/{token}` | 公开 | 无 | 邀请详情；不携带当前登录态 |
 | POST | `/api/v1/team-invites/{token}/accept` | 登录用户 | 无 | 加入后的成员信息 |
 | POST | `/api/v1/team-invites/{token}/reject` | 登录用户 | 无 | 拒绝邀请 |
 
 **TeamInviteResponse 字段:** `id`、`teamId`、`teamName`、`email`、`role`、`status`、`invitedByUserId`、`invitedByUsername`、`expiresAt`、`acceptedAt`、`rejectedAt`、`createdAt`、`updatedAt`。
 
-**错误码:** 403（无管理成员权限）、404（邀请不存在）、409（邀请已处理或已过期）。
+邀请列表固定按 `createdAt DESC, id DESC` 排序。读取列表或详情时，已超过有效期的待处理邀请会变为 `EXPIRED`。同一团队和邮箱只保留一个待处理邀请；重复创建会刷新角色、token 和有效期，旧链接立即失效。重发允许 `PENDING` 和 `EXPIRED`，会签发新 token 并恢复为 `PENDING`；取消保持幂等。
+
+同一账号重复接受或拒绝已经处于相同终态的邀请保持幂等；尝试执行相反操作、处理已取消或过期邀请会失败。接受账号的邮箱必须与邀请邮箱一致。OWNER 可以邀请、重发或取消 ADMIN、EDITOR、VIEWER 邀请，ADMIN 只能管理 EDITOR、VIEWER 邀请。邀请邮件始终指向 `${APP_PUBLIC_URL}/team-invites/{token}` 的 Web 页面，Web 页面可由用户显式打开 `betterclouddrive://team-invites/{token}` 交给 KMP Android；服务端结构化审计会脱敏 URL 中的 token。
+
+**错误码:** 400（邀请状态不允许当前操作）、403（无管理成员权限或账号邮箱不匹配）、404（邀请不存在）、409（账号已经是团队成员）。
 
 ### 16.3 团队文件、回收站、上传下载
 

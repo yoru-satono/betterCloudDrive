@@ -21,6 +21,7 @@ const loading = ref(true)
 const invite = ref<TeamInvite | null>(null)
 const token = computed(() => String(route.params.token || ''))
 const loggedIn = computed(() => !!localStorage.getItem('accessToken'))
+const mobileDeepLink = computed(() => `betterclouddrive://team-invites/${encodeURIComponent(token.value)}`)
 
 async function load() {
   loading.value = true
@@ -60,6 +61,9 @@ onMounted(load)
         <span>{{ __t('team.teaminvite.expired') }}{{ formatDateFull(invite.expiresAt) }}</span>
       </div>
       <div v-if="invite.status === 'PENDING'" class="invite-panel__actions">
+        <a class="invite-panel__mobile" :href="mobileDeepLink" data-testid="open-in-mobile-app">
+          <OButton variant="ghost">{{ __t('team.teaminvite.openInMobileApp') }}</OButton>
+        </a>
         <template v-if="loggedIn">
           <OButton variant="primary" @click="accept">{{ __t('team.teaminvite.acceptInvitation') }}</OButton>
           <OButton variant="ghost" @click="reject">{{ __t('team.teaminvite.reject') }}</OButton>
@@ -120,4 +124,5 @@ onMounted(load)
   gap: 8px;
   flex-wrap: wrap;
 }
+.invite-panel__mobile { display: inline-flex; text-decoration: none; }
 </style>

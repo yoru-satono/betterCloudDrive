@@ -9,6 +9,7 @@ import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.entity.UserEntity;
 import com.betterclouddrive.dal.repository.TeamInviteRepository;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.EmailService;
 import com.betterclouddrive.service.TeamAuditService;
@@ -48,6 +49,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
 
     private final TeamInviteRepository teamInviteRepository;
     private final TeamMemberRepository teamMemberRepository;
+    private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final TeamService teamService;
     private final EmailService emailService;
@@ -64,7 +66,8 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     @Transactional
     public TeamInviteView createInvite(Long actorUserId, Long teamId, String email, String role) {
         TeamMemberEntity actor = teamService.requireManageMembers(actorUserId, teamId);
-        TeamEntity team = teamService.requireTeam(teamId);
+        TeamEntity team = teamRepository.findActiveByIdForUpdate(teamId)
+                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
         String normalizedEmail = normalizeEmail(email);
         String normalizedRole = normalizeRole(role);
         if (!TeamService.ROLE_OWNER.equals(actor.getRole()) && TeamService.ROLE_ADMIN.equals(normalizedRole)) {
@@ -104,9 +107,11 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     }
 
     @Override
+    @Transactional
     public PageResult<TeamInviteView> listInvites(Long actorUserId, Long teamId, int page, int size) {
         teamService.requireManageMembers(actorUserId, teamId);
-        Page<TeamInviteEntity> result = teamInviteRepository.findByTeamIdOrderByCreatedAtDesc(
+        teamInviteRepository.expirePending(teamId, LocalDateTime.now());
+        Page<TeamInviteEntity> result = teamInviteRepository.findByTeamIdOrderByCreatedAtDescIdDesc(
                 teamId, PageRequest.of(Math.max(page - 1, 0), size));
         List<TeamInviteView> records = result.getContent().stream()
                 .map(this::view)
@@ -117,13 +122,21 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     @Override
     @Transactional
     public TeamInviteView resendInvite(Long actorUserId, Long teamId, Long inviteId) {
-        teamService.requireManageMembers(actorUserId, teamId);
+        TeamMemberEntity actor = teamService.requireManageMembers(actorUserId, teamId);
+        teamRepository.findActiveByIdForUpdate(teamId)
+                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
         TeamInviteEntity invite = requireTeamInvite(teamId, inviteId);
-        if (!STATUS_PENDING.equals(invite.getStatus())) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Only pending invites can be resent");
+        requireCanManageInviteRole(actor, invite.getRole());
+        expireIfNeeded(invite);
+        if (!STATUS_PENDING.equals(invite.getStatus()) && !STATUS_EXPIRED.equals(invite.getStatus())) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Only pending or expired invites can be resent");
         }
         LocalDateTime now = LocalDateTime.now();
         invite.setToken(newToken());
+        invite.setStatus(STATUS_PENDING);
+        invite.setAcceptedByUserId(null);
+        invite.setAcceptedAt(null);
+        invite.setRejectedAt(null);
         invite.setExpiresAt(now.plusHours(inviteTtlHours));
         invite.setUpdatedAt(now);
         TeamInviteEntity saved = teamInviteRepository.save(invite);
@@ -142,8 +155,12 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     @Override
     @Transactional
     public void cancelInvite(Long actorUserId, Long teamId, Long inviteId) {
-        teamService.requireManageMembers(actorUserId, teamId);
+        TeamMemberEntity actor = teamService.requireManageMembers(actorUserId, teamId);
+        teamRepository.findActiveByIdForUpdate(teamId)
+                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
         TeamInviteEntity invite = requireTeamInvite(teamId, inviteId);
+        requireCanManageInviteRole(actor, invite.getRole());
+        expireIfNeeded(invite);
         if (!STATUS_PENDING.equals(invite.getStatus())) {
             return;
         }
@@ -154,6 +171,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     }
 
     @Override
+    @Transactional
     public TeamInviteView getInviteByToken(String token) {
         TeamInviteEntity invite = requireInviteByToken(token);
         expireIfNeeded(invite);
@@ -165,13 +183,16 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     public TeamInviteEntity acceptInvite(Long userId, String token) {
         TeamInviteEntity invite = requireInviteByToken(token);
         expireIfNeeded(invite);
-        if (!STATUS_PENDING.equals(invite.getStatus())) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Invite is not pending");
-        }
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "User not found"));
         if (!normalizeEmail(user.getEmail()).equals(invite.getEmail())) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Invite email does not match current user");
+        }
+        if (STATUS_ACCEPTED.equals(invite.getStatus()) && userId.equals(invite.getAcceptedByUserId())) {
+            return invite;
+        }
+        if (!STATUS_PENDING.equals(invite.getStatus())) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Invite is not pending");
         }
         TeamMemberEntity member = teamMemberRepository.findByTeamIdAndUserId(invite.getTeamId(), userId).orElse(null);
         LocalDateTime now = LocalDateTime.now();
@@ -184,8 +205,8 @@ public class TeamInviteServiceImpl implements TeamInviteService {
                     .createdAt(now)
                     .updatedAt(now)
                     .build();
-        } else if (TeamService.ROLE_OWNER.equals(member.getRole())) {
-            throw new BusinessException(ApiCode.CONFLICT, "Owner is already a team member");
+        } else if (member.getStatus() == ACTIVE) {
+            throw new BusinessException(ApiCode.CONFLICT, "User is already a team member");
         } else {
             member.setRole(invite.getRole());
             member.setStatus(ACTIVE);
@@ -210,13 +231,16 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     public TeamInviteEntity rejectInvite(Long userId, String token) {
         TeamInviteEntity invite = requireInviteByToken(token);
         expireIfNeeded(invite);
-        if (!STATUS_PENDING.equals(invite.getStatus())) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Invite is not pending");
-        }
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "User not found"));
         if (!normalizeEmail(user.getEmail()).equals(invite.getEmail())) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Invite email does not match current user");
+        }
+        if (STATUS_REJECTED.equals(invite.getStatus())) {
+            return invite;
+        }
+        if (!STATUS_PENDING.equals(invite.getStatus())) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Invite is not pending");
         }
         invite.setStatus(STATUS_REJECTED);
         invite.setRejectedAt(LocalDateTime.now());
@@ -231,7 +255,7 @@ public class TeamInviteServiceImpl implements TeamInviteService {
     }
 
     private TeamInviteEntity requireTeamInvite(Long teamId, Long inviteId) {
-        return teamInviteRepository.findByIdAndTeamId(inviteId, teamId)
+        return teamInviteRepository.findByIdAndTeamIdForUpdate(inviteId, teamId)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Invite not found"));
     }
 
@@ -239,8 +263,14 @@ public class TeamInviteServiceImpl implements TeamInviteService {
         if (!StringUtils.hasText(token)) {
             throw new BusinessException(ApiCode.NOT_FOUND, "Invite not found");
         }
-        return teamInviteRepository.findByToken(token.trim())
+        return teamInviteRepository.findByTokenForUpdate(token.trim())
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Invite not found"));
+    }
+
+    private void requireCanManageInviteRole(TeamMemberEntity actor, String inviteRole) {
+        if (TeamService.ROLE_ADMIN.equals(actor.getRole()) && TeamService.ROLE_ADMIN.equals(inviteRole)) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Administrators cannot manage administrator invites");
+        }
     }
 
     private TeamInviteView view(TeamInviteEntity invite) {

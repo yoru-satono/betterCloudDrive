@@ -43,7 +43,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.Tab
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,13 +65,18 @@ import com.betterclouddrive.mobile.core.model.TeamFilePermission
 import com.betterclouddrive.mobile.core.model.TeamMember
 import com.betterclouddrive.mobile.core.model.TeamPermissionSubjectType
 import com.betterclouddrive.mobile.core.model.TeamRole
+import com.betterclouddrive.mobile.core.model.TeamInvite
+import com.betterclouddrive.mobile.core.model.TeamInviteStatus
 import com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest
 import com.betterclouddrive.mobile.feature.teams.TeamMembersState
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsState
+import com.betterclouddrive.mobile.feature.teams.TeamInvitesState
+import com.betterclouddrive.mobile.feature.teams.TeamPeopleTab
 
 @Composable
 fun TeamMembersScreen(
     state: TeamMembersState,
+    invites: TeamInvitesState = TeamInvitesState(),
     wide: Boolean,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
@@ -78,12 +86,22 @@ fun TeamMembersScreen(
     onRemove: (TeamMember) -> Unit,
     onClearAddError: () -> Unit,
     onClearFeedback: () -> Unit,
+    onSelectTab: (TeamPeopleTab) -> Unit = {},
+    onRefreshInvites: () -> Unit = {},
+    onLoadMoreInvites: () -> Unit = {},
+    onCreateInvite: (String, TeamRole) -> Unit = { _, _ -> },
+    onResendInvite: (TeamInvite) -> Unit = {},
+    onCancelInvite: (TeamInvite) -> Unit = {},
+    onClearInviteError: () -> Unit = {},
+    onClearInviteFeedback: () -> Unit = {},
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
     var adding by remember { mutableStateOf(false) }
     var pendingRole by remember { mutableStateOf<Pair<TeamMember, TeamRole>?>(null) }
     var pendingRemove by remember { mutableStateOf<TeamMember?>(null) }
+    var inviting by remember { mutableStateOf(false) }
+    var pendingCancelInvite by remember { mutableStateOf<TeamInvite?>(null) }
     LaunchedEffect(state.feedback) {
         state.feedback?.let {
             adding = false
@@ -93,6 +111,14 @@ fun TeamMembersScreen(
             onClearFeedback()
         }
     }
+    LaunchedEffect(invites.feedback) {
+        invites.feedback?.let {
+            inviting = false
+            pendingCancelInvite = null
+            snackbar.showSnackbar(strings.resolve(it).orEmpty())
+            onClearInviteFeedback()
+        }
+    }
     Scaffold(
         modifier = Modifier.testTag("team-members-screen"),
         snackbarHost = { SnackbarHost(snackbar) },
@@ -100,15 +126,38 @@ fun TeamMembersScreen(
             title = { Text(strings[MobileString.TeamMembers]) },
             navigationIcon = { IconButton(onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent]) } },
             actions = {
-                IconButton(onRefresh, enabled = !state.loading && !state.refreshing) { Icon(Icons.Default.Refresh, strings[MobileString.RefreshDirectory]) }
-                if (state.canManageMembers) IconButton({ onClearAddError(); adding = true }, Modifier.testTag("team-member-add")) {
-                    Icon(Icons.Default.Add, strings[MobileString.AddTeamMember])
+                val showingInvites = invites.selectedTab == TeamPeopleTab.INVITES
+                IconButton(
+                    if (showingInvites) onRefreshInvites else onRefresh,
+                    enabled = if (showingInvites) !invites.loading && !invites.refreshing else !state.loading && !state.refreshing,
+                ) { Icon(Icons.Default.Refresh, strings[MobileString.RefreshDirectory]) }
+                if (state.canManageMembers) IconButton({
+                    if (showingInvites) { onClearInviteError(); inviting = true } else { onClearAddError(); adding = true }
+                }, Modifier.testTag(if (showingInvites) "team-invite-add" else "team-member-add")) {
+                    Icon(Icons.Default.Add, strings[if (showingInvites) MobileString.CreateInvite else MobileString.AddTeamMember])
                 }
             },
         ) },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            when {
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            PrimaryTabRow(selectedTabIndex = invites.selectedTab.ordinal) {
+                Tab(
+                    selected = invites.selectedTab == TeamPeopleTab.MEMBERS,
+                    onClick = { onSelectTab(TeamPeopleTab.MEMBERS) },
+                    text = { Text(strings[MobileString.MembersTab]) },
+                    modifier = Modifier.testTag("team-people-members-tab"),
+                )
+                Tab(
+                    selected = invites.selectedTab == TeamPeopleTab.INVITES,
+                    onClick = { onSelectTab(TeamPeopleTab.INVITES) },
+                    text = { Text(strings[MobileString.InvitesTab]) },
+                    modifier = Modifier.testTag("team-people-invites-tab"),
+                )
+            }
+            Box(Modifier.fillMaxSize()) {
+            if (invites.selectedTab == TeamPeopleTab.INVITES) TeamInvitesContent(
+                invites, onLoadMoreInvites, onResendInvite, { pendingCancelInvite = it },
+            ) else when {
                 state.loading && state.items.isEmpty() -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 state.error != null && state.items.isEmpty() -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(strings.resolve(state.error).orEmpty(), color = MaterialTheme.colorScheme.error)
@@ -130,12 +179,21 @@ fun TeamMembersScreen(
                     state.loadMoreError?.let { item { OutlinedButton(onLoadMore, Modifier.padding(16.dp)) { Text(strings[MobileString.RetryLoadMore]) } } }
                 }
             }
+            }
         }
     }
     if (adding) TeamAddMemberOverlay(
         wide, state.actorRole, state.adding, state.addError,
         onDismiss = { if (!state.adding) { adding = false; onClearAddError() } },
         onSubmit = onAdd,
+    )
+    if (inviting) TeamInviteOverlay(
+        wide = wide,
+        actorRole = invites.actorRole,
+        busy = invites.creating,
+        error = invites.createError,
+        onDismiss = { if (!invites.creating) { inviting = false; onClearInviteError() } },
+        onSubmit = onCreateInvite,
     )
     pendingRole?.let { (member, role) -> AlertDialog(
         onDismissRequest = { if (state.submittingUserId == null) pendingRole = null },
@@ -153,6 +211,97 @@ fun TeamMembersScreen(
         } },
         dismissButton = { OutlinedButton({ pendingRemove = null }) { Text(strings[MobileString.Cancel]) } },
     ) }
+    pendingCancelInvite?.let { invite -> AlertDialog(
+        onDismissRequest = { if (invites.submittingInviteId == null) pendingCancelInvite = null },
+        title = { Text(strings[MobileString.CancelInvite]) },
+        text = { Text(strings.format(MobileString.CancelInviteMessage, invite.email)) },
+        confirmButton = { Button({ onCancelInvite(invite) }, Modifier.testTag("team-invite-cancel-confirm")) { Text(strings[MobileString.Confirm]) } },
+        dismissButton = { OutlinedButton({ pendingCancelInvite = null }) { Text(strings[MobileString.Cancel]) } },
+    ) }
+}
+
+@Composable
+private fun TeamInvitesContent(
+    state: TeamInvitesState,
+    onLoadMore: () -> Unit,
+    onResend: (TeamInvite) -> Unit,
+    onCancel: (TeamInvite) -> Unit,
+) {
+    val strings = LocalMobileStrings.current
+    when {
+        state.loading && state.items.isEmpty() -> CircularProgressIndicator()
+        state.error != null && state.items.isEmpty() -> Text(strings.resolve(state.error).orEmpty(), color = MaterialTheme.colorScheme.error)
+        state.items.isEmpty() -> Text(strings[MobileString.TeamInvitesEmpty], Modifier.padding(24.dp))
+        else -> LazyColumn(Modifier.fillMaxSize().testTag("team-invites-list")) {
+            items(state.items, key = TeamInvite::id) { invite ->
+                Row(Modifier.fillMaxWidth().padding(16.dp).testTag("team-invite-${invite.id}"), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(invite.email, style = MaterialTheme.typography.titleMedium)
+                        Text(strings[invite.role.label()] + " · " + strings[invite.status.label()])
+                        Text(strings.format(MobileString.InviteExpires, invite.expiresAt ?: "—"), style = MaterialTheme.typography.labelMedium)
+                    }
+                    if (state.submittingInviteId == invite.id) CircularProgressIndicator(Modifier.width(24.dp).height(24.dp))
+                    else if (state.canInvite && invite.status in setOf(TeamInviteStatus.PENDING, TeamInviteStatus.EXPIRED)) {
+                        TextButton(onClick = { onResend(invite) }, modifier = Modifier.testTag("team-invite-resend-${invite.id}")) {
+                            Text(strings[MobileString.ResendInvite])
+                        }
+                        if (invite.status == TeamInviteStatus.PENDING) IconButton({ onCancel(invite) }) {
+                            Icon(Icons.Default.Delete, strings[MobileString.CancelInvite])
+                        }
+                    }
+                }
+                HorizontalDivider()
+                if (invite.id == state.items.lastOrNull()?.id && state.hasMore) LaunchedEffect(invite.id) { onLoadMore() }
+            }
+            if (state.loadingMore) item { CircularProgressIndicator(Modifier.padding(16.dp)) }
+            state.loadMoreError?.let { item { OutlinedButton(onLoadMore, Modifier.padding(16.dp)) { Text(strings[MobileString.RetryLoadMore]) } } }
+        }
+    }
+}
+
+@Composable
+private fun TeamInviteOverlay(
+    wide: Boolean,
+    actorRole: TeamRole,
+    busy: Boolean,
+    error: com.betterclouddrive.mobile.core.localization.UiMessage?,
+    onDismiss: () -> Unit,
+    onSubmit: (String, TeamRole) -> Unit,
+) {
+    val strings = LocalMobileStrings.current
+    var email by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf(TeamRole.VIEWER) }
+    var menu by remember { mutableStateOf(false) }
+    val content: @Composable () -> Unit = {
+        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(strings[MobileString.CreateInvite], style = MaterialTheme.typography.titleLarge)
+            OutlinedTextField(
+                email, { email = it }, enabled = !busy, singleLine = true,
+                label = { Text(strings[MobileString.InviteEmail]) },
+                isError = error != null,
+                supportingText = { error?.let { Text(strings.resolve(it).orEmpty()) } },
+                modifier = Modifier.fillMaxWidth().testTag("team-invite-email"),
+            )
+            Box {
+                OutlinedButton({ menu = true }, enabled = !busy) { Text(strings[role.label()]) }
+                DropdownMenu(menu, { menu = false }) {
+                    allowedRoles(actorRole).forEach { option -> DropdownMenuItem(
+                        text = { Text(strings[option.label()]) },
+                        onClick = { role = option; menu = false },
+                    ) }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                OutlinedButton(onDismiss, enabled = !busy) { Text(strings[MobileString.Cancel]) }
+                Spacer(Modifier.width(8.dp))
+                Button({ onSubmit(email, role) }, enabled = !busy && email.isNotBlank(), modifier = Modifier.testTag("team-invite-create-confirm")) {
+                    Text(strings[MobileString.CreateInvite])
+                }
+            }
+        }
+    }
+    if (wide) AlertDialog(onDismissRequest = onDismiss, confirmButton = {}, text = content)
+    else ModalBottomSheet(onDismissRequest = onDismiss) { content() }
 }
 
 @Composable
@@ -436,6 +585,14 @@ private fun TeamRole.label(): MobileString = when (this) {
     TeamRole.ADMIN -> MobileString.TeamRoleAdmin
     TeamRole.EDITOR -> MobileString.TeamRoleEditor
     TeamRole.VIEWER -> MobileString.TeamRoleViewer
+}
+
+private fun TeamInviteStatus.label(): MobileString = when (this) {
+    TeamInviteStatus.PENDING -> MobileString.InviteStatusPending
+    TeamInviteStatus.ACCEPTED -> MobileString.InviteStatusAccepted
+    TeamInviteStatus.REJECTED -> MobileString.InviteStatusRejected
+    TeamInviteStatus.CANCELED -> MobileString.InviteStatusCanceled
+    TeamInviteStatus.EXPIRED -> MobileString.InviteStatusExpired
 }
 
 private fun TeamEffectivePermission.summary(strings: com.betterclouddrive.mobile.core.localization.MobileStrings): String = listOfNotNull(

@@ -42,6 +42,11 @@ import com.betterclouddrive.mobile.feature.teams.TeamMembersRepository
 import com.betterclouddrive.mobile.feature.teams.TeamMembersStore
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsRepository
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsStore
+import com.betterclouddrive.mobile.feature.teams.TeamInvitesRepository
+import com.betterclouddrive.mobile.feature.teams.NotificationsRepository
+import com.betterclouddrive.mobile.feature.teams.TeamInvitesStore
+import com.betterclouddrive.mobile.feature.teams.IncomingInviteStore
+import com.betterclouddrive.mobile.feature.teams.NotificationsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -59,6 +64,8 @@ class AppContainer(
     val teamPreview: TeamPreviewRepository,
     val teamMembers: TeamMembersRepository,
     val teamPermissions: TeamPermissionsRepository,
+    val teamInvites: TeamInvitesRepository,
+    val notifications: NotificationsRepository,
     val database: MobileDatabase,
     val transfers: TransferManager,
     val transferEngine: TransferEngine,
@@ -99,6 +106,12 @@ class AppContainer(
         teamFileActionsStore.invalidatePermission(teamId, fileId)
         invalidateTeamContent(teamId, setOf(fileId))
     }
+    val teamInvitesStore = TeamInvitesStore(teamInvites, applicationScope)
+    val incomingInviteStore = IncomingInviteStore(teamInvites, applicationScope) { teamId ->
+        teamsStore.refresh()
+        teamMembersStore.reset()
+    }
+    val notificationsStore = NotificationsStore(notifications, applicationScope)
     private fun invalidatePersonalContent() {
         favoritesStore.invalidate()
         tagsStore.invalidateFiles()
@@ -120,7 +133,10 @@ class AppContainer(
             recycleBinStore, versionsStore, diagnosticsStore, transferQueue,
             teamsStore, teamBrowserStore, teamSearchStore, teamPreviewStore,
             teamFileActionsStore, teamMembersStore, teamPermissionsStore,
+            teamInvitesStore, notificationsStore,
         ),
+        incomingInviteStore,
+        notificationsStore,
         applicationScope,
     )
 

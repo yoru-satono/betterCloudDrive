@@ -31,6 +31,8 @@ enum class PasswordResetStep { EMAIL, RESET }
 data class AccountState(
     val publicPage: PublicAuthPage = PublicAuthPage.LOGIN,
     val loginUsername: String = "",
+    val registrationEmail: String = "",
+    val registrationEmailLocked: Boolean = false,
     val registerBusy: Boolean = false,
     val registrationCodeBusy: Boolean = false,
     val registrationCodeSeconds: Int = 0,
@@ -154,9 +156,17 @@ class AuthStore(
         publicPage = PublicAuthPage.LOGIN, registrationError = null, resetError = null,
     )) }
     fun showRegistration(server: String) = openPublicPage(server, PublicAuthPage.REGISTER)
+    fun showInvitationRegistration(server: String, email: String) = scope.launch {
+        openPublicPageNow(server, PublicAuthPage.REGISTER)
+        mutableState.update { it.copy(account = it.account.copy(
+            registrationEmail = email, registrationEmailLocked = true,
+        )) }
+    }
     fun showForgotPassword(server: String) = openPublicPage(server, PublicAuthPage.FORGOT_PASSWORD)
 
-    private fun openPublicPage(server: String, page: PublicAuthPage) = scope.launch {
+    private fun openPublicPage(server: String, page: PublicAuthPage) = scope.launch { openPublicPageNow(server, page) }
+
+    private suspend fun openPublicPageNow(server: String, page: PublicAuthPage) {
         try {
             val normalized = source.normalizeServer(server).getOrThrow()
             if (normalized != source.serverBaseUrl) source.switchServer(normalized).getOrThrow()
@@ -164,6 +174,7 @@ class AuthStore(
                 server = source.serverBaseUrl, sessionError = null,
                 account = it.account.copy(
                     publicPage = page, registrationError = null, registrationSucceeded = false,
+                    registrationEmail = "", registrationEmailLocked = false,
                     resetStep = PasswordResetStep.EMAIL, resetError = null,
                     passwordResetSucceeded = false, resetCodeSent = false,
                 ),
@@ -204,6 +215,7 @@ class AuthStore(
             val result = source.register(username.trim(), password, email.trim(), code.trim(), state.value.account.locale.languageTag)
             countdownJob?.cancel(); mutableState.update { it.copy(account = it.account.copy(
                 publicPage = PublicAuthPage.LOGIN, loginUsername = result.username, registerBusy = false,
+                registrationEmail = "", registrationEmailLocked = false,
                 registrationCodeSeconds = 0, registrationSucceeded = true,
             )) }
         } catch (cancelled: CancellationException) { throw cancelled }

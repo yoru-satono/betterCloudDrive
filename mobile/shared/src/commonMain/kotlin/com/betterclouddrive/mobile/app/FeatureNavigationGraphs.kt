@@ -270,7 +270,21 @@ internal fun NavGraphBuilder.productUtilityGraph(
     container: AppContainer,
     debugToolsEnabled: Boolean,
     onOpenDiagnostics: () -> Unit,
+    onNotificationTarget: (com.betterclouddrive.mobile.feature.teams.NotificationTarget) -> Unit,
 ) {
+    composable<NotificationsRoute> {
+        val state by container.notificationsStore.state.collectAsState()
+        LaunchedEffect(Unit) { container.notificationsStore.activate() }
+        NotificationsScreen(
+            state = state,
+            onRefresh = container.notificationsStore::refresh,
+            onLoadMore = container.notificationsStore::loadMore,
+            onFilter = container.notificationsStore::filter,
+            onOpen = { item -> container.notificationsStore.markRead(item, onNotificationTarget) },
+            onMarkAllRead = container.notificationsStore::markAllRead,
+            onClearFeedback = container.notificationsStore::clearFeedback,
+        )
+    }
     composable<TransfersRoute> {
         val state by container.transferQueue.state.collectAsState()
         TransferQueueScreen(
@@ -381,12 +395,17 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
     composable<TeamMembersRoute> { entry ->
         val teamId = entry.toRoute<TeamMembersRoute>().teamId
         val state by container.teamMembersStore.state.collectAsState()
+        val invites by container.teamInvitesStore.state.collectAsState()
         val browser by container.teamBrowserStore.state.collectAsState()
         val listedTeam = container.teamsStore.state.value.items.firstOrNull { it.id == teamId }
         val role = browser.team?.takeIf { it.id == teamId }?.role ?: listedTeam?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
-        LaunchedEffect(teamId, role) { container.teamMembersStore.activate(teamId, role) }
+        LaunchedEffect(teamId, role) {
+            container.teamMembersStore.activate(teamId, role)
+            container.teamInvitesStore.activate(teamId, role)
+        }
         TeamMembersScreen(
             state = state,
+            invites = invites,
             wide = wide,
             onBack = navController::popBackStack,
             onRefresh = container.teamMembersStore::refresh,
@@ -396,6 +415,14 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             onRemove = container.teamMembersStore::remove,
             onClearAddError = container.teamMembersStore::clearAddError,
             onClearFeedback = container.teamMembersStore::clearFeedback,
+            onSelectTab = container.teamInvitesStore::selectTab,
+            onRefreshInvites = container.teamInvitesStore::refresh,
+            onLoadMoreInvites = container.teamInvitesStore::loadMore,
+            onCreateInvite = container.teamInvitesStore::create,
+            onResendInvite = container.teamInvitesStore::resend,
+            onCancelInvite = container.teamInvitesStore::cancel,
+            onClearInviteError = container.teamInvitesStore::clearCreateError,
+            onClearInviteFeedback = container.teamInvitesStore::clearFeedback,
         )
     }
 }

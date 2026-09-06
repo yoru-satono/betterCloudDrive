@@ -17,12 +17,19 @@ interface TransferSessionPort {
     suspend fun waitForLogin()
 }
 
+interface RealtimeSessionPort {
+    fun startSession()
+    fun stopSession()
+}
+
 class AppCoordinator(
     val auth: AuthStore,
     private val authSource: AuthDataSource,
     private val browser: BrowserSessionPort,
     private val transfers: TransferSessionPort,
     private val sessionStores: List<ResettableStore>,
+    private val incomingInvite: ResettableStore,
+    private val realtime: RealtimeSessionPort,
     private val scope: CoroutineScope,
 ) {
     private var started = false
@@ -36,7 +43,9 @@ class AppCoordinator(
                 )
             ) return@collectLatest
             auth.invalidate(reason)
+            realtime.stopSession()
             resetSessionStores()
+            incomingInvite.reset()
             transfers.waitForLogin()
         } }
     }
@@ -44,31 +53,40 @@ class AppCoordinator(
     fun start() {
         if (started) return
         started = true
-        scope.launch { if (auth.restore()) { transfers.resumeWaitingForLogin(); browser.loadRoot() } else resetSessionStores() }
+        scope.launch { if (auth.restore()) { transfers.resumeWaitingForLogin(); browser.loadRoot(); realtime.startSession() } else resetSessionStores() }
     }
 
-    fun retryRestore() { scope.launch { if (auth.restore()) { transfers.resumeWaitingForLogin(); browser.loadRoot() } } }
+    fun retryRestore() { scope.launch { if (auth.restore()) { transfers.resumeWaitingForLogin(); browser.loadRoot(); realtime.startSession() } } }
 
     fun discardSession() { scope.launch {
-        auth.logout(); transfers.clearForLogout(); resetSessionStores()
+        auth.logout(); realtime.stopSession(); transfers.clearForLogout(); resetSessionStores(); incomingInvite.reset()
     } }
 
     fun login(server: String, username: String, password: String) { scope.launch {
         val normalized = authSource.normalizeServer(server).getOrNull()
         val changedServer = normalized != null && auth.state.value.server != normalized
-        if (changedServer) transfers.clearForLogout()
+        if (changedServer) {
+            transfers.clearForLogout()
+            incomingInvite.reset()
+        }
         if (auth.login(server, username, password)) {
-            resetSessionStores(); transfers.resumeWaitingForLogin(); browser.loadRoot()
+            resetSessionStores(); transfers.resumeWaitingForLogin(); browser.loadRoot(); realtime.startSession()
         }
     } }
 
     fun logout() { scope.launch {
-        auth.logout(); transfers.clearForLogout(); resetSessionStores()
+        auth.logout(); realtime.stopSession(); transfers.clearForLogout(); resetSessionStores(); incomingInvite.reset()
+    } }
+
+    fun switchAccountPreservingInvite() { scope.launch {
+        auth.logout(); realtime.stopSession(); transfers.clearForLogout(); resetSessionStores()
     } }
 
     fun confirmServerSwitch() { scope.launch {
         if (!auth.state.value.account.serverSwitchConfirming) return@launch
-        if (auth.switchServer { transfers.clearForLogout() }) resetSessionStores()
+        if (auth.switchServer { transfers.clearForLogout() }) {
+            realtime.stopSession(); resetSessionStores(); incomingInvite.reset()
+        }
     } }
 
     private fun resetSessionStores() { sessionStores.forEach(ResettableStore::reset) }

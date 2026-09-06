@@ -1,6 +1,8 @@
 package com.betterclouddrive.mobile.android
 
+import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.LocaleList
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
@@ -37,6 +39,7 @@ import com.betterclouddrive.mobile.app.TagsScreen
 import com.betterclouddrive.mobile.app.TeamBrowserScreen
 import com.betterclouddrive.mobile.app.TeamMembersScreen
 import com.betterclouddrive.mobile.app.TeamPermissionsOverlay
+import com.betterclouddrive.mobile.app.NotificationsScreen
 import com.betterclouddrive.mobile.app.TransferQueueScreen
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
 import com.betterclouddrive.mobile.core.localization.MobileString
@@ -47,6 +50,9 @@ import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.model.TeamEffectivePermission
 import com.betterclouddrive.mobile.core.model.TeamFilePermission
 import com.betterclouddrive.mobile.core.model.TeamMember
+import com.betterclouddrive.mobile.core.model.TeamInvite
+import com.betterclouddrive.mobile.core.model.TeamInviteStatus
+import com.betterclouddrive.mobile.core.model.NotificationItem
 import com.betterclouddrive.mobile.core.model.TeamPermissionSource
 import com.betterclouddrive.mobile.core.model.TeamPermissionSubjectType
 import com.betterclouddrive.mobile.core.model.TeamRole
@@ -69,11 +75,15 @@ import com.betterclouddrive.mobile.feature.teams.TeamBrowserState
 import com.betterclouddrive.mobile.feature.teams.TeamFileActionsState
 import com.betterclouddrive.mobile.feature.teams.TeamMembersState
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsState
+import com.betterclouddrive.mobile.feature.teams.TeamInvitesState
+import com.betterclouddrive.mobile.feature.teams.TeamPeopleTab
+import com.betterclouddrive.mobile.feature.teams.NotificationsState
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferScope
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
 import com.betterclouddrive.mobile.feature.transfers.TransferTask
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -82,6 +92,19 @@ import java.util.Locale
 @RunWith(AndroidJUnit4::class)
 class FeatureScreenDeviceTest {
     @get:Rule val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun invitationDeepLinkIsRegisteredWithAndroid() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(
+            "betterclouddrive://team-invites/abcdefghijklmnop",
+        )).addCategory(Intent.CATEGORY_BROWSABLE)
+
+        val resolved = context.packageManager.resolveActivity(intent, 0)
+
+        assertNotNull(resolved)
+        assertEquals(MainActivity::class.java.name, resolved?.activityInfo?.name)
+    }
 
     @Test
     fun transferQueueRetainsTabsProgressActionsAndTerminalCleanup() {
@@ -209,6 +232,57 @@ class FeatureScreenDeviceTest {
             state.value = state.value.copy(feedback = UiMessage(MobileString.TeamMemberAdded))
         }
         composeRule.onAllNodesWithTag("team-member-username").assertCountEquals(0)
+    }
+
+    @Test
+    fun teamPeopleTabsShowPendingAndExpiredInvitations() {
+        val invites = mutableStateOf(TeamInvitesState(
+            teamId = 9,
+            actorRole = TeamRole.OWNER,
+            selectedTab = TeamPeopleTab.MEMBERS,
+            items = listOf(
+                TeamInvite(id = 1, teamId = 9, email = "pending@example.com", status = TeamInviteStatus.PENDING),
+                TeamInvite(id = 2, teamId = 9, email = "expired@example.com", status = TeamInviteStatus.EXPIRED),
+            ),
+            page = 1,
+        ))
+        composeRule.setContent { themed("en-US") {
+            TeamMembersScreen(
+                state = TeamMembersState(teamId = 9, actorRole = TeamRole.OWNER, page = 1),
+                invites = invites.value,
+                wide = false,
+                onBack = {}, onRefresh = {}, onLoadMore = {}, onAdd = { _, _ -> },
+                onUpdateRole = { _, _ -> }, onRemove = {}, onClearAddError = {}, onClearFeedback = {},
+                onSelectTab = { invites.value = invites.value.copy(selectedTab = it) },
+            )
+        } }
+
+        composeRule.onNodeWithTag("team-people-invites-tab").performClick()
+        composeRule.onNodeWithTag("team-invites-list").assertIsDisplayed()
+        composeRule.onNodeWithText("pending@example.com").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-invite-resend-2").assertIsDisplayed()
+    }
+
+    @Test
+    fun notificationsRenderLocalizedKnownAndGenericMessages() {
+        val known = NotificationItem(
+            id = 1,
+            type = "TEAM_INVITE",
+            titleKey = "notification.teamInvite.title",
+            contentKey = "notification.teamInvite.content",
+        )
+        val unknown = NotificationItem(id = 2, type = "UNKNOWN", titleKey = "unknown.key", contentKey = "unknown.content")
+        composeRule.setContent { themed("en-US") {
+            NotificationsScreen(
+                state = NotificationsState(items = listOf(known, unknown), page = 1),
+                onRefresh = {}, onLoadMore = {}, onFilter = { _, _ -> }, onOpen = {},
+                onMarkAllRead = {}, onClearFeedback = {},
+            )
+        } }
+
+        composeRule.onNodeWithText("Team invitation").assertIsDisplayed()
+        composeRule.onNodeWithText("Notification").assertIsDisplayed()
+        composeRule.onAllNodesWithText("unknown.key").assertCountEquals(0)
     }
 
     @Test

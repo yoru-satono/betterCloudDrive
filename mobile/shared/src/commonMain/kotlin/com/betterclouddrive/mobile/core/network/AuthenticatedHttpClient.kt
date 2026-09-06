@@ -13,6 +13,7 @@ import com.betterclouddrive.mobile.core.platform.ServerSettingsStore
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.sse.SSE
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -57,6 +58,7 @@ class AuthenticatedHttpClient(
     internal val client = engineClient.config {
         expectSuccess = false
         install(ContentNegotiation) { json(json) }
+        install(SSE)
     }
     private val refreshMutex = Mutex()
     private val sessionState = MutableStateFlow<StoredSession?>(null)

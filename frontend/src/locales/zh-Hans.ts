@@ -475,6 +475,7 @@ export default {
       joinAsIdentity: "身份加入。",
       logInToAccept: "登录后接受",
       teamAdmin: "团队管理员",
+      openInMobileApp: "在移动端打开",
     },
     teamrecyclebin: {
       teamFilesWillBePermanentlyDeletedAndCannotBeRecovered:

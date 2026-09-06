@@ -5,6 +5,7 @@ import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.dal.entity.NotificationEntity;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.web.dto.request.UpdateNotificationPreferencesRequest;
+import com.betterclouddrive.web.dto.response.NotificationResponse;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import com.betterclouddrive.web.service.NotificationSseService;
@@ -28,13 +29,16 @@ public class NotificationController {
     private final NotificationStreamTicketService notificationStreamTicketService;
 
     @GetMapping
-    public ApiResponse<PageResult<NotificationEntity>> listNotifications(
+    public ApiResponse<PageResult<NotificationResponse>> listNotifications(
             @CurrentUser UserPrincipal user,
             @RequestParam(required = false) Boolean unreadOnly,
             @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
-        return ApiResponse.success(notificationService.listNotifications(user.getUserId(), unreadOnly, type, page, size));
+        PageResult<NotificationEntity> result = notificationService.listNotifications(user.getUserId(), unreadOnly, type, page, size);
+        return ApiResponse.success(PageResult.of(
+                result.getRecords().stream().map(NotificationResponse::from).toList(),
+                result.getTotal(), result.getPage(), result.getSize()));
     }
 
     @GetMapping("/unread-count")

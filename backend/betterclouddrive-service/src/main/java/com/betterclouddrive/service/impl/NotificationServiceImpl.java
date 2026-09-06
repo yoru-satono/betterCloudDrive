@@ -95,7 +95,8 @@ public class NotificationServiceImpl implements NotificationService {
             }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
-        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageable = PageRequest.of(page - 1, size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
         Page<NotificationEntity> result = notificationRepository.findAll(spec, pageable);
         return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
     }

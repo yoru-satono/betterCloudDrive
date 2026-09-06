@@ -490,6 +490,7 @@ export default {
       joinAsIdentity: "Join as identity.",
       logInToAccept: "Log in to accept",
       teamAdmin: "Team Admin",
+      openInMobileApp: "Open in mobile app",
     },
     teamrecyclebin: {
       teamFilesWillBePermanentlyDeletedAndCannotBeRecovered:

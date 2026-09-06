@@ -9,13 +9,20 @@ import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.put
+import io.ktor.client.request.parameter
 import io.ktor.client.request.setBody
+import io.ktor.client.plugins.sse.sse
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.collect
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 
 class AuthApi(private val http: AuthenticatedHttpClient) {
     val sessionInvalidations = http.sessionInvalidations
@@ -252,6 +259,90 @@ class TeamMembersApi(private val http: AuthenticatedHttpClient) {
 
     suspend fun remove(teamId: Long, userId: Long) = http.run {
         authenticatedNoData { client, token -> client.delete(url("teams/$teamId/members/$userId")) { bearer(token) } }
+    }
+}
+
+class TeamInvitesApi(private val http: AuthenticatedHttpClient) {
+    suspend fun list(teamId: Long, page: Int, size: Int): PageResult<TeamInvite> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/invites")) {
+            bearer(token)
+            url {
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun create(teamId: Long, email: String, role: TeamRole): TeamInvite = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("teams/$teamId/invites")) {
+            bearer(token); jsonBody(CreateTeamInviteRequest(email, role))
+        } }
+    }
+
+    suspend fun resend(teamId: Long, inviteId: Long): TeamInvite = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("teams/$teamId/invites/$inviteId/resend")) { bearer(token) } }
+    }
+
+    suspend fun cancel(teamId: Long, inviteId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId/invites/$inviteId")) { bearer(token) } }
+    }
+
+    suspend fun getIncoming(token: String): TeamInvite = http.run {
+        publicEnvelope { client -> client.get(url("team-invites/$token")) }
+    }
+
+    suspend fun accept(token: String) = http.run {
+        authenticatedNoData { client, accessToken -> client.post(url("team-invites/$token/accept")) { bearer(accessToken) } }
+    }
+
+    suspend fun reject(token: String) = http.run {
+        authenticatedNoData { client, accessToken -> client.post(url("team-invites/$token/reject")) { bearer(accessToken) } }
+    }
+}
+
+class NotificationsApi(private val http: AuthenticatedHttpClient) {
+    suspend fun list(unreadOnly: Boolean?, type: String?, page: Int, size: Int): PageResult<NotificationItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("notifications")) {
+            bearer(token)
+            url {
+                unreadOnly?.let { parameters.append("unreadOnly", it.toString()) }
+                type?.takeIf(String::isNotBlank)?.let { parameters.append("type", it) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun unreadCount(): Long = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("notifications/unread-count")) { bearer(token) } }
+    }
+
+    suspend fun markRead(notificationId: Long) = http.run {
+        authenticatedNoData { client, token -> client.post(url("notifications/$notificationId/read")) { bearer(token) } }
+    }
+
+    suspend fun markAllRead() = http.run {
+        authenticatedNoData { client, token -> client.post(url("notifications/read-all")) { bearer(token) } }
+    }
+
+    suspend fun stream(onUnreadCount: suspend (Long) -> Unit) {
+        val ticket: NotificationStreamTicket = http.run {
+            authenticatedEnvelope { client, token -> client.post(url("notifications/stream-ticket")) { bearer(token) } }
+        }
+        http.run {
+            client.sse(
+                urlString = url("notifications/stream"),
+                request = { parameter("ticket", ticket.ticket) },
+            ) {
+                incoming.collect { event ->
+                    val data = event.data ?: return@collect
+                    val unread = runCatching {
+                        Json.parseToJsonElement(data).jsonObject["unreadCount"]?.jsonPrimitive?.longOrNull
+                    }.getOrNull()
+                    if (unread != null) onUnreadCount(unread)
+                }
+            }
+        }
     }
 }
 

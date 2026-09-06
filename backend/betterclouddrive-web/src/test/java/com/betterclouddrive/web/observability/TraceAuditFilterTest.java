@@ -35,6 +35,18 @@ class TraceAuditFilterTest {
     private OperationLogService operationLogService;
 
     @Test
+    void shouldRedactTeamInviteTokenFromAuditPath() {
+        String token = "0123456789abcdef0123456789abcdef";
+
+        assertThat(TraceAuditFilter.sanitizePath("/api/v1/team-invites/" + token))
+                .isEqualTo("/api/v1/team-invites/***REDACTED***")
+                .doesNotContain(token);
+        assertThat(TraceAuditFilter.sanitizePath("/api/v1/team-invites/" + token + "/accept"))
+                .isEqualTo("/api/v1/team-invites/***REDACTED***/accept")
+                .doesNotContain(token);
+    }
+
+    @Test
     void shouldBindRequestIdAndWriteAudit() throws Exception {
         ObservabilityProperties properties = new ObservabilityProperties();
         properties.getAudit().setCaptureBody(true);

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Person
@@ -57,7 +58,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -103,15 +106,27 @@ fun ProductShell(
     container: AppContainer,
     debugToolsEnabled: Boolean,
     wideLayoutOverride: Boolean? = null,
+    initialTeamId: Long? = null,
+    onInitialTeamConsumed: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
     val transfers by container.transferQueue.state.collectAsState()
+    val notifications by container.notificationsStore.state.collectAsState()
     val isDiagnostics = destination.matches(DiagnosticsRoute)
     val isPreview = destination?.hasRoute<PersonalPreviewRoute>() == true || destination?.hasRoute<TeamPreviewRoute>() == true
     val isSearch = destination?.hasRoute<PersonalSearchRoute>() == true || destination?.hasRoute<TeamSearchRoute>() == true
     val isTeamFeature = destination.isTeam()
+    val isNotifications = destination?.hasRoute<NotificationsRoute>() == true
+    var notificationSource by rememberSaveable { mutableStateOf("personal") }
+
+    LaunchedEffect(initialTeamId) {
+        initialTeamId?.let {
+            navController.navigate(TeamWorkspaceRoute(it)) { launchSingleTop = true }
+            onInitialTeamConsumed()
+        }
+    }
 
     LaunchedEffect(backStackEntry) {
         when {
@@ -175,6 +190,21 @@ fun ProductShell(
     fun openTags() = navController.navigate(PersonalTagsRoute) { launchSingleTop = true }
     fun openShares() = navController.navigate(PersonalSharesRoute) { launchSingleTop = true }
     fun openRecycleBin() = navController.navigate(PersonalRecycleBinRoute) { launchSingleTop = true }
+    fun openNotifications() {
+        notificationSource = when {
+            destination.isTeam() -> "teams"
+            destination.matches(TransfersRoute) -> "transfers"
+            destination.matches(ProfileRoute) -> "profile"
+            else -> "personal"
+        }
+        navController.navigate(NotificationsRoute) { launchSingleTop = true }
+    }
+    val selectedTopLevelOverride = if (isNotifications) when (notificationSource) {
+        "teams" -> TeamsRoute
+        "transfers" -> TransfersRoute
+        "profile" -> ProfileRoute
+        else -> PersonalRoute
+    } else null
     fun openVersions(file: FileItem) = navController.navigate(PersonalVersionsRoute(file.id))
     fun openPreview(file: FileItem) = navController.navigate(PersonalPreviewRoute(file.id))
     fun closePreview() {
@@ -201,6 +231,15 @@ fun ProductShell(
             onOpenSearchLocation = ::openSearchLocation,
             onOpenShareDetail = { navController.navigate(PersonalShareDetailRoute(it)) },
             onOpenVersions = ::openVersions,
+            onNotificationTarget = { target ->
+                when (target) {
+                    is com.betterclouddrive.mobile.feature.teams.NotificationTarget.Invite -> container.incomingInviteStore.open(target.token)
+                    is com.betterclouddrive.mobile.feature.teams.NotificationTarget.TeamRoot -> navController.navigate(TeamWorkspaceRoute(target.teamId))
+                    is com.betterclouddrive.mobile.feature.teams.NotificationTarget.TeamFolder -> navController.navigate(TeamFolderRoute(target.teamId, target.folderId))
+                    is com.betterclouddrive.mobile.feature.teams.NotificationTarget.TeamMembers -> navController.navigate(TeamMembersRoute(target.teamId))
+                    com.betterclouddrive.mobile.feature.teams.NotificationTarget.Unsupported -> Unit
+                }
+            },
         )
     }
 
@@ -208,7 +247,7 @@ fun ProductShell(
         val wide = wideLayoutOverride ?: (maxWidth >= 600.dp)
         if (wide && !isDiagnostics && !isPreview) {
             Row(Modifier.fillMaxSize().testTag("product-shell-wide")) {
-                MainNavigationRail(destination, transfers.activeCount, ::navigateTopLevel)
+                MainNavigationRail(destination, selectedTopLevelOverride, transfers.activeCount, ::navigateTopLevel)
                 ShellScaffold(
                     destination, container.browserStore,
                     onBack = navController::popBackStack,
@@ -218,6 +257,8 @@ fun ProductShell(
                     onOpenTags = ::openTags,
                     onOpenShares = ::openShares,
                     onOpenRecycleBin = ::openRecycleBin,
+                    onOpenNotifications = ::openNotifications,
+                    unreadNotifications = notifications.unreadCount,
                     showTopBar = !isSearch && !isTeamFeature,
                     modifier = Modifier.weight(1f),
                     content = { Content(it, true) },
@@ -233,11 +274,18 @@ fun ProductShell(
                 onOpenTags = ::openTags,
                 onOpenShares = ::openShares,
                 onOpenRecycleBin = ::openRecycleBin,
+                onOpenNotifications = ::openNotifications,
+                unreadNotifications = notifications.unreadCount,
                 showTopBar = !isSearch && !isPreview && !isTeamFeature,
-                bottomBar = { if (!isDiagnostics && !isPreview) MainNavigationBar(destination, transfers.activeCount, ::navigateTopLevel) },
+                bottomBar = { if (!isDiagnostics && !isPreview) MainNavigationBar(destination, selectedTopLevelOverride, transfers.activeCount, ::navigateTopLevel) },
                 modifier = Modifier.fillMaxSize().testTag("product-shell-compact"),
                 content = { Content(it, false) },
             )
+        }
+        if (isTeamFeature && !isPreview && !isDiagnostics && !isNotifications) {
+            Box(Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 8.dp)) {
+                NotificationBell(notifications.unreadCount, ::openNotifications)
+            }
         }
         val editor by container.tagsStore.editor.collectAsState()
         editor?.let {
@@ -270,6 +318,8 @@ private fun ShellScaffold(
     onOpenTags: () -> Unit,
     onOpenShares: () -> Unit,
     onOpenRecycleBin: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    unreadNotifications: Long,
     showTopBar: Boolean = true,
     modifier: Modifier = Modifier,
     bottomBar: @Composable () -> Unit = {},
@@ -291,6 +341,7 @@ private fun ShellScaffold(
                 navigationIcon = {
                     when {
                         destination.matches(DiagnosticsRoute) -> BackButton(onBack, strings[MobileString.BackToProfile], "diagnostics-back")
+                        destination.matches(NotificationsRoute) -> BackButton(onBack, strings[MobileString.BackToParent], "notifications-back")
                         destination.isPersonalOrganization() -> BackButton(onBack, strings[MobileString.BackToParent], "organization-back")
                         destination.isPersonalFolder() -> BackButton(onBack, strings[MobileString.BackToParent], "personal-parent")
                     }
@@ -299,6 +350,7 @@ private fun ShellScaffold(
                     if (destination.isPersonalDirectory()) PersonalTopActions(
                         browserState, browser, onOpenSearch, onOpenFavorites, onOpenTags, onOpenShares, onOpenRecycleBin,
                     )
+                    if (!destination.matches(NotificationsRoute)) NotificationBell(unreadNotifications, onOpenNotifications)
                 },
             )
         },
@@ -449,6 +501,18 @@ private fun PersonalTopActions(
 }
 
 @Composable
+private fun NotificationBell(unread: Long, onOpen: () -> Unit) {
+    val strings = LocalMobileStrings.current
+    IconButton(onClick = onOpen, modifier = Modifier.testTag("notifications-bell")) {
+        if (unread > 0) BadgedBox(
+            badge = { Badge { Text(if (unread > 99) "99+" else unread.toString()) } },
+            modifier = Modifier.testTag("notifications-badge"),
+        ) { Icon(Icons.Default.Notifications, strings[MobileString.Notifications]) }
+        else Icon(Icons.Default.Notifications, strings[MobileString.Notifications])
+    }
+}
+
+@Composable
 private fun AppNavHost(
     navController: NavHostController,
     modifier: Modifier,
@@ -465,6 +529,7 @@ private fun AppNavHost(
     onOpenSearchLocation: (FileItem) -> Unit,
     onOpenShareDetail: (Long) -> Unit,
     onOpenVersions: (FileItem) -> Unit,
+    onNotificationTarget: (com.betterclouddrive.mobile.feature.teams.NotificationTarget) -> Unit,
 ) {
     NavHost(navController, startDestination = PersonalRoute, modifier = modifier) {
         personalBrowserGraph(container, onOpenFolder, onGoRoot, onOpenTransfers, onOpenPreview, onOpenVersions)
@@ -479,16 +544,16 @@ private fun AppNavHost(
                 launchSingleTop = true
             }
         }
-        productUtilityGraph(container, debugToolsEnabled, onOpenDiagnostics)
+        productUtilityGraph(container, debugToolsEnabled, onOpenDiagnostics, onNotificationTarget)
     }
 }
 
 @Composable
-private fun MainNavigationBar(destination: NavDestination?, activeTransfers: Int, onNavigate: (AppRoute) -> Unit) {
+private fun MainNavigationBar(destination: NavDestination?, selectedOverride: AppRoute?, activeTransfers: Int, onNavigate: (AppRoute) -> Unit) {
     val strings = LocalMobileStrings.current
     NavigationBar(modifier = Modifier.testTag("main-navigation-bar")) {
         topLevelItems.forEach { item ->
-            val selected = destination.matches(item.route)
+            val selected = selectedOverride?.let { it == item.route } ?: destination.matches(item.route)
             NavigationBarItem(
                 selected = selected,
                 onClick = {
@@ -506,12 +571,12 @@ private fun MainNavigationBar(destination: NavDestination?, activeTransfers: Int
 }
 
 @Composable
-private fun MainNavigationRail(destination: NavDestination?, activeTransfers: Int, onNavigate: (AppRoute) -> Unit) {
+private fun MainNavigationRail(destination: NavDestination?, selectedOverride: AppRoute?, activeTransfers: Int, onNavigate: (AppRoute) -> Unit) {
     val strings = LocalMobileStrings.current
     NavigationRail(modifier = Modifier.fillMaxHeight().testTag("main-navigation-rail")) {
         Spacer(Modifier.height(16.dp))
         topLevelItems.forEach { item ->
-            val selected = destination.matches(item.route)
+            val selected = selectedOverride?.let { it == item.route } ?: destination.matches(item.route)
             NavigationRailItem(
                 selected = selected,
                 onClick = {
@@ -567,6 +632,7 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
     is TeamSearchRoute -> this?.hasRoute<TeamSearchRoute>() == true
     is TeamPreviewRoute -> this?.hasRoute<TeamPreviewRoute>() == true
     is TeamMembersRoute -> this?.hasRoute<TeamMembersRoute>() == true
+    NotificationsRoute -> this?.hasRoute<NotificationsRoute>() == true
     TransfersRoute -> this?.hasRoute<TransfersRoute>() == true
     ProfileRoute -> this?.hasRoute<ProfileRoute>() == true
     DiagnosticsRoute -> this?.hasRoute<DiagnosticsRoute>() == true
@@ -608,6 +674,7 @@ private fun NavDestination?.title(strings: MobileStrings): String = when {
     matches(TransfersRoute) -> strings[MobileString.TransferQueueTitle]
     matches(ProfileRoute) -> strings[MobileString.Profile]
     matches(DiagnosticsRoute) -> strings[MobileString.Diagnostics]
+    matches(NotificationsRoute) -> strings[MobileString.Notifications]
     else -> strings[MobileString.AppName]
 }
 

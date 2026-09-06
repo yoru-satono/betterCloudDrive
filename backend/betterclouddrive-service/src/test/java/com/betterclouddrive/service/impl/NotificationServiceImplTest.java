@@ -72,7 +72,8 @@ class NotificationServiceImplTest {
         verify(notificationRepository).findAll(any(Specification.class), argThat((Pageable pageable) ->
                 pageable.getPageNumber() == 0
                         && pageable.getPageSize() == 20
-                        && pageable.getSort().getOrderFor("createdAt") != null));
+                        && pageable.getSort().getOrderFor("createdAt") != null
+                        && pageable.getSort().getOrderFor("id") != null));
     }
 
     @Test
