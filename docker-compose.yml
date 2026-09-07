@@ -24,7 +24,7 @@ services:
   postgres:
     image: postgres:18.4-alpine
     container_name: bcd-postgres
-    restart: unless-stopped
+    restart: "no"
     command: ["postgres", "-c", "log_min_duration_statement=${POSTGRES_LOG_MIN_DURATION_MS:-500}"]
     env_file:
       - ./config/env-files/database.env
@@ -43,7 +43,7 @@ services:
   redis:
     image: redis:8.8.1-alpine
     container_name: bcd-redis
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ./config/env-files/database.env
     command: redis-server /usr/local/etc/redis/redis.conf
@@ -63,7 +63,7 @@ services:
   seaweedfs:
     image: chrislusf/seaweedfs:4.40
     container_name: bcd-seaweedfs
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ./config/env-files/storage.env
     command: "server -dir=/data -s3 -s3.port=8333 -master.volumeSizeLimitMB=1024 -filer -webdav"
@@ -84,7 +84,7 @@ services:
   mailpit:
     image: axllent/mailpit:v1.30.5
     container_name: bcd-mailpit
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ./config/env-files/mail.env
     ports:
@@ -102,7 +102,7 @@ services:
   rabbitmq:
     image: rabbitmq:4.3.4-management-alpine
     container_name: bcd-rabbitmq
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ./config/env-files/rabbitmq.env
     command: sh -c "rabbitmq-plugins enable --offline rabbitmq_prometheus && rabbitmq-server"
@@ -122,7 +122,7 @@ services:
   onlyoffice-documentserver:
     image: onlyoffice/documentserver:9.3.0.1
     container_name: bcd-onlyoffice
-    restart: unless-stopped
+    restart: "no"
     environment:
       JWT_ENABLED: "true"
       JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-betterclouddrive-onlyoffice-dev-secret}
@@ -146,7 +146,7 @@ services:
     <<: *observability-medium
     image: grafana/loki:3.6.13
     container_name: bcd-loki
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ./config/env-files/observability.env
     environment:
@@ -168,7 +168,7 @@ services:
     <<: *observability-small
     image: grafana/alloy:v1.18.0
     container_name: bcd-alloy
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ./config/env-files/observability.env
     environment:
@@ -201,7 +201,7 @@ services:
     <<: *observability-tiny
     image: prom/blackbox-exporter:v0.28.0
     container_name: bcd-blackbox-exporter
-    restart: unless-stopped
+    restart: "no"
     command:
       - --config.file=/etc/blackbox_exporter/config.yml
     volumes:
@@ -218,7 +218,7 @@ services:
     <<: *observability-large
     image: prom/prometheus:v3.13.1
     container_name: bcd-prometheus
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ./config/env-files/observability.env
     command:
@@ -250,7 +250,7 @@ services:
     <<: *observability-small
     image: prom/alertmanager:v0.33.1
     container_name: bcd-alertmanager
-    restart: unless-stopped
+    restart: "no"
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
@@ -287,7 +287,7 @@ services:
     <<: *observability-medium
     image: grafana/grafana:13.1.1
     container_name: bcd-grafana
-    restart: unless-stopped
+    restart: "no"
     env_file:
       - ./config/env-files/observability.env
     environment:
@@ -328,7 +328,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: bcd-backend
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       backend-log-init:
         condition: service_completed_successfully
@@ -394,7 +394,7 @@ services:
         VITE_DESKTOP_API_BASE_URL: ${VITE_DESKTOP_API_BASE_URL:-http://127.0.0.1:8080/api/v1}
         VITE_DESKTOP_WEB_BASE_URL: ${VITE_DESKTOP_WEB_BASE_URL:-http://127.0.0.1:3000}
     container_name: bcd-frontend
-    restart: unless-stopped
+    restart: "no"
     depends_on:
       backend:
         condition: service_healthy
