@@ -1,20 +1,21 @@
 # 测试策略
 
-本文面向所有代码贡献者，定义测试分层、按修改范围选择的最低验证、完整验收和报告位置。可执行事实来源是 `scripts/verify-all.ps1`、`scripts/verify-all.sh` 与各模块构建文件。
+本文面向所有代码贡献者，定义测试分层、按修改范围选择的最低验证、完整验收和报告位置。可执行事实来源是 `scripts/verify-all.ps1`、`scripts/verify-all.sh` 与各模块构建文件。`mobile/` 是跨平台 KMP 工程：当前已有 Android 应用与设备套件，iOS 目标已进入共享源码元数据编译门禁，后续可继续增加 iOS 应用和平台测试。
 
-Java 与 Web 生成覆盖率报告，用于辅助发现未验证实现；Android 只按行为、状态转换和用户场景验收，不生成或检查代码行覆盖率。
+Java 与 Web 生成覆盖率报告，用于辅助发现未验证实现；KMP 移动端的 Android 目标按行为、状态转换和用户场景验收，不生成或检查代码行覆盖率。iOS 当前验证共享源码元数据，完整应用与平台测试随 iOS 应用壳补充。
 
 ## 验证层次
 
 | 层 | 主要目标 | 是否需要外部环境 |
 |----|----------|------------------|
-| Java/TypeScript/Rust/Android JVM 单元 | 纯逻辑、状态机、协议封装和错误分支 | 通常不需要 |
+| Java/TypeScript/Rust/KMP 主机单元 | 纯逻辑、状态机、协议封装和错误分支 | 通常不需要 |
 | Testcontainers 集成 | PostgreSQL Repository、SeaweedFS、RabbitMQ 与 trace 传播 | Docker |
 | Python API 黑盒 | 真实 HTTP 契约和跨模块业务链路 | Compose 后端栈 |
 | Security/WebDAV/Observability/Resilience 专项 | 安全边界、协议、运维与故障恢复 | Compose 及专项工具 |
 | Web Playwright | 真实浏览器、权限、上传下载和 OnlyOffice | Compose 完整栈 |
 | Tauri E2E | 真实桌面窗口和原生传输桥接 | Rust、平台 driver、后端栈 |
-| Android instrumentation | Compose UI、导航、设备 I/O 和端到端场景 | SDK、adb、设备、后端栈 |
+| KMP Android instrumentation | Compose UI、导航、设备 I/O 和端到端场景 | SDK、adb、设备、后端栈 |
+| KMP iOS 共享源码编译 | iOS source set、依赖和公开 API 的编译边界 | Kotlin/Native 工具链；应用壳测试后续补充 |
 
 单元测试不能代替资源作用域、真实数据库约束或客户端用户流程；端到端测试也不能代替对复杂状态机的精确单元断言。
 
@@ -32,9 +33,9 @@ Linux/macOS：
 ./scripts/verify-all.sh
 ```
 
-`all` 选择 backend、integration、blackbox、security、web、tauri、旧 Android、KMP 移动端、office、webdav、observability 和 resilience。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。
+`all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability 和 resilience。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。旧版 `android/` 仅保留为 KMP 迁移参考，不属于任何验证模块，也不会被 `all` 构建或测试。
 
-脚本会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。`all` 是完整验收，不能再配合跳过 Tauri、Android 或 OnlyOffice 的参数。
+脚本会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。`all` 是完整验收，不能再配合跳过 Tauri、KMP Android 或 OnlyOffice 的参数。
 
 常用子集：
 
@@ -42,8 +43,6 @@ Linux/macOS：
 .\scripts\verify-all.ps1 -Module backend
 .\scripts\verify-all.ps1 -Module backend,integration,blackbox
 .\scripts\verify-all.ps1 -Module web -SkipDockerBuild
-.\scripts\verify-all.ps1 -Module android-unit
-.\scripts\verify-all.ps1 -Module android -AndroidSerial localhost:16416
 .\scripts\verify-all.ps1 -Module mobile-unit
 .\scripts\verify-all.ps1 -Module mobile-android -AndroidSerial emulator-5556
 .\scripts\verify-all.ps1 -Module observability -KeepGoing
@@ -52,8 +51,6 @@ Linux/macOS：
 ```bash
 ./scripts/verify-all.sh --module backend --module integration
 ./scripts/verify-all.sh --module web --skip-docker-build
-./scripts/verify-all.sh --module android-unit
-./scripts/verify-all.sh --module android --android-serial localhost:16416
 ./scripts/verify-all.sh --module mobile-unit
 ./scripts/verify-all.sh --module mobile-android --android-serial emulator-5556
 ./scripts/verify-all.sh --module observability --keep-going
@@ -72,11 +69,10 @@ Linux/macOS：
 | Web E2E | `cd frontend && pnpm run test:e2e:docker` | 启动/复用 Docker 测试环境 |
 | Tauri Rust | `cd frontend/src-tauri && cargo test --locked` | 传输、设置和路径逻辑 |
 | Tauri 桌面 | `cd frontend && pnpm run tauri:e2e:build && pnpm run test:e2e:tauri` | 真实桌面窗口 |
-| Android JVM | `cd android && ./gradlew testDebugUnitTest` | Repository、ViewModel、工具和协议行为 |
-| Android 设备 | `cd android && ./gradlew connectedDebugAndroidTest` | Compose/instrumentation 场景 |
-| KMP 移动端主机 | `cd mobile && ./gradlew :shared:testAndroidHostTest` | 认证、并发刷新、语义错误与传输状态机 |
-| KMP Android 设备 | `cd mobile && ./gradlew :androidApp:connectedDebugAndroidTest` | 产品导航、Keystore、平台调度和设备 I/O |
-| KMP Android Release | `cd mobile && ./gradlew :androidApp:assembleRelease` | Release、R8 与 lint vital |
+| KMP 移动端主机 | `cd mobile && sh ./gradlew :shared:testAndroidHostTest` | 认证、并发刷新、语义错误与传输状态机 |
+| KMP Android 设备 | `cd mobile && ANDROID_SERIAL=<device-id> sh ./gradlew :androidApp:connectedDebugAndroidTest` | 产品导航、Keystore、平台调度和设备 I/O |
+| KMP Android Release | `cd mobile && sh ./gradlew :androidApp:assembleRelease` | Release、R8 与 lint vital |
+| KMP iOS 共享源码 | `cd mobile && sh ./gradlew :shared:compileIosMainKotlinMetadata` | iOS source set 和跨平台依赖编译边界；不等同于完整 iOS 应用构建 |
 
 KMP 传输改动必须在 Android 9/API 28 与 Android 14/API 34 上分别运行设备测试。API 28 用例不得跳过 WorkManager 集成测试；API 34 允许该低版本专用用例按条件跳过，但必须通过 UIDT 选择、通知和真实 OkHttp 流式 Range 恢复测试。每次运行都显式传入 `AndroidSerial`，不能依赖当前默认设备。
 
@@ -114,7 +110,7 @@ KMP 团队邀请与通知改动必须覆盖邀请稳定分页、同邮箱待处�
 
 2026-09-01 的阶段 12 验收已完成上述矩阵。API 34 的 64 MiB 历史版本 SAF 下载在两次强制停止后分别从 1,261,535 和 20,060,313 字节偏移获得 `206` 并继续，最终文件大小和 MD5 与源文件一致；最终黑盒运行通过 148 项测试，可观测性专项通过 Prometheus 规则测试和 7 项测试。
 
-Windows Android 使用 `gradlew.bat`。完整专项命令优先通过验证脚本运行，因为脚本还会设置运行 ID、报告位置、服务健康和数据清理。
+Windows KMP Android 使用 `mobile/gradlew.bat`。完整专项命令优先通过验证脚本运行，因为脚本还会设置运行 ID、报告位置、服务健康和数据清理。
 
 ## 修改范围到最低验证
 
@@ -131,12 +127,9 @@ Windows Android 使用 `gradlew.bat`。完整专项命令优先通过验证脚�
 | Vue component/composable/store | 相关 Vitest + `pnpm run build` |
 | Web 路由、认证、团队权限、传输 | Web 单元 +相关 Playwright |
 | Tauri Rust command/路径/恢复 | `cargo test --locked` + Tauri E2E |
-| Android util/model | JVM 行为测试 |
-| Android Repository/ViewModel | JVM 协议和状态测试 |
-| Android Compose/导航/设备 I/O | JVM 相关测试 + instrumentation |
 | `mobile/shared` 会话或传输状态机 | `:shared:testAndroidHostTest`；涉及 Keystore、SAF 或调度再加 KMP Android 设备测试 |
 | `mobile/androidApp`、Manifest 或 R8 | KMP Android 设备测试 + `:androidApp:assembleRelease` |
-| API 或本地化共同协议 | 后端测试 + Web、Tauri、Android 受影响契约/场景 |
+| API 或本地化共同协议 | 后端测试 + Web、Tauri、KMP Android 受影响契约/场景 |
 | Compose/生产代理/观测配置 | 配置渲染/健康检查 + observability；故障路径加 resilience |
 | OnlyOffice 回调或编辑 | 后端单元 + office E2E + 保存失败/重试场景 |
 
@@ -171,7 +164,7 @@ Prometheus 告警测试应证明健康基线、`for` 等待窗口、firing 和�
 - `java/<artifactId>/index.html`
 - `web/index.html`、`web/coverage-summary.json` 和 `web/lcov.info`
 
-Java/Web 覆盖率是辅助诊断，不替代关键行为断言。Android 不生成覆盖率报告，也不以代码行数、行覆盖比例或类似统计作为通过条件；Android 质量由 Repository 协议、ViewModel 状态转换、错误处理、Compose 交互和端到端场景判断。
+Java/Web 覆盖率是辅助诊断，不替代关键行为断言。KMP Android 不生成覆盖率报告，也不以代码行数、行覆盖比例或类似统计作为通过条件；其质量由 Store/Repository 协议、状态转换、错误处理、Compose 交互和端到端场景判断。
 
 ## 通用测试规则
 

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "backend", "integration", "blackbox", "security", "web", "tauri", "android-unit", "android", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience")]
+    [ValidateSet("all", "backend", "integration", "blackbox", "security", "web", "tauri", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience")]
     [string[]]$Module = @("all"),
     [switch]$SkipDockerBuild,
     [switch]$SkipTauri,
@@ -32,17 +32,15 @@ $RunBlackbox = $RunAll -or $SelectedModules.Contains("blackbox")
 $RunSecurity = $RunAll -or $SelectedModules.Contains("security")
 $RunWeb = $RunAll -or $SelectedModules.Contains("web")
 $RunTauri = ($RunAll -or $SelectedModules.Contains("tauri")) -and -not $SkipTauri
-$RunAndroid = ($RunAll -or $SelectedModules.Contains("android")) -and -not $SkipAndroid
-$RunAndroidUnit = $RunAndroid -or $SelectedModules.Contains("android-unit")
 $RunMobileUnit = $RunAll -or $SelectedModules.Contains("mobile-unit")
 $RunMobileAndroid = ($RunAll -or $SelectedModules.Contains("mobile-android")) -and -not $SkipAndroid
 $RunOffice = ($RunAll -or $SelectedModules.Contains("office")) -and -not $SkipOnlyOffice
 $RunWebDav = $RunAll -or $SelectedModules.Contains("webdav")
 $RunObservability = $RunAll -or $SelectedModules.Contains("observability")
 $RunResilience = $RunAll -or $SelectedModules.Contains("resilience")
-$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience
+$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience
 $NeedsFrontendHttp = $RunWeb -or $RunTauri -or $RunOffice
-$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunAndroid -or $RunOffice
+$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunOffice
 $NeedsOnlyOffice = $RunOffice
 $NeedsDocker = $NeedsBackendHttp -or $NeedsOnlyOffice
 $ShouldCleanupE2E = -not $SkipE2ECleanup -and $NeedsDocker
@@ -260,18 +258,18 @@ try {
     Write-Host "Selected modules: $($SelectedModules -join ', ')"
     Write-Host "Test run ID: $RunId"
     New-Item -ItemType Directory -Force -Path $ResultRoot | Out-Null
-    @("backend", "integration", "blackbox", "security", "web", "tauri", "android", "office", "webdav", "observability", "resilience", "coverage") |
+    @("backend", "integration", "blackbox", "security", "web", "tauri", "office", "webdav", "observability", "resilience", "coverage") |
         ForEach-Object { New-Item -ItemType Directory -Force -Path (Join-Path $ResultRoot $_) | Out-Null }
 
     if ($RunAll -and ($SkipTauri -or $SkipAndroid -or $SkipOnlyOffice)) {
-        throw "Module 'all' is a complete acceptance run; SkipTauri, SkipAndroid, and SkipOnlyOffice are not allowed."
+        throw "Module 'all' is a complete acceptance run; SkipTauri, SkipAndroid (KMP), and SkipOnlyOffice are not allowed."
     }
 
     if ($RunWebDav -and -not (Get-Command "rclone" -ErrorAction SilentlyContinue)) {
         throw "rclone is required by the webdav module. Install it from https://rclone.org/install/ and ensure it is on PATH."
     }
-    if ($RunAndroid -and -not (Get-Command "adb" -ErrorAction SilentlyContinue)) {
-        throw "adb is required by the android module and was not found on PATH."
+    if ($RunMobileAndroid -and -not (Get-Command "adb" -ErrorAction SilentlyContinue)) {
+        throw "adb is required by the KMP Android device module and was not found on PATH."
     }
 
     Invoke-Step "Prepare env files" {
@@ -460,27 +458,8 @@ try {
         }
     }
 
-    if ($RunAndroidUnit) {
-        Invoke-Step "Android unit tests" {
-            Invoke-InDirectory "android" {
-                Invoke-External ".\gradlew.bat" @("testDebugUnitTest")
-            }
-        }
-    }
-    if ($RunAndroid) {
-        Invoke-Step "Android E2E tests" {
-            Invoke-InDirectory "android" {
-                if ($AndroidSerial -match ":") {
-                    Invoke-External "adb" @("connect", $AndroidSerial)
-                }
-                Invoke-WithEnv @{ ANDROID_SERIAL = $AndroidSerial } {
-                    Invoke-External ".\gradlew.bat" @("connectedDebugAndroidTest")
-                }
-            }
-        }
-    }
     if ($RunMobileUnit) {
-        Invoke-Step "KMP mobile host tests and production builds" {
+        Invoke-Step "KMP host tests, Android builds, and iOS metadata" {
             Invoke-InDirectory "mobile" {
                 Invoke-External ".\gradlew.bat" @(
                     ":shared:testAndroidHostTest",

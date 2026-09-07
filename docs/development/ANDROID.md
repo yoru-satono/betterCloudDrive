@@ -1,10 +1,10 @@
 # Android 开发指南
 
-本文面向修改 Android 客户端的开发者，说明旧版 `android/` 与 KMP 重写 `mobile/` 的工程结构、服务地址、设备调试和测试约定。两者使用同一后端 REST 协议，不在本地复制服务端权限规则。新应用达到功能对等前不得删除旧应用。
+本文说明 KMP 移动端工程 `mobile/` 的 Android 平台实现、设备调试和测试约定，并不表示 KMP 应用只支持 Android。共享模块已声明 iOS 真机与模拟器目标，后续 iOS 应用继续复用同一套共享业务层。旧版 `android/` 只保留为 KMP 迁移时的行为与协议参考，不再作为活跃应用构建或测试；两个验证脚本及 `all` 均不会运行其 Gradle 任务。
 
 ## KMP 快速入口
 
-KMP 工程使用 Kotlin 2.4.10、Compose Multiplatform 1.11.1、AGP 9.1.1、Gradle 9.3.1、Ktor 3.5.1、Room 2.8.4、DataStore 1.2.1 和 WorkManager 2.11.2。Android 14+ 的长传输由 UIDT 执行，Android 13 及以下回退 WorkManager。
+KMP 工程使用 Kotlin 2.4.10、Compose Multiplatform 1.11.1、AGP 9.1.1、Gradle 9.3.1、Ktor 3.5.1、Room 2.8.4、DataStore 1.2.1 和 WorkManager 2.11.2。`shared` 当前包含 Android、`iosArm64` 和 `iosSimulatorArm64` 目标；Android 14+ 的长传输由 UIDT 执行，Android 13 及以下回退 WorkManager。
 
 ```powershell
 .\mobile\gradlew.bat -p mobile :shared:testAndroidHostTest :androidApp:assembleDebug
@@ -13,20 +13,11 @@ $env:ANDROID_SERIAL = '<adb 设备序列号>'
 .\mobile\gradlew.bat -p mobile :androidApp:assembleRelease
 ```
 
-KMP 当前依赖与状态边界见[阶段 11.5 架构收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，个人恢复与版本见[阶段 12 个人回收站与文件版本](../../mobile/docs/stage-12-personal-recovery-versions.md)。以下旧版说明继续有效，但其 Gradle 命令应在 `android/` 目录执行。
+KMP 当前依赖与状态边界见[阶段 11.5 架构收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，个人恢复与版本见[阶段 12 个人回收站与文件版本](../../mobile/docs/stage-12-personal-recovery-versions.md)。文中涉及 `android/` 的结构说明仅供迁移对照，不构成验证要求。
 
-## 工具与构建
+## 旧版迁移参考
 
-- Android Studio 或命令行 Android SDK。
-- compileSdk/targetSdk 37，minSdk 26。
-- 项目 Gradle wrapper 9.6.1；Gradle 构建 JVM 使用 Java 17。
-
-```bash
-cd android
-./gradlew assembleDebug
-```
-
-Windows 使用 `gradlew.bat assembleDebug`。APK 位于 `app/build/outputs/apk/debug/`。
+`android/` 的源码、接口封装和交互实现可用于核对尚未迁移的功能，但不运行其 Gradle 构建、JVM 测试或 instrumentation。新增实现、修复和回归验证均落在 `mobile/`。
 
 ## 代码结构
 
@@ -51,7 +42,7 @@ debug 默认服务器地址来自 `ANDROID_DEFAULT_SERVER_BASE_URL`，未设置�
 |------|----------|
 | Android 官方模拟器 → 宿主机 | `http://10.0.2.2:8080` |
 | 真机 → 开发电脑 | `http://<电脑局域网IP>:8080` |
-| Android 测试连接网络 adb 设备 | 设置 `ANDROID_SERIAL=<host:port>` |
+| KMP Android 测试连接网络 adb 设备 | 设置 `ANDROID_SERIAL=<host:port>` |
 
 修改环境变量后需要重新构建应用。生产服务器应使用 HTTPS；不要把个人开发 IP 或凭据提交到源码。
 
@@ -116,37 +107,38 @@ KMP 不使用全应用 Controller 或单体 Repository。`AuthenticatedHttpClien
 
 ## 测试
 
-JVM 测试：
+KMP 主机测试：
 
 ```bash
-./gradlew testDebugUnitTest
+cd mobile
+sh ./gradlew :shared:testAndroidHostTest
 ```
 
-设备 Compose/instrumentation：
+KMP 设备 Compose/instrumentation：
 
 ```bash
-ANDROID_SERIAL=<device-id> ./gradlew connectedDebugAndroidTest
+cd mobile
+ANDROID_SERIAL=<device-id> sh ./gradlew :androidApp:connectedDebugAndroidTest
 ```
 
 Windows：
 
 ```powershell
 $env:ANDROID_SERIAL = '<device-id>'
-.\gradlew.bat connectedDebugAndroidTest
+.\mobile\gradlew.bat -p mobile :androidApp:connectedDebugAndroidTest
 ```
 
-Android 测试以 Repository 协议、ViewModel 状态转换、错误处理、Compose 交互和端到端用户场景为验收依据，不生成覆盖率报告，也不以代码行数、行覆盖率或类似统计作为指标。
+KMP Android 测试以 Store/Repository 协议、状态转换、错误处理、Compose 交互和端到端用户场景为验收依据，不生成覆盖率报告，也不以代码行数、行覆盖率或类似统计作为指标。
 
 修改范围对应最低验证：
 
 | 修改 | 最低验证 |
 |------|----------|
-| util/纯模型 | JVM 行为测试 |
-| Retrofit DTO/ApiService | MockWebServer 契约测试 + 相关 Repository 测试 |
-| Repository/认证刷新/传输 | JVM 状态与错误测试；真实 I/O 再加设备测试 |
-| ViewModel | Coroutines/Turbine 状态序列测试 |
-| Compose/导航/权限动作 | instrumentation 场景 |
-| 服务器共同协议 | Android 测试 + Web/Tauri/后端契约测试 |
+| `mobile/shared` 纯模型 | 主机行为测试 |
+| Ktor DTO/API | MockEngine 契约测试 + 相关 Repository 测试 |
+| Store/Repository/认证刷新/传输 | 主机状态与错误测试；真实 I/O 再加设备测试 |
+| Compose/导航/权限动作 | KMP instrumentation 场景 |
+| 服务器共同协议 | KMP Android 测试 + Web/Tauri/后端契约测试 |
 
 完整测试策略见 [TESTING.md](TESTING.md)。
 

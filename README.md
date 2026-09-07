@@ -34,7 +34,7 @@
 - **注册验证码 & 密码重置**：Mailpit 模拟邮件
 - **存储配额**：默认 10GB/用户，管理员可调整
 - **管理员面板**：用户管理/配额调整/日志中心/系统统计
-- **响应式 UI**：Web 端桌面+移动端，Android 端手机+平板双布局
+- **响应式 UI**：Web 端桌面+移动端；KMP Android 端手机+平板双布局，共享业务层面向后续 iOS 客户端复用
 
 ## 项目结构
 
@@ -49,7 +49,8 @@ betterCloudDrive/
 │   ├── betterclouddrive-scheduler/  # 定时任务
 │   └── betterclouddrive-start/      # 启动入口 + Flyway 迁移
 ├── frontend/                # Vue 3 Web 前端与 Tauri 桌面壳
-├── android/                 # Kotlin Android 应用
+├── mobile/                  # 活跃的 Kotlin Multiplatform 移动端
+├── android/                 # 仅供 KMP 迁移参考的旧 Android 应用
 ├── backend-test/            # Python 黑盒 API 测试
 ├── observability/           # Prometheus/Loki/Alloy/Alertmanager/Grafana 配置
 ├── docs/                    # 文档索引、参考资料、运维手册和决策记录
@@ -137,13 +138,14 @@ cd frontend && pnpm install && pnpm run dev
 
 开发服务器访问 `http://localhost:5173`，Vite 会把 `/api` 和 `/webdav` 代理到 `VITE_DEV_BACKEND_PROXY_BASE`，默认是 `http://localhost:8080`。
 
-### 构建 Android 应用
+### 构建 KMP 移动端
 
 ```bash
-cd android && ./gradlew assembleDebug
+cd mobile
+sh ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug :shared:compileIosMainKotlinMetadata
 ```
 
-APK 输出在 `android/app/build/outputs/apk/debug/`。
+Android APK 输出在 `mobile/androidApp/build/outputs/apk/debug/`。`shared` 已声明 `iosArm64` 和 `iosSimulatorArm64` 目标，当前门禁会编译 iOS 共享源码元数据；后续 iOS 应用壳仍属于 KMP 移动端规划。旧版 `android/` 不再纳入构建和测试入口。
 
 ## API 文档
 
