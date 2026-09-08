@@ -27,15 +27,15 @@ Windows PowerShell：
 .\scripts\verify-all.ps1
 ```
 
-Linux/macOS：
+Linux/macOS（需要 Bash 3.2 或更高版本）：
 
 ```bash
-./scripts/verify-all.sh
+bash scripts/verify-all.sh
 ```
 
 `all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability 和 resilience。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。旧版 `android/` 仅保留为 KMP 迁移参考，不属于任何验证模块，也不会被 `all` 构建或测试。
 
-脚本会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。`all` 是完整验收，不能再配合跳过 Tauri、KMP Android 或 OnlyOffice 的参数。
+脚本会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。Web、OnlyOffice 和 Tauri E2E runner 会加载根 `.env`、`config/env-files/database.env` 与 `config/env-files/backend.env`，将与 Compose 一致的数据库端口、凭据和 OnlyOffice JWT 传给测试子进程；配置不一致时只报告键名，不输出密钥。`all` 是完整验收，不能再配合跳过 Tauri、KMP Android 或 OnlyOffice 的参数。
 
 常用子集：
 
@@ -49,11 +49,11 @@ Linux/macOS：
 ```
 
 ```bash
-./scripts/verify-all.sh --module backend --module integration
-./scripts/verify-all.sh --module web --skip-docker-build
-./scripts/verify-all.sh --module mobile-unit
-./scripts/verify-all.sh --module mobile-android --android-serial emulator-5556
-./scripts/verify-all.sh --module observability --keep-going
+bash scripts/verify-all.sh --module backend --module integration
+bash scripts/verify-all.sh --module web --skip-docker-build
+bash scripts/verify-all.sh --module mobile-unit
+bash scripts/verify-all.sh --module mobile-android --android-serial emulator-5556
+bash scripts/verify-all.sh --module observability --keep-going
 ```
 
 ## 独立命令

@@ -33,16 +33,16 @@
 
 ## 验证入口
 
-Linux/macOS 统一使用 POSIX shell 入口：
+Linux/macOS 统一使用 Bash 入口：
 
 ```sh
-sh scripts/verify-all.sh --module <module>
+bash scripts/verify-all.sh --module <module>
 ```
 
 可用模块：`backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience` 和 `all`。
 
 - 不得重新加入 `android` 或 `android-unit` 模块。
-- `scripts/verify-all.sh` 必须保持 POSIX `sh` 兼容；不要引入 Bash 数组、`[[ ... ]]`、`pipefail`、`BASH_SOURCE` 或其他 Bashism。
+- `scripts/verify-all.sh` 以 Bash 3.2 为最低兼容版本，可以使用索引数组、`[[ ... ]]`、`pipefail` 和 `BASH_SOURCE`；不要引入 Bash 4 才支持的关联数组等语法。
 - 修改验证流程时同步维护 `scripts/verify-all.ps1` 的模块含义和 `docs/development/TESTING.md`。
 - `all` 是完整验收，包含 KMP Android 设备测试，需要可用的 adb 设备或模拟器。
 - 优先运行与改动范围匹配的模块；跨模块协议或全局配置变化再扩大验证范围。
@@ -51,16 +51,16 @@ sh scripts/verify-all.sh --module <module>
 
 ```sh
 # KMP 主机测试、Android Debug/Release 和 iOS 共享源码元数据
-sh scripts/verify-all.sh --module mobile-unit
+bash scripts/verify-all.sh --module mobile-unit
 
 # KMP Android 设备测试
-sh scripts/verify-all.sh --module mobile-android --android-serial emulator-5556
+bash scripts/verify-all.sh --module mobile-android --android-serial emulator-5556
 
 # 后端与真实依赖
-sh scripts/verify-all.sh --module backend --module integration
+bash scripts/verify-all.sh --module backend --module integration
 
 # 已启动 Compose 时跳过镜像重建
-sh scripts/verify-all.sh --module security --skip-docker-build
+bash scripts/verify-all.sh --module security --skip-docker-build
 ```
 
 KMP 设备相关变更应在 API 28 和 API 34 上分别验证，以覆盖 WorkManager 与 UIDT。当前 iOS 门禁为：
@@ -95,7 +95,7 @@ sh ./gradlew :shared:compileIosMainKotlinMetadata
 ## 提交与交付
 
 - 提交前至少运行相关语法检查、目标模块测试和 `git diff --check`。
-- `scripts/verify-all.sh` 变化至少运行 `sh -n` 与 `dash -n`，并实际执行一个不依赖 Bash 的模块路径。
+- `scripts/verify-all.sh` 变化至少运行 `bash -n`、帮助与错误参数检查，并实际执行一个模块路径。
 - 不提交本地 SDK、AVD、IDE 配置、缓存、构建产物或测试结果。
 - 只有用户明确要求时才创建 Git 提交。提交信息应准确描述本次单一变更，不夹带无关文件。
 - 交付说明应列出已运行的检查、未运行的检查及原因，并明确剩余失败是实现问题、环境问题还是已知平台限制。

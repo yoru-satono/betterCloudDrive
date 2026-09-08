@@ -363,14 +363,8 @@ try {
             Set-BackendFunctionalTestRateLimits
             try {
                 Invoke-InDirectory "frontend" {
-                    $webEnv = @{
-                        E2E_USE_DOCKER = "1"
-                        E2E_BASE_URL = "http://127.0.0.1:3000"
-                        E2E_BACKEND_URL = "http://127.0.0.1:8080"
-                        E2E_ONLYOFFICE = "0"
-                    }
-                    Invoke-WithEnv $webEnv {
-                        Invoke-External "pnpm" @("exec", "playwright", "test", "--project=core")
+                    Invoke-WithEnv @{ E2E_ONLYOFFICE = "0" } {
+                        Invoke-External "node" @("scripts/run-playwright-docker.mjs", "--project=core")
                     }
                 }
             } finally {
@@ -382,13 +376,8 @@ try {
     if ($RunOffice) {
         Invoke-Step "OnlyOffice E2E tests" {
             Invoke-InDirectory "frontend" {
-                Invoke-WithEnv @{
-                    E2E_USE_DOCKER = "1"
-                    E2E_BASE_URL = "http://127.0.0.1:3000"
-                    E2E_BACKEND_URL = "http://127.0.0.1:8080"
-                    E2E_ONLYOFFICE = "1"
-                } {
-                    Invoke-External "pnpm" @("exec", "playwright", "test", "--project=office")
+                Invoke-WithEnv @{ E2E_ONLYOFFICE = "1" } {
+                    Invoke-External "node" @("scripts/run-playwright-docker.mjs", "--project=office")
                 }
             }
         }

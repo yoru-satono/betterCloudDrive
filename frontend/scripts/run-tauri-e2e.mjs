@@ -5,8 +5,11 @@ import path from 'node:path'
 import { inspect } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { download as downloadEdgeDriver } from 'edgedriver'
+import { loadWorkspaceE2EEnv } from './e2e-env.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const workspaceRoot = path.resolve(root, '..')
+Object.assign(process.env, loadWorkspaceE2EEnv(workspaceRoot))
 const defaultApp = process.platform === 'win32'
   ? 'src-tauri/target/release/betterclouddrive.exe'
   : 'src-tauri/target/release/betterclouddrive'
