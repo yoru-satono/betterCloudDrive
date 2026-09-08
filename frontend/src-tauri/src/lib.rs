@@ -3,8 +3,22 @@ mod settings;
 mod transfer;
 mod upload;
 
+#[cfg(target_os = "linux")]
+fn configure_linux_webview_environment() {
+    if std::env::var_os("WAYLAND_DISPLAY").is_some()
+        && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+    {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn configure_linux_webview_environment() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    configure_linux_webview_environment();
+
     let builder = tauri::Builder::default()
         .manage(settings::TransferLimiters::default())
         .manage(transfer::DesktopTransferState::default())

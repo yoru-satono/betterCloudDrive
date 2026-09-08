@@ -30,6 +30,8 @@ pnpm run tauri:dev
 
 默认 API 是 `http://127.0.0.1:8080/api/v1`，默认 Web 分享地址是 `http://127.0.0.1:3000`。登录页和桌面设置可调整地址；调试目录上传/下载时确认应用具有目标目录权限。
 
+Linux Wayland 下应用保持原生 Wayland backend。为规避部分 WebKitGTK/显卡组合在 DMA-BUF 分配失败后触发的 GDK protocol error，应用会在调用方未显式配置时于 WebView 初始化前设置 `WEBKIT_DISABLE_DMABUF_RENDERER=1`，不会回退到 XWayland。
+
 ## Command 设计
 
 - 参数和返回值保持可序列化、稳定且不暴露绝对内部状态。
@@ -62,7 +64,7 @@ pnpm run test:e2e:tauri
 
 测试复用 Web E2E API helper，因此默认 Compose 后端栈必须运行。
 
-Windows 需要 `tauri-driver` 与匹配 WebView2 的 EdgeDriver，可通过 `TAURI_DRIVER_PATH`、`EDGEWEBDRIVER_PATH` 指定。Linux E2E 使用 instrumented embedded WebDriver，需要图形显示或 `xvfb-run`，不要求普通 `tauri-driver`。
+Windows 需要 `tauri-driver` 与匹配 WebView2 的 EdgeDriver，可通过 `TAURI_DRIVER_PATH`、`EDGEWEBDRIVER_PATH` 指定。Linux E2E 使用 instrumented embedded WebDriver，需要图形显示或 `xvfb-run`，不要求普通 `tauri-driver`；测试入口也会为 WebKitGTK 默认禁用有兼容问题的 DMA-BUF renderer。
 
 Linux 推荐运行 `./scripts/verify-all.sh --module tauri`，脚本会临时放宽 E2E 限流并在结束后恢复。`TAURI_E2E_APP_PATH` 可指定不同可执行文件。
 

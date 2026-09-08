@@ -75,6 +75,9 @@ Linux prerequisites:
 
 - The standard Tauri 2 development dependencies for WebKitGTK 4.1 are installed.
 - A graphical display is available, or `xvfb-run` is installed for headless use.
+- Native Wayland remains enabled. On affected WebKitGTK/GPU combinations, the
+  app disables the DMA-BUF renderer before WebView initialization to avoid GDK
+  protocol errors; it does not force XWayland.
 - The Linux E2E build uses an instrumented embedded WebDriver. It does not
   require `tauri-driver` or `WebKitWebDriver`, and the instrumentation is not
   included in a normal `tauri:build`.

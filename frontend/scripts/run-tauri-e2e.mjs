@@ -39,6 +39,7 @@ if (process.platform === 'linux') {
     BCD_E2E_DOWNLOAD_DIR: downloadDir,
     BCD_E2E_UPLOAD_DIR: uploadDir,
     BCD_TAURI_E2E_DRIVER: 'embedded',
+    WEBKIT_DISABLE_DMABUF_RENDERER: process.env.WEBKIT_DISABLE_DMABUF_RENDERER || '1',
   }
   const command = process.env.DISPLAY ? process.execPath : findOnPath('xvfb-run')
   if (!command) {

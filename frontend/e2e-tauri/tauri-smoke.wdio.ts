@@ -268,7 +268,13 @@ async function acceptInviteFromNotification(accessToken: string, refreshToken: s
   } else {
     await notificationRow.click()
   }
+  await browser.waitUntil(async () => /\/team-invites\/[^/?#]+/.test(await browser.getUrl()), {
+    timeout: 15_000,
+    timeoutMsg: 'Opening the invite notification did not navigate to the invite page',
+  })
   await expectVisibleText(teamName)
+  const acceptButton = await $('//button[normalize-space(.)="接受邀请"]')
+  await acceptButton.waitForDisplayed()
   if (process.env.BCD_TAURI_E2E_DRIVER === 'embedded') {
     await browser.execute(() => {
       const button = Array.from(document.querySelectorAll<HTMLButtonElement>('button'))
@@ -281,7 +287,7 @@ async function acceptInviteFromNotification(accessToken: string, refreshToken: s
       timeoutMsg: 'Accepting the team invite did not navigate to the team files page',
     })
   } else {
-    await clickButton('接受邀请')
+    await acceptButton.click()
     await expectVisibleText(teamName)
   }
 }
