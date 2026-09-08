@@ -1,8 +1,11 @@
 package com.betterclouddrive.web.controller;
 
 import com.betterclouddrive.web.security.UserPrincipal;
+import com.betterclouddrive.web.dto.request.ReplaceFileTagsRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -13,6 +16,19 @@ import java.util.Arrays;
 import static org.assertj.core.api.Assertions.*;
 
 class TeamControllerContractTest {
+
+    @Test
+    void teamFileTags_shouldExposeAtomicGetAndPutMappings() throws NoSuchMethodException {
+        Method list = TeamController.class.getMethod(
+                "listTeamFileTags", UserPrincipal.class, Long.class, Long.class);
+        Method replace = TeamController.class.getMethod(
+                "replaceTeamFileTags", UserPrincipal.class, Long.class, Long.class, ReplaceFileTagsRequest.class);
+
+        assertThat(list.getAnnotation(GetMapping.class).value())
+                .containsExactly("/{teamId}/files/{fileId}/tags");
+        assertThat(replace.getAnnotation(PutMapping.class).value())
+                .containsExactly("/{teamId}/files/{fileId}/tags");
+    }
 
     @Test
     void listAuditLogs_shouldUseIsoDateTimeForTimeFilters() throws NoSuchMethodException {

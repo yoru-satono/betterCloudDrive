@@ -1,6 +1,9 @@
 package com.betterclouddrive.dal.repository;
 
 import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.FavoriteEntity;
+import com.betterclouddrive.dal.entity.FileTagEntity;
+import com.betterclouddrive.dal.entity.TagEntity;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -44,6 +47,12 @@ class FileRepositoryIT {
 
     @jakarta.annotation.Resource
     private FileRepository repository;
+    @jakarta.annotation.Resource
+    private FavoriteRepository favoriteRepository;
+    @jakarta.annotation.Resource
+    private FileTagRepository fileTagRepository;
+    @jakarta.annotation.Resource
+    private TagRepository tagRepository;
 
     @Test
     void personalQueriesIsolateOwnersTeamsAndSoftDeletedFiles() {
@@ -72,6 +81,46 @@ class FileRepositoryIT {
         assertThat(repository.findExpiredDeletedFiles(LocalDateTime.now().minusDays(30),
                 org.springframework.data.domain.PageRequest.of(0, 10)))
                 .extracting(FileEntity::getFileName).containsExactly("old.txt");
+    }
+
+    @Test
+    void teamOrganizationQueriesAreScopedAndStableAndSupportAtomicReplacementDelete() {
+        FileEntity first = repository.save(file(1L, 7L, null, "first.txt", false));
+        FileEntity second = repository.save(file(1L, 7L, null, "second.txt", false));
+        FileEntity foreign = repository.save(file(1L, 8L, null, "foreign.txt", false));
+        LocalDateTime sameTime = LocalDateTime.of(2026, 9, 8, 0, 0);
+        favoriteRepository.save(FavoriteEntity.builder().userId(1L).fileId(first.getId()).createdAt(sameTime).build());
+        favoriteRepository.save(FavoriteEntity.builder().userId(1L).fileId(second.getId()).createdAt(sameTime).build());
+        favoriteRepository.save(FavoriteEntity.builder().userId(1L).fileId(foreign.getId()).createdAt(sameTime).build());
+
+        assertThat(favoriteRepository.findTeamFavoriteFiles(1L, 7L))
+                .extracting(FileEntity::getId).containsExactly(second.getId(), first.getId());
+
+        TagEntity beta = tagRepository.save(TagEntity.builder()
+                .userId(1L).teamId(7L).tagName("beta").color("#00d4aa").createdAt(sameTime).build());
+        TagEntity alpha = tagRepository.save(TagEntity.builder()
+                .userId(1L).teamId(7L).tagName("Alpha").color("#60a5fa").createdAt(sameTime).build());
+        TagEntity otherTeam = tagRepository.save(TagEntity.builder()
+                .userId(1L).teamId(8L).tagName("foreign").color("#a78bfa").createdAt(sameTime).build());
+        fileTagRepository.save(FileTagEntity.builder()
+                .userId(1L).teamId(7L).fileId(first.getId()).tagId(beta.getId()).createdAt(sameTime).build());
+        fileTagRepository.save(FileTagEntity.builder()
+                .userId(1L).teamId(7L).fileId(first.getId()).tagId(alpha.getId()).createdAt(sameTime).build());
+        fileTagRepository.save(FileTagEntity.builder()
+                .userId(1L).teamId(7L).fileId(second.getId()).tagId(beta.getId()).createdAt(sameTime).build());
+        fileTagRepository.save(FileTagEntity.builder()
+                .userId(1L).teamId(8L).fileId(foreign.getId()).tagId(otherTeam.getId()).createdAt(sameTime).build());
+
+        assertThat(fileTagRepository.findTeamTagsForFile(7L, first.getId()))
+                .extracting(TagEntity::getTagName).containsExactly("Alpha", "beta");
+        assertThat(fileTagRepository.findTeamTaggedFiles(7L, beta.getId()))
+                .extracting(FileEntity::getId).containsExactly(second.getId(), first.getId());
+
+        fileTagRepository.deleteByTeamIdAndFileId(7L, first.getId());
+        fileTagRepository.flush();
+        assertThat(fileTagRepository.findTeamTagsForFile(7L, first.getId())).isEmpty();
+        assertThat(fileTagRepository.findTeamTagsForFile(8L, foreign.getId()))
+                .extracting(TagEntity::getId).containsExactly(otherTeam.getId());
     }
 
     private static FileEntity file(Long userId, Long teamId, Long parentId, String name, boolean deleted) {

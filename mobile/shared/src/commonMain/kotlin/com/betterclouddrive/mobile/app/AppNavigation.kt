@@ -298,6 +298,19 @@ fun ProductShell(
                 onDismiss = container.tagsStore::closeEditor,
             )
         }
+        val teamEditor by container.teamTagsStore.editor.collectAsState()
+        val canCreateTeamTags by container.teamTagsStore.canManage.collectAsState()
+        teamEditor?.let {
+            FileTagEditorOverlay(
+                editor = it,
+                wide = wide,
+                onToggle = container.teamTagsStore::toggleEditorTag,
+                onSave = container.teamTagsStore::saveEditor,
+                onCreate = container.teamTagsStore::createInEditor,
+                onDismiss = container.teamTagsStore::closeEditor,
+                canCreate = canCreateTeamTags,
+            )
+        }
         val shares by container.sharesStore.state.collectAsState()
         ShareCreatorOverlay(
             shares, wide, container.localDateTime, container.clipboard,
@@ -632,6 +645,9 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
     is TeamSearchRoute -> this?.hasRoute<TeamSearchRoute>() == true
     is TeamPreviewRoute -> this?.hasRoute<TeamPreviewRoute>() == true
     is TeamMembersRoute -> this?.hasRoute<TeamMembersRoute>() == true
+    is TeamFavoritesRoute -> this?.hasRoute<TeamFavoritesRoute>() == true
+    is TeamTagsRoute -> this?.hasRoute<TeamTagsRoute>() == true
+    is TeamTagFilesRoute -> this?.hasRoute<TeamTagFilesRoute>() == true
     NotificationsRoute -> this?.hasRoute<NotificationsRoute>() == true
     TransfersRoute -> this?.hasRoute<TransfersRoute>() == true
     ProfileRoute -> this?.hasRoute<ProfileRoute>() == true
@@ -649,7 +665,9 @@ private fun NavDestination?.isPersonal(): Boolean =
 private fun NavDestination?.isTeam(): Boolean =
     this?.hasRoute<TeamsRoute>() == true || this?.hasRoute<TeamWorkspaceRoute>() == true ||
         this?.hasRoute<TeamFolderRoute>() == true || this?.hasRoute<TeamSearchRoute>() == true ||
-        this?.hasRoute<TeamPreviewRoute>() == true || this?.hasRoute<TeamMembersRoute>() == true
+        this?.hasRoute<TeamPreviewRoute>() == true || this?.hasRoute<TeamMembersRoute>() == true ||
+        this?.hasRoute<TeamFavoritesRoute>() == true || this?.hasRoute<TeamTagsRoute>() == true ||
+        this?.hasRoute<TeamTagFilesRoute>() == true
 
 private fun NavDestination?.isPersonalDirectory(): Boolean =
     this?.hasRoute<PersonalRoute>() == true || this?.hasRoute<PersonalFolderRoute>() == true
@@ -670,6 +688,8 @@ private fun NavDestination?.title(strings: MobileStrings): String = when {
     matches(PersonalRecycleBinRoute) -> strings[MobileString.RecycleBinTitle]
     this?.hasRoute<PersonalVersionsRoute>() == true -> strings[MobileString.VersionHistory]
     this?.hasRoute<TeamMembersRoute>() == true -> strings[MobileString.TeamMembers]
+    this?.hasRoute<TeamFavoritesRoute>() == true -> strings[MobileString.FavoritesTitle]
+    this?.hasRoute<TeamTagsRoute>() == true || this?.hasRoute<TeamTagFilesRoute>() == true -> strings[MobileString.TagsTitle]
     matches(TeamsRoute) -> strings[MobileString.TeamsTitle]
     matches(TransfersRoute) -> strings[MobileString.TransferQueueTitle]
     matches(ProfileRoute) -> strings[MobileString.Profile]

@@ -13,7 +13,22 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface TeamEventOutboxRepository extends JpaRepository<TeamEventOutboxEntity, Long>, JpaSpecificationExecutor<TeamEventOutboxEntity> {
-    List<TeamEventOutboxEntity> findByStatusAndAvailableAtLessThanEqualOrderByIdAsc(String status, LocalDateTime availableAt, Pageable pageable);
+    @Query("""
+            SELECT e
+            FROM TeamEventOutboxEntity e
+            WHERE e.status = :status
+              AND e.availableAt <= :availableAt
+            ORDER BY CASE e.aggregateType
+                       WHEN 'NOTIFICATION' THEN 0
+                       WHEN 'TEAM_TASK' THEN 1
+                       ELSE 2
+                     END,
+                     e.id ASC
+            """)
+    List<TeamEventOutboxEntity> findReadyByDispatchPriority(
+            @Param("status") String status,
+            @Param("availableAt") LocalDateTime availableAt,
+            Pageable pageable);
 
     long countByStatus(String status);
 

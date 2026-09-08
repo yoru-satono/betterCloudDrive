@@ -269,4 +269,71 @@ class TagServiceImplTest {
 
         assertThat(result.getRecords()).extracting(FileEntity::getId).containsExactly(21L);
     }
+
+    @Test
+    void teamTagCrud_shouldNormalizeAndReturnStableConflict() {
+        when(tagRepository.existsByTeamIdAndTagName(10L, "important")).thenReturn(false);
+        when(tagRepository.saveAndFlush(any(TagEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TagEntity created = tagService.createTeamTag(1L, 10L, " important ", " #AABBCC ");
+
+        assertThat(created.getTagName()).isEqualTo("important");
+        assertThat(created.getColor()).isEqualTo("#aabbcc");
+        verify(teamService).requireManageMembers(1L, 10L);
+
+        TagEntity existing = TagEntity.builder().id(7L).teamId(10L).tagName("important").color("#aabbcc").build();
+        when(tagRepository.findById(7L)).thenReturn(Optional.of(existing));
+        when(tagRepository.existsByTeamIdAndTagNameAndIdNot(10L, "archive", 7L)).thenReturn(true);
+        assertThatThrownBy(() -> tagService.updateTeamTag(1L, 10L, 7L, " archive ", null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getCode()).isEqualTo(409002));
+    }
+
+    @Test
+    void replaceTeamFileTags_shouldUseEffectiveWriteAndReplaceAtomically() {
+        FileEntity file = FileEntity.builder().id(20L).teamId(10L).fileName("report.txt").isDeleted(false).build();
+        TagEntity first = TagEntity.builder().id(1L).teamId(10L).tagName("first").build();
+        TagEntity second = TagEntity.builder().id(2L).teamId(10L).tagName("second").build();
+        when(fileRepository.findById(20L)).thenReturn(Optional.of(file));
+        when(tagRepository.findById(2L)).thenReturn(Optional.of(second));
+        when(fileTagRepository.findTeamTagsForFile(10L, 20L)).thenReturn(List.of(first));
+
+        List<TagEntity> result = tagService.replaceTeamFileTags(4L, 10L, 20L, List.of(2L, 2L));
+
+        assertThat(result).containsExactly(second);
+        verify(teamPermissionService).requireWrite(4L, 10L, 20L);
+        verify(fileTagRepository).deleteByTeamIdAndFileId(10L, 20L);
+        verify(fileTagRepository).flush();
+        verify(fileTagRepository).save(argThat(value -> value.getTeamId().equals(10L)
+                && value.getFileId().equals(20L) && value.getTagId().equals(2L)));
+        verify(teamAuditService).record(10L, 4L, "TAG_ATTACH", "FILE", 20L, "report.txt");
+        verify(teamAuditService).record(10L, 4L, "TAG_DETACH", "FILE", 20L, "report.txt");
+    }
+
+    @Test
+    void replaceTeamFileTags_shouldValidateEveryTagBeforeDeletingCurrentAssignments() {
+        FileEntity file = FileEntity.builder().id(20L).teamId(10L).fileName("report.txt").isDeleted(false).build();
+        TagEntity foreign = TagEntity.builder().id(2L).teamId(11L).tagName("foreign").build();
+        when(fileRepository.findById(20L)).thenReturn(Optional.of(file));
+        when(tagRepository.findById(2L)).thenReturn(Optional.of(foreign));
+
+        assertThatThrownBy(() -> tagService.replaceTeamFileTags(4L, 10L, 20L, List.of(2L)))
+                .isInstanceOf(BusinessException.class);
+
+        verify(fileTagRepository, never()).deleteByTeamIdAndFileId(anyLong(), anyLong());
+        verify(fileTagRepository, never()).save(any(FileTagEntity.class));
+    }
+
+    @Test
+    void listTeamFileTags_shouldRequireEffectiveRead() {
+        FileEntity file = FileEntity.builder().id(20L).teamId(10L).isDeleted(false).build();
+        TagEntity tag = TagEntity.builder().id(1L).teamId(10L).tagName("visible").build();
+        when(fileRepository.findById(20L)).thenReturn(Optional.of(file));
+        when(fileTagRepository.findTeamTagsForFile(10L, 20L)).thenReturn(List.of(tag));
+
+        assertThat(tagService.listTeamFileTags(4L, 10L, 20L)).containsExactly(tag);
+
+        verify(teamService).requireRead(4L, 10L);
+        verify(teamPermissionService).requireRead(4L, 10L, 20L);
+    }
 }

@@ -30,6 +30,7 @@ class NetworkTestFacade private constructor(
     private val recovery = PersonalRecoveryApi(http)
     private val teams = TeamWorkspaceApi(http)
     private val teamPreview = TeamPreviewApi(http)
+    private val teamOrganization = TeamOrganizationApi(http)
     private val teamPermissions = TeamPermissionsApi(http)
     private val teamMembers = TeamMembersApi(http)
     private val teamInvites = TeamInvitesApi(http)
@@ -72,6 +73,21 @@ class NetworkTestFacade private constructor(
     suspend fun listPersonalFileTags(id: Long) = organization.fileTags(id)
     suspend fun replacePersonalFileTags(id: Long, tags: List<Long>) = organization.replaceFileTags(id, tags)
     suspend fun removePersonalFileTag(tagId: Long, fileId: Long) = organization.removeFileTag(tagId, fileId)
+
+    suspend fun listTeamFavorites(teamId: Long, query: String?, page: Int, size: Int) = teamOrganization.listFavorites(teamId, query, page, size)
+    suspend fun isTeamFavorite(teamId: Long, fileId: Long) = teamOrganization.favoriteStatus(teamId, fileId)
+    suspend fun addTeamFavorite(teamId: Long, fileId: Long) = teamOrganization.addFavorite(teamId, fileId)
+    suspend fun removeTeamFavorite(teamId: Long, fileId: Long) = teamOrganization.removeFavorite(teamId, fileId)
+    suspend fun listTeamTags(teamId: Long, query: String? = null) = teamOrganization.listTags(teamId, query)
+    suspend fun createTeamTag(teamId: Long, name: String, color: String) = teamOrganization.createTag(teamId, name, color)
+    suspend fun updateTeamTag(teamId: Long, tagId: Long, name: String, color: String) = teamOrganization.updateTag(teamId, tagId, name, color)
+    suspend fun deleteTeamTag(teamId: Long, tagId: Long) = teamOrganization.deleteTag(teamId, tagId)
+    suspend fun listTeamFilesByTag(teamId: Long, tagId: Long, query: String?, page: Int, size: Int) =
+        teamOrganization.filesByTag(teamId, tagId, query, page, size)
+    suspend fun listTeamFileTags(teamId: Long, fileId: Long) = teamOrganization.fileTags(teamId, fileId)
+    suspend fun replaceTeamFileTags(teamId: Long, fileId: Long, tagIds: List<Long>) =
+        teamOrganization.replaceFileTags(teamId, fileId, tagIds)
+    suspend fun removeTeamFileTag(teamId: Long, tagId: Long, fileId: Long) = teamOrganization.removeFileTag(teamId, tagId, fileId)
 
     suspend fun createPersonalShare(request: CreatePersonalShareRequest) = shares.create(request)
     suspend fun listPersonalShares(query: String?, protected: Boolean?, expiration: ShareExpirationFilter, page: Int, size: Int) =

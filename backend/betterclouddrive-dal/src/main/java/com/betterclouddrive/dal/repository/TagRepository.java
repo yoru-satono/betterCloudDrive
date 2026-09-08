@@ -20,4 +20,6 @@ public interface TagRepository extends JpaRepository<TagEntity, Long> {
     boolean existsByUserIdAndTagNameAndIdNot(Long userId, String tagName, Long id);
 
     boolean existsByTeamIdAndTagName(Long teamId, String tagName);
+
+    boolean existsByTeamIdAndTagNameAndIdNot(Long teamId, String tagName, Long id);
 }

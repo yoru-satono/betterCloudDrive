@@ -220,19 +220,25 @@ public class TagServiceImpl implements TagService {
     @Transactional
     public TagEntity createTeamTag(Long actorUserId, Long teamId, String tagName, String color) {
         teamService.requireManageMembers(actorUserId, teamId);
-        if (tagRepository.existsByTeamIdAndTagName(teamId, tagName)) {
-            throw new BusinessException(ApiCode.CONFLICT, "Team tag '" + tagName + "' already exists");
+        String normalizedName = normalizeTagName(tagName);
+        String normalizedColor = normalizeColor(color, true);
+        if (tagRepository.existsByTeamIdAndTagName(teamId, normalizedName)) {
+            throw new BusinessException(ApiCode.TAG_NAME_CONFLICT);
         }
         TagEntity tag = TagEntity.builder()
                 .userId(actorUserId)
                 .teamId(teamId)
-                .tagName(tagName)
-                .color(color != null ? color : "#1890ff")
+                .tagName(normalizedName)
+                .color(normalizedColor)
                 .createdAt(LocalDateTime.now())
                 .build();
-        TagEntity saved = tagRepository.save(tag);
-        teamAuditService.record(teamId, actorUserId, "TAG_CREATE", "TAG", saved.getId(), saved.getTagName());
-        return saved;
+        try {
+            TagEntity saved = tagRepository.saveAndFlush(tag);
+            teamAuditService.record(teamId, actorUserId, "TAG_CREATE", "TAG", saved.getId(), saved.getTagName());
+            return saved;
+        } catch (DataIntegrityViolationException exception) {
+            throw new BusinessException(ApiCode.TAG_NAME_CONFLICT);
+        }
     }
 
     @Override
@@ -250,14 +256,23 @@ public class TagServiceImpl implements TagService {
         teamService.requireManageMembers(actorUserId, teamId);
         TagEntity tag = requireTeamTag(teamId, tagId);
         if (tagName != null) {
-            tag.setTagName(tagName);
+            String normalizedName = normalizeTagName(tagName);
+            if (!normalizedName.equals(tag.getTagName())
+                    && tagRepository.existsByTeamIdAndTagNameAndIdNot(teamId, normalizedName, tagId)) {
+                throw new BusinessException(ApiCode.TAG_NAME_CONFLICT);
+            }
+            tag.setTagName(normalizedName);
         }
         if (color != null) {
-            tag.setColor(color);
+            tag.setColor(normalizeColor(color, false));
         }
-        TagEntity saved = tagRepository.save(tag);
-        teamAuditService.record(teamId, actorUserId, "TAG_UPDATE", "TAG", tagId, saved.getTagName());
-        return saved;
+        try {
+            TagEntity saved = tagRepository.saveAndFlush(tag);
+            teamAuditService.record(teamId, actorUserId, "TAG_UPDATE", "TAG", tagId, saved.getTagName());
+            return saved;
+        } catch (DataIntegrityViolationException exception) {
+            throw new BusinessException(ApiCode.TAG_NAME_CONFLICT);
+        }
     }
 
     @Override
@@ -273,10 +288,14 @@ public class TagServiceImpl implements TagService {
     @Override
     @Transactional
     public void tagTeamFiles(Long actorUserId, Long teamId, Long tagId, List<Long> fileIds) {
-        teamService.requireWrite(actorUserId, teamId);
+        teamService.requireRead(actorUserId, teamId);
         requireTeamTag(teamId, tagId);
-        for (Long fileId : fileIds) {
+        if (fileIds == null || fileIds.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "error.validation", Map.of("fields", "fileIds"));
+        }
+        for (Long fileId : new LinkedHashSet<>(fileIds)) {
             FileEntity file = requireTeamFile(teamId, fileId);
+            teamPermissionService.requireWrite(actorUserId, teamId, fileId);
             if (!fileTagRepository.existsByFileIdAndTagId(fileId, tagId)) {
                 fileTagRepository.save(FileTagEntity.builder()
                         .userId(actorUserId)
@@ -293,9 +312,10 @@ public class TagServiceImpl implements TagService {
     @Override
     @Transactional
     public void untagTeamFile(Long actorUserId, Long teamId, Long tagId, Long fileId) {
-        teamService.requireWrite(actorUserId, teamId);
+        teamService.requireRead(actorUserId, teamId);
         requireTeamTag(teamId, tagId);
         FileEntity file = requireTeamFile(teamId, fileId);
+        teamPermissionService.requireWrite(actorUserId, teamId, fileId);
         fileTagRepository.findByFileIdAndTagId(fileId, tagId)
                 .ifPresent(ft -> fileTagRepository.deleteById(ft.getId()));
         teamAuditService.record(teamId, actorUserId, "TAG_DETACH", "FILE", fileId, file.getFileName());
@@ -313,6 +333,54 @@ public class TagServiceImpl implements TagService {
                 .filter(file -> canReadTeamFile(userId, teamId, file.getId()))
                 .toList();
         return PageResults.fromFiltered(readable, page, size);
+    }
+
+    @Override
+    public List<TagEntity> listTeamFileTags(Long userId, Long teamId, Long fileId) {
+        teamService.requireRead(userId, teamId);
+        requireTeamFile(teamId, fileId);
+        teamPermissionService.requireRead(userId, teamId, fileId);
+        return fileTagRepository.findTeamTagsForFile(teamId, fileId);
+    }
+
+    @Override
+    @Transactional
+    public List<TagEntity> replaceTeamFileTags(Long actorUserId, Long teamId, Long fileId, List<Long> tagIds) {
+        teamService.requireRead(actorUserId, teamId);
+        FileEntity file = requireTeamFile(teamId, fileId);
+        teamPermissionService.requireWrite(actorUserId, teamId, fileId);
+        if (tagIds == null || tagIds.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "error.validation", Map.of("fields", "tagIds"));
+        }
+
+        Set<Long> requestedIds = new LinkedHashSet<>(tagIds);
+        List<TagEntity> requestedTags = requestedIds.stream()
+                .map(tagId -> requireTeamTag(teamId, tagId))
+                .sorted(Comparator.comparing(TagEntity::getTagName, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(TagEntity::getId))
+                .toList();
+        List<TagEntity> currentTags = fileTagRepository.findTeamTagsForFile(teamId, fileId);
+        Set<Long> currentIds = currentTags.stream().map(TagEntity::getId).collect(Collectors.toSet());
+        if (currentIds.equals(requestedIds)) {
+            return currentTags;
+        }
+
+        fileTagRepository.deleteByTeamIdAndFileId(teamId, fileId);
+        fileTagRepository.flush();
+        for (TagEntity tag : requestedTags) {
+            fileTagRepository.save(FileTagEntity.builder()
+                    .userId(actorUserId)
+                    .fileId(fileId)
+                    .teamId(teamId)
+                    .tagId(tag.getId())
+                    .createdAt(LocalDateTime.now())
+                    .build());
+        }
+        requestedIds.stream().filter(id -> !currentIds.contains(id)).forEach(id ->
+                teamAuditService.record(teamId, actorUserId, "TAG_ATTACH", "FILE", fileId, file.getFileName()));
+        currentIds.stream().filter(id -> !requestedIds.contains(id)).forEach(id ->
+                teamAuditService.record(teamId, actorUserId, "TAG_DETACH", "FILE", fileId, file.getFileName()));
+        return requestedTags;
     }
 
     private boolean canReadTeamFile(Long userId, Long teamId, Long fileId) {

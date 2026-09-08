@@ -69,7 +69,7 @@ public interface FavoriteRepository extends JpaRepository<FavoriteEntity, Long> 
             WHERE fav.userId = :userId
               AND f.teamId = :teamId
               AND f.isDeleted = false
-            ORDER BY fav.createdAt DESC
+            ORDER BY fav.createdAt DESC, f.id DESC
             """)
     List<FileEntity> findTeamFavoriteFiles(
             @Param("userId") Long userId,
@@ -81,7 +81,7 @@ public interface FavoriteRepository extends JpaRepository<FavoriteEntity, Long> 
               AND f.teamId = :teamId
               AND f.isDeleted = false
               AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
-            ORDER BY fav.createdAt DESC
+            ORDER BY fav.createdAt DESC, f.id DESC
             """)
     List<FileEntity> findTeamFavoriteFilesByKeyword(
             @Param("userId") Long userId,

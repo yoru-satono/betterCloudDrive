@@ -707,6 +707,61 @@ class NetworkTestFacadeTest {
     }
 
     @Test
+    fun teamOrganizationUsesStageSeventeenAtomicContracts() = runTest {
+        val observed = mutableListOf<Triple<HttpMethod, String, String>>()
+        val engine = MockEngine { request ->
+            val body = (request.body as? OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+            observed += Triple(request.method, request.url.toString(), body)
+            when (request.url.encodedPath) {
+                "/api/v1/teams/10/favorites" -> jsonResponse(
+                    """{"code":200,"data":{"records":[{"id":7,"fileName":"report.txt","fileType":"file"}],"total":1,"page":1,"size":50,"pages":1}}""",
+                )
+                "/api/v1/teams/10/favorites/7/status" -> jsonResponse("""{"code":200,"data":true}""")
+                "/api/v1/teams/10/favorites/7" -> jsonResponse("""{"code":200}""")
+                "/api/v1/teams/10/tags" -> when (request.method) {
+                    HttpMethod.Get -> jsonResponse("""{"code":200,"data":[{"id":3,"teamId":10,"tagName":"important","color":"#00d4aa"}]}""")
+                    else -> jsonResponse("""{"code":200,"data":{"id":4,"teamId":10,"tagName":"new","color":"#60a5fa"}}""")
+                }
+                "/api/v1/teams/10/tags/3" -> when (request.method) {
+                    HttpMethod.Put -> jsonResponse("""{"code":200,"data":{"id":3,"teamId":10,"tagName":"renamed","color":"#60a5fa"}}""")
+                    else -> jsonResponse("""{"code":200}""")
+                }
+                "/api/v1/teams/10/tags/3/files" -> jsonResponse(
+                    """{"code":200,"data":{"records":[{"id":7,"fileName":"report.txt","fileType":"file"}],"total":1,"page":1,"size":50,"pages":1}}""",
+                )
+                "/api/v1/teams/10/tags/3/files/7" -> jsonResponse("""{"code":200}""")
+                "/api/v1/teams/10/files/7/tags" -> when (request.method) {
+                    HttpMethod.Get -> jsonResponse("""{"code":200,"data":[{"id":3,"teamId":10,"tagName":"important","color":"#00d4aa"}]}""")
+                    else -> jsonResponse("""{"code":200,"data":[]}""")
+                }
+                else -> error("unexpected ${request.url}")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals(7, client.listTeamFavorites(10, " report ", 1, 50).records.single().id)
+        assertTrue(client.isTeamFavorite(10, 7))
+        client.addTeamFavorite(10, 7); client.removeTeamFavorite(10, 7)
+        assertEquals(3, client.listTeamTags(10, " imp ").single().id)
+        assertEquals(4, client.createTeamTag(10, "new", "#60a5fa").id)
+        assertEquals("renamed", client.updateTeamTag(10, 3, "renamed", "#60a5fa").tagName)
+        client.deleteTeamTag(10, 3)
+        assertEquals(7, client.listTeamFilesByTag(10, 3, " report ", 1, 50).records.single().id)
+        assertEquals(3, client.listTeamFileTags(10, 7).single().id)
+        assertTrue(client.replaceTeamFileTags(10, 7, listOf(3, 3)).isEmpty())
+        client.removeTeamFileTag(10, 3, 7)
+
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/teams/10/favorites?q=report&page=1&size=50") })
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/teams/10/tags?q=imp") })
+        assertTrue(observed.any { it.first == HttpMethod.Put && it.second.endsWith("/teams/10/files/7/tags") && it.third == """{"tagIds":[3]}""" })
+    }
+
+    @Test
     fun searchTicketTextRangeAndPersonalOfficeUseStableContracts() = runTest {
         val observed = mutableListOf<Pair<String, String?>>()
         val engine = MockEngine { request ->

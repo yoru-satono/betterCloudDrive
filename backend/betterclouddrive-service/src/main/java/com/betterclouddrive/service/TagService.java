@@ -25,4 +25,6 @@ public interface TagService {
     void tagTeamFiles(Long actorUserId, Long teamId, Long tagId, List<Long> fileIds);
     void untagTeamFile(Long actorUserId, Long teamId, Long tagId, Long fileId);
     PageResult<FileEntity> listTeamFilesByTag(Long userId, Long teamId, Long tagId, String keyword, int page, int size);
+    List<TagEntity> listTeamFileTags(Long userId, Long teamId, Long fileId);
+    List<TagEntity> replaceTeamFileTags(Long actorUserId, Long teamId, Long fileId, List<Long> tagIds);
 }

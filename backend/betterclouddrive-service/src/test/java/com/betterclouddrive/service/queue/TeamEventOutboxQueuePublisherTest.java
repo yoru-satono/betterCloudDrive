@@ -61,7 +61,7 @@ class TeamEventOutboxQueuePublisherTest {
     }
 
     private void pending(TeamEventOutboxEntity event) {
-        when(repository.findByStatusAndAvailableAtLessThanEqualOrderByIdAsc(eq("PENDING"), any(), any(Pageable.class))).thenReturn(List.of(event));
+        when(repository.findReadyByDispatchPriority(eq("PENDING"), any(), any(Pageable.class))).thenReturn(List.of(event));
     }
     private TeamEventOutboxEntity event(String aggregateType, String eventType) {
         var now = LocalDateTime.now();

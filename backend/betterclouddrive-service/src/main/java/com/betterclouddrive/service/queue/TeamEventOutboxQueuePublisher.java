@@ -33,7 +33,7 @@ public class TeamEventOutboxQueuePublisher {
         }
         resetStaleProcessingEvents();
         int limit = batchSize > 0 ? batchSize : queueProperties.getRabbitmq().getOutboxPublishBatchSize();
-        List<TeamEventOutboxEntity> events = teamEventOutboxRepository.findByStatusAndAvailableAtLessThanEqualOrderByIdAsc(
+        List<TeamEventOutboxEntity> events = teamEventOutboxRepository.findReadyByDispatchPriority(
                 TeamEventOutboxEntity.STATUS_PENDING,
                 LocalDateTime.now(),
                 PageRequest.of(0, limit));

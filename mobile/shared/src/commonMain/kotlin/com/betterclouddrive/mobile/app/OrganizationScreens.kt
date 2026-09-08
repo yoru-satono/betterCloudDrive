@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
@@ -92,10 +93,13 @@ fun FavoritesScreen(
     onPreview: (FileItem) -> Unit,
     onDownload: (FileItem, String) -> Unit,
     onToggleFavorite: (FileItem) -> Unit,
-    onManageTags: (FileItem) -> Unit,
-    onCreateShare: (FileItem) -> Unit,
+    onManageTags: ((FileItem) -> Unit)?,
+    onCreateShare: ((FileItem) -> Unit)?,
     onConsumeFeedback: () -> Unit,
-    onOpenVersions: (FileItem) -> Unit,
+    onOpenVersions: ((FileItem) -> Unit)?,
+    onMenuOpen: (FileItem) -> Unit = {},
+    canManageTags: (FileItem) -> Boolean = { true },
+    onBack: (() -> Unit)? = null,
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
@@ -128,18 +132,20 @@ fun FavoritesScreen(
             onLoadMore = onLoadMore,
             onScrollAnchor = onScrollAnchor,
             onClick = { if (it.isFolder) onOpenFolder(it) else selected = it },
+            onBack = onBack,
             menu = { file ->
                 OrganizationFileMenu(
                     file = file,
                     onLocation = { onOpenLocation(file) },
                     onPreview = { onPreview(file) },
                     onDownload = { download(file) },
-                    onManageTags = { onManageTags(file) },
-                    onCreateShare = { onCreateShare(file) },
-                    onOpenVersions = { onOpenVersions(file) },
+                    onManageTags = onManageTags?.takeIf { canManageTags(file) }?.let { action -> { action(file) } },
+                    onCreateShare = onCreateShare?.let { action -> { action(file) } },
+                    onOpenVersions = onOpenVersions?.let { action -> { action(file) } },
                     trailingLabel = MobileString.RemoveFavorite,
                     trailingIcon = { Icon(Icons.Default.Star, null) },
                     onTrailing = { onToggleFavorite(file) },
+                    onOpenMenu = { onMenuOpen(file) },
                 )
             },
         )
@@ -151,8 +157,8 @@ fun FavoritesScreen(
             onDismiss = { selected = null },
             onPreview = { selected = null; onPreview(file) },
             onDownload = { download(file) },
-            onCreateShare = { selected = null; onCreateShare(file) },
-            onOpenVersions = { selected = null; onOpenVersions(file) },
+            onCreateShare = onCreateShare?.let { action -> { selected = null; action(file) } },
+            onOpenVersions = onOpenVersions?.let { action -> { selected = null; action(file) } },
         )
     }
 }
@@ -167,6 +173,9 @@ fun TagsScreen(
     onUpdate: (PersonalTag, String, String) -> Unit,
     onDelete: (PersonalTag) -> Unit,
     onConsumeFeedback: () -> Unit,
+    canManage: Boolean = true,
+    showFileCount: Boolean = true,
+    onBack: (() -> Unit)? = null,
 ) {
     val strings = LocalMobileStrings.current
     var createDialog by remember { mutableStateOf(false) }
@@ -183,6 +192,9 @@ fun TagsScreen(
     Box(Modifier.fillMaxSize().testTag("tags-screen")) {
         Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (onBack != null) IconButton(onBack, Modifier.testTag("tags-back")) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent])
+                }
                 OutlinedTextField(
                     value = state.query,
                     onValueChange = onQuery,
@@ -193,7 +205,7 @@ fun TagsScreen(
                 IconButton(onClick = onRefresh, modifier = Modifier.testTag("tags-refresh")) {
                     Icon(Icons.Default.Refresh, strings[MobileString.RefreshDirectory])
                 }
-                IconButton(onClick = { createDialog = true }, modifier = Modifier.testTag("tags-create")) {
+                if (canManage) IconButton(onClick = { createDialog = true }, modifier = Modifier.testTag("tags-create")) {
                     Icon(Icons.Default.Add, strings[MobileString.NewTag])
                 }
             }
@@ -216,12 +228,12 @@ fun TagsScreen(
                                 Box(Modifier.size(18.dp).background(parseTagColor(tag.color), MaterialTheme.shapes.small))
                                 Column(Modifier.weight(1f)) {
                                     Text(tag.tagName, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(
+                                    if (showFileCount) Text(
                                         strings.format(MobileString.TagFileCount, tag.fileCount),
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                 }
-                                TagActionsMenu(tag, { editTarget = tag }, { deleteTarget = tag })
+                                if (canManage) TagActionsMenu(tag, { editTarget = tag }, { deleteTarget = tag })
                             }
                         }
                     }
@@ -265,11 +277,14 @@ fun TagFilesScreen(
     onOpenLocation: (FileItem) -> Unit,
     onPreview: (FileItem) -> Unit,
     onDownload: (FileItem, String) -> Unit,
-    onManageTags: (FileItem) -> Unit,
-    onCreateShare: (FileItem) -> Unit,
+    onManageTags: ((FileItem) -> Unit)?,
+    onCreateShare: ((FileItem) -> Unit)?,
     onRemove: (FileItem) -> Unit,
     onConsumeFeedback: () -> Unit,
-    onOpenVersions: (FileItem) -> Unit,
+    onOpenVersions: ((FileItem) -> Unit)?,
+    onMenuOpen: (FileItem) -> Unit = {},
+    canManageTags: (FileItem) -> Boolean = { true },
+    onBack: (() -> Unit)? = null,
 ) {
     val strings = LocalMobileStrings.current
     var pendingDownload by remember { mutableStateOf<FileItem?>(null) }
@@ -298,10 +313,14 @@ fun TagFilesScreen(
             onLoadMore = onLoadMore,
             onScrollAnchor = onScrollAnchor,
             onClick = { if (it.isFolder) onOpenFolder(it) else onPreview(it) },
+            onBack = onBack,
             menu = { file -> OrganizationFileMenu(
-                file, { onOpenLocation(file) }, { onPreview(file) }, { download(file) }, { onManageTags(file) }, { onCreateShare(file) },
-                { onOpenVersions(file) },
+                file, { onOpenLocation(file) }, { onPreview(file) }, { download(file) },
+                onManageTags?.takeIf { canManageTags(file) }?.let { action -> { action(file) } },
+                onCreateShare?.let { action -> { action(file) } },
+                onOpenVersions?.let { action -> { action(file) } },
                 MobileString.RemoveFromTag, { Icon(Icons.Default.Label, null) }, { onRemove(file) },
+                onOpenMenu = { onMenuOpen(file) }, showTrailing = canManageTags(file),
             ) },
         )
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
@@ -317,6 +336,7 @@ fun FileTagEditorOverlay(
     onSave: () -> Unit,
     onCreate: (String, String) -> Unit,
     onDismiss: () -> Unit,
+    canCreate: Boolean = true,
 ) {
     val strings = LocalMobileStrings.current
     var creating by remember { mutableStateOf(false) }
@@ -346,7 +366,7 @@ fun FileTagEditorOverlay(
                     }
                 }
             }
-            if (creating) {
+            if (canCreate && creating) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it }, singleLine = true,
                     label = { Text(strings[MobileString.TagName]) }, modifier = Modifier.fillMaxWidth().testTag("file-tag-new-name"),
@@ -357,7 +377,7 @@ fun FileTagEditorOverlay(
                     onClick = { onCreate(name, color); name = ""; creating = false },
                     modifier = Modifier.testTag("file-tag-new-confirm"),
                 ) { Text(strings[MobileString.NewTag]) }
-            } else {
+            } else if (canCreate) {
                 TextButton(onClick = { creating = true }, modifier = Modifier.testTag("file-tag-create")) {
                     Icon(Icons.Default.Add, null); Text(strings[MobileString.CreateTagHere])
                 }
@@ -400,10 +420,16 @@ private fun OrganizationFilesContent(
     onScrollAnchor: (Long?) -> Unit,
     onClick: (FileItem) -> Unit,
     menu: @Composable (FileItem) -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val strings = LocalMobileStrings.current
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (onBack != null) IconButton(onBack, Modifier.testTag("organization-back")) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent])
+            }
+            Text(title, style = MaterialTheme.typography.titleLarge)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = query, onValueChange = onQuery, singleLine = true,
@@ -463,17 +489,19 @@ private fun OrganizationFileMenu(
     onLocation: () -> Unit,
     onPreview: () -> Unit,
     onDownload: () -> Unit,
-    onManageTags: () -> Unit,
-    onCreateShare: () -> Unit,
-    onOpenVersions: () -> Unit,
+    onManageTags: (() -> Unit)?,
+    onCreateShare: (() -> Unit)?,
+    onOpenVersions: (() -> Unit)?,
     trailingLabel: MobileString,
     trailingIcon: @Composable () -> Unit,
     onTrailing: () -> Unit,
+    onOpenMenu: () -> Unit = {},
+    showTrailing: Boolean = true,
 ) {
     val strings = LocalMobileStrings.current
     var expanded by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { expanded = true }, modifier = Modifier.testTag("organization-more-${file.id}")) {
+        IconButton(onClick = { onOpenMenu(); expanded = true }, modifier = Modifier.testTag("organization-more-${file.id}")) {
             Icon(Icons.Default.MoreVert, strings[MobileString.MoreActions])
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -486,16 +514,16 @@ private fun OrganizationFileMenu(
             if (!file.isFolder) DropdownMenuItem(text = { Text(strings[MobileString.Download]) }, leadingIcon = {
                 Icon(Icons.Default.Download, null)
             }, onClick = { expanded = false; onDownload() })
-            DropdownMenuItem(text = { Text(strings[MobileString.ManageTags]) }, leadingIcon = {
+            if (onManageTags != null) DropdownMenuItem(text = { Text(strings[MobileString.ManageTags]) }, leadingIcon = {
                 Icon(Icons.Default.Label, null)
             }, onClick = { expanded = false; onManageTags() })
-            DropdownMenuItem(text = { Text(strings[MobileString.CreateShare]) }, leadingIcon = {
+            if (onCreateShare != null) DropdownMenuItem(text = { Text(strings[MobileString.CreateShare]) }, leadingIcon = {
                 Icon(Icons.Default.Share, null)
             }, onClick = { expanded = false; onCreateShare() })
-            if (!file.isFolder) DropdownMenuItem(text = { Text(strings[MobileString.VersionHistory]) }, leadingIcon = {
+            if (!file.isFolder && onOpenVersions != null) DropdownMenuItem(text = { Text(strings[MobileString.VersionHistory]) }, leadingIcon = {
                 Icon(Icons.Default.History, null)
             }, onClick = { expanded = false; onOpenVersions() })
-            DropdownMenuItem(text = { Text(strings[trailingLabel]) }, leadingIcon = trailingIcon,
+            if (showTrailing) DropdownMenuItem(text = { Text(strings[trailingLabel]) }, leadingIcon = trailingIcon,
                 onClick = { expanded = false; onTrailing() })
         }
     }
@@ -598,8 +626,8 @@ private fun OrganizationFileDetail(
     onDismiss: () -> Unit,
     onPreview: () -> Unit,
     onDownload: () -> Unit,
-    onCreateShare: () -> Unit,
-    onOpenVersions: () -> Unit,
+    onCreateShare: (() -> Unit)?,
+    onOpenVersions: (() -> Unit)?,
 ) {
     val strings = LocalMobileStrings.current
     AlertDialog(
@@ -612,8 +640,8 @@ private fun OrganizationFileDetail(
         } },
         confirmButton = { if (!file.isFolder) Button(onClick = onPreview) { Text(strings[MobileString.Preview]) } },
         dismissButton = { Row {
-            TextButton(onClick = onCreateShare) { Text(strings[MobileString.CreateShare]) }
-            if (!file.isFolder) TextButton(onClick = onOpenVersions) { Text(strings[MobileString.VersionHistory]) }
+            if (onCreateShare != null) TextButton(onClick = onCreateShare) { Text(strings[MobileString.CreateShare]) }
+            if (!file.isFolder && onOpenVersions != null) TextButton(onClick = onOpenVersions) { Text(strings[MobileString.VersionHistory]) }
             if (!file.isFolder) TextButton(onClick = onDownload) { Text(strings[MobileString.Download]) }
             TextButton(onClick = onDismiss) { Text(strings[MobileString.Close]) }
         } },

@@ -175,11 +175,23 @@ class FeatureScreenDeviceTest {
             current = DirectoryPageState(items = listOf(file), hasLoaded = true, page = 1),
         )
         val actions = mutableStateOf(TeamFileActionsState(teamId = 9, folderId = null))
+        var organizationDestination: String? = null
         composeRule.setContent { themed("en-US") {
-            teamBrowser(browser, actions.value)
+            teamBrowser(
+                browser,
+                actions.value,
+                onOpenFavorites = { organizationDestination = "favorites" },
+                onOpenTags = { organizationDestination = "tags" },
+            )
         } }
         composeRule.onAllNodesWithTag("team-create-folder").assertCountEquals(0)
         composeRule.onAllNodesWithTag("team-upload").assertCountEquals(0)
+        composeRule.onNodeWithTag("team-organize").performClick()
+        composeRule.onNodeWithTag("team-organize-favorites").assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals("favorites", organizationDestination) }
+        composeRule.onNodeWithTag("team-organize").performClick()
+        composeRule.onNodeWithTag("team-organize-tags").assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals("tags", organizationDestination) }
         composeRule.onNodeWithTag("team-more-41").performClick()
         composeRule.onNodeWithText("Download").assertIsDisplayed()
         composeRule.onAllNodesWithText("Rename").assertCountEquals(0)
@@ -192,6 +204,28 @@ class FeatureScreenDeviceTest {
             )
         }
         composeRule.onNodeWithTag("team-delete-selected").assertIsDisplayed()
+    }
+
+    @Test
+    fun teamTagManagementControlsRequireOwnerOrAdmin() {
+        val tag = PersonalTag(id = 7, teamId = 9, tagName = "Important", color = "#00d4aa")
+        val state = TagsState(tags = listOf(tag))
+        val canManage = mutableStateOf(false)
+        composeRule.setContent { themed("en-US") {
+            TagsScreen(
+                state = state,
+                onQuery = {}, onRefresh = {}, onOpenTag = {}, onCreate = { _, _ -> },
+                onUpdate = { _, _, _ -> }, onDelete = {}, onConsumeFeedback = {},
+                canManage = canManage.value, showFileCount = false, onBack = {},
+            )
+        } }
+        composeRule.onNodeWithTag("tag-row-7").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("tags-create").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("tag-more-7").assertCountEquals(0)
+
+        composeRule.runOnIdle { canManage.value = true }
+        composeRule.onNodeWithTag("tags-create").assertIsDisplayed()
+        composeRule.onNodeWithTag("tag-more-7").assertIsDisplayed()
     }
 
     @Test
@@ -462,7 +496,12 @@ class FeatureScreenDeviceTest {
     }
 
     @Composable
-    private fun teamBrowser(state: TeamBrowserState, actions: TeamFileActionsState) {
+    private fun teamBrowser(
+        state: TeamBrowserState,
+        actions: TeamFileActionsState,
+        onOpenFavorites: () -> Unit = {},
+        onOpenTags: () -> Unit = {},
+    ) {
         TeamBrowserScreen(
             state = state, actions = actions, permissions = TeamPermissionsState(), wide = false,
             actorUserId = 1, documentPicker = NoopDocumentPicker,
@@ -476,6 +515,9 @@ class FeatureScreenDeviceTest {
             onConsumeTransferFeedback = {}, onClearPermissionError = {}, onOpenTransfers = {},
             onManagePermissions = {}, onRetryPermissions = {}, onSavePermission = {}, onDeletePermission = {},
             onClosePermissions = {}, onClearPermissionsFeedback = {},
+            favorites = FavoritesState(), onLoadFavoriteStatus = {}, onToggleFavorite = {},
+            onConsumeFavoriteFeedback = {}, onManageTags = {},
+            onOpenFavorites = onOpenFavorites, onOpenTags = onOpenTags,
         )
     }
 

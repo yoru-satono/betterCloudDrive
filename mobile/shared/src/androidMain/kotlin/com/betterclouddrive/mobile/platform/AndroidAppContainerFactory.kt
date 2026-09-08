@@ -23,6 +23,7 @@ import com.betterclouddrive.mobile.core.network.TransferApi
 import com.betterclouddrive.mobile.core.network.PersonalRecoveryApi
 import com.betterclouddrive.mobile.core.network.TeamPreviewApi
 import com.betterclouddrive.mobile.core.network.TeamWorkspaceApi
+import com.betterclouddrive.mobile.core.network.TeamOrganizationApi
 import com.betterclouddrive.mobile.core.network.TeamMembersApi
 import com.betterclouddrive.mobile.core.network.TeamPermissionsApi
 import com.betterclouddrive.mobile.core.network.TeamInvitesApi
@@ -40,6 +41,7 @@ import com.betterclouddrive.mobile.feature.transfers.TransferManager
 import com.betterclouddrive.mobile.feature.transfers.TransferRepository
 import com.betterclouddrive.mobile.feature.teams.TeamPreviewRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamWorkspaceRepositoryImpl
+import com.betterclouddrive.mobile.feature.teams.TeamOrganizationRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamMembersRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamInvitesRepositoryImpl
@@ -101,6 +103,7 @@ object AndroidAppContainerFactory {
         val recoveryApi = PersonalRecoveryApi(http)
         val teamWorkspaceApi = TeamWorkspaceApi(http)
         val teamPreviewApi = TeamPreviewApi(http)
+        val teamOrganizationApi = TeamOrganizationApi(http)
         val teamMembersApi = TeamMembersApi(http)
         val teamPermissionsApi = TeamPermissionsApi(http)
         val teamInvitesApi = TeamInvitesApi(http)
@@ -119,6 +122,7 @@ object AndroidAppContainerFactory {
             personalVersions = PersonalVersionsRepositoryImpl(filesApi, recoveryApi),
             teamWorkspace = TeamWorkspaceRepositoryImpl(teamWorkspaceApi),
             teamPreview = TeamPreviewRepositoryImpl(teamWorkspaceApi, teamPreviewApi),
+            teamOrganization = TeamOrganizationRepositoryImpl(teamOrganizationApi),
             teamMembers = TeamMembersRepositoryImpl(teamMembersApi),
             teamPermissions = TeamPermissionsRepositoryImpl(teamPermissionsApi),
             teamInvites = TeamInvitesRepositoryImpl(teamInvitesApi),

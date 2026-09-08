@@ -436,6 +436,24 @@ public class TeamController {
         return ApiResponse.success(tagService.listTeamFilesByTag(user.getUserId(), teamId, tagId, q, page, size));
     }
 
+    @GetMapping("/{teamId}/files/{fileId}/tags")
+    public ApiResponse<List<TagEntity>> listTeamFileTags(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @PathVariable Long fileId) {
+        return ApiResponse.success(tagService.listTeamFileTags(user.getUserId(), teamId, fileId));
+    }
+
+    @PutMapping("/{teamId}/files/{fileId}/tags")
+    public ApiResponse<List<TagEntity>> replaceTeamFileTags(
+            @CurrentUser UserPrincipal user,
+            @PathVariable Long teamId,
+            @PathVariable Long fileId,
+            @Valid @RequestBody ReplaceFileTagsRequest request) {
+        return ApiResponse.success(tagService.replaceTeamFileTags(
+                user.getUserId(), teamId, fileId, request.getTagIds()));
+    }
+
     @GetMapping("/{teamId}/files")
     public ApiResponse<PageResult<FileEntity>> listFiles(
             @CurrentUser UserPrincipal user,

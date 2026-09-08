@@ -425,6 +425,131 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             onClearInviteFeedback = container.teamInvitesStore::clearFeedback,
         )
     }
+    composable<TeamFavoritesRoute> { entry ->
+        val teamId = entry.toRoute<TeamFavoritesRoute>().teamId
+        val state by container.teamFavoritesStore.state.collectAsState()
+        val actions by container.teamFileActionsStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val team = browser.team?.takeIf { it.id == teamId }
+            ?: teams.items.firstOrNull { it.id == teamId }
+        LaunchedEffect(teamId, team?.role) {
+            container.teamFavoritesStore.activate(teamId)
+            container.teamTagsStore.bind(teamId, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
+            container.teamFileActionsStore.activate(team, teamId, null)
+        }
+        FavoritesScreen(
+            state = state,
+            documentPicker = container.documentPicker,
+            onQuery = container.teamFavoritesStore::updateQuery,
+            onRefresh = container.teamFavoritesStore::refresh,
+            onLoadMore = container.teamFavoritesStore::loadMore,
+            onScrollAnchor = container.teamFavoritesStore::updateScrollAnchor,
+            onOpenFolder = { navController.navigate(TeamFolderRoute(teamId, it.id)) },
+            onOpenLocation = { file ->
+                container.teamBrowserStore.prepareOpenLocation(file)
+                navController.navigate(file.parentId?.let { TeamFolderRoute(teamId, it) } ?: TeamWorkspaceRoute(teamId))
+            },
+            onPreview = { navController.navigate(TeamPreviewRoute(teamId, it.id)) },
+            onDownload = container.teamFileActionsStore::download,
+            onToggleFavorite = container.teamFavoritesStore::toggle,
+            onManageTags = container.teamTagsStore::openEditor,
+            onCreateShare = null,
+            onConsumeFeedback = container.teamFavoritesStore::consumeFeedback,
+            onOpenVersions = null,
+            onMenuOpen = { container.teamFileActionsStore.requestItemPermission(it) },
+            canManageTags = { actions.itemPermissions[it.id]?.canWrite == true },
+            onBack = navController::popBackStack,
+        )
+    }
+    composable<TeamTagsRoute> { entry ->
+        val teamId = entry.toRoute<TeamTagsRoute>().teamId
+        val state by container.teamTagsStore.state.collectAsState()
+        val canManage by container.teamTagsStore.canManage.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val team = browser.team?.takeIf { it.id == teamId }
+            ?: teams.items.firstOrNull { it.id == teamId }
+        LaunchedEffect(teamId, team?.role) {
+            container.teamTagsStore.activate(teamId, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
+        }
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(if (wide) 0.42f else 1f)) {
+                TagsScreen(
+                    state = state,
+                    onQuery = container.teamTagsStore::updateQuery,
+                    onRefresh = container.teamTagsStore::refresh,
+                    onOpenTag = {
+                        if (wide) container.teamTagsStore.activateFiles(it.id)
+                        else navController.navigate(TeamTagFilesRoute(teamId, it.id))
+                    },
+                    onCreate = container.teamTagsStore::create,
+                    onUpdate = container.teamTagsStore::update,
+                    onDelete = container.teamTagsStore::delete,
+                    onConsumeFeedback = container.teamTagsStore::consumeFeedback,
+                    canManage = canManage,
+                    showFileCount = false,
+                    onBack = navController::popBackStack,
+                )
+            }
+            if (wide) {
+                VerticalDivider()
+                Box(Modifier.weight(0.58f).testTag("team-tags-wide-detail")) {
+                    TeamTagFilesDestination(teamId, state.activeTagId, container, state, navController)
+                }
+            }
+        }
+    }
+    composable<TeamTagFilesRoute> { entry ->
+        val route = entry.toRoute<TeamTagFilesRoute>()
+        val state by container.teamTagsStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val team = browser.team?.takeIf { it.id == route.teamId }
+            ?: teams.items.firstOrNull { it.id == route.teamId }
+        LaunchedEffect(route.teamId, route.tagId, team?.role) {
+            container.teamTagsStore.activate(route.teamId, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
+            container.teamTagsStore.activateFiles(route.tagId)
+            container.teamFileActionsStore.activate(team, route.teamId, null)
+        }
+        TeamTagFilesDestination(route.teamId, route.tagId, container, state, navController)
+    }
+}
+
+@Composable
+private fun TeamTagFilesDestination(
+    teamId: Long,
+    tagId: Long?,
+    container: AppContainer,
+    state: com.betterclouddrive.mobile.feature.organization.TagsState,
+    navController: NavHostController,
+) {
+    val actions by container.teamFileActionsStore.state.collectAsState()
+    if (tagId != null && state.activeTagId != tagId) return
+    TagFilesScreen(
+        tag = state.tags.firstOrNull { it.id == tagId },
+        state = state,
+        documentPicker = container.documentPicker,
+        onQuery = container.teamTagsStore::updateFilesQuery,
+        onRefresh = container.teamTagsStore::refreshFiles,
+        onLoadMore = container.teamTagsStore::loadMoreFiles,
+        onScrollAnchor = container.teamTagsStore::updateFilesScrollAnchor,
+        onOpenFolder = { navController.navigate(TeamFolderRoute(teamId, it.id)) },
+        onOpenLocation = { file ->
+            container.teamBrowserStore.prepareOpenLocation(file)
+            navController.navigate(file.parentId?.let { TeamFolderRoute(teamId, it) } ?: TeamWorkspaceRoute(teamId))
+        },
+        onPreview = { navController.navigate(TeamPreviewRoute(teamId, it.id)) },
+        onDownload = container.teamFileActionsStore::download,
+        onManageTags = container.teamTagsStore::openEditor,
+        onCreateShare = null,
+        onRemove = container.teamTagsStore::removeFile,
+        onConsumeFeedback = container.teamTagsStore::consumeFeedback,
+        onOpenVersions = null,
+        onMenuOpen = container.teamFileActionsStore::requestItemPermission,
+        canManageTags = { actions.itemPermissions[it.id]?.canWrite == true },
+        onBack = navController::popBackStack,
+    )
 }
 
 @Composable
@@ -439,10 +564,13 @@ private fun TeamBrowserDestination(
     val state by container.teamBrowserStore.state.collectAsState()
     val actions by container.teamFileActionsStore.state.collectAsState()
     val permissions by container.teamPermissionsStore.state.collectAsState()
+    val favorites by container.teamFavoritesStore.state.collectAsState()
     val auth by container.authStore.state.collectAsState()
     LaunchedEffect(teamId, folderId) { container.teamBrowserStore.activate(teamId, folderId) }
     LaunchedEffect(teamId, folderId, state.team?.role) {
         container.teamFileActionsStore.activate(state.team, teamId, folderId)
+        container.teamFavoritesStore.bind(teamId)
+        container.teamTagsStore.bind(teamId, state.team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
     }
     TeamBrowserScreen(
         state = state,
@@ -470,6 +598,8 @@ private fun TeamBrowserDestination(
         },
         onOpenSearch = { navController.navigate(TeamSearchRoute(teamId)) },
         onOpenMembers = { navController.navigate(TeamMembersRoute(teamId)) },
+        onOpenFavorites = { navController.navigate(TeamFavoritesRoute(teamId)) },
+        onOpenTags = { navController.navigate(TeamTagsRoute(teamId)) },
         onRetryWorkspace = { container.teamBrowserStore.activate(teamId, folderId) },
         onRefresh = { container.teamFileActionsStore.clearSelection(); container.teamBrowserStore.refresh() },
         onLoadMore = container.teamBrowserStore::loadMore,
@@ -501,5 +631,10 @@ private fun TeamBrowserDestination(
         onClosePermissions = container.teamPermissionsStore::close,
         onClearPermissionsFeedback = container.teamPermissionsStore::clearFeedback,
         onOpenTransfers = onOpenTransfers,
+        favorites = favorites,
+        onLoadFavoriteStatus = container.teamFavoritesStore::loadStatus,
+        onToggleFavorite = container.teamFavoritesStore::toggle,
+        onConsumeFavoriteFeedback = container.teamFavoritesStore::consumeFeedback,
+        onManageTags = container.teamTagsStore::openEditor,
     )
 }

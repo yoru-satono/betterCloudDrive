@@ -235,6 +235,63 @@ class TeamWorkspaceApi(private val http: AuthenticatedHttpClient) {
     }
 }
 
+class TeamOrganizationApi(private val http: AuthenticatedHttpClient) {
+    suspend fun listFavorites(teamId: Long, query: String?, page: Int, size: Int): PageResult<FileItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/favorites")) {
+            bearer(token); url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                parameters.append("page", page.toString()); parameters.append("size", size.toString())
+            }
+        } }
+    }
+    suspend fun favoriteStatus(teamId: Long, fileId: Long): Boolean = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/favorites/$fileId/status")) { bearer(token) } }
+    }
+    suspend fun addFavorite(teamId: Long, fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.post(url("teams/$teamId/favorites/$fileId")) { bearer(token) } }
+    }
+    suspend fun removeFavorite(teamId: Long, fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId/favorites/$fileId")) { bearer(token) } }
+    }
+    suspend fun listTags(teamId: Long, query: String?): List<TeamTag> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/tags")) {
+            bearer(token); url { query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) } }
+        } }
+    }
+    suspend fun createTag(teamId: Long, name: String, color: String): TeamTag = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("teams/$teamId/tags")) {
+            bearer(token); jsonBody(CreateTeamTagRequest(name, color))
+        } }
+    }
+    suspend fun updateTag(teamId: Long, tagId: Long, name: String, color: String): TeamTag = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("teams/$teamId/tags/$tagId")) {
+            bearer(token); jsonBody(UpdateTeamTagRequest(name, color))
+        } }
+    }
+    suspend fun deleteTag(teamId: Long, tagId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId/tags/$tagId")) { bearer(token) } }
+    }
+    suspend fun filesByTag(teamId: Long, tagId: Long, query: String?, page: Int, size: Int): PageResult<FileItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/tags/$tagId/files")) {
+            bearer(token); url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                parameters.append("page", page.toString()); parameters.append("size", size.toString())
+            }
+        } }
+    }
+    suspend fun fileTags(teamId: Long, fileId: Long): List<TeamTag> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/files/$fileId/tags")) { bearer(token) } }
+    }
+    suspend fun replaceFileTags(teamId: Long, fileId: Long, ids: List<Long>): List<TeamTag> = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("teams/$teamId/files/$fileId/tags")) {
+            bearer(token); jsonBody(ReplaceTeamFileTagsRequest(ids.distinct()))
+        } }
+    }
+    suspend fun removeFileTag(teamId: Long, tagId: Long, fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId/tags/$tagId/files/$fileId")) { bearer(token) } }
+    }
+}
+
 class TeamMembersApi(private val http: AuthenticatedHttpClient) {
     suspend fun list(teamId: Long, page: Int, size: Int): PageResult<TeamMember> = http.run {
         authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/members")) {

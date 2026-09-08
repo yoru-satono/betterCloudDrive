@@ -81,7 +81,7 @@ public interface FileTagRepository extends JpaRepository<FileTagEntity, Long> {
               AND ft.tagId = :tagId
               AND f.teamId = :teamId
               AND f.isDeleted = false
-            ORDER BY ft.createdAt DESC
+            ORDER BY ft.createdAt DESC, f.id DESC
             """)
     List<FileEntity> findTeamTaggedFiles(
             @Param("teamId") Long teamId,
@@ -94,7 +94,7 @@ public interface FileTagRepository extends JpaRepository<FileTagEntity, Long> {
               AND f.teamId = :teamId
               AND f.isDeleted = false
               AND LOWER(f.fileName) LIKE LOWER(CONCAT('%', :keyword, '%'))
-            ORDER BY ft.createdAt DESC
+            ORDER BY ft.createdAt DESC, f.id DESC
             """)
     List<FileEntity> findTeamTaggedFilesByKeyword(
             @Param("teamId") Long teamId,
@@ -125,7 +125,18 @@ public interface FileTagRepository extends JpaRepository<FileTagEntity, Long> {
             """)
     List<TagEntity> findPersonalTagsForFile(@Param("userId") Long userId, @Param("fileId") Long fileId);
 
+    @Query("""
+            SELECT t FROM FileTagEntity ft JOIN TagEntity t ON ft.tagId = t.id
+            WHERE ft.fileId = :fileId
+              AND ft.teamId = :teamId
+              AND t.teamId = :teamId
+            ORDER BY LOWER(t.tagName) ASC, t.id ASC
+            """)
+    List<TagEntity> findTeamTagsForFile(@Param("teamId") Long teamId, @Param("fileId") Long fileId);
+
     void deleteByUserIdAndFileId(Long userId, Long fileId);
+
+    void deleteByTeamIdAndFileId(Long teamId, Long fileId);
 
     void deleteByTagId(Long tagId);
 

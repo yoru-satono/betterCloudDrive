@@ -173,6 +173,12 @@ export const addTeamFileTag = (teamId: number, fileId: number, tagId: number) =>
 export const removeTeamFileTag = (teamId: number, fileId: number, tagId: number) =>
   api.delete<ApiResponse<void>>(`/teams/${teamId}/tags/${tagId}/files/${fileId}`)
 
+export const listTeamFileTags = (teamId: number, fileId: number) =>
+  api.get<ApiResponse<TagEntity[]>>(`/teams/${teamId}/files/${fileId}/tags`)
+
+export const replaceTeamFileTags = (teamId: number, fileId: number, tagIds: number[]) =>
+  api.put<ApiResponse<TagEntity[]>>(`/teams/${teamId}/files/${fileId}/tags`, { tagIds })
+
 export const listTeamFilesByTag = (teamId: number, tagId: number, page = 1, size = 20, q?: string) =>
   api.get<ApiResponse<PageResult<FileEntity>>>(`/teams/${teamId}/tags/${tagId}/files`, { params: { page, size, q } })
 

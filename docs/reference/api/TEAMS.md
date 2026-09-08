@@ -97,17 +97,24 @@
 | DELETE | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | 取消分享 |
 
 团队分享响应与个人分享使用同一兼容 DTO：`shareUrl` 由后端按 `APP_PUBLIC_URL` 生成，`expireAtEpochMs` 提供明确时区的 epoch 毫秒值，并可携带分享根项目的 `fileName`、`fileType`、`fileSize`；原有 `expireAt` 保留兼容。列表文件元数据批量读取，项目已删除时元数据字段为 `null`。
+
 | POST | `/api/v1/teams/{teamId}/favorites/{fileId}` | 可读 | 添加团队收藏 |
-| DELETE | `/api/v1/teams/{teamId}/favorites/{fileId}` | 登录用户 | 取消团队收藏 |
+| DELETE | `/api/v1/teams/{teamId}/favorites/{fileId}` | 团队成员 | 取消团队收藏 |
 | GET | `/api/v1/teams/{teamId}/favorites/{fileId}/status` | 可读 | 返回 boolean |
 | GET | `/api/v1/teams/{teamId}/favorites?q=&page=&size=` | 团队成员 | 返回可读收藏文件 |
-| POST | `/api/v1/teams/{teamId}/tags` | OWNER/ADMIN/EDITOR | `{ "tagName": "重要", "color": "#00d0b8" }` |
+| POST | `/api/v1/teams/{teamId}/tags` | OWNER/ADMIN | `{ "tagName": "重要", "color": "#00d0b8" }` |
 | GET | `/api/v1/teams/{teamId}/tags?q=` | 团队成员 | 团队标签列表 |
-| PUT | `/api/v1/teams/{teamId}/tags/{tagId}` | OWNER/ADMIN/EDITOR | 更新标签 |
-| DELETE | `/api/v1/teams/{teamId}/tags/{tagId}` | OWNER/ADMIN/EDITOR | 删除标签 |
+| PUT | `/api/v1/teams/{teamId}/tags/{tagId}` | OWNER/ADMIN | 更新标签 |
+| DELETE | `/api/v1/teams/{teamId}/tags/{tagId}` | OWNER/ADMIN | 删除标签 |
 | POST | `/api/v1/teams/{teamId}/tags/{tagId}/files` | 文件可写 | `{ "fileIds": [10, 11] }` |
 | DELETE | `/api/v1/teams/{teamId}/tags/{tagId}/files/{fileId}` | 文件可写 | 取消标签 |
 | GET | `/api/v1/teams/{teamId}/tags/{tagId}/files?q=&page=&size=` | 团队成员 | 返回可读标签文件 |
+| GET | `/api/v1/teams/{teamId}/files/{fileId}/tags` | 文件可读 | 返回项目当前关联的团队标签 |
+| PUT | `/api/v1/teams/{teamId}/files/{fileId}/tags` | 文件可写 | `{ "tagIds": [1, 2] }`，原子替换并返回最终标签列表 |
+
+团队收藏和标签文件列表会先按固定顺序取数，再按当前有效读取权限过滤并分页；同一页不会因权限过滤而暴露不可读项目。收藏固定按关联创建时间、文件 ID 降序，标签文件固定按关联创建时间、文件 ID 降序。标签名称会去除首尾空白，颜色统一为小写 `#rrggbb`；同团队重名稳定返回冲突。
+
+文件标签原子替换会去重 `tagIds`，并在删除旧关联前验证每个标签都属于当前团队。空数组表示清空；任一标签非法、目标文件不可写或事务失败时，旧关联保持不变。标签创建、更新、删除只允许 OWNER/ADMIN，文件标签分配则服从目标文件的有效写权限。
 
 **错误码:** 403（文件权限不足）、404（标签/分享不存在）、409（标签名重复）、419002-419005（公开分享访问限制）。
 

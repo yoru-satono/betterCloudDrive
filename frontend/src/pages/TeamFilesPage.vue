@@ -83,7 +83,6 @@ const tagOpen = ref(false)
 const tagTarget = ref<FileEntity | null>(null)
 const teamTags = ref<TagEntity[]>([])
 const tagSelection = ref<Record<number, boolean>>({})
-const originalTagIds = ref<Set<number>>(new Set())
 const tagsLoading = ref(false)
 const permissionOpen = ref(false)
 const permissionTarget = ref<FileEntity | null>(null)
@@ -341,14 +340,12 @@ async function openTags(file: FileEntity) {
   tagOpen.value = true
   tagsLoading.value = true
   try {
-    const { data } = await teamsApi.listTeamTags(teamId.value)
-    teamTags.value = data.data
-    const selected = new Set<number>()
-    await Promise.all(teamTags.value.map(async tag => {
-      const filesRes = await teamsApi.listTeamFilesByTag(teamId.value, tag.id, 1, 100)
-      if (filesRes.data.data.records.some(item => item.id === file.id)) selected.add(tag.id)
-    }))
-    originalTagIds.value = selected
+    const [availableResponse, assignedResponse] = await Promise.all([
+      teamsApi.listTeamTags(teamId.value),
+      teamsApi.listTeamFileTags(teamId.value, file.id),
+    ])
+    teamTags.value = availableResponse.data.data
+    const selected = new Set(assignedResponse.data.data.map(tag => tag.id))
     tagSelection.value = Object.fromEntries(teamTags.value.map(tag => [tag.id, selected.has(tag.id)]))
   } finally {
     tagsLoading.value = false
@@ -359,14 +356,8 @@ async function saveTags() {
   if (!tagTarget.value) return
   tagsLoading.value = true
   try {
-    await Promise.all(teamTags.value.map(tag => {
-      const selected = !!tagSelection.value[tag.id]
-      const wasSelected = originalTagIds.value.has(tag.id)
-      if (selected === wasSelected) return Promise.resolve()
-      return selected
-        ? teamsApi.addTeamFileTag(teamId.value, tagTarget.value!.id, tag.id)
-        : teamsApi.removeTeamFileTag(teamId.value, tagTarget.value!.id, tag.id)
-    }))
+    const selectedIds = teamTags.value.filter(tag => tagSelection.value[tag.id]).map(tag => tag.id)
+    await teamsApi.replaceTeamFileTags(teamId.value, tagTarget.value.id, selectedIds)
     toast.success(__t('commonUi.filebrowser.labelUpdated'))
     tagOpen.value = false
   } finally {

@@ -323,6 +323,12 @@ describe('API endpoint contracts', () => {
     await teamsApi.removeTeamFileTag(10, 7, 3)
     expect(apiMock.delete).toHaveBeenCalledWith('/teams/10/tags/3/files/7')
 
+    await teamsApi.listTeamFileTags(10, 7)
+    expect(apiMock.get).toHaveBeenCalledWith('/teams/10/files/7/tags')
+
+    await teamsApi.replaceTeamFileTags(10, 7, [3, 4])
+    expect(apiMock.put).toHaveBeenCalledWith('/teams/10/files/7/tags', { tagIds: [3, 4] })
+
     await teamsApi.listTeamFilesByTag(10, 3, 2, 30, 'doc')
     expect(apiMock.get).toHaveBeenCalledWith('/teams/10/tags/3/files', {
       params: { page: 2, size: 30, q: 'doc' },

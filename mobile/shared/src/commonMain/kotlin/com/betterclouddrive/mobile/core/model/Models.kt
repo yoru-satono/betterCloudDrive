@@ -292,9 +292,14 @@ data class PersonalTag(
     @SerialName("createdAt") val createdAt: String? = null,
 )
 
+typealias TeamTag = PersonalTag
+
 @Serializable data class CreatePersonalTagRequest(@SerialName("tagName") val tagName: String, val color: String)
 @Serializable data class UpdatePersonalTagRequest(@SerialName("tagName") val tagName: String, val color: String)
 @Serializable data class ReplacePersonalFileTagsRequest(@SerialName("tagIds") val tagIds: List<Long>)
+@Serializable data class CreateTeamTagRequest(@SerialName("tagName") val tagName: String, val color: String)
+@Serializable data class UpdateTeamTagRequest(@SerialName("tagName") val tagName: String, val color: String)
+@Serializable data class ReplaceTeamFileTagsRequest(@SerialName("tagIds") val tagIds: List<Long>)
 
 @Serializable
 data class ShareLink(

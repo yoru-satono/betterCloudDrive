@@ -47,6 +47,9 @@ import com.betterclouddrive.mobile.feature.teams.NotificationsRepository
 import com.betterclouddrive.mobile.feature.teams.TeamInvitesStore
 import com.betterclouddrive.mobile.feature.teams.IncomingInviteStore
 import com.betterclouddrive.mobile.feature.teams.NotificationsStore
+import com.betterclouddrive.mobile.feature.teams.TeamOrganizationRepository
+import com.betterclouddrive.mobile.feature.teams.TeamFavoritesStore
+import com.betterclouddrive.mobile.feature.teams.TeamTagsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -62,6 +65,7 @@ class AppContainer(
     val personalVersions: PersonalVersionsRepository,
     val teamWorkspace: TeamWorkspaceRepository,
     val teamPreview: TeamPreviewRepository,
+    val teamOrganization: TeamOrganizationRepository,
     val teamMembers: TeamMembersRepository,
     val teamPermissions: TeamPermissionsRepository,
     val teamInvites: TeamInvitesRepository,
@@ -94,10 +98,14 @@ class AppContainer(
     val teamBrowserStore = TeamBrowserStore(teamWorkspace, applicationScope)
     val teamSearchStore = TeamSearchStore(teamWorkspace, applicationScope)
     val teamPreviewStore = TeamPreviewStore(teamPreview, applicationScope)
+    val teamFavoritesStore = TeamFavoritesStore(teamOrganization, applicationScope)
+    val teamTagsStore = TeamTagsStore(teamOrganization, applicationScope)
     private fun invalidateTeamContent(teamId: Long, folderIds: Set<Long?>) {
         teamBrowserStore.invalidate(teamId, folderIds)
         teamSearchStore.reset()
         teamPreviewStore.reset()
+        teamFavoritesStore.invalidate(teamId)
+        teamTagsStore.invalidateFiles(teamId)
         teamsStore.refresh()
     }
     val teamFileActionsStore = TeamFileActionsStore(teamWorkspace, teamPermissions, transferQueue, applicationScope, ::invalidateTeamContent)
@@ -132,6 +140,7 @@ class AppContainer(
             browserStore, searchStore, favoritesStore, tagsStore, sharesStore, previewStore,
             recycleBinStore, versionsStore, diagnosticsStore, transferQueue,
             teamsStore, teamBrowserStore, teamSearchStore, teamPreviewStore,
+            teamFavoritesStore, teamTagsStore,
             teamFileActionsStore, teamMembersStore, teamPermissionsStore,
             teamInvitesStore, notificationsStore,
         ),
