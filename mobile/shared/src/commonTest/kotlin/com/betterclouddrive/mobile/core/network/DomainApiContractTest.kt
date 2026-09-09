@@ -4,8 +4,10 @@ import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.StoredSession
 import com.betterclouddrive.mobile.core.model.SessionRestoreResult
 import com.betterclouddrive.mobile.core.model.CreatePersonalShareRequest
+import com.betterclouddrive.mobile.core.model.CreateShareRequest
 import com.betterclouddrive.mobile.core.model.ShareExpirationFilter
 import com.betterclouddrive.mobile.core.model.UpdatePersonalShareRequest
+import com.betterclouddrive.mobile.core.model.UpdateShareRequest
 import com.betterclouddrive.mobile.core.model.TeamPermissionSubjectType
 import com.betterclouddrive.mobile.core.model.TeamRole
 import com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest
@@ -126,6 +128,53 @@ class NetworkTestFacadeTest {
         assertEquals("tail", body)
         assertTrue(observed.any { it.second.contains("/recycle-bin?q=old&page=1&size=50") })
         assertTrue(observed.any { it.first == HttpMethod.Get && it.second.contains("/files/9/versions/2/download") })
+    }
+
+    @Test
+    fun teamRecycleBinVersionsAndVersionRangeDownloadUseStableContracts() = runTest {
+        val observed = mutableListOf<Pair<HttpMethod, String>>()
+        val engine = MockEngine { request ->
+            observed += request.method to request.url.toString()
+            when (request.url.encodedPath) {
+                "/api/v1/teams/7/recycle-bin" -> if (request.method == HttpMethod.Get) jsonResponse(
+                    """{"code":200,"data":{"records":[{"id":8,"fileName":"old.txt","fileType":"file","deletedAt":"2026-09-09T10:00:00"}],"total":1,"page":1,"size":50,"pages":1}}""",
+                ) else jsonResponse("""{"code":200}""")
+                "/api/v1/teams/7/files/9/versions" -> jsonResponse(
+                    """{"code":200,"data":[{"id":3,"fileId":9,"versionNumber":2,"fileSize":8,"md5Hash":"abcd"}]}""",
+                )
+                "/api/v1/teams/7/files/9/versions/2/restore" -> jsonResponse(
+                    """{"code":200,"data":{"id":9,"fileName":"doc.txt","fileType":"file"}}""",
+                )
+                "/api/v1/teams/7/files/9/versions/2/download" -> {
+                    assertEquals("bytes=4-", request.headers[HttpHeaders.Range])
+                    respond("tail", HttpStatusCode.PartialContent, headersOf(
+                        HttpHeaders.ContentRange to listOf("bytes 4-7/8"),
+                        HttpHeaders.ContentLength to listOf("4"),
+                    ))
+                }
+                else -> jsonResponse("""{"code":200}""")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals("old.txt", client.listTeamRecycleBin(7, " old ", 1, 50).records.single().fileName)
+        client.restoreTeamRecycleItem(7, 8)
+        client.permanentlyDeleteTeamRecycleItem(7, 8)
+        client.emptyTeamRecycleBin(7)
+        assertEquals(2, client.listTeamVersions(7, 9).single().versionNumber)
+        client.restoreTeamVersion(7, 9, 2)
+        client.deleteTeamVersion(7, 9, 2)
+        val body = client.download(TransferScope.Team(7), 9, 4, 2) { _, _, channel ->
+            val bytes = ByteArray(4); channel.readAvailable(bytes); bytes.decodeToString()
+        }
+        assertEquals("tail", body)
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.contains("/teams/7/recycle-bin?q=old&page=1&size=50") })
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.contains("/teams/7/files/9/versions/2/download") })
     }
 
     @Test
@@ -314,6 +363,43 @@ class NetworkTestFacadeTest {
         assertTrue(observed.any { it.first == HttpMethod.Post && it.third == """{"fileId":7,"password":"safe-pass","expireAt":1780000000000,"maxVisits":9}""" })
         assertTrue(observed.any { it.first == HttpMethod.Put && it.third == """{"clearPassword":true,"clearExpireAt":true,"clearMaxVisits":true}""" })
         assertTrue(observed.any { it.first == HttpMethod.Delete && it.second.endsWith("/shares/5") })
+    }
+
+    @Test
+    fun teamShareLifecycleUsesScopedPathsFiltersAndExplicitClearFields() = runTest {
+        val observed = mutableListOf<Triple<HttpMethod, String, String>>()
+        val shareJson = """{"id":5,"userId":9,"teamId":12,"fileId":7,"shareCode":"team1234","shareUrl":"https://drive.example.com/s/team1234","hasPassword":true,"expireAtEpochMs":1780000000000,"maxVisits":9,"visitCount":2,"downloadCount":1,"fileName":"report.pdf","fileType":"file","fileSize":42}"""
+        val engine = MockEngine { request ->
+            val body = (request.body as? OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+            observed += Triple(request.method, request.url.toString(), body)
+            when {
+                request.url.encodedPath.endsWith("/password") -> jsonResponse("""{"code":200,"data":{"password":"safe-pass"}}""")
+                request.method == HttpMethod.Delete -> jsonResponse("""{"code":200}""")
+                request.url.encodedPath == "/api/v1/teams/12/shares" && request.method == HttpMethod.Get ->
+                    jsonResponse("""{"code":200,"data":{"records":[$shareJson],"total":105,"page":2,"size":50,"pages":3}}""")
+                else -> jsonResponse("""{"code":200,"data":$shareJson}""")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals(12L, client.createTeamShare(12, CreateShareRequest(7, "safe-pass", 1_780_000_000_000, 9)).teamId)
+        assertEquals(105, client.listTeamShares(12, " report ", true, ShareExpirationFilter.ACTIVE, 2, 50).total)
+        assertEquals("report.pdf", client.getTeamShare(12, 5).fileName)
+        assertEquals("safe-pass", client.getTeamSharePassword(12, 5))
+        client.updateTeamShare(12, 5, UpdateShareRequest(clearPassword = true, clearExpireAt = true, clearMaxVisits = true))
+        client.cancelTeamShare(12, 5)
+
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/teams/12/shares?q=report&passwordProtected=true&expirationStatus=ACTIVE&page=2&size=50") })
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/teams/12/shares/5") })
+        assertTrue(observed.any { it.first == HttpMethod.Get && it.second.endsWith("/teams/12/shares/5/password") })
+        assertTrue(observed.any { it.first == HttpMethod.Post && it.second.endsWith("/teams/12/shares") && it.third == """{"fileId":7,"password":"safe-pass","expireAt":1780000000000,"maxVisits":9}""" })
+        assertTrue(observed.any { it.first == HttpMethod.Put && it.second.endsWith("/teams/12/shares/5") && it.third == """{"clearPassword":true,"clearExpireAt":true,"clearMaxVisits":true}""" })
+        assertTrue(observed.any { it.first == HttpMethod.Delete && it.second.endsWith("/teams/12/shares/5") })
     }
 
     @Test

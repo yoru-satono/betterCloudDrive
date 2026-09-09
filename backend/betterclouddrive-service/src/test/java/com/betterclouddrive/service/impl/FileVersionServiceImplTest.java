@@ -10,7 +10,9 @@ import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.entity.UserEntity;
+import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.storage.StorageService;
@@ -34,6 +36,7 @@ class FileVersionServiceImplTest {
     @Mock private FileVersionRepository fileVersionRepository;
     @Mock private FileRepository fileRepository;
     @Mock private UserRepository userRepository;
+    @Mock private TeamRepository teamRepository;
     @Mock private StorageService storageService;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
@@ -46,6 +49,8 @@ class FileVersionServiceImplTest {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
         lenient().when(userRepository.findById(anyLong())).thenReturn(Optional.of(
                 UserEntity.builder().id(1L).storageUsed(0L).storageQuota(Long.MAX_VALUE).build()));
+        lenient().when(teamRepository.findByIdAndDeletedAtIsNull(anyLong())).thenReturn(Optional.of(
+                TeamEntity.builder().id(10L).storageUsed(0L).storageQuota(Long.MAX_VALUE).build()));
     }
 
     private FileEntity ownedFile(Long fileId, Long userId) {
@@ -185,7 +190,7 @@ class FileVersionServiceImplTest {
     void deleteTeamVersion_shouldRemoveVersionAndWriteAuditLog() {
         FileEntity file = teamFile(1L, 2L, 10L);
         file.setVersionCount(2);
-        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(file));
         List<FileVersionEntity> versions = List.of(version(2, "teams/10/v2.docx"), version(1, "teams/10/v1.docx"));
         when(fileVersionRepository.findTopVersionsByFileId(eq(1L), any(PageRequest.class)))
                 .thenReturn(versions);
@@ -240,5 +245,38 @@ class FileVersionServiceImplTest {
                 eq(10L),
                 eq("application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
         verify(teamAuditService).record(10L, 2L, "VERSION_RESTORE", "FILE", 1L, "version 1");
+        verify(valueOps).increment("team:storage:incr:10", 10L);
+    }
+
+    @Test
+    void listTeamVersions_shouldRejectAFileUnderADeletedAncestor() {
+        FileEntity file = teamFile(1L, 2L, 10L);
+        file.setParentId(9L);
+        FileEntity deletedParent = FileEntity.builder().id(9L).teamId(10L).fileType("folder").isDeleted(true).build();
+        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findById(9L)).thenReturn(Optional.of(deletedParent));
+
+        assertThatThrownBy(() -> fileVersionService.listTeamVersions(10L, 1L))
+                .isInstanceOf(BusinessException.class);
+
+        verify(fileVersionRepository, never()).findTopVersionsByFileId(anyLong(), any(PageRequest.class));
+    }
+
+    @Test
+    void restoreTeamVersion_shouldRejectWhenTeamQuotaWouldBeExceeded() {
+        FileEntity file = teamFile(1L, 2L, 10L);
+        FileVersionEntity selected = version(1, "teams/10/v1.docx");
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(file));
+        when(fileVersionRepository.findByFileIdAndVersionNumber(1L, 1)).thenReturn(Optional.of(selected));
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(
+                TeamEntity.builder().id(10L).storageUsed(95L).storageQuota(100L).build()));
+        when(valueOps.get("team:storage:incr:10")).thenReturn(null);
+
+        assertThatThrownBy(() -> fileVersionService.restoreTeamVersion(10L, 2L, 1L, 1))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419001));
+
+        verify(storageService, never()).downloadObject(anyString());
+        verify(fileVersionRepository, never()).save(any(FileVersionEntity.class));
     }
 }

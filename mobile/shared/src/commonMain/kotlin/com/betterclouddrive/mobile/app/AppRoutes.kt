@@ -66,6 +66,18 @@ data class TeamTagsRoute(val teamId: Long) : AppRoute
 data class TeamTagFilesRoute(val teamId: Long, val tagId: Long) : AppRoute
 
 @Serializable
+data class TeamSharesRoute(val teamId: Long) : AppRoute
+
+@Serializable
+data class TeamShareDetailRoute(val teamId: Long, val shareId: Long) : AppRoute
+
+@Serializable
+data class TeamRecycleBinRoute(val teamId: Long) : AppRoute
+
+@Serializable
+data class TeamVersionsRoute(val teamId: Long, val fileId: Long) : AppRoute
+
+@Serializable
 data object NotificationsRoute : AppRoute
 
 @Serializable

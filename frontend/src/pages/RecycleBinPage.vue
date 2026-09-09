@@ -11,12 +11,12 @@ import { useFormatters } from '@/composables/useFormatters'
 import { useConfirm } from '@/composables/useConfirm'
 import * as recycleApi from '@/api/recycle'
 import { toast } from 'vue-sonner'
-import type { FileEntity } from '@/types/file'
+import type { RecycleBinItem } from '@/types/file'
 
 const { formatSize, formatDate } = useFormatters()
 const { confirm } = useConfirm()
 
-const files = ref<FileEntity[]>([])
+const files = ref<RecycleBinItem[]>([])
 const loading = ref(false)
 const selected = ref<Set<number>>(new Set())
 
@@ -98,7 +98,7 @@ onMounted(load)
           <span class="truncate">{{ file.fileName }}</span>
         </div>
         <div class="file-table__size font-mono">{{ file.fileType === 'folder' ? '—' : formatSize(file.fileSize) }}</div>
-        <div class="file-table__date">{{ formatDate(file.updatedAt) }}</div>
+        <div class="file-table__date">{{ formatDate(file.deletedAt) }}</div>
       </div>
     </div>
   </div>

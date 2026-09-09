@@ -99,6 +99,7 @@ fun FavoritesScreen(
     onOpenVersions: ((FileItem) -> Unit)?,
     onMenuOpen: (FileItem) -> Unit = {},
     canManageTags: (FileItem) -> Boolean = { true },
+    canCreateShare: (FileItem) -> Boolean = { onCreateShare != null },
     onBack: (() -> Unit)? = null,
 ) {
     val strings = LocalMobileStrings.current
@@ -140,7 +141,7 @@ fun FavoritesScreen(
                     onPreview = { onPreview(file) },
                     onDownload = { download(file) },
                     onManageTags = onManageTags?.takeIf { canManageTags(file) }?.let { action -> { action(file) } },
-                    onCreateShare = onCreateShare?.let { action -> { action(file) } },
+                    onCreateShare = onCreateShare?.takeIf { canCreateShare(file) }?.let { action -> { action(file) } },
                     onOpenVersions = onOpenVersions?.let { action -> { action(file) } },
                     trailingLabel = MobileString.RemoveFavorite,
                     trailingIcon = { Icon(Icons.Default.Star, null) },
@@ -152,12 +153,13 @@ fun FavoritesScreen(
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
     selected?.let { file ->
+        LaunchedEffect(file.id) { onMenuOpen(file) }
         OrganizationFileDetail(
             file,
             onDismiss = { selected = null },
             onPreview = { selected = null; onPreview(file) },
             onDownload = { download(file) },
-            onCreateShare = onCreateShare?.let { action -> { selected = null; action(file) } },
+            onCreateShare = onCreateShare?.takeIf { canCreateShare(file) }?.let { action -> { selected = null; action(file) } },
             onOpenVersions = onOpenVersions?.let { action -> { selected = null; action(file) } },
         )
     }
@@ -284,6 +286,7 @@ fun TagFilesScreen(
     onOpenVersions: ((FileItem) -> Unit)?,
     onMenuOpen: (FileItem) -> Unit = {},
     canManageTags: (FileItem) -> Boolean = { true },
+    canCreateShare: (FileItem) -> Boolean = { onCreateShare != null },
     onBack: (() -> Unit)? = null,
 ) {
     val strings = LocalMobileStrings.current
@@ -317,7 +320,7 @@ fun TagFilesScreen(
             menu = { file -> OrganizationFileMenu(
                 file, { onOpenLocation(file) }, { onPreview(file) }, { download(file) },
                 onManageTags?.takeIf { canManageTags(file) }?.let { action -> { action(file) } },
-                onCreateShare?.let { action -> { action(file) } },
+                onCreateShare?.takeIf { canCreateShare(file) }?.let { action -> { action(file) } },
                 onOpenVersions?.let { action -> { action(file) } },
                 MobileString.RemoveFromTag, { Icon(Icons.Default.Label, null) }, { onRemove(file) },
                 onOpenMenu = { onMenuOpen(file) }, showTrailing = canManageTags(file),

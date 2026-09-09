@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP mobile · Stage 14</string>
+    <string name="stage_label">KMP mobile · Stage 18</string>
     <string name="restore_title">Can&apos;t connect to the server</string>
     <string name="session_preserved">Your local session remains encrypted</string>
     <string name="retry">Retry</string>
@@ -243,6 +243,7 @@
     <string name="error_invalid_tag_name">Tag names must contain 1–64 characters.</string>
     <string name="error_invalid_tag_color">Select a valid tag color.</string>
     <string name="shares_title">Shares</string>
+    <string name="team_shares_title">Team shares</string>
     <string name="create_share">Create share</string>
     <string name="search_shares">Search by share code or file ID</string>
     <string name="shares_empty">No active shares</string>

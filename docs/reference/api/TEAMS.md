@@ -62,7 +62,7 @@
 | DELETE | `/api/v1/teams/{teamId}/files` | 可删除 | Body `{ "fileIds": [1, 2] }`，移入团队回收站 |
 | GET | `/api/v1/teams/{teamId}/recycle-bin?q=&page=&size=` | 团队成员 | 团队回收站 |
 | POST | `/api/v1/teams/{teamId}/recycle-bin/{fileId}/restore` | 可写 | 从团队回收站恢复 |
-| DELETE | `/api/v1/teams/{teamId}/recycle-bin/{fileId}` | OWNER/ADMIN | 永久删除单个回收站文件 |
+| DELETE | `/api/v1/teams/{teamId}/recycle-bin/{fileId}` | 可删除 | 永久删除单个回收站根项目 |
 | DELETE | `/api/v1/teams/{teamId}/recycle-bin` | OWNER/ADMIN | 清空团队回收站 |
 | POST | `/api/v1/teams/{teamId}/upload/init` | 父目录可写 | 初始化分片上传，Body 同个人上传 |
 | POST | `/api/v1/teams/{teamId}/upload/{sessionId}/chunk` | 上传会话所有者 | 上传分片 |
@@ -85,6 +85,8 @@
 
 团队文件变更在同一团队事务锁内串行执行，并在锁内重新校验源项目及目标目录的有效权限。批量删除会去重并折叠已同时选择的后代；删除文件夹前会递归验证整棵活动子树的删除权限，任一后代无权删除则整体回滚。软删除后，目录、搜索、收藏、标签、分享、预览、下载和直接元数据访问都不会暴露已删除祖先下的活动记录。团队配额扣减包含当前对象和历史版本占用。
 
+团队回收站只返回一次删除操作形成的根项目，固定按 `deletedAt DESC, id DESC` 排序，并在按当前有效 `canRead` 过滤后分页；子项目随根项目递归恢复或永久删除，不会在列表中重复出现。列表使用安全的 `RecycleBinItemResponse`，不返回 `storagePath`、`thumbnailPath`、`userId` 或 `teamId`。恢复要求删除根有效 `canWrite` 以及目标父目录可写；原父目录不存在、已删除或不再有效时回退团队根目录。恢复完整删除标记子树前会把当前文件和历史版本重新计入团队配额，超限返回 `419001`。永久删除会递归校验删除子树的有效 `canDelete`；清空仍仅允许 OWNER/ADMIN，并记录团队审计和清理任务。
+
 ### 16.4 团队分享、收藏和标签
 
 | 方法 | 路径 | 权限 | 请求/响应 |
@@ -92,11 +94,13 @@
 | POST | `/api/v1/teams/{teamId}/shares` | 可分享 | Body 同个人分享；响应 `ShareLinkResponse`，含 `teamId` |
 | GET | `/api/v1/teams/{teamId}/shares?q=&passwordProtected=&expirationStatus=&page=&size=` | 团队成员 | 返回当前用户可读文件对应的分享；状态过滤参数与个人分享一致 |
 | GET | `/api/v1/teams/{teamId}/shares/{shareId}` | 分享文件可读 | 分享详情 |
-| GET | `/api/v1/teams/{teamId}/shares/{shareId}/password` | 可分享 | 读取分享密码 |
-| PUT | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | Body 同个人更新分享；可更新或清空密码、过期时间和访问次数 |
-| DELETE | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享 | 取消分享 |
+| GET | `/api/v1/teams/{teamId}/shares/{shareId}/password` | 可分享且为创建者或可管理 | 读取分享密码；OWNER/ADMIN 默认满足管理条件 |
+| PUT | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享且为创建者或可管理 | Body 同个人更新分享；可更新或显式清空密码、过期时间和访问次数 |
+| DELETE | `/api/v1/teams/{teamId}/shares/{shareId}` | 可分享且为创建者或可管理 | 幂等取消分享；OWNER/ADMIN 默认满足管理条件 |
 
 团队分享响应与个人分享使用同一兼容 DTO：`shareUrl` 由后端按 `APP_PUBLIC_URL` 生成，`expireAtEpochMs` 提供明确时区的 epoch 毫秒值，并可携带分享根项目的 `fileName`、`fileType`、`fileSize`；原有 `expireAt` 保留兼容。列表文件元数据批量读取，项目已删除时元数据字段为 `null`。
+
+团队分享列表在有效读取权限过滤后分页，固定按 `createdAt DESC, id DESC` 排序。列表、详情和复制链接要求目标项目有效 `canRead`；创建要求有效 `canShare`；密码读取、编辑和取消还要求操作者是分享创建者，或对目标项目拥有有效 `canManage`。权限被撤销后立即按当前有效权限拒绝，越权密码读取返回业务错误码 403。
 
 | POST | `/api/v1/teams/{teamId}/favorites/{fileId}` | 可读 | 添加团队收藏 |
 | DELETE | `/api/v1/teams/{teamId}/favorites/{fileId}` | 团队成员 | 取消团队收藏 |
@@ -215,12 +219,14 @@ Authorization: Bearer <accessToken>
 
 | 端点 | 权限 | 响应 |
 |------|------|------|
-| `GET versions` | 可读 | `FileVersionEntity[]`，按版本号降序 |
+| `GET versions` | 可读 | `FileVersionResponse[]`，按版本号降序 |
 | `GET download` | 可读 | 二进制流，`Content-Disposition: attachment`，支持 Range |
 | `POST restore` | 可写 | 恢复后的 `FileEntity`，并保留当前内容为新版本 |
 | `DELETE` | 可删除 | 删除指定历史版本 |
 
-**错误码:** 403（权限不足）、404（版本不存在）、419009（不能删除唯一版本或版本限制冲突）。
+版本接口只接受当前团队内、未删除且所有祖先均有效的普通文件。列表 DTO 仅包含 `id`、`fileId`、`versionNumber`、`fileSize`、`md5Hash`、`createdAt`，不暴露对象存储路径或版本创建者。恢复前归档当前内容，并把新归档和恢复副本计入团队配额；删除版本会同步扣减团队容量增量。下载继续支持完整响应、Range `206` 和非法范围 `416`。
+
+**错误码:** 403（权限不足）、404（文件或版本不存在）、419001（恢复版本后团队配额不足）、419009（不能删除唯一版本或版本限制冲突）。
 
 ### 16.7 团队审计
 

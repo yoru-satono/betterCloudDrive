@@ -22,7 +22,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class PersonalSharesState(
+data class ShareManagementState(
+    val teamId: Long? = null,
     val query: String = "",
     val submittedQuery: String = "",
     val passwordProtected: Boolean? = null,
@@ -37,11 +38,14 @@ data class PersonalSharesState(
     val pages: Int = 1,
     val total: Long = 0,
     val selected: ShareLink? = null,
+    val detailShareId: Long? = null,
     val detailLoading: Boolean = false,
     val detailError: UiMessage? = null,
     val revealedPassword: String? = null,
     val passwordVisible: Boolean = false,
     val passwordLoading: Boolean = false,
+    val selectedCanEdit: Boolean = true,
+    val permissionLoading: Boolean = false,
     val createTarget: FileItem? = null,
     val creating: Boolean = false,
     val createError: UiMessage? = null,
@@ -55,13 +59,15 @@ data class PersonalSharesState(
     val hasMore: Boolean get() = page < pages
 }
 
+typealias PersonalSharesState = ShareManagementState
+
 class PersonalSharesStore(
     private val repository: PersonalSharesRepository,
     parentScope: CoroutineScope,
     private val now: () -> Long = { kotlin.time.Clock.System.now().toEpochMilliseconds() },
 ) : ResettableStore {
     private val scope = parentScope.storeChildScope()
-    private val mutableState = MutableStateFlow(PersonalSharesState())
+    private val mutableState = MutableStateFlow(ShareManagementState())
     val state: StateFlow<PersonalSharesState> = mutableState.asStateFlow()
     private var listJob: Job? = null
     private var detailJob: Job? = null
@@ -140,14 +146,14 @@ class PersonalSharesStore(
         detailJob?.cancel()
         val listed = state.value.items.firstOrNull { it.id == shareId }
         mutableState.update { it.copy(
-            selected = listed, detailLoading = true, detailError = null, revealedPassword = null,
+            selected = listed, detailShareId = shareId, detailLoading = true, detailError = null, revealedPassword = null,
             passwordVisible = false, passwordLoading = false, updateError = null,
         ) }
         detailJob = scope.launch {
             try {
                 val detail = repository.getPersonalShare(shareId)
                 mutableState.update { current ->
-                    if (current.selected?.id != shareId && listed != null) current
+                    if (current.detailShareId != shareId) current
                     else current.copy(selected = detail, detailLoading = false)
                 }
             } catch (cancelled: CancellationException) {
@@ -161,7 +167,7 @@ class PersonalSharesStore(
     fun closeDetail() {
         detailJob?.cancel()
         mutableState.update { it.copy(
-            selected = null, detailLoading = false, detailError = null, revealedPassword = null,
+            selected = null, detailShareId = null, detailLoading = false, detailError = null, revealedPassword = null,
             passwordVisible = false, passwordLoading = false, updateError = null,
         ) }
     }
@@ -230,7 +236,7 @@ class PersonalSharesStore(
             try {
                 repository.cancelPersonalShare(share.id)
                 mutableState.update { current -> current.copy(
-                    canceling = false, selected = null, revealedPassword = null, passwordVisible = false,
+                    canceling = false, selected = null, detailShareId = null, revealedPassword = null, passwordVisible = false,
                     items = current.items.filterNot { it.id == share.id }, total = (current.total - 1).coerceAtLeast(0),
                     feedback = FileMutationFeedback(++feedbackSequence, UiMessage(MobileString.ShareCanceled), false),
                 ) }
@@ -246,7 +252,7 @@ class PersonalSharesStore(
 
     override fun reset() {
         listJob?.cancel(); detailJob?.cancel(); mutationJob?.cancel()
-        mutableState.value = PersonalSharesState()
+        mutableState.value = ShareManagementState()
     }
 
     private suspend fun loadPage(query: String, page: Int, refresh: Boolean) {

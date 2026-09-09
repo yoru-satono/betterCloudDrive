@@ -555,6 +555,53 @@ class PersonalSharesApi(private val http: AuthenticatedHttpClient) {
     }
 }
 
+class TeamSharesApi(private val http: AuthenticatedHttpClient) {
+    suspend fun create(teamId: Long, request: CreateShareRequest): ShareLink = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("teams/$teamId/shares")) {
+            bearer(token); jsonBody(request)
+        } }
+    }
+
+    suspend fun list(
+        teamId: Long,
+        query: String?,
+        passwordProtected: Boolean?,
+        expiration: ShareExpirationFilter,
+        page: Int,
+        size: Int,
+    ): PageResult<ShareLink> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/shares")) {
+            bearer(token); url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                passwordProtected?.let { parameters.append("passwordProtected", it.toString()) }
+                expiration.apiValue?.let { parameters.append("expirationStatus", it) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun get(teamId: Long, shareId: Long): ShareLink = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/shares/$shareId")) { bearer(token) } }
+    }
+
+    suspend fun password(teamId: Long, shareId: Long): String? = http.run {
+        authenticatedEnvelope<SharePasswordResponse> { client, token ->
+            client.get(url("teams/$teamId/shares/$shareId/password")) { bearer(token) }
+        }.password
+    }
+
+    suspend fun update(teamId: Long, shareId: Long, request: UpdateShareRequest): ShareLink = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("teams/$teamId/shares/$shareId")) {
+            bearer(token); jsonBody(request)
+        } }
+    }
+
+    suspend fun cancel(teamId: Long, shareId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId/shares/$shareId")) { bearer(token) } }
+    }
+}
+
 class PersonalRecoveryApi(private val http: AuthenticatedHttpClient) {
     suspend fun listRecycleBin(query: String?, page: Int, size: Int): PageResult<RecycleBinItem> = http.run {
         authenticatedEnvelope { client, token -> client.get(url("recycle-bin")) {
@@ -588,6 +635,46 @@ class PersonalRecoveryApi(private val http: AuthenticatedHttpClient) {
 
     suspend fun deleteVersion(fileId: Long, versionNumber: Int) = http.run {
         authenticatedNoData { client, token -> client.delete(url("files/$fileId/versions/$versionNumber")) { bearer(token) } }
+    }
+}
+
+class TeamRecoveryApi(private val http: AuthenticatedHttpClient) {
+    suspend fun listRecycleBin(teamId: Long, query: String?, page: Int, size: Int): PageResult<RecycleBinItem> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/recycle-bin")) {
+            bearer(token); url {
+                query?.trim()?.takeIf(String::isNotEmpty)?.let { parameters.append("q", it) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun restoreRecycleItem(teamId: Long, fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.post(url("teams/$teamId/recycle-bin/$fileId/restore")) { bearer(token) } }
+    }
+
+    suspend fun permanentlyDeleteRecycleItem(teamId: Long, fileId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId/recycle-bin/$fileId")) { bearer(token) } }
+    }
+
+    suspend fun emptyRecycleBin(teamId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId/recycle-bin")) { bearer(token) } }
+    }
+
+    suspend fun listVersions(teamId: Long, fileId: Long): List<PersonalFileVersion> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/files/$fileId/versions")) { bearer(token) } }
+    }
+
+    suspend fun restoreVersion(teamId: Long, fileId: Long, versionNumber: Int): FileItem = http.run {
+        authenticatedEnvelope { client, token -> client.post(
+            url("teams/$teamId/files/$fileId/versions/$versionNumber/restore"),
+        ) { bearer(token) } }
+    }
+
+    suspend fun deleteVersion(teamId: Long, fileId: Long, versionNumber: Int) = http.run {
+        authenticatedNoData { client, token -> client.delete(
+            url("teams/$teamId/files/$fileId/versions/$versionNumber"),
+        ) { bearer(token) } }
     }
 }
 

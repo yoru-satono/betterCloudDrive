@@ -357,9 +357,21 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
     composable<TeamSearchRoute> { entry ->
         val teamId = entry.toRoute<TeamSearchRoute>().teamId
         val state by container.teamSearchStore.state.collectAsState()
-        LaunchedEffect(teamId) { container.teamSearchStore.activate(teamId) }
+        val actions by container.teamFileActionsStore.state.collectAsState()
+        val auth by container.authStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val team = browser.team?.takeIf { it.id == teamId }
+            ?: container.teamsStore.state.value.items.firstOrNull { it.id == teamId }
+        LaunchedEffect(teamId, team?.role, auth.user?.id) {
+            container.teamSearchStore.activate(teamId)
+            container.teamFileActionsStore.activate(team, teamId, null)
+            container.teamSharesStore.bind(
+                teamId, auth.user?.id, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER,
+            )
+        }
         TeamSearchScreen(
             state = state,
+            actions = actions,
             documentPicker = container.documentPicker,
             onBack = navController::popBackStack,
             onQuery = container.teamSearchStore::updateQuery,
@@ -373,6 +385,9 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             },
             onPreview = { navController.navigate(TeamPreviewRoute(teamId, it.id)) },
             onDownload = container.teamFileActionsStore::download,
+            onRequestPermission = container.teamFileActionsStore::requestItemPermission,
+            onCreateShare = container.teamSharesStore::openCreator,
+            onOpenVersions = { navController.navigate(TeamVersionsRoute(teamId, it.id)) },
         )
     }
     composable<TeamPreviewRoute> { entry ->
@@ -390,6 +405,7 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             onPositionChanged = container.teamPreviewStore::updatePosition,
             onRendererError = container.teamPreviewStore::reportRendererError,
             onDownload = container.teamFileActionsStore::download,
+            onOpenVersions = { navController.navigate(TeamVersionsRoute(route.teamId, it.id)) },
         )
     }
     composable<TeamMembersRoute> { entry ->
@@ -431,12 +447,14 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
         val actions by container.teamFileActionsStore.state.collectAsState()
         val browser by container.teamBrowserStore.state.collectAsState()
         val teams by container.teamsStore.state.collectAsState()
+        val auth by container.authStore.state.collectAsState()
         val team = browser.team?.takeIf { it.id == teamId }
             ?: teams.items.firstOrNull { it.id == teamId }
-        LaunchedEffect(teamId, team?.role) {
+        LaunchedEffect(teamId, team?.role, auth.user?.id) {
             container.teamFavoritesStore.activate(teamId)
             container.teamTagsStore.bind(teamId, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
             container.teamFileActionsStore.activate(team, teamId, null)
+            container.teamSharesStore.bind(teamId, auth.user?.id, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
         }
         FavoritesScreen(
             state = state,
@@ -454,11 +472,12 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             onDownload = container.teamFileActionsStore::download,
             onToggleFavorite = container.teamFavoritesStore::toggle,
             onManageTags = container.teamTagsStore::openEditor,
-            onCreateShare = null,
+            onCreateShare = container.teamSharesStore::openCreator,
             onConsumeFeedback = container.teamFavoritesStore::consumeFeedback,
-            onOpenVersions = null,
+            onOpenVersions = { navController.navigate(TeamVersionsRoute(teamId, it.id)) },
             onMenuOpen = { container.teamFileActionsStore.requestItemPermission(it) },
             canManageTags = { actions.itemPermissions[it.id]?.canWrite == true },
+            canCreateShare = { actions.itemPermissions[it.id]?.canShare == true },
             onBack = navController::popBackStack,
         )
     }
@@ -468,10 +487,12 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
         val canManage by container.teamTagsStore.canManage.collectAsState()
         val browser by container.teamBrowserStore.state.collectAsState()
         val teams by container.teamsStore.state.collectAsState()
+        val auth by container.authStore.state.collectAsState()
         val team = browser.team?.takeIf { it.id == teamId }
             ?: teams.items.firstOrNull { it.id == teamId }
-        LaunchedEffect(teamId, team?.role) {
+        LaunchedEffect(teamId, team?.role, auth.user?.id) {
             container.teamTagsStore.activate(teamId, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
+            container.teamSharesStore.bind(teamId, auth.user?.id, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
         }
         Row(Modifier.fillMaxSize()) {
             Box(Modifier.weight(if (wide) 0.42f else 1f)) {
@@ -505,16 +526,132 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
         val state by container.teamTagsStore.state.collectAsState()
         val browser by container.teamBrowserStore.state.collectAsState()
         val teams by container.teamsStore.state.collectAsState()
+        val auth by container.authStore.state.collectAsState()
         val team = browser.team?.takeIf { it.id == route.teamId }
             ?: teams.items.firstOrNull { it.id == route.teamId }
-        LaunchedEffect(route.teamId, route.tagId, team?.role) {
+        LaunchedEffect(route.teamId, route.tagId, team?.role, auth.user?.id) {
             container.teamTagsStore.activate(route.teamId, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
             container.teamTagsStore.activateFiles(route.tagId)
             container.teamFileActionsStore.activate(team, route.teamId, null)
+            container.teamSharesStore.bind(route.teamId, auth.user?.id, team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
         }
         TeamTagFilesDestination(route.teamId, route.tagId, container, state, navController)
     }
+    composable<TeamSharesRoute> { entry ->
+        val teamId = entry.toRoute<TeamSharesRoute>().teamId
+        val state by container.teamSharesStore.state.collectAsState()
+        val auth by container.authStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val role = browser.team?.takeIf { it.id == teamId }?.role
+            ?: teams.items.firstOrNull { it.id == teamId }?.role
+            ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
+        LaunchedEffect(teamId, auth.user?.id, role) {
+            container.teamSharesStore.activate(teamId, auth.user?.id, role)
+        }
+        DisposableEffect(teamId) { onDispose { container.teamSharesStore.closeDetail() } }
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(if (wide) 0.48f else 1f)) {
+                SharesScreen(
+                    state = state,
+                    dateTime = container.localDateTime,
+                    clipboard = container.clipboard,
+                    onQuery = container.teamSharesStore::updateQuery,
+                    onFilters = container.teamSharesStore::setFilters,
+                    onRefresh = container.teamSharesStore::refresh,
+                    onLoadMore = container.teamSharesStore::loadMore,
+                    onOpen = {
+                        if (wide) container.teamSharesStore.openDetail(it)
+                        else navController.navigate(TeamShareDetailRoute(teamId, it))
+                    },
+                    onConsumeFeedback = container.teamSharesStore::consumeFeedback,
+                    onBack = navController::popBackStack,
+                )
+            }
+            if (wide) {
+                VerticalDivider()
+                Box(Modifier.weight(0.52f).testTag("team-shares-wide-detail")) {
+                    TeamShareDetailDestination(container, state)
+                }
+            }
+        }
+    }
+    composable<TeamShareDetailRoute> { entry ->
+        val route = entry.toRoute<TeamShareDetailRoute>()
+        val state by container.teamSharesStore.state.collectAsState()
+        val auth by container.authStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val role = browser.team?.takeIf { it.id == route.teamId }?.role
+            ?: teams.items.firstOrNull { it.id == route.teamId }?.role
+            ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
+        var loaded by remember(route.teamId, route.shareId) { mutableStateOf(false) }
+        LaunchedEffect(route.teamId, route.shareId, auth.user?.id, role) {
+            container.teamSharesStore.activate(route.teamId, auth.user?.id, role)
+            container.teamSharesStore.openDetail(route.shareId)
+        }
+        LaunchedEffect(state.selected?.id, state.canceling) {
+            if (state.selected?.id == route.shareId) loaded = true
+            else if (loaded && !state.canceling) navController.popBackStack()
+        }
+        DisposableEffect(route.teamId, route.shareId) { onDispose { container.teamSharesStore.closeDetail() } }
+        TeamShareDetailDestination(container, state, navController::popBackStack)
+    }
+    composable<TeamRecycleBinRoute> { entry ->
+        val teamId = entry.toRoute<TeamRecycleBinRoute>().teamId
+        val state by container.teamRecycleBinStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val role = browser.team?.takeIf { it.id == teamId }?.role
+            ?: teams.items.firstOrNull { it.id == teamId }?.role
+            ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
+        LaunchedEffect(teamId, role) { container.teamRecycleBinStore.activate(teamId, role) }
+        TeamRecycleBinScreen(
+            state = state,
+            onQuery = container.teamRecycleBinStore::updateQuery,
+            onRefresh = container.teamRecycleBinStore::refresh,
+            onLoadMore = container.teamRecycleBinStore::loadMore,
+            onRequestPermission = container.teamRecycleBinStore::requestPermission,
+            onRestore = container.teamRecycleBinStore::restore,
+            onPermanentlyDelete = container.teamRecycleBinStore::permanentlyDelete,
+            onEmpty = container.teamRecycleBinStore::empty,
+            onConsumeFeedback = container.teamRecycleBinStore::consumeFeedback,
+            onClearPermissionError = container.teamRecycleBinStore::clearPermissionError,
+        )
+    }
+    composable<TeamVersionsRoute> { entry ->
+        val route = entry.toRoute<TeamVersionsRoute>()
+        val state by container.teamVersionsStore.state.collectAsState()
+        LaunchedEffect(route.teamId, route.fileId) { container.teamVersionsStore.open(route.teamId, route.fileId) }
+        TeamVersionsScreen(
+            state = state,
+            documentPicker = container.documentPicker,
+            onRetry = container.teamVersionsStore::retry,
+            onDownload = container.teamVersionsStore::download,
+            onRestore = container.teamVersionsStore::restore,
+            onDelete = container.teamVersionsStore::delete,
+            onOpenTransfers = onOpenTransfers,
+            onConsumeFeedback = container.teamVersionsStore::consumeFeedback,
+            onConsumeTransferFeedback = container.teamVersionsStore::consumeTransferFeedback,
+        )
+    }
 }
+
+@Composable
+private fun TeamShareDetailDestination(
+    container: AppContainer,
+    state: com.betterclouddrive.mobile.feature.shares.TeamSharesState,
+    onBack: (() -> Unit)? = null,
+) = ShareDetailScreen(
+    state = state,
+    dateTime = container.localDateTime,
+    clipboard = container.clipboard,
+    onRevealPassword = container.teamSharesStore::togglePassword,
+    onUpdate = container.teamSharesStore::update,
+    onCancel = container.teamSharesStore::cancel,
+    onConsumeFeedback = container.teamSharesStore::consumeFeedback,
+    onBack = onBack,
+)
 
 @Composable
 private fun TeamTagFilesDestination(
@@ -542,12 +679,13 @@ private fun TeamTagFilesDestination(
         onPreview = { navController.navigate(TeamPreviewRoute(teamId, it.id)) },
         onDownload = container.teamFileActionsStore::download,
         onManageTags = container.teamTagsStore::openEditor,
-        onCreateShare = null,
+        onCreateShare = container.teamSharesStore::openCreator,
         onRemove = container.teamTagsStore::removeFile,
         onConsumeFeedback = container.teamTagsStore::consumeFeedback,
-        onOpenVersions = null,
+        onOpenVersions = { navController.navigate(TeamVersionsRoute(teamId, it.id)) },
         onMenuOpen = container.teamFileActionsStore::requestItemPermission,
         canManageTags = { actions.itemPermissions[it.id]?.canWrite == true },
+        canCreateShare = { actions.itemPermissions[it.id]?.canShare == true },
         onBack = navController::popBackStack,
     )
 }
@@ -567,10 +705,11 @@ private fun TeamBrowserDestination(
     val favorites by container.teamFavoritesStore.state.collectAsState()
     val auth by container.authStore.state.collectAsState()
     LaunchedEffect(teamId, folderId) { container.teamBrowserStore.activate(teamId, folderId) }
-    LaunchedEffect(teamId, folderId, state.team?.role) {
+    LaunchedEffect(teamId, folderId, state.team?.role, auth.user?.id) {
         container.teamFileActionsStore.activate(state.team, teamId, folderId)
         container.teamFavoritesStore.bind(teamId)
         container.teamTagsStore.bind(teamId, state.team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
+        container.teamSharesStore.bind(teamId, auth.user?.id, state.team?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER)
     }
     TeamBrowserScreen(
         state = state,
@@ -636,5 +775,9 @@ private fun TeamBrowserDestination(
         onToggleFavorite = container.teamFavoritesStore::toggle,
         onConsumeFavoriteFeedback = container.teamFavoritesStore::consumeFeedback,
         onManageTags = container.teamTagsStore::openEditor,
+        onCreateShare = container.teamSharesStore::openCreator,
+        onOpenShares = { navController.navigate(TeamSharesRoute(teamId)) },
+        onOpenVersions = { navController.navigate(TeamVersionsRoute(teamId, it.id)) },
+        onOpenRecycleBin = { navController.navigate(TeamRecycleBinRoute(teamId)) },
     )
 }

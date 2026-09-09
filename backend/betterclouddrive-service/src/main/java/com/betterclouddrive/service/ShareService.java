@@ -13,7 +13,7 @@ public interface ShareService {
     ShareLinkEntity getShare(Long userId, Long shareId);
     ShareLinkEntity getTeamShare(Long teamId, Long shareId);
     String getSharePassword(Long userId, Long shareId);
-    String getTeamSharePassword(Long teamId, Long shareId);
+    String getTeamSharePassword(Long actorUserId, boolean canManageAll, Long teamId, Long shareId);
     ShareLinkEntity updateShare(Long userId, Long shareId, String password, Long expireAtMs, Integer maxVisits);
     ShareLinkEntity updateShare(Long userId, Long shareId, ShareUpdateCommand command);
     ShareLinkEntity updateTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId, String password, Long expireAtMs, Integer maxVisits);

@@ -1,6 +1,6 @@
 package com.betterclouddrive.mobile.app
 
-import com.betterclouddrive.mobile.feature.shares.PersonalSharesState
+import com.betterclouddrive.mobile.feature.shares.ShareManagementState
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -73,7 +74,7 @@ private enum class SharePasswordEdit { KEEP, SET, REMOVE }
 
 @Composable
 fun SharesScreen(
-    state: PersonalSharesState,
+    state: ShareManagementState,
     dateTime: LocalDateTimeService,
     clipboard: ClipboardService,
     onQuery: (String) -> Unit,
@@ -82,6 +83,7 @@ fun SharesScreen(
     onLoadMore: () -> Unit,
     onOpen: (Long) -> Unit,
     onConsumeFeedback: () -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
@@ -102,6 +104,12 @@ fun SharesScreen(
     }
     Box(Modifier.fillMaxSize().testTag("shares-screen")) {
         Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (onBack != null) Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack, modifier = Modifier.testTag("team-shares-back")) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent])
+                }
+                Text(strings[MobileString.TeamSharesTitle], style = MaterialTheme.typography.titleLarge)
+            }
             OutlinedTextField(
                 value = state.query,
                 onValueChange = onQuery,
@@ -199,13 +207,14 @@ private fun ShareCard(share: ShareLink, dateTime: LocalDateTimeService, onOpen: 
 
 @Composable
 fun ShareDetailScreen(
-    state: PersonalSharesState,
+    state: ShareManagementState,
     dateTime: LocalDateTimeService,
     clipboard: ClipboardService,
     onRevealPassword: () -> Unit,
     onUpdate: (UpdatePersonalShareRequest) -> Unit,
     onCancel: () -> Unit,
     onConsumeFeedback: () -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val strings = LocalMobileStrings.current
     val share = state.selected
@@ -226,20 +235,28 @@ fun ShareDetailScreen(
     }
     Box(Modifier.fillMaxSize().testTag("share-detail")) {
         when {
-            state.detailLoading && share == null -> CenterProgress()
-            state.detailError != null && share == null -> ShareError(strings.resolve(state.detailError).orEmpty()) {}
-            share == null -> ShareEmpty()
+            state.detailLoading && share == null -> ShareDetailFallback(onBack) { CenterProgress() }
+            state.detailError != null && share == null -> ShareDetailFallback(onBack) {
+                ShareError(strings.resolve(state.detailError).orEmpty()) {}
+            }
+            share == null -> ShareDetailFallback(onBack) { ShareEmpty() }
             else -> LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (onBack != null) item {
+                    ShareDetailBack(onBack)
+                }
                 item { Text(share.fileName ?: strings[MobileString.ShareOriginalUnavailable], style = MaterialTheme.typography.headlineSmall) }
                 item { ShareDetailRow(strings[MobileString.ShareLink], share.shareUrl) }
                 item { ShareDetailRow(strings[MobileString.ShareCode], share.shareCode) }
+                item { ShareDetailRow(strings[MobileString.FileId], share.fileId.toString()) }
+                share.fileType?.let { item { ShareDetailRow(strings[MobileString.Type], it) } }
+                share.fileSize?.let { item { ShareDetailRow(strings[MobileString.Size], formatFileSize(it)) } }
                 item { ShareDetailRow(strings[MobileString.ShareExpiry], share.expireAtEpochMs?.let(dateTime::formatDateTime) ?: strings[MobileString.ShareNeverExpires]) }
                 item { ShareDetailRow(strings[MobileString.ShareStatus], shareStatus(share, dateTime)) }
                 item { ShareDetailRow(strings[MobileString.ShareMaxVisits], share.maxVisits?.toString() ?: strings[MobileString.ShareUnlimited]) }
                 item { Text(strings.format(MobileString.ShareVisits, share.visitCount)) }
                 item { Text(strings.format(MobileString.ShareDownloads, share.downloadCount)) }
                 item {
-                    if (share.hasPassword) {
+                    if (share.hasPassword && state.selectedCanEdit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(if (state.passwordVisible) state.revealedPassword.orEmpty() else "••••", Modifier.weight(1f))
                             TextButton(onClick = onRevealPassword, enabled = !state.passwordLoading, modifier = Modifier.testTag("share-password-toggle")) {
@@ -251,11 +268,13 @@ fun ShareDetailScreen(
                                 modifier = Modifier.testTag("share-password-copy"),
                             ) { Icon(Icons.Default.ContentCopy, strings[MobileString.CopyPassword]) }
                         }
-                    } else Text(strings[MobileString.ShareNoPassword])
+                    } else if (!share.hasPassword) Text(strings[MobileString.ShareNoPassword])
                 }
                 item { Button(onClick = { copy(MobileString.ShareLink, share.shareUrl) }, modifier = Modifier.fillMaxWidth().testTag("share-detail-copy")) { Text(strings[MobileString.CopyLink]) } }
-                item { OutlinedButton(onClick = { editOpen = true }, modifier = Modifier.fillMaxWidth().testTag("share-edit")) { Icon(Icons.Default.Edit, null); Text(strings[MobileString.EditShare]) } }
-                item { OutlinedButton(onClick = { cancelConfirm = true }, enabled = !state.canceling, modifier = Modifier.fillMaxWidth().testTag("share-cancel")) { Icon(Icons.Default.Delete, null); Text(strings[MobileString.CancelShare]) } }
+                if (state.selectedCanEdit) {
+                    item { OutlinedButton(onClick = { editOpen = true }, modifier = Modifier.fillMaxWidth().testTag("share-edit")) { Icon(Icons.Default.Edit, null); Text(strings[MobileString.EditShare]) } }
+                    item { OutlinedButton(onClick = { cancelConfirm = true }, enabled = !state.canceling, modifier = Modifier.fillMaxWidth().testTag("share-cancel")) { Icon(Icons.Default.Delete, null); Text(strings[MobileString.CancelShare]) } }
+                }
                 state.detailError?.let { item { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) } }
             }
         }
@@ -273,10 +292,29 @@ fun ShareDetailScreen(
     )
 }
 
+@Composable
+private fun ShareDetailFallback(onBack: (() -> Unit)?, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        if (onBack != null) ShareDetailBack(onBack)
+        Box(Modifier.fillMaxWidth().weight(1f)) { content() }
+    }
+}
+
+@Composable
+private fun ShareDetailBack(onBack: () -> Unit) {
+    val strings = LocalMobileStrings.current
+    Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack, modifier = Modifier.testTag("team-share-detail-back")) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent])
+        }
+        Text(strings[MobileString.TeamSharesTitle], style = MaterialTheme.typography.titleLarge)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareCreatorOverlay(
-    state: PersonalSharesState,
+    state: ShareManagementState,
     wide: Boolean,
     dateTime: LocalDateTimeService,
     clipboard: ClipboardService,
@@ -300,7 +338,7 @@ fun ShareCreatorOverlay(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShareCreateContent(
-    state: PersonalSharesState,
+    state: ShareManagementState,
     dateTime: LocalDateTimeService,
     clipboard: ClipboardService,
     onCreate: (String?, Long?, Int?) -> Unit,
@@ -324,6 +362,16 @@ private fun ShareCreateContent(
         }
         return
     }
+    val normalizedPassword = password.trim()
+    val parsedMaxVisits = maxVisits.toIntOrNull()
+    val expires = expiryEpoch(expiry, customDate, hour, minute, dateTime)
+    val localError = when {
+        normalizedPassword.isNotEmpty() && normalizedPassword.length !in 4..16 -> MobileString.ErrorSharePasswordLength
+        maxVisits.isNotEmpty() && (parsedMaxVisits == null || parsedMaxVisits < 1) -> MobileString.ErrorShareMaxVisits
+        expiry == ShareExpiryChoice.CUSTOM && customDate == null -> MobileString.ShareChooseDate
+        expires != null && expires <= dateTime.nowEpochMillis() -> MobileString.ErrorShareExpiryPast
+        else -> null
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("share-create-form")) {
         Text(state.createTarget?.fileName.orEmpty(), style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(password, { password = it }, label = { Text(strings[MobileString.SharePassword]) }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth().testTag("share-create-password"))
@@ -338,13 +386,13 @@ private fun ShareCreateContent(
                 OutlinedTextField(minute, { minute = it.filter(Char::isDigit).take(2) }, label = { Text(strings[MobileString.ShareMinute]) }, modifier = Modifier.weight(1f))
             }
         }
-        state.createError?.let { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) }
+        localError?.let { Text(strings[it], color = MaterialTheme.colorScheme.error) }
+            ?: state.createError?.let { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) }
         Button(
             onClick = {
-                val expires = expiryEpoch(expiry, customDate, hour, minute, dateTime)
-                onCreate(password.takeIf(String::isNotBlank), expires, maxVisits.toIntOrNull())
+                onCreate(normalizedPassword.takeIf(String::isNotEmpty), expires, parsedMaxVisits)
             },
-            enabled = !state.creating,
+            enabled = !state.creating && localError == null,
             modifier = Modifier.fillMaxWidth().testTag("share-create-submit"),
         ) { if (state.creating) CircularProgressIndicator() else Text(strings[MobileString.CreateShare]) }
         TextButton(onClick = onDismiss, enabled = !state.creating, modifier = Modifier.fillMaxWidth()) { Text(strings[MobileString.Cancel]) }
@@ -363,7 +411,7 @@ private fun ShareCreateContent(
 @Composable
 private fun ShareEditDialog(
     share: ShareLink,
-    state: PersonalSharesState,
+    state: ShareManagementState,
     dateTime: LocalDateTimeService,
     onDismiss: () -> Unit,
     onSave: (UpdatePersonalShareRequest) -> Unit,
@@ -378,6 +426,16 @@ private fun ShareEditDialog(
     var hour by remember { mutableStateOf(share.expireAtEpochMs?.let(dateTime::hourOfDay)?.toString() ?: "12") }
     var minute by remember { mutableStateOf(share.expireAtEpochMs?.let(dateTime::minuteOfHour)?.toString()?.padStart(2, '0') ?: "00") }
     var dateDialog by remember { mutableStateOf(false) }
+    val normalizedPassword = password.trim()
+    val parsedMaxVisits = maxVisits.toIntOrNull()
+    val expires = expiryEpoch(expiry, customDate, hour, minute, dateTime)
+    val localError = when {
+        passwordMode == SharePasswordEdit.SET && normalizedPassword.length !in 4..16 -> MobileString.ErrorSharePasswordLength
+        !clearMax && (parsedMaxVisits == null || parsedMaxVisits < 1) -> MobileString.ErrorShareMaxVisits
+        expiry == ShareExpiryChoice.CUSTOM && customDate == null -> MobileString.ShareChooseDate
+        expires != null && expires <= dateTime.nowEpochMillis() -> MobileString.ErrorShareExpiryPast
+        else -> null
+    }
     AlertDialog(
         onDismissRequest = { if (!state.updating) onDismiss() },
         title = { Text(strings[MobileString.EditShare]) },
@@ -406,19 +464,20 @@ private fun ShareEditDialog(
                         OutlinedTextField(minute, { minute = it.filter(Char::isDigit).take(2) }, label = { Text(strings[MobileString.ShareMinute]) }, modifier = Modifier.weight(1f))
                     }
                 }
-                state.updateError?.let { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) }
+                localError?.let { Text(strings[it], color = MaterialTheme.colorScheme.error) }
+                    ?: state.updateError?.let { Text(strings.resolve(it).orEmpty(), color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = { Button(onClick = {
             onSave(UpdatePersonalShareRequest(
-                password = password.takeIf { passwordMode == SharePasswordEdit.SET },
-                expireAt = expiryEpoch(expiry, customDate, hour, minute, dateTime),
-                maxVisits = maxVisits.toIntOrNull().takeUnless { clearMax },
+                password = normalizedPassword.takeIf { passwordMode == SharePasswordEdit.SET },
+                expireAt = expires,
+                maxVisits = parsedMaxVisits.takeUnless { clearMax },
                 clearPassword = passwordMode == SharePasswordEdit.REMOVE,
                 clearExpireAt = expiry == ShareExpiryChoice.NEVER,
                 clearMaxVisits = clearMax,
             ))
-        }, enabled = !state.updating) { Text(strings[MobileString.Save]) } },
+        }, enabled = !state.updating && localError == null) { Text(strings[MobileString.Save]) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(strings[MobileString.Cancel]) } },
     )
     if (dateDialog) {

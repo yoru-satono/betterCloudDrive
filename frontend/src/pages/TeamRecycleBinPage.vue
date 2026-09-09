@@ -12,8 +12,8 @@ import { useFormatters } from '@/composables/useFormatters'
 import { useConfirm } from '@/composables/useConfirm'
 import * as teamsApi from '@/api/teams'
 import { toast } from 'vue-sonner'
-import type { FileEntity } from '@/types/file'
-import type { Team } from '@/types/team'
+import type { RecycleBinItem } from '@/types/file'
+import type { Team, TeamEffectivePermission } from '@/types/team'
 
 const route = useRoute()
 const router = useRouter()
@@ -22,11 +22,14 @@ const { confirm } = useConfirm()
 
 const teamId = computed(() => Number(route.params.teamId))
 const team = ref<Team | null>(null)
-const files = ref<FileEntity[]>([])
+const files = ref<RecycleBinItem[]>([])
 const loading = ref(false)
 const selected = ref<Set<number>>(new Set())
+const permissions = ref<Record<number, TeamEffectivePermission>>({})
 
-const canWrite = computed(() => ['OWNER', 'ADMIN', 'EDITOR'].includes(team.value?.role || ''))
+const canEmpty = computed(() => ['OWNER', 'ADMIN'].includes(team.value?.role || ''))
+const selectedCanRestore = computed(() => [...selected.value].every(id => permissions.value[id]?.canWrite))
+const selectedCanDelete = computed(() => [...selected.value].every(id => permissions.value[id]?.canDelete))
 
 async function load() {
   if (!Number.isFinite(teamId.value)) return
@@ -39,13 +42,14 @@ async function load() {
     team.value = teamRes.data.data
     files.value = fileRes.data.data.records
     selected.value.clear()
+    permissions.value = {}
   } finally {
     loading.value = false
   }
 }
 
 async function restore() {
-  if (!canWrite.value) return
+  if (!selectedCanRestore.value) return
   const ids = [...selected.value]
   if (!ids.length) return
   await teamsApi.restoreTeamFiles(teamId.value, ids)
@@ -54,7 +58,7 @@ async function restore() {
 }
 
 async function permanentDelete() {
-  if (!canWrite.value) return
+  if (!selectedCanDelete.value) return
   const ids = [...selected.value]
   if (!ids.length) return
   const ok = await confirm(__t('team.recyclebin.deletePermanently'), __t('team.teamrecyclebin.teamFilesWillBePermanentlyDeletedAndCannotBeRecovered', { p0: ids.length }))
@@ -65,7 +69,7 @@ async function permanentDelete() {
 }
 
 async function emptyBin() {
-  if (!canWrite.value) return
+  if (!canEmpty.value) return
   const ok = await confirm(__t('team.teamrecyclebin.emptyTheTeamRecycleBin'), __t('team.teamrecyclebin.allFilesInTheTeamRecycleBinWillBePermanently'))
   if (!ok) return
   await teamsApi.emptyTeamRecycleBin(teamId.value)
@@ -73,9 +77,21 @@ async function emptyBin() {
   await load()
 }
 
-function toggle(id: number) {
-  if (selected.value.has(id)) selected.value.delete(id)
-  else selected.value.add(id)
+async function toggle(id: number) {
+  if (selected.value.has(id)) {
+    selected.value.delete(id)
+    return
+  }
+  if (!permissions.value[id]) {
+    try {
+      const response = await teamsApi.getTeamFileEffectivePermission(teamId.value, id)
+      permissions.value[id] = response.data.data
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : __t('error.internal'))
+      return
+    }
+  }
+  selected.value.add(id)
 }
 
 watch(teamId, () => load())
@@ -91,9 +107,9 @@ onMounted(load)
       </div>
       <div class="team-bin__actions">
         <OButton variant="ghost" size="sm" @click="router.push({ name: 'TeamFiles', params: { teamId } })">{{ __t('team.teamrecyclebin.returnFile') }}</OButton>
-        <OButton v-if="canWrite && selected.size > 0" variant="ghost" size="sm" @click="restore">{{ __t('team.recyclebin.recover') }}{{ selected.size }})</OButton>
-        <OButton v-if="canWrite && selected.size > 0" variant="danger" size="sm" @click="permanentDelete">{{ __t('team.recyclebin.deletePermanentlyCountPrefix') }}{{ selected.size }})</OButton>
-        <OButton v-if="canWrite && files.length > 0" variant="danger" size="sm" @click="emptyBin">{{ __t('team.recyclebin.emptyRecycleBin') }}</OButton>
+        <OButton v-if="selected.size > 0 && selectedCanRestore" variant="ghost" size="sm" @click="restore">{{ __t('team.recyclebin.recover') }}{{ selected.size }})</OButton>
+        <OButton v-if="selected.size > 0 && selectedCanDelete" variant="danger" size="sm" @click="permanentDelete">{{ __t('team.recyclebin.deletePermanentlyCountPrefix') }}{{ selected.size }})</OButton>
+        <OButton v-if="canEmpty && files.length > 0" variant="danger" size="sm" @click="emptyBin">{{ __t('team.recyclebin.emptyRecycleBin') }}</OButton>
       </div>
     </div>
 
@@ -125,7 +141,7 @@ onMounted(load)
           <span class="truncate">{{ file.fileName }}</span>
         </div>
         <div class="team-bin__size font-mono">{{ file.fileType === 'folder' ? '-' : formatSize(file.fileSize) }}</div>
-        <div class="team-bin__date">{{ formatDate(file.updatedAt) }}</div>
+        <div class="team-bin__date">{{ formatDate(file.deletedAt) }}</div>
       </div>
     </div>
   </div>

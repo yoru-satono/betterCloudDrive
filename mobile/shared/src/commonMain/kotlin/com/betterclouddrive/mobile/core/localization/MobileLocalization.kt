@@ -399,6 +399,7 @@ enum class MobileString(internal val resource: StringResource) {
     ErrorInvalidTagName(Res.string.error_invalid_tag_name),
     ErrorInvalidTagColor(Res.string.error_invalid_tag_color),
     SharesTitle(Res.string.shares_title),
+    TeamSharesTitle(Res.string.team_shares_title),
     CreateShare(Res.string.create_share),
     SearchShares(Res.string.search_shares),
     SharesEmpty(Res.string.shares_empty),

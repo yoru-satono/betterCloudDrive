@@ -41,9 +41,12 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Upload
@@ -285,8 +288,12 @@ fun TeamBrowserScreen(
     onToggleFavorite: (FileItem) -> Unit,
     onConsumeFavoriteFeedback: () -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
     onOpenFavorites: () -> Unit,
     onOpenTags: () -> Unit,
+    onOpenShares: () -> Unit,
+    onOpenRecycleBin: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
@@ -375,6 +382,18 @@ fun TeamBrowserScreen(
                             onClick = { organizeMenu = false; onOpenTags() },
                             modifier = Modifier.testTag("team-organize-tags"),
                         )
+                        DropdownMenuItem(
+                            text = { Text(strings[MobileString.TeamSharesTitle]) },
+                            leadingIcon = { Icon(Icons.Default.Share, null) },
+                            onClick = { organizeMenu = false; onOpenShares() },
+                            modifier = Modifier.testTag("team-organize-shares"),
+                        )
+                        DropdownMenuItem(
+                            text = { Text(strings[MobileString.RecycleBinTitle]) },
+                            leadingIcon = { Icon(Icons.Default.DeleteForever, null) },
+                            onClick = { organizeMenu = false; onOpenRecycleBin() },
+                            modifier = Modifier.testTag("team-organize-recycle-bin"),
+                        )
                     }
                 }
                 Box {
@@ -439,7 +458,8 @@ fun TeamBrowserScreen(
                             state, actions, onOpenFolder, onSelect, onLoadMore, onRequestPermission,
                             onToggleSelection, { renameTarget = it }, onOpenMovePicker,
                             { deleteTargets = listOf(it) }, ::download, onManagePermissions,
-                            favorites, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                            favorites, onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare,
+                            onOpenVersions,
                         )
                     }
                 }
@@ -452,6 +472,7 @@ fun TeamBrowserScreen(
                     onManagePermissions,
                     Modifier.weight(.38f).fillMaxSize(),
                     favorites, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                    onCreateShare, onOpenVersions,
                 )
             }
         }
@@ -463,6 +484,7 @@ fun TeamBrowserScreen(
             onManagePermissions,
             Modifier.fillMaxWidth(),
             favorites, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+            onCreateShare, onOpenVersions,
         )
     }
     if (createDialog) TeamNameDialog(
@@ -523,6 +545,8 @@ private fun TeamDirectoryContent(
     onLoadFavoriteStatus: (FileItem) -> Unit,
     onToggleFavorite: (FileItem) -> Unit,
     onManageTags: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     val current = state.current
@@ -539,6 +563,7 @@ private fun TeamDirectoryContent(
                     onManagePermissions,
                     favorites.favoriteStatus[file.id], file.id in favorites.statusLoading,
                     favorites.mutatingFileId == file.id, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                    onCreateShare, onOpenVersions,
                 )
                 if (file.id == current.items.lastOrNull()?.id && current.hasMore) LaunchedEffect(file.id) { onLoadMore() }
             }
@@ -553,6 +578,7 @@ private fun TeamDirectoryContent(
                     onManagePermissions,
                     favorites.favoriteStatus[file.id], file.id in favorites.statusLoading,
                     favorites.mutatingFileId == file.id, onLoadFavoriteStatus, onToggleFavorite, onManageTags,
+                    onCreateShare, onOpenVersions,
                 )
                 if (file.id == current.items.lastOrNull()?.id && current.hasMore) LaunchedEffect(file.id) { onLoadMore() }
             }
@@ -580,6 +606,9 @@ private fun TeamFileRow(
     favorite: Boolean? = null, favoriteLoading: Boolean = false, favoriteMutating: Boolean = false,
     onLoadFavoriteStatus: (FileItem) -> Unit = {}, onToggleFavorite: (FileItem) -> Unit = {},
     onManageTags: (FileItem) -> Unit = {},
+    onCreateShare: (FileItem) -> Unit = {},
+    onOpenVersions: (FileItem) -> Unit = {},
+    shareFocusedActions: Boolean = false,
 ) {
     Row(
         Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)
@@ -590,7 +619,8 @@ private fun TeamFileRow(
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) { Text(file.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(formatFileSize(file.fileSize)) }
         TeamFileActionMenu(file, permission, onRequestPermission, onRename, onMove, onDelete, onDownload, onManagePermissions,
-            favorite, favoriteLoading, favoriteMutating, onLoadFavoriteStatus, onToggleFavorite, onManageTags)
+            favorite, favoriteLoading, favoriteMutating, onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare, onOpenVersions,
+            shareFocusedActions)
     }
     HorizontalDivider()
 }
@@ -605,6 +635,9 @@ private fun TeamFileCard(
     favorite: Boolean? = null, favoriteLoading: Boolean = false, favoriteMutating: Boolean = false,
     onLoadFavoriteStatus: (FileItem) -> Unit = {}, onToggleFavorite: (FileItem) -> Unit = {},
     onManageTags: (FileItem) -> Unit = {},
+    onCreateShare: (FileItem) -> Unit = {},
+    onOpenVersions: (FileItem) -> Unit = {},
+    shareFocusedActions: Boolean = false,
 ) {
     Card(Modifier.padding(8.dp).combinedClickable(onClick = onClick, onLongClick = onLongClick).testTag("team-grid-${file.id}")) {
         Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -612,7 +645,8 @@ private fun TeamFileCard(
             Text(file.fileName, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(formatFileSize(file.fileSize), style = MaterialTheme.typography.labelSmall)
             TeamFileActionMenu(file, permission, onRequestPermission, onRename, onMove, onDelete, onDownload, onManagePermissions,
-                favorite, favoriteLoading, favoriteMutating, onLoadFavoriteStatus, onToggleFavorite, onManageTags)
+                favorite, favoriteLoading, favoriteMutating, onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare, onOpenVersions,
+                shareFocusedActions)
         }
     }
 }
@@ -628,6 +662,9 @@ private fun TeamFileDetails(
     onLoadFavoriteStatus: (FileItem) -> Unit = {},
     onToggleFavorite: (FileItem) -> Unit = {},
     onManageTags: (FileItem) -> Unit = {},
+    onCreateShare: (FileItem) -> Unit = {},
+    onOpenVersions: (FileItem) -> Unit = {},
+    shareFocusedActions: Boolean = false,
 ) {
     val strings = LocalMobileStrings.current
     if (file == null) return
@@ -661,9 +698,12 @@ private fun TeamFileDetails(
         if (!file.isFolder) OutlinedButton({ onDownload(file) }, Modifier.testTag("team-download-${file.id}")) {
             Icon(Icons.Default.Download, null); Text(strings[MobileString.Download])
         }
+        if (!file.isFolder) OutlinedButton({ onOpenVersions(file) }, Modifier.testTag("team-detail-versions-${file.id}")) {
+            Icon(Icons.Default.History, null); Text(strings[MobileString.VersionHistory])
+        }
         TeamFileActionMenu(file, actions.itemPermissions[file.id], { onRequestPermission(file) }, onRename, onMove, onDelete, onDownload, onManagePermissions,
             favorites.favoriteStatus[file.id], file.id in favorites.statusLoading, favorites.mutatingFileId == file.id,
-            onLoadFavoriteStatus, onToggleFavorite, onManageTags)
+            onLoadFavoriteStatus, onToggleFavorite, onManageTags, onCreateShare, onOpenVersions, shareFocusedActions)
     }
 }
 
@@ -683,6 +723,9 @@ private fun TeamFileActionMenu(
     onLoadFavoriteStatus: (FileItem) -> Unit = {},
     onToggleFavorite: (FileItem) -> Unit = {},
     onManageTags: (FileItem) -> Unit = {},
+    onCreateShare: (FileItem) -> Unit = {},
+    onOpenVersions: (FileItem) -> Unit = {},
+    shareFocusedActions: Boolean = false,
 ) {
     val strings = LocalMobileStrings.current
     var expanded by remember { mutableStateOf(false) }
@@ -691,23 +734,33 @@ private fun TeamFileActionMenu(
             Icon(Icons.Default.MoreVert, strings[MobileString.MoreActions])
         }
         DropdownMenu(expanded, { expanded = false }) {
-            DropdownMenuItem(
+            if (!shareFocusedActions) DropdownMenuItem(
                 text = { Text(strings[if (favorite == true) MobileString.RemoveFavorite else MobileString.AddFavorite]) },
                 leadingIcon = { Icon(if (favorite == true) Icons.Default.Star else Icons.Default.StarBorder, null) },
                 enabled = favorite != null && !favoriteLoading && !favoriteMutating,
                 onClick = { expanded = false; onToggleFavorite(file) },
                 modifier = Modifier.testTag("team-favorite-${file.id}"),
             )
-            if (permission?.canWrite == true) DropdownMenuItem(
+            if (!shareFocusedActions && permission?.canWrite == true) DropdownMenuItem(
                 text = { Text(strings[MobileString.ManageTags]) }, leadingIcon = { Icon(Icons.Default.Label, null) },
                 onClick = { expanded = false; onManageTags(file) },
                 modifier = Modifier.testTag("team-tags-${file.id}"),
+            )
+            if (permission?.canShare == true) DropdownMenuItem(
+                text = { Text(strings[MobileString.CreateShare]) }, leadingIcon = { Icon(Icons.Default.Share, null) },
+                onClick = { expanded = false; onCreateShare(file) },
+                modifier = Modifier.testTag("team-share-${file.id}"),
+            )
+            if (!file.isFolder) DropdownMenuItem(
+                text = { Text(strings[MobileString.VersionHistory]) }, leadingIcon = { Icon(Icons.Default.History, null) },
+                onClick = { expanded = false; onOpenVersions(file) },
+                modifier = Modifier.testTag("team-versions-${file.id}"),
             )
             if (!file.isFolder) DropdownMenuItem(
                 text = { Text(strings[MobileString.Download]) }, leadingIcon = { Icon(Icons.Default.Download, null) },
                 onClick = { expanded = false; onDownload(file) },
             )
-            if (permission?.canWrite == true) {
+            if (!shareFocusedActions && permission?.canWrite == true) {
                 DropdownMenuItem(
                     text = { Text(strings[MobileString.Rename]) }, leadingIcon = { Icon(Icons.Default.Edit, null) },
                     onClick = { expanded = false; onRename(file) },
@@ -717,11 +770,11 @@ private fun TeamFileActionMenu(
                     onClick = { expanded = false; onMove(file) },
                 )
             }
-            if (permission?.canDelete == true) DropdownMenuItem(
+            if (!shareFocusedActions && permission?.canDelete == true) DropdownMenuItem(
                 text = { Text(strings[MobileString.Delete]) }, leadingIcon = { Icon(Icons.Default.Delete, null) },
                 onClick = { expanded = false; onDelete(file) },
             )
-            if (permission?.canManage == true) DropdownMenuItem(
+            if (!shareFocusedActions && permission?.canManage == true) DropdownMenuItem(
                 text = { Text(strings[MobileString.ManagePermissions]) },
                 onClick = { expanded = false; onManagePermissions(file) },
             )
@@ -809,6 +862,7 @@ private fun TeamDetailRow(label: String, value: String) {
 @Composable
 internal fun TeamSearchScreen(
     state: TeamSearchState,
+    actions: TeamFileActionsState,
     documentPicker: DocumentPicker,
     onBack: () -> Unit,
     onQuery: (String) -> Unit,
@@ -819,6 +873,9 @@ internal fun TeamSearchScreen(
     onOpenLocation: (FileItem) -> Unit,
     onPreview: (FileItem) -> Unit,
     onDownload: (FileItem, String) -> Unit,
+    onRequestPermission: (FileItem) -> Unit,
+    onCreateShare: (FileItem) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var selectedUnsupported by remember { mutableStateOf<FileItem?>(null) }
@@ -857,12 +914,15 @@ internal fun TeamSearchScreen(
                 items(state.items, key = FileItem::id) { file ->
                     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                         TeamFileRow(
-                            file, false, null,
+                            file, false, actions.itemPermissions[file.id],
                             {
                                 if (file.isFolder) onOpenFolder(file)
                                 else if (file.previewKind() != PreviewKind.UNSUPPORTED) onPreview(file)
-                                else selectedUnsupported = file
-                            }, {}, {}, {}, {}, {}, ::download, {},
+                                else { onRequestPermission(file); selectedUnsupported = file }
+                            }, {}, { onRequestPermission(file) }, {}, {}, {}, ::download, {},
+                            onCreateShare = onCreateShare,
+                            onOpenVersions = onOpenVersions,
+                            shareFocusedActions = true,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton({ onOpenLocation(file) }, Modifier.testTag("team-open-location-${file.id}")) { Text(strings[MobileString.OpenLocation]) }
@@ -883,7 +943,10 @@ internal fun TeamSearchScreen(
     } }
     selectedUnsupported?.let { file -> ModalBottomSheet(onDismissRequest = { selectedUnsupported = null }) {
         TeamFileDetails(
-            file, TeamFileActionsState(), onPreview, {}, {}, {}, {}, ::download, {}, Modifier.fillMaxWidth(),
+            file, actions, onPreview, onRequestPermission, {}, {}, {}, ::download, {}, Modifier.fillMaxWidth(),
+            onCreateShare = onCreateShare,
+            onOpenVersions = onOpenVersions,
+            shareFocusedActions = true,
         )
     } }
 }
@@ -900,6 +963,7 @@ internal fun TeamPreviewScreen(
     onPositionChanged: (Long) -> Unit,
     onRendererError: (UiMessage) -> Unit,
     onDownload: (FileItem, String) -> Unit,
+    onOpenVersions: (FileItem) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var officeStatus by remember(state.teamId, state.fileId) { mutableStateOf<UiMessage?>(null) }
@@ -914,9 +978,14 @@ internal fun TeamPreviewScreen(
         topBar = { TopAppBar(
             title = { Column { Text(state.file?.fileName ?: strings[MobileString.Preview]); Text(strings[MobileString.TeamReadOnly], style = MaterialTheme.typography.labelSmall) } },
             navigationIcon = { IconButton(onBack, Modifier.testTag("team-preview-back")) { Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent]) } },
-            actions = { state.file?.takeIf { !it.isFolder }?.let { file -> IconButton({
-                pendingDownload = file; downloadLauncher(DownloadRequest(file.fileName, file.mimeType))
-            }, Modifier.testTag("team-preview-download")) { Icon(Icons.Default.Download, strings[MobileString.Download]) } } },
+            actions = { state.file?.takeIf { !it.isFolder }?.let { file ->
+                IconButton({ onOpenVersions(file) }, Modifier.testTag("team-preview-versions")) {
+                    Icon(Icons.Default.History, strings[MobileString.VersionHistory])
+                }
+                IconButton({
+                    pendingDownload = file; downloadLauncher(DownloadRequest(file.fileName, file.mimeType))
+                }, Modifier.testTag("team-preview-download")) { Icon(Icons.Default.Download, strings[MobileString.Download]) }
+            } },
         ) },
     ) { padding -> Box(Modifier.fillMaxSize().padding(padding), Alignment.Center) {
         when {

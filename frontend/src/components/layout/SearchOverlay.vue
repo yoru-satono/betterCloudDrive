@@ -22,12 +22,13 @@ import FileContextMenu from '@/components/file/FileContextMenu.vue'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { downloadFile, downloadFolderZip } from '@/api/download'
 import { usePreviewStore } from '@/stores/preview'
-import type { FileEntity } from '@/types/file'
+import type { FileEntity, RecycleBinItem } from '@/types/file'
 import type { ShareLinkEntity } from '@/types/share'
 import type { TagEntity } from '@/types/tag'
 
 type SearchResult =
-  | { type: 'file'; source: SearchMode | 'tag-files'; file: FileEntity }
+  | { type: 'file'; source: Exclude<SearchMode, 'recycle'> | 'tag-files'; file: FileEntity }
+  | { type: 'file'; source: 'recycle'; file: RecycleBinItem }
   | { type: 'share'; share: ShareLinkEntity }
   | { type: 'tag'; tag: TagEntity }
 
@@ -154,7 +155,6 @@ async function openFileResult(file: FileEntity) {
 
 function openSearchContextMenu(result: SearchResult, event: MouseEvent) {
   if (result.type !== 'file') return
-  const file = result.file
   if (result.source === 'recycle') {
     ctx.open(event, [
       {
@@ -164,6 +164,7 @@ function openSearchContextMenu(result: SearchResult, event: MouseEvent) {
     ])
     return
   }
+  const file = result.file
   const handled = dispatchFileAction({ action: 'context-menu', file, event, afterAction: handleClose })
   if (handled) return
   ctx.open(event, [

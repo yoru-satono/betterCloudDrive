@@ -40,6 +40,8 @@ import com.betterclouddrive.web.dto.response.DownloadTicketResponse;
 import com.betterclouddrive.web.dto.response.ShareLinkResponse;
 import com.betterclouddrive.web.dto.response.ShareLinkResponseMapper;
 import com.betterclouddrive.web.dto.response.SharePasswordResponse;
+import com.betterclouddrive.web.dto.response.RecycleBinItemResponse;
+import com.betterclouddrive.web.dto.response.FileVersionResponse;
 import com.betterclouddrive.web.dto.response.TeamInviteResponse;
 import com.betterclouddrive.web.dto.response.TeamMemberResponse;
 import com.betterclouddrive.web.dto.response.TeamFilePermissionResponse;
@@ -586,14 +588,17 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}/recycle-bin")
-    public ApiResponse<PageResult<FileEntity>> listRecycleBin(
+    public ApiResponse<PageResult<RecycleBinItemResponse>> listRecycleBin(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
         teamService.requireRead(user.getUserId(), teamId);
-        return ApiResponse.success(fileService.listTeamRecycleBin(user.getUserId(), teamId, q, page, size));
+        PageResult<FileEntity> result = fileService.listTeamRecycleBin(user.getUserId(), teamId, q, page, size);
+        return ApiResponse.success(PageResult.of(
+                result.getRecords().stream().map(RecycleBinItemResponse::from).toList(),
+                result.getTotal(), result.getPage(), result.getSize()));
     }
 
     @PostMapping("/{teamId}/recycle-bin/{fileId}/restore")
@@ -601,7 +606,7 @@ public class TeamController {
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long fileId) {
-        teamPermissionService.requireDelete(user.getUserId(), teamId, fileId);
+        teamPermissionService.requireWrite(user.getUserId(), teamId, fileId);
         fileService.restoreTeamFile(teamId, user.getUserId(), fileId);
         return ApiResponse.success();
     }
@@ -634,12 +639,14 @@ public class TeamController {
     }
 
     @GetMapping("/{teamId}/files/{fileId}/versions")
-    public ApiResponse<List<FileVersionEntity>> listVersions(
+    public ApiResponse<List<FileVersionResponse>> listVersions(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long fileId) {
         teamPermissionService.requireRead(user.getUserId(), teamId, fileId);
-        return ApiResponse.success(fileVersionService.listTeamVersions(teamId, fileId));
+        return ApiResponse.success(fileVersionService.listTeamVersions(teamId, fileId).stream()
+                .map(FileVersionResponse::from)
+                .toList());
     }
 
     @GetMapping("/{teamId}/files/{fileId}/versions/{versionNumber}/download")
@@ -798,7 +805,9 @@ public class TeamController {
             @PathVariable Long shareId) {
         ShareLinkEntity share = shareService.getTeamShare(teamId, shareId);
         teamPermissionService.requireShare(user.getUserId(), teamId, share.getFileId());
-        return ApiResponse.success(new SharePasswordResponse(shareService.getTeamSharePassword(teamId, shareId)));
+        TeamMemberEntity member = teamService.requireRead(user.getUserId(), teamId);
+        return ApiResponse.success(new SharePasswordResponse(shareService.getTeamSharePassword(
+                user.getUserId(), canManageAllShares(member, share.getFileId()), teamId, shareId)));
     }
 
     @PutMapping("/{teamId}/shares/{shareId}")

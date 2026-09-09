@@ -102,6 +102,11 @@ class ShareServiceImplTest {
         assertThat(result.getRecords()).extracting(ShareLinkEntity::getId).containsExactly(11L);
         assertThat(result.getTotal()).isEqualTo(2);
         assertThat(result.getPages()).isEqualTo(2);
+        verify(shareLinkRepository).findAll(any(Specification.class), argThat((Sort sort) ->
+                sort.getOrderFor("createdAt") != null
+                        && sort.getOrderFor("createdAt").isDescending()
+                        && sort.getOrderFor("id") != null
+                        && sort.getOrderFor("id").isDescending()));
     }
 
     @Test
@@ -159,6 +164,41 @@ class ShareServiceImplTest {
 
         assertThat(share.getIsCanceled()).isTrue();
         verify(teamAuditService).record(eq(10L), eq(3L), eq("SHARE_CANCEL"), eq("SHARE"), eq(1L), contains("teamshare"));
+    }
+
+    @Test
+    void getTeamSharePassword_shouldAllowCreator() {
+        ShareLinkEntity share = activeShare("teamshare", 2L, 5L);
+        share.setTeamId(10L);
+        share.setPasswordCiphertext("cipher");
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+        when(sharePasswordCryptoService.decrypt("cipher")).thenReturn("secret");
+
+        assertThat(shareService.getTeamSharePassword(2L, false, 10L, 1L)).isEqualTo("secret");
+    }
+
+    @Test
+    void getTeamSharePassword_shouldAllowFileManager() {
+        ShareLinkEntity share = activeShare("teamshare", 2L, 5L);
+        share.setTeamId(10L);
+        share.setPasswordCiphertext("cipher");
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+        when(sharePasswordCryptoService.decrypt("cipher")).thenReturn("secret");
+
+        assertThat(shareService.getTeamSharePassword(3L, true, 10L, 1L)).isEqualTo("secret");
+    }
+
+    @Test
+    void getTeamSharePassword_shouldRejectUnrelatedMember() {
+        ShareLinkEntity share = activeShare("teamshare", 2L, 5L);
+        share.setTeamId(10L);
+        share.setPasswordCiphertext("cipher");
+        when(shareLinkRepository.findById(1L)).thenReturn(Optional.of(share));
+
+        assertThatThrownBy(() -> shareService.getTeamSharePassword(3L, false, 10L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getCode()).isEqualTo(403));
+        verify(sharePasswordCryptoService, never()).decrypt(anyString());
     }
 
     @Test

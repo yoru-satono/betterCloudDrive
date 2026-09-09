@@ -665,7 +665,7 @@ class FileServiceImplTest {
         FileEntity file = FileEntity.builder()
                 .id(1L).teamId(10L).parentId(null).fileName("doc.txt")
                 .isDeleted(true).deletedAt(LocalDateTime.now()).build();
-        when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(file));
         when(fileRepository.existsByTeamIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(10L, "doc.txt"))
                 .thenReturn(false);
         when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
@@ -677,8 +677,38 @@ class FileServiceImplTest {
     }
 
     @Test
+    void restoreTeamFile_shouldRestoreOnlyTheMatchingDeletedTreeAndRestoreQuota() {
+        LocalDateTime marker = LocalDateTime.now();
+        FileEntity folder = FileEntity.builder()
+                .id(1L).teamId(10L).fileName("docs").fileType("folder")
+                .isDeleted(true).deletedAt(marker).build();
+        FileEntity child = FileEntity.builder()
+                .id(2L).teamId(10L).parentId(1L).fileName("report.pdf").fileType("file")
+                .fileSize(64L).isDeleted(true).deletedAt(marker).build();
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(folder));
+        when(fileRepository.existsByTeamIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(10L, "docs"))
+                .thenReturn(false);
+        when(fileRepository.findAll(any(Specification.class)))
+                .thenReturn(List.of(child), List.of(), List.of(child), List.of());
+        when(fileVersionRepository.findByFileIdOrderByVersionNumberDesc(2L)).thenReturn(List.of());
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(
+                TeamEntity.builder().id(10L).storageUsed(10L).storageQuota(1000L).build()));
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.get("team:storage:incr:10")).thenReturn(null);
+        when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        fileService.restoreTeamFile(10L, 2L, 1L);
+
+        assertThat(folder.getIsDeleted()).isFalse();
+        assertThat(child.getIsDeleted()).isFalse();
+        verify(valueOps).increment("team:storage:incr:10", 64L);
+        verify(teamAuditService).record(10L, 2L, "FILE_RESTORE", "FILE", 1L, "docs");
+    }
+
+    @Test
     void listTeamRecycleBin_shouldReturnDeletedFiles() {
-        FileEntity file = FileEntity.builder().id(1L).teamId(10L).fileName("deleted.txt").build();
+        FileEntity file = FileEntity.builder().id(1L).teamId(10L).fileName("deleted.txt")
+                .isDeleted(true).deletedAt(LocalDateTime.now()).build();
         when(fileRepository.findAll(any(Specification.class), any(org.springframework.data.domain.Sort.class)))
                 .thenReturn(List.of(file));
         when(teamPermissionService.effectivePermissions(2L, 10L, 1L)).thenReturn(TeamEffectivePermission.viewer());
@@ -686,6 +716,57 @@ class FileServiceImplTest {
         PageResult<FileEntity> result = fileService.listTeamRecycleBin(2L, 10L, "deleted", 1, 20);
 
         assertThat(result.getRecords()).hasSize(1);
+    }
+
+    @Test
+    void listTeamRecycleBin_shouldExposeOnlyReadableDeletionRootsInStableOrder() {
+        LocalDateTime marker = LocalDateTime.now();
+        FileEntity root = FileEntity.builder().id(3L).teamId(10L).fileName("root")
+                .isDeleted(true).deletedAt(marker).build();
+        FileEntity nested = FileEntity.builder().id(2L).teamId(10L).parentId(3L).fileName("nested")
+                .isDeleted(true).deletedAt(marker).build();
+        FileEntity hidden = FileEntity.builder().id(1L).teamId(10L).fileName("hidden")
+                .isDeleted(true).deletedAt(marker.minusSeconds(1)).build();
+        when(fileRepository.findAll(any(Specification.class), any(Sort.class)))
+                .thenReturn(List.of(root, nested, hidden));
+        when(fileRepository.findById(3L)).thenReturn(Optional.of(root));
+        when(teamPermissionService.effectivePermissions(2L, 10L, 3L)).thenReturn(TeamEffectivePermission.viewer());
+        when(teamPermissionService.effectivePermissions(2L, 10L, 1L))
+                .thenReturn(new TeamEffectivePermission(false, false, false, false, false));
+
+        PageResult<FileEntity> result = fileService.listTeamRecycleBin(2L, 10L, null, 1, 50);
+
+        assertThat(result.getRecords()).extracting(FileEntity::getId).containsExactly(3L);
+        assertThat(result.getTotal()).isEqualTo(1);
+        ArgumentCaptor<Sort> sort = ArgumentCaptor.forClass(Sort.class);
+        verify(fileRepository).findAll(any(Specification.class), sort.capture());
+        assertThat(sort.getValue().stream())
+                .extracting(Sort.Order::getProperty, Sort.Order::getDirection)
+                .containsExactly(
+                        tuple("deletedAt", Sort.Direction.DESC),
+                        tuple("id", Sort.Direction.DESC));
+    }
+
+    @Test
+    void permanentDeleteTeamFile_shouldAuthorizeAndDeleteTheWholeDeletedTree() {
+        LocalDateTime marker = LocalDateTime.now();
+        FileEntity folder = FileEntity.builder().id(1L).teamId(10L).fileName("docs").fileType("folder")
+                .isDeleted(true).deletedAt(marker).build();
+        FileEntity child = FileEntity.builder().id(2L).teamId(10L).parentId(1L).fileName("old.txt")
+                .fileType("file").storagePath("teams/10/old.txt").isDeleted(false).deletedAt(marker).build();
+        when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(folder));
+        when(fileRepository.findAll(any(Specification.class)))
+                .thenReturn(List.of(child), List.of(), List.of(child), List.of());
+        when(fileVersionRepository.findByFileIdOrderByVersionNumberDesc(anyLong())).thenReturn(List.of());
+
+        fileService.permanentDeleteTeamFile(10L, 2L, 1L);
+
+        verify(teamPermissionService).requireDelete(2L, 10L, 1L);
+        verify(teamPermissionService).requireDelete(2L, 10L, 2L);
+        verify(storageService).deleteObject("teams/10/old.txt");
+        verify(fileRepository).deleteById(2L);
+        verify(fileRepository).deleteById(1L);
+        verify(teamAuditService).record(10L, 2L, "FILE_PERMANENT_DELETE", "FILE", 1L, "docs");
     }
 
     @Test

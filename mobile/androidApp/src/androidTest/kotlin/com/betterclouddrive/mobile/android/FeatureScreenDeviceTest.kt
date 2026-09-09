@@ -39,6 +39,10 @@ import com.betterclouddrive.mobile.app.TagsScreen
 import com.betterclouddrive.mobile.app.TeamBrowserScreen
 import com.betterclouddrive.mobile.app.TeamMembersScreen
 import com.betterclouddrive.mobile.app.TeamPermissionsOverlay
+import com.betterclouddrive.mobile.app.TeamRecycleBinScreen
+import com.betterclouddrive.mobile.app.TeamVersionsScreen
+import com.betterclouddrive.mobile.app.SharesScreen
+import com.betterclouddrive.mobile.app.ShareDetailScreen
 import com.betterclouddrive.mobile.app.NotificationsScreen
 import com.betterclouddrive.mobile.app.TransferQueueScreen
 import com.betterclouddrive.mobile.core.localization.LocalMobileStrings
@@ -46,6 +50,8 @@ import com.betterclouddrive.mobile.core.localization.MobileString
 import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.localization.mobileStringsFor
 import com.betterclouddrive.mobile.core.model.FileItem
+import com.betterclouddrive.mobile.core.model.PersonalFileVersion
+import com.betterclouddrive.mobile.core.model.RecycleBinItem
 import com.betterclouddrive.mobile.core.model.PersonalTag
 import com.betterclouddrive.mobile.core.model.TeamEffectivePermission
 import com.betterclouddrive.mobile.core.model.TeamFilePermission
@@ -56,12 +62,15 @@ import com.betterclouddrive.mobile.core.model.NotificationItem
 import com.betterclouddrive.mobile.core.model.TeamPermissionSource
 import com.betterclouddrive.mobile.core.model.TeamPermissionSubjectType
 import com.betterclouddrive.mobile.core.model.TeamRole
+import com.betterclouddrive.mobile.core.model.ShareLink
 import com.betterclouddrive.mobile.core.model.TeamSummary
 import com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.DownloadRequest
 import com.betterclouddrive.mobile.core.platform.PickedDestination
 import com.betterclouddrive.mobile.core.platform.UploadPickResult
+import com.betterclouddrive.mobile.core.platform.ClipboardService
+import com.betterclouddrive.mobile.core.platform.LocalDateTimeService
 import com.betterclouddrive.mobile.designsystem.BetterCloudDriveTheme
 import com.betterclouddrive.mobile.feature.files.DirectoryPageState
 import com.betterclouddrive.mobile.feature.files.FileMutationKind
@@ -78,6 +87,9 @@ import com.betterclouddrive.mobile.feature.teams.TeamPermissionsState
 import com.betterclouddrive.mobile.feature.teams.TeamInvitesState
 import com.betterclouddrive.mobile.feature.teams.TeamPeopleTab
 import com.betterclouddrive.mobile.feature.teams.NotificationsState
+import com.betterclouddrive.mobile.feature.recovery.TeamRecycleBinState
+import com.betterclouddrive.mobile.feature.recovery.TeamVersionsState
+import com.betterclouddrive.mobile.feature.shares.ShareManagementState
 import com.betterclouddrive.mobile.feature.transfers.TransferDirection
 import com.betterclouddrive.mobile.feature.transfers.TransferScope
 import com.betterclouddrive.mobile.feature.transfers.TransferStatus
@@ -176,12 +188,16 @@ class FeatureScreenDeviceTest {
         )
         val actions = mutableStateOf(TeamFileActionsState(teamId = 9, folderId = null))
         var organizationDestination: String? = null
+        var sharedFileId: Long? = null
         composeRule.setContent { themed("en-US") {
             teamBrowser(
                 browser,
                 actions.value,
                 onOpenFavorites = { organizationDestination = "favorites" },
                 onOpenTags = { organizationDestination = "tags" },
+                onOpenShares = { organizationDestination = "shares" },
+                onOpenRecycleBin = { organizationDestination = "recycle" },
+                onCreateShare = { sharedFileId = it.id },
             )
         } }
         composeRule.onAllNodesWithTag("team-create-folder").assertCountEquals(0)
@@ -192,11 +208,18 @@ class FeatureScreenDeviceTest {
         composeRule.onNodeWithTag("team-organize").performClick()
         composeRule.onNodeWithTag("team-organize-tags").assertIsDisplayed().performClick()
         composeRule.runOnIdle { assertEquals("tags", organizationDestination) }
+        composeRule.onNodeWithTag("team-organize").performClick()
+        composeRule.onNodeWithTag("team-organize-shares").assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals("shares", organizationDestination) }
+        composeRule.onNodeWithTag("team-organize").performClick()
+        composeRule.onNodeWithTag("team-organize-recycle-bin").assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals("recycle", organizationDestination) }
         composeRule.onNodeWithTag("team-more-41").performClick()
         composeRule.onNodeWithText("Download").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-versions-41").assertIsDisplayed()
         composeRule.onAllNodesWithText("Rename").assertCountEquals(0)
 
-        val editable = TeamEffectivePermission(true, true, false, true, false)
+        val editable = TeamEffectivePermission(true, true, true, true, false)
         composeRule.runOnIdle {
             actions.value = TeamFileActionsState(
                 teamId = 9, folderId = null, directoryPermission = editable,
@@ -204,6 +227,82 @@ class FeatureScreenDeviceTest {
             )
         }
         composeRule.onNodeWithTag("team-delete-selected").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-more-41").performClick()
+        composeRule.onNodeWithTag("team-share-41").assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals(file.id, sharedFileId) }
+    }
+
+    @Test
+    fun teamSharesUseCompactNavigationAndWideListDetailLayout() {
+        val share = ShareLink(
+            id = 71, userId = 2, teamId = 9, fileId = 41, shareCode = "team1234",
+            shareUrl = "https://drive.example.com/s/team1234", fileName = "team-note.txt",
+        )
+        val wide = mutableStateOf(false)
+        var opened: Long? = null
+        composeRule.setContent { themed("en-US") {
+            val state = ShareManagementState(teamId = 9, items = listOf(share), page = 1, selected = share)
+            if (wide.value) Row(Modifier.fillMaxSize().testTag("team-shares-wide")) {
+                Box(Modifier.weight(1f)) { SharesScreen(
+                    state, TestDateTime, TestClipboard, {}, { _, _ -> }, {}, {}, { opened = it }, {}, {},
+                ) }
+                VerticalDivider()
+                Box(Modifier.weight(1f).testTag("team-shares-wide-detail")) { ShareDetailScreen(
+                    state, TestDateTime, TestClipboard, {}, {}, {}, {},
+                ) }
+            } else SharesScreen(
+                state, TestDateTime, TestClipboard, {}, { _, _ -> }, {}, {}, { opened = it }, {}, {},
+            )
+        } }
+
+        composeRule.onNodeWithTag("shares-screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("share-row-71").performClick()
+        composeRule.runOnIdle { assertEquals(71L, opened) }
+        composeRule.runOnIdle { wide.value = true }
+        composeRule.onNodeWithTag("team-shares-wide").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-shares-wide-detail").assertIsDisplayed()
+        composeRule.onNodeWithTag("share-detail-copy").assertIsDisplayed()
+    }
+
+    @Test
+    fun teamRecoveryScreensExposeOnlyAuthorizedDestructiveActions() {
+        val item = RecycleBinItem(id = 81, fileName = "deleted.txt", deletedAt = "2026-09-09T10:00:00")
+        val recycleState = mutableStateOf(TeamRecycleBinState(
+            teamId = 9, role = TeamRole.OWNER, items = listOf(item), page = 1,
+            permissions = mapOf(item.id to TeamEffectivePermission(canRead = true, canWrite = true)),
+        ))
+        val showVersions = mutableStateOf(false)
+        val version = PersonalFileVersion(id = 2, fileId = 91, versionNumber = 2, fileSize = 8)
+        composeRule.setContent { themed("en-US") {
+            if (showVersions.value) {
+                TeamVersionsScreen(
+                    TeamVersionsState(
+                        teamId = 9, fileId = 91, file = FileItem(id = 91, fileName = "doc.txt"),
+                        permission = TeamEffectivePermission(canRead = true, canDelete = true),
+                        versions = listOf(version),
+                    ),
+                    NoopDocumentPicker, {}, { _, _ -> }, {}, {}, {}, {}, {},
+                )
+            } else {
+                TeamRecycleBinScreen(
+                    recycleState.value, {}, {}, {}, {}, {}, {}, {}, {}, {},
+                )
+            }
+        } }
+        composeRule.onNodeWithTag("team-recycle-empty-action").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-recycle-more-81").performClick()
+        composeRule.onNodeWithTag("team-recycle-restore-81").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("team-recycle-delete-81").assertCountEquals(0)
+
+        composeRule.runOnIdle {
+            recycleState.value = recycleState.value.copy(role = TeamRole.EDITOR)
+        }
+        composeRule.onAllNodesWithTag("team-recycle-empty-action").assertCountEquals(0)
+
+        composeRule.runOnIdle { showVersions.value = true }
+        composeRule.onNodeWithTag("team-version-download-2").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-version-delete-2").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("team-version-restore-2").assertCountEquals(0)
     }
 
     @Test
@@ -501,6 +600,9 @@ class FeatureScreenDeviceTest {
         actions: TeamFileActionsState,
         onOpenFavorites: () -> Unit = {},
         onOpenTags: () -> Unit = {},
+        onOpenShares: () -> Unit = {},
+        onOpenRecycleBin: () -> Unit = {},
+        onCreateShare: (FileItem) -> Unit = {},
     ) {
         TeamBrowserScreen(
             state = state, actions = actions, permissions = TeamPermissionsState(), wide = false,
@@ -517,7 +619,10 @@ class FeatureScreenDeviceTest {
             onClosePermissions = {}, onClearPermissionsFeedback = {},
             favorites = FavoritesState(), onLoadFavoriteStatus = {}, onToggleFavorite = {},
             onConsumeFavoriteFeedback = {}, onManageTags = {},
-            onOpenFavorites = onOpenFavorites, onOpenTags = onOpenTags,
+            onCreateShare = onCreateShare,
+            onOpenVersions = {},
+            onOpenFavorites = onOpenFavorites, onOpenTags = onOpenTags, onOpenShares = onOpenShares,
+            onOpenRecycleBin = onOpenRecycleBin,
         )
     }
 
@@ -536,6 +641,16 @@ class FeatureScreenDeviceTest {
     private object NoopDocumentPicker : DocumentPicker {
         @Composable override fun rememberUploadLauncher(maxItems: Int, onPicked: (UploadPickResult) -> Unit): () -> Unit = {}
         @Composable override fun rememberDownloadLauncher(onPicked: (PickedDestination) -> Unit): (DownloadRequest) -> Unit = {}
+    }
+
+    private object TestClipboard : ClipboardService {
+        override fun copyText(label: String, value: String) = true
+    }
+
+    private object TestDateTime : LocalDateTimeService {
+        override fun nowEpochMillis() = 1_700_000_000_000
+        override fun localDateTimeToEpochMillis(selectedUtcDateMillis: Long, hour: Int, minute: Int) = selectedUtcDateMillis
+        override fun formatDateTime(epochMillis: Long) = epochMillis.toString()
     }
 
     private fun transfer(

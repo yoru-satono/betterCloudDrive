@@ -1,6 +1,6 @@
 import api from './client'
 import type { ApiResponse, PageResult } from '@/types/api'
-import type { FileEntity } from '@/types/file'
+import type { FileEntity, RecycleBinItem } from '@/types/file'
 import type { CreateShareRequest, ShareLinkEntity, SharePasswordResponse, UpdateShareRequest } from '@/types/share'
 import type {
   Team,
@@ -229,7 +229,7 @@ export const deleteTeamFiles = (teamId: number, fileIds: number[]) =>
   api.delete<ApiResponse<void>>(`/teams/${teamId}/files`, { data: { fileIds } })
 
 export const listTeamRecycleBin = (teamId: number, page = 1, size = 20, q?: string) =>
-  api.get<ApiResponse<PageResult<FileEntity>>>(`/teams/${teamId}/recycle-bin`, { params: { page, size, q } })
+  api.get<ApiResponse<PageResult<RecycleBinItem>>>(`/teams/${teamId}/recycle-bin`, { params: { page, size, q } })
 
 export const restoreTeamFiles = (teamId: number, fileIds: number[]) =>
   Promise.all(fileIds.map(fileId => api.post<ApiResponse<void>>(`/teams/${teamId}/recycle-bin/${fileId}/restore`)))

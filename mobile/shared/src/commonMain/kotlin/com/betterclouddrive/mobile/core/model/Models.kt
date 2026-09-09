@@ -328,7 +328,7 @@ enum class ShareExpirationFilter(val apiValue: String?) {
 }
 
 @Serializable
-data class CreatePersonalShareRequest(
+data class CreateShareRequest(
     @SerialName("fileId") val fileId: Long,
     val password: String? = null,
     @SerialName("expireAt") val expireAt: Long? = null,
@@ -336,7 +336,7 @@ data class CreatePersonalShareRequest(
 )
 
 @Serializable
-data class UpdatePersonalShareRequest(
+data class UpdateShareRequest(
     val password: String? = null,
     @SerialName("expireAt") val expireAt: Long? = null,
     @SerialName("maxVisits") val maxVisits: Int? = null,
@@ -346,6 +346,9 @@ data class UpdatePersonalShareRequest(
 )
 
 @Serializable data class SharePasswordResponse(val password: String? = null)
+
+typealias CreatePersonalShareRequest = CreateShareRequest
+typealias UpdatePersonalShareRequest = UpdateShareRequest
 
 @Serializable
 data class InitUploadRequest(

@@ -4,8 +4,10 @@ import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.FileVersionEntity;
+import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.repository.FileRepository;
 import com.betterclouddrive.dal.repository.FileVersionRepository;
+import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.NotificationService;
@@ -38,6 +40,7 @@ public class FileVersionServiceImpl implements FileVersionService {
     private final FileVersionRepository fileVersionRepository;
     private final FileRepository fileRepository;
     private final UserRepository userRepository;
+    private final TeamRepository teamRepository;
     private final StorageService storageService;
     private final StringRedisTemplate redisTemplate;
     private final TeamAuditService teamAuditService;
@@ -72,10 +75,7 @@ public class FileVersionServiceImpl implements FileVersionService {
 
     @Override
     public List<FileVersionEntity> listTeamVersions(Long teamId, Long fileId) {
-        FileEntity file = fileRepository.findById(fileId).orElse(null);
-        if (file == null || !Objects.equals(file.getTeamId(), teamId)) {
-            throw new BusinessException(ApiCode.FILE_NOT_FOUND);
-        }
+        FileEntity file = requireTeamFile(teamId, fileId);
         return fileVersionRepository.findTopVersionsByFileId(fileId, PageRequest.of(0, 10));
     }
 
@@ -88,7 +88,7 @@ public class FileVersionServiceImpl implements FileVersionService {
     @Override
     @Transactional
     public void deleteTeamVersion(Long teamId, Long userId, Long fileId, int versionNumber) {
-        FileEntity file = requireTeamFile(teamId, fileId);
+        FileEntity file = requireTeamFileForUpdate(teamId, fileId);
         deleteVersionRecord(file, versionNumber);
         teamAuditService.record(teamId, userId, "VERSION_DELETE", "FILE", fileId,
                 "version " + versionNumber);
@@ -209,7 +209,7 @@ public class FileVersionServiceImpl implements FileVersionService {
 
     private FileEntity requireTeamFile(Long teamId, Long fileId) {
         FileEntity file = fileRepository.findById(fileId).orElse(null);
-        if (file == null || !Objects.equals(file.getTeamId(), teamId) || file.getIsDeleted()) {
+        if (!isActiveTeamFile(file, teamId)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         return file;
@@ -217,10 +217,28 @@ public class FileVersionServiceImpl implements FileVersionService {
 
     private FileEntity requireTeamFileForUpdate(Long teamId, Long fileId) {
         FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
-        if (file == null || !Objects.equals(file.getTeamId(), teamId) || file.getIsDeleted()) {
+        if (!isActiveTeamFile(file, teamId)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
         return file;
+    }
+
+    private boolean isActiveTeamFile(FileEntity file, Long teamId) {
+        if (file == null || !Objects.equals(file.getTeamId(), teamId)
+                || Boolean.TRUE.equals(file.getIsDeleted()) || !"file".equals(file.getFileType())) {
+            return false;
+        }
+        Long parentId = file.getParentId();
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        while (parentId != null && seen.add(parentId)) {
+            FileEntity parent = fileRepository.findById(parentId).orElse(null);
+            if (parent == null || !Objects.equals(parent.getTeamId(), teamId)
+                    || Boolean.TRUE.equals(parent.getIsDeleted())) {
+                return false;
+            }
+            parentId = parent.getParentId();
+        }
+        return parentId == null;
     }
 
     private FileVersionEntity requireVersion(Long fileId, int versionNumber) {
@@ -253,7 +271,22 @@ public class FileVersionServiceImpl implements FileVersionService {
             return;
         }
         if (file.getTeamId() != null) {
-            // Team quota is already enforced by the team write boundary; stage 12 changes only personal recovery.
+            TeamEntity team = teamRepository.findByIdAndDeletedAtIsNull(file.getTeamId())
+                    .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
+            String pendingValue = redisTemplate.opsForValue().get(TEAM_STORAGE_INCR_PREFIX + file.getTeamId());
+            long pending = 0L;
+            if (pendingValue != null) {
+                try {
+                    pending = Long.parseLong(pendingValue);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            long used = team.getStorageUsed() == null ? 0L : team.getStorageUsed();
+            long quota = team.getStorageQuota() == null ? 0L : team.getStorageQuota();
+            if (used + pending + additionalBytes > quota) {
+                throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
+                        "Team storage quota exceeded. Used: " + (used + pending) + ", Quota: " + quota);
+            }
             return;
         }
         com.betterclouddrive.dal.entity.UserEntity user = userRepository.findById(file.getUserId()).orElse(null);
@@ -276,7 +309,11 @@ public class FileVersionServiceImpl implements FileVersionService {
     }
 
     private void incrementStorage(FileEntity file, long delta) {
-        if (delta == 0 || file.getTeamId() != null) {
+        if (delta == 0) {
+            return;
+        }
+        if (file.getTeamId() != null) {
+            redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + file.getTeamId(), delta);
             return;
         }
         redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + file.getUserId(), delta);

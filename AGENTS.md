@@ -63,6 +63,18 @@ bash scripts/verify-all.sh --module backend --module integration
 bash scripts/verify-all.sh --module security --skip-docker-build
 ```
 
+AVD 生命周期继续在验证脚本外管理。当前本机使用 Android Emulator 37.1.11 无窗口启动时，SwiftShader 软件渲染会在 `RenderThread` 中崩溃，因此应在单独终端显式传入 `-gpu host`：
+
+```sh
+# Android 9 / API 28
+emulator -avd bcd_api28 -port 5556 -no-window -no-audio -no-boot-anim -no-snapshot -gpu host -camera-back none -camera-front none
+
+# Android 14 / API 34
+emulator -avd bcd_api34 -port 5556 -no-window -no-audio -no-boot-anim -no-snapshot -gpu host -camera-back none -camera-front none
+```
+
+两套 AVD 共用 `emulator-5556`，必须依次启动和验证；切换前使用 `adb -s emulator-5556 emu kill` 关闭当前实例，并等待设备从 `adb devices` 消失。
+
 KMP 设备相关变更应在 API 28 和 API 34 上分别验证，以覆盖 WorkManager 与 UIDT。当前 iOS 门禁为：
 
 ```sh

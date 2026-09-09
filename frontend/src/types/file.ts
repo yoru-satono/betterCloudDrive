@@ -20,10 +20,23 @@ export interface FileVersionEntity {
   id: number
   fileId: number
   versionNumber: number
-  storagePath: string
   fileSize: number
   md5Hash: string | null
   createdAt: string
+}
+
+export interface RecycleBinItem {
+  id: number
+  parentId: number | null
+  fileName: string
+  fileType: 'file' | 'folder'
+  mimeType: string | null
+  fileSize: number
+  md5Hash: string | null
+  versionCount: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string
 }
 
 export interface UploadSession {

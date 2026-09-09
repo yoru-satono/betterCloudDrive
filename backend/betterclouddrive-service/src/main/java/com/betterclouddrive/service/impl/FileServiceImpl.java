@@ -430,16 +430,26 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void restoreTeamFile(Long teamId, Long actorUserId, Long fileId) {
-        FileEntity file = fileRepository.findById(fileId).orElse(null);
-        if (file == null || !Objects.equals(file.getTeamId(), teamId) || !file.getIsDeleted()) {
+        lockTeamMutations(teamId);
+        FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
+        if (file == null || !Objects.equals(file.getTeamId(), teamId) || !isRecycleRoot(file)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
-        if (teamNameExists(teamId, file.getParentId(), file.getFileName())) {
+        teamPermissionService.requireWrite(actorUserId, teamId, fileId);
+        Long targetParentId = validTeamRestoreParent(teamId, file.getParentId()) ? file.getParentId() : null;
+        teamPermissionService.requireParentWrite(actorUserId, teamId, targetParentId);
+        if (teamNameExists(teamId, targetParentId, file.getFileName())) {
             throw new BusinessException(ApiCode.FILE_NAME_CONFLICT);
         }
-        file.setIsDeleted(false);
-        file.setDeletedAt(null);
-        fileRepository.save(file);
+        long restoredBytes = deletedTreeStoredBytes(file, file.getDeletedAt());
+        if (restoredBytes > 0) {
+            checkTeamStorageQuota(teamId, restoredBytes);
+        }
+        file.setParentId(targetParentId);
+        restoreDeletedTree(file, file.getDeletedAt());
+        if (restoredBytes > 0) {
+            redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, restoredBytes);
+        }
         teamAuditService.record(teamId, actorUserId, "FILE_RESTORE", "FILE", fileId, file.getFileName());
     }
 
@@ -455,8 +465,11 @@ public class FileServiceImpl implements FileService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
         List<FileEntity> readable = fileRepository
-                .findAll(spec, Sort.by(Sort.Direction.DESC, "deletedAt"))
+                .findAll(spec, Sort.by(
+                        new Sort.Order(Sort.Direction.DESC, "deletedAt").nullsLast(),
+                        new Sort.Order(Sort.Direction.DESC, "id")))
                 .stream()
+                .filter(this::isRecycleRoot)
                 .filter(file -> canRead(userId, teamId, file.getId()))
                 .toList();
         return PageResults.fromFiltered(readable, page, size);
@@ -465,10 +478,12 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void permanentDeleteTeamFile(Long teamId, Long actorUserId, Long fileId) {
-        FileEntity file = fileRepository.findById(fileId).orElse(null);
-        if (file == null || !Objects.equals(file.getTeamId(), teamId) || !file.getIsDeleted()) {
+        lockTeamMutations(teamId);
+        FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
+        if (file == null || !Objects.equals(file.getTeamId(), teamId) || !isRecycleRoot(file)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
+        requireDeleteStoredTree(actorUserId, teamId, file);
         teamAuditService.record(teamId, actorUserId, "FILE_PERMANENT_DELETE", "FILE", fileId, file.getFileName());
         deleteTree(file);
     }
@@ -476,8 +491,9 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void emptyTeamRecycleBin(Long teamId, Long actorUserId) {
+        lockTeamMutations(teamId);
         teamAuditService.record(teamId, actorUserId, "RECYCLE_EMPTY", "TEAM", teamId, null);
-        listDeletedFiles(teamId, null).forEach(this::deleteTree);
+        listDeletedFiles(teamId, null).stream().filter(this::isRecycleRoot).forEach(this::deleteTree);
     }
 
     @Override
@@ -588,6 +604,25 @@ public class FileServiceImpl implements FileService {
         if (storageUsed + pendingIncr + additionalBytes > storageQuota) {
             throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
                     "Storage quota exceeded. Used: " + (storageUsed + pendingIncr) + ", Quota: " + storageQuota);
+        }
+    }
+
+    private void checkTeamStorageQuota(Long teamId, long additionalBytes) {
+        com.betterclouddrive.dal.entity.TeamEntity team = teamRepository.findByIdAndDeletedAtIsNull(teamId)
+                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
+        String increment = redisTemplate.opsForValue().get(TEAM_STORAGE_INCR_PREFIX + teamId);
+        long pending = 0L;
+        if (increment != null) {
+            try {
+                pending = Long.parseLong(increment);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        long used = team.getStorageUsed() == null ? 0L : team.getStorageUsed();
+        long quota = team.getStorageQuota() == null ? 0L : team.getStorageQuota();
+        if (used + pending + additionalBytes > quota) {
+            throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
+                    "Team storage quota exceeded. Used: " + (used + pending) + ", Quota: " + quota);
         }
     }
 
@@ -796,6 +831,13 @@ public class FileServiceImpl implements FileService {
         }
     }
 
+    private void requireDeleteStoredTree(Long userId, Long teamId, FileEntity file) {
+        teamPermissionService.requireDelete(userId, teamId, file.getId());
+        for (FileEntity child : childrenOf(file)) {
+            requireDeleteStoredTree(userId, teamId, child);
+        }
+    }
+
     private boolean hasActiveAncestors(FileEntity file) {
         Long parentId = file.getParentId();
         java.util.Set<Long> seen = new java.util.HashSet<>();
@@ -869,6 +911,18 @@ public class FileServiceImpl implements FileService {
                 && parent.getTeamId() == null
                 && Objects.equals(parent.getUserId(), userId)
                 && !parent.getIsDeleted()
+                && "folder".equals(parent.getFileType());
+    }
+
+    private boolean validTeamRestoreParent(Long teamId, Long parentId) {
+        if (parentId == null) {
+            return true;
+        }
+        FileEntity parent = fileRepository.findById(parentId).orElse(null);
+        return parent != null
+                && Objects.equals(parent.getTeamId(), teamId)
+                && !parent.getIsDeleted()
+                && hasActiveAncestors(parent)
                 && "folder".equals(parent.getFileType());
     }
 

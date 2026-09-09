@@ -112,7 +112,7 @@ public class ShareServiceImpl implements ShareService {
     public PageResult<ShareLinkEntity> listTeamShares(Long userId, Long teamId, String keyword, Boolean passwordProtected, String expirationStatus, int page, int size) {
         Specification<ShareLinkEntity> spec = shareListSpec(null, teamId, keyword, passwordProtected, expirationStatus);
         List<ShareLinkEntity> readable = shareLinkRepository
-                .findAll(spec, Sort.by(Sort.Direction.DESC, "createdAt"))
+                .findAll(spec, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")))
                 .stream()
                 .filter(share -> canReadTeamFile(userId, teamId, share.getFileId()))
                 .toList();
@@ -180,8 +180,9 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
-    public String getTeamSharePassword(Long teamId, Long shareId) {
+    public String getTeamSharePassword(Long actorUserId, boolean canManageAll, Long teamId, Long shareId) {
         ShareLinkEntity share = getTeamShare(teamId, shareId);
+        requireShareEditor(actorUserId, canManageAll, share);
         return share.getPasswordCiphertext() == null ? null : sharePasswordCryptoService.decrypt(share.getPasswordCiphertext());
     }
 

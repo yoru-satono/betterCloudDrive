@@ -39,6 +39,19 @@ interface VersionTransferOperations {
     ): TransferTask
 }
 
+interface TeamVersionTransferOperations {
+    suspend fun enqueueTeamVersionDownload(
+        teamId: Long,
+        fileId: Long,
+        versionNumber: Int,
+        fileName: String,
+        fileSize: Long,
+        mimeType: String?,
+        destinationHandle: String,
+        expectedMd5: String?,
+    ): TransferTask
+}
+
 data class TeamUploadFolder(val teamId: Long, val parentId: Long?)
 
 interface TeamTransferOperations {
@@ -54,7 +67,8 @@ interface TeamTransferOperations {
 class TransferQueueStore(
     private val manager: TransferManager,
     parentScope: CoroutineScope,
-) : ResettableStore, TransferSessionPort, PersonalTransferOperations, VersionTransferOperations, TeamTransferOperations {
+) : ResettableStore, TransferSessionPort, PersonalTransferOperations, VersionTransferOperations,
+    TeamVersionTransferOperations, TeamTransferOperations {
     private val scope = parentScope.storeChildScope()
     private val mutableState = MutableStateFlow<List<TransferTask>>(emptyList())
     val state: StateFlow<List<TransferTask>> = mutableState.asStateFlow()
@@ -130,6 +144,20 @@ class TransferQueueStore(
     ) = manager.enqueueDownload(
         fileId, fileName, fileSize, mimeType, destinationHandle,
         expectedMd5 = expectedMd5, versionNumber = versionNumber,
+    )
+
+    override suspend fun enqueueTeamVersionDownload(
+        teamId: Long,
+        fileId: Long,
+        versionNumber: Int,
+        fileName: String,
+        fileSize: Long,
+        mimeType: String?,
+        destinationHandle: String,
+        expectedMd5: String?,
+    ) = manager.enqueueDownload(
+        fileId, fileName, fileSize, mimeType, destinationHandle,
+        scope = TransferScope.Team(teamId), expectedMd5 = expectedMd5, versionNumber = versionNumber,
     )
 
     override suspend fun enqueueTeamUploads(teamId: Long, result: UploadPickResult, parentId: Long?) = manager.enqueueUploads(

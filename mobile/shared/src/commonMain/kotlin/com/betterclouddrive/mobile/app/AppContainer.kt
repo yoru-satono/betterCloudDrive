@@ -28,9 +28,15 @@ import com.betterclouddrive.mobile.feature.files.PersonalPreviewStore
 import com.betterclouddrive.mobile.feature.organization.FavoritesStore
 import com.betterclouddrive.mobile.feature.organization.TagsStore
 import com.betterclouddrive.mobile.feature.shares.PersonalSharesStore
+import com.betterclouddrive.mobile.feature.shares.TeamSharesRepository
+import com.betterclouddrive.mobile.feature.shares.TeamSharesStore
 import com.betterclouddrive.mobile.feature.diagnostics.DiagnosticsStore
 import com.betterclouddrive.mobile.feature.recovery.PersonalRecycleBinStore
 import com.betterclouddrive.mobile.feature.recovery.PersonalVersionsStore
+import com.betterclouddrive.mobile.feature.recovery.TeamRecycleBinRepository
+import com.betterclouddrive.mobile.feature.recovery.TeamRecycleBinStore
+import com.betterclouddrive.mobile.feature.recovery.TeamVersionsRepository
+import com.betterclouddrive.mobile.feature.recovery.TeamVersionsStore
 import com.betterclouddrive.mobile.feature.teams.TeamBrowserStore
 import com.betterclouddrive.mobile.feature.teams.TeamFileActionsStore
 import com.betterclouddrive.mobile.feature.teams.TeamPreviewRepository
@@ -60,9 +66,12 @@ class AppContainer(
     val favorites: FavoritesRepository,
     val tags: TagsRepository,
     val shares: PersonalSharesRepository,
+    val teamShares: TeamSharesRepository,
     val preview: PreviewRepository,
     val recycleBin: RecycleBinRepository,
     val personalVersions: PersonalVersionsRepository,
+    val teamRecycleBin: TeamRecycleBinRepository,
+    val teamVersions: TeamVersionsRepository,
     val teamWorkspace: TeamWorkspaceRepository,
     val teamPreview: TeamPreviewRepository,
     val teamOrganization: TeamOrganizationRepository,
@@ -100,6 +109,7 @@ class AppContainer(
     val teamPreviewStore = TeamPreviewStore(teamPreview, applicationScope)
     val teamFavoritesStore = TeamFavoritesStore(teamOrganization, applicationScope)
     val teamTagsStore = TeamTagsStore(teamOrganization, applicationScope)
+    val teamSharesStore = TeamSharesStore(teamShares, teamPermissions, applicationScope)
     private fun invalidateTeamContent(teamId: Long, folderIds: Set<Long?>) {
         teamBrowserStore.invalidate(teamId, folderIds)
         teamSearchStore.reset()
@@ -109,6 +119,12 @@ class AppContainer(
         teamsStore.refresh()
     }
     val teamFileActionsStore = TeamFileActionsStore(teamWorkspace, teamPermissions, transferQueue, applicationScope, ::invalidateTeamContent)
+    val teamRecycleBinStore = TeamRecycleBinStore(teamRecycleBin, teamPermissions, applicationScope) { teamId ->
+        invalidateTeamContent(teamId, setOf(null))
+    }
+    val teamVersionsStore = TeamVersionsStore(teamVersions, teamPermissions, transferQueue, applicationScope) { teamId, parentId ->
+        invalidateTeamContent(teamId, setOf(parentId))
+    }
     val teamMembersStore = TeamMembersStore(teamMembers, applicationScope)
     val teamPermissionsStore = TeamPermissionsStore(teamPermissions, teamMembers, applicationScope) { teamId, fileId ->
         teamFileActionsStore.invalidatePermission(teamId, fileId)
@@ -140,7 +156,8 @@ class AppContainer(
             browserStore, searchStore, favoritesStore, tagsStore, sharesStore, previewStore,
             recycleBinStore, versionsStore, diagnosticsStore, transferQueue,
             teamsStore, teamBrowserStore, teamSearchStore, teamPreviewStore,
-            teamFavoritesStore, teamTagsStore,
+            teamFavoritesStore, teamTagsStore, teamSharesStore,
+            teamRecycleBinStore, teamVersionsStore,
             teamFileActionsStore, teamMembersStore, teamPermissionsStore,
             teamInvitesStore, notificationsStore,
         ),

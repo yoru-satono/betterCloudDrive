@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BetterCloudDrive</string>
-    <string name="stage_label">KMP 移动端 · 阶段 14</string>
+    <string name="stage_label">KMP 移动端 · 阶段 18</string>
     <string name="restore_title">暂时无法连接服务器</string>
     <string name="session_preserved">本地会话仍已加密保存</string>
     <string name="retry">重试</string>
@@ -243,6 +243,7 @@
     <string name="error_invalid_tag_name">标签名称长度必须为 1～64 个字符。</string>
     <string name="error_invalid_tag_color">请选择有效的标签颜色。</string>
     <string name="shares_title">分享</string>
+    <string name="team_shares_title">团队分享</string>
     <string name="create_share">创建分享</string>
     <string name="search_shares">按分享码或文件 ID 搜索</string>
     <string name="shares_empty">暂无有效分享</string>

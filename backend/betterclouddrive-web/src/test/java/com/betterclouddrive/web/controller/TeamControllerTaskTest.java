@@ -1,5 +1,7 @@
 package com.betterclouddrive.web.controller;
 
+import com.betterclouddrive.dal.entity.FileEntity;
+import com.betterclouddrive.dal.entity.FileVersionEntity;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
 import com.betterclouddrive.service.FavoriteService;
 import com.betterclouddrive.service.FileService;
@@ -174,6 +176,40 @@ class TeamControllerTaskTest {
                 .isInstanceOf(RuntimeException.class);
 
         verify(teamTaskService).markFailed(88L, "storage down");
+    }
+
+    @Test
+    void listRecycleBin_shouldMapInternalFilesToSafeResponses() {
+        FileEntity deleted = FileEntity.builder()
+                .id(7L).teamId(10L).userId(2L).fileName("deleted.txt")
+                .storagePath("teams/10/private-object").isDeleted(true).build();
+        when(fileService.listTeamRecycleBin(2L, 10L, "deleted", 1, 50))
+                .thenReturn(PageResult.of(List.of(deleted), 1, 1, 50));
+
+        var response = controller.listRecycleBin(user(), 10L, "deleted", 1, 50);
+
+        assertThat(response.getData().getRecords()).singleElement().satisfies(item -> {
+            assertThat(item.getId()).isEqualTo(7L);
+            assertThat(item.getFileName()).isEqualTo("deleted.txt");
+        });
+        verify(teamService).requireRead(2L, 10L);
+    }
+
+    @Test
+    void listVersions_shouldMapInternalVersionsToSafeResponses() {
+        FileVersionEntity version = FileVersionEntity.builder()
+                .id(8L).fileId(7L).userId(2L).versionNumber(3)
+                .storagePath("teams/10/private-version").fileSize(12L).build();
+        when(fileVersionService.listTeamVersions(10L, 7L)).thenReturn(List.of(version));
+
+        var response = controller.listVersions(user(), 10L, 7L);
+
+        assertThat(response.getData()).singleElement().satisfies(item -> {
+            assertThat(item.getId()).isEqualTo(8L);
+            assertThat(item.getVersionNumber()).isEqualTo(3);
+            assertThat(item.getFileSize()).isEqualTo(12L);
+        });
+        verify(teamPermissionService).requireRead(2L, 10L, 7L);
     }
 
     private UserPrincipal user() {
