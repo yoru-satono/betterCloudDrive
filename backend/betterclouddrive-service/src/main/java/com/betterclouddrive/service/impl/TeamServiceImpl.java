@@ -90,22 +90,24 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional
     public TeamView updateTeam(Long userId, Long teamId, String name) {
-        requireManageMembers(userId, teamId);
-        TeamEntity team = requireTeam(teamId);
+        TeamEntity team = requireActiveTeamForUpdate(teamId);
+        TeamMemberEntity actor = requireActiveMemberAfterLock(userId, teamId);
+        if (!Set.of(ROLE_OWNER, ROLE_ADMIN).contains(actor.getRole())) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Team role cannot manage members");
+        }
         team.setName(normalizeName(name));
         team.setUpdatedAt(LocalDateTime.now());
         TeamEntity saved = teamRepository.save(team);
         teamAuditService.record(teamId, userId, "TEAM_UPDATE", "TEAM", teamId, saved.getName());
-        return new TeamView(saved, requireRead(userId, teamId).getRole());
+        return new TeamView(saved, actor.getRole());
     }
 
     @Override
     @Transactional
     public void deleteTeam(Long userId, Long teamId) {
-        TeamEntity team = teamRepository.findById(teamId)
+        TeamEntity team = teamRepository.findByIdForUpdate(teamId)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
-        TeamMemberEntity owner = teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, userId, ACTIVE)
-                .orElseThrow(() -> new BusinessException(ApiCode.FORBIDDEN, "Not a team member"));
+        TeamMemberEntity owner = requireActiveMemberAfterLock(userId, teamId);
         if (!ROLE_OWNER.equals(owner.getRole())) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Only owner can perform this operation");
         }
@@ -145,8 +147,11 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional
     public TeamMemberView addMember(Long actorUserId, Long teamId, String username, String role) {
-        TeamMemberEntity actor = requireManageMembers(actorUserId, teamId);
-        requireTeam(teamId);
+        requireActiveTeamForUpdate(teamId);
+        TeamMemberEntity actor = requireActiveMemberAfterLock(actorUserId, teamId);
+        if (!Set.of(ROLE_OWNER, ROLE_ADMIN).contains(actor.getRole())) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Team role cannot manage members");
+        }
         String normalizedRole = normalizeMemberRole(role);
         if (!ROLE_OWNER.equals(actor.getRole()) && ROLE_ADMIN.equals(normalizedRole)) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Only owner can add admins");
@@ -185,7 +190,11 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional
     public TeamMemberView updateMember(Long actorUserId, Long teamId, Long targetUserId, String role) {
-        TeamMemberEntity actor = requireManageMembers(actorUserId, teamId);
+        requireActiveTeamForUpdate(teamId);
+        TeamMemberEntity actor = requireActiveMemberAfterLock(actorUserId, teamId);
+        if (!Set.of(ROLE_OWNER, ROLE_ADMIN).contains(actor.getRole())) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Team role cannot manage members");
+        }
         String normalizedRole = normalizeMemberRole(role);
         TeamMemberEntity member = teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, targetUserId, ACTIVE)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team member not found"));
@@ -209,7 +218,11 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional
     public void removeMember(Long actorUserId, Long teamId, Long targetUserId) {
-        TeamMemberEntity actor = requireManageMembers(actorUserId, teamId);
+        requireActiveTeamForUpdate(teamId);
+        TeamMemberEntity actor = requireActiveMemberAfterLock(actorUserId, teamId);
+        if (!Set.of(ROLE_OWNER, ROLE_ADMIN).contains(actor.getRole())) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Team role cannot manage members");
+        }
         TeamMemberEntity member = teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, targetUserId, ACTIVE)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team member not found"));
         if (ROLE_OWNER.equals(member.getRole())) {
@@ -229,7 +242,8 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional
     public void leaveTeam(Long userId, Long teamId) {
-        TeamMemberEntity member = requireRead(userId, teamId);
+        requireActiveTeamForUpdate(teamId);
+        TeamMemberEntity member = requireActiveMemberAfterLock(userId, teamId);
         if (ROLE_OWNER.equals(member.getRole())) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Owner must transfer ownership before leaving");
         }
@@ -242,13 +256,16 @@ public class TeamServiceImpl implements TeamService {
     @Override
     @Transactional
     public TeamView transferOwner(Long ownerUserId, Long teamId, Long targetUserId) {
-        TeamMemberEntity owner = requireOwner(ownerUserId, teamId);
+        TeamEntity team = requireActiveTeamForUpdate(teamId);
+        TeamMemberEntity owner = requireActiveMemberAfterLock(ownerUserId, teamId);
+        if (!ROLE_OWNER.equals(owner.getRole())) {
+            throw new BusinessException(ApiCode.FORBIDDEN, "Only owner can perform this operation");
+        }
         if (ownerUserId.equals(targetUserId)) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "Target user is already owner");
         }
         TeamMemberEntity target = teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, targetUserId, ACTIVE)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team member not found"));
-        TeamEntity team = requireTeam(teamId);
         LocalDateTime now = LocalDateTime.now();
         owner.setRole(ROLE_ADMIN);
         owner.setUpdatedAt(now);
@@ -315,6 +332,20 @@ public class TeamServiceImpl implements TeamService {
             throw new BusinessException(ApiCode.BAD_REQUEST, "Team name must be 1-80 characters");
         }
         return normalized;
+    }
+
+    private TeamEntity requireActiveTeamForUpdate(Long teamId) {
+        TeamEntity team = teamRepository.findActiveByIdForUpdate(teamId)
+                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
+        if (team.getArchivedAt() != null) {
+            throw new BusinessException(ApiCode.NOT_FOUND, "Team not found");
+        }
+        return team;
+    }
+
+    private TeamMemberEntity requireActiveMemberAfterLock(Long userId, Long teamId) {
+        return teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, userId, ACTIVE)
+                .orElseThrow(() -> new BusinessException(ApiCode.FORBIDDEN, "Not a team member"));
     }
 
     private String normalizeMemberRole(String role) {

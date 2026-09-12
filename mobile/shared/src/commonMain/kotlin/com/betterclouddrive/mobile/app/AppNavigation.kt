@@ -650,6 +650,9 @@ private fun NavDestination?.matches(route: AppRoute): Boolean = when (route) {
     is TeamSearchRoute -> this?.hasRoute<TeamSearchRoute>() == true
     is TeamPreviewRoute -> this?.hasRoute<TeamPreviewRoute>() == true
     is TeamMembersRoute -> this?.hasRoute<TeamMembersRoute>() == true
+    is TeamSettingsRoute -> this?.hasRoute<TeamSettingsRoute>() == true
+    is TeamAuditRoute -> this?.hasRoute<TeamAuditRoute>() == true
+    is TeamTasksRoute -> this?.hasRoute<TeamTasksRoute>() == true
     is TeamFavoritesRoute -> this?.hasRoute<TeamFavoritesRoute>() == true
     is TeamTagsRoute -> this?.hasRoute<TeamTagsRoute>() == true
     is TeamTagFilesRoute -> this?.hasRoute<TeamTagFilesRoute>() == true
@@ -675,6 +678,8 @@ private fun NavDestination?.isTeam(): Boolean =
     this?.hasRoute<TeamsRoute>() == true || this?.hasRoute<TeamWorkspaceRoute>() == true ||
         this?.hasRoute<TeamFolderRoute>() == true || this?.hasRoute<TeamSearchRoute>() == true ||
         this?.hasRoute<TeamPreviewRoute>() == true || this?.hasRoute<TeamMembersRoute>() == true ||
+        this?.hasRoute<TeamSettingsRoute>() == true ||
+        this?.hasRoute<TeamAuditRoute>() == true || this?.hasRoute<TeamTasksRoute>() == true ||
         this?.hasRoute<TeamFavoritesRoute>() == true || this?.hasRoute<TeamTagsRoute>() == true ||
         this?.hasRoute<TeamTagFilesRoute>() == true || this?.hasRoute<TeamSharesRoute>() == true ||
         this?.hasRoute<TeamShareDetailRoute>() == true || this?.hasRoute<TeamRecycleBinRoute>() == true ||
@@ -699,6 +704,9 @@ private fun NavDestination?.title(strings: MobileStrings): String = when {
     matches(PersonalRecycleBinRoute) -> strings[MobileString.RecycleBinTitle]
     this?.hasRoute<PersonalVersionsRoute>() == true -> strings[MobileString.VersionHistory]
     this?.hasRoute<TeamMembersRoute>() == true -> strings[MobileString.TeamMembers]
+    this?.hasRoute<TeamSettingsRoute>() == true -> strings[MobileString.TeamSettings]
+    this?.hasRoute<TeamAuditRoute>() == true -> strings[MobileString.TeamAuditLogs]
+    this?.hasRoute<TeamTasksRoute>() == true -> strings[MobileString.TeamTasks]
     this?.hasRoute<TeamFavoritesRoute>() == true -> strings[MobileString.FavoritesTitle]
     this?.hasRoute<TeamTagsRoute>() == true || this?.hasRoute<TeamTagFilesRoute>() == true -> strings[MobileString.TagsTitle]
     this?.hasRoute<TeamSharesRoute>() == true || this?.hasRoute<TeamShareDetailRoute>() == true -> strings[MobileString.TeamSharesTitle]

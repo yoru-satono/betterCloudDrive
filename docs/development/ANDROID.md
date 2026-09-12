@@ -87,7 +87,9 @@ KMP 个人搜索调用现有 `/files/search`，输入停止 300 ms 后请求，�
 
 KMP 登录后的共享产品外壳使用 Navigation Compose 类型安全路由。个人、团队、传输和我的始终具有固定顶层位置；窗口宽度小于 600dp 时使用底部导航栏，宽窗口使用侧边导航栏。页面 Composable 只接收状态和事件，不持有 `NavController` 或完整 `AppContainer`。
 
-团队分支使用 `TeamsRoute`、`TeamWorkspaceRoute`、`TeamFolderRoute`、`TeamSearchRoute`、`TeamPreviewRoute` 和 `TeamMembersRoute`。团队列表、目录、文件操作、成员、权限、搜索和预览分别由独立 Store 管理；团队切换取消旧请求，退出或换服务器清除全部团队缓存和 ticket。`TeamMembersStore` 按角色矩阵提供成员操作，`TeamPermissionsStore` 一次管理一个文件或文件夹的来源链和直接覆盖；保存后通过明确授权变更事件刷新 `TeamFileActionsStore`，不允许 Store 直接修改彼此状态。团队文本通过认证 Range 最多读取 512 KiB，图片/视频 ticket 不持久化，OnlyOffice 固定请求 `mobile=true` 并原样渲染签名配置。
+团队分支使用 `TeamsRoute`、`TeamWorkspaceRoute`、`TeamFolderRoute`、`TeamSearchRoute`、`TeamPreviewRoute`、`TeamMembersRoute`、`TeamSettingsRoute`、`TeamAuditRoute` 和 `TeamTasksRoute`。团队列表、目录、文件操作、成员、权限、搜索、预览、生命周期和治理分别由独立 Store 管理；团队切换取消旧请求，退出或换服务器清除全部团队缓存和 ticket。`TeamManagementStore` 绑定团队 ID，负责详情、改名、退出、软删除和所有权转让；成功结果通过 `AppContainer` 的窄协调方法更新摘要或清理团队上下文。`TeamMembersStore` 按角色矩阵提供成员操作，`TeamPermissionsStore` 一次管理一个文件或文件夹的来源链和直接覆盖；保存后通过明确授权变更事件刷新 `TeamFileActionsStore`，不允许 Store 直接修改彼此状态。团队文本通过认证 Range 最多读取 512 KiB，图片/视频 ticket 不持久化，OnlyOffice 固定请求 `mobile=true` 并原样渲染签名配置。
+
+团队审计筛选、异步导出、任务分页与重试全部留在 KMP 共享层；Android 平台只通过现有 `CreateDocument`/`TransferFileAccess` 边界提供任务结果文件目标。任务结果是不可恢复的前台保存，不进入 Room 传输队列、不使用 Range；客户端要求完整 `200`，校验 `Content-Length`/`resultSizeBytes` 后从私有临时文件提交到用户目标。SAF Provider 不保证跨 Provider 原子替换，失败路径会清理私有临时文件和持久 URI 权限。任务页仅在可见且有活动任务时轮询。具体边界见[阶段 21 团队审计与任务中心](../../mobile/docs/stage-21-team-audit-and-tasks.md)。
 
 团队邀请不把 token 放进 Navigation route。`MainActivity` 以 `singleTask` 接收冷启动和 `onNewIntent`，仅接受 `betterclouddrive://team-invites/{token}` 的严格格式；冷启动时先等待已保存服务器地址恢复完成，再把 token 交给 Application 生命周期内的 `IncomingInviteStore`。邀请续接中的普通登录必须使用当前服务器；用户修改服务器、普通退出、关闭流程或会话失效都会清除 token。Web 邮件链接仍是 HTTPS canonical 页面，自定义 scheme 只由页面中的显式按钮触发。
 

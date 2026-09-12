@@ -23,6 +23,10 @@ public interface TeamRepository extends JpaRepository<TeamEntity, Long>, JpaSpec
     @Query("SELECT t FROM TeamEntity t WHERE t.id = :teamId AND t.deletedAt IS NULL")
     Optional<TeamEntity> findActiveByIdForUpdate(@Param("teamId") Long teamId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM TeamEntity t WHERE t.id = :teamId")
+    Optional<TeamEntity> findByIdForUpdate(@Param("teamId") Long teamId);
+
     List<TeamEntity> findByDeletedAtIsNull();
 
     @Query("""

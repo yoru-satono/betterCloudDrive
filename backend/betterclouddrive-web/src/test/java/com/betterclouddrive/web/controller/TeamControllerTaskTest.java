@@ -23,6 +23,7 @@ import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.web.download.DownloadTicketService;
 import com.betterclouddrive.web.export.AuditCsvExporter;
 import com.betterclouddrive.web.dto.response.ShareLinkResponseMapper;
+import com.betterclouddrive.web.dto.response.TeamTaskResponse;
 import com.betterclouddrive.web.security.UserPrincipal;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -74,7 +75,8 @@ class TeamControllerTaskTest {
 
         var response = controller.listTasks(user(), 10L, "FAILED", "FOLDER_ZIP", 1, 20);
 
-        assertThat(response.getData()).isSameAs(tasks);
+        assertThat(response.getData().getRecords()).isEmpty();
+        assertThat(response.getData().getTotal()).isZero();
         verify(teamTaskService).listTasks(2L, 10L, "FAILED", "FOLDER_ZIP", 1, 20);
     }
 
@@ -85,7 +87,7 @@ class TeamControllerTaskTest {
 
         var response = controller.retryTask(user(), 10L, 88L);
 
-        assertThat(response.getData()).isSameAs(task);
+        assertThat(response.getData().getId()).isEqualTo(88L);
     }
 
     @Test
@@ -98,7 +100,7 @@ class TeamControllerTaskTest {
 
         var response = controller.queueAuditExport(user(), 10L, 5L, "FILE_DELETE", "FILE", 1, startAt, endAt);
 
-        assertThat(response.getData()).isSameAs(task);
+        assertThat(response.getData().getId()).isEqualTo(88L);
     }
 
     @Test
@@ -130,7 +132,27 @@ class TeamControllerTaskTest {
 
         var response = controller.queueFolderZipTask(user(), 10L, 20L);
 
-        assertThat(response.getData()).isSameAs(task);
+        assertThat(response.getData().getId()).isEqualTo(99L);
+    }
+
+    @Test
+    void taskResponse_shouldExcludeInternalExecutionFields() {
+        TeamTaskEntity task = TeamTaskEntity.builder()
+                .id(88L)
+                .payload("private payload")
+                .resultPath("private/result.csv")
+                .traceparent("00-private")
+                .tracestate("private-state")
+                .build();
+
+        TeamTaskResponse response = TeamTaskResponse.from(task);
+
+        assertThat(response.getId()).isEqualTo(88L);
+        assertThat(response).hasNoNullFieldsOrPropertiesExcept(
+                "teamId", "actorUserId", "taskType", "status", "targetType", "targetId", "titleKey",
+                "progress", "resultMessageKey", "resultFileName", "resultContentType", "resultSizeBytes",
+                "resultExpiresAt", "errorMessageKey", "retryCount", "createdAt", "updatedAt", "startedAt",
+                "completedAt");
     }
 
     @Test

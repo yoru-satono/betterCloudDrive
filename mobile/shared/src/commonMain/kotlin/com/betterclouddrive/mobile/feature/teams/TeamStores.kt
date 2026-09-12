@@ -38,7 +38,13 @@ data class TeamsState(
     val creating: Boolean = false,
     val createError: UiMessage? = null,
     val createdTeam: TeamSummary? = null,
+    val feedback: TeamsFeedback? = null,
 ) { val hasMore: Boolean get() = page < pages }
+
+data class TeamsFeedback(
+    val id: Long,
+    val message: UiMessage,
+)
 
 class TeamsStore(
     private val repository: TeamWorkspaceRepository,
@@ -49,6 +55,7 @@ class TeamsStore(
     val state: StateFlow<TeamsState> = mutableState.asStateFlow()
     private var listJob: Job? = null
     private var createJob: Job? = null
+    private var feedbackSequence = 0L
 
     fun activate() {
         if (state.value.loading || state.value.page > 0) return
@@ -91,6 +98,33 @@ class TeamsStore(
 
     fun consumeCreatedTeam() = mutableState.update { it.copy(createdTeam = null) }
     fun clearCreateError() = mutableState.update { it.copy(createError = null) }
+    fun clearFeedback() = mutableState.update { it.copy(feedback = null) }
+
+    fun showFeedback(message: UiMessage) {
+        mutableState.update { it.copy(feedback = TeamsFeedback(++feedbackSequence, message)) }
+    }
+
+    fun upsert(team: TeamSummary) {
+        mutableState.update { current ->
+            val existed = current.items.any { it.id == team.id }
+            current.copy(
+                items = (current.items.filterNot { it.id == team.id } + team)
+                    .sortedWith(compareBy<TeamSummary> { it.name.lowercase() }.thenBy { it.id }),
+                total = if (existed) current.total else maxOf(current.total + 1, current.items.size.toLong() + 1),
+            )
+        }
+    }
+
+    fun remove(teamId: Long) {
+        mutableState.update { current ->
+            val items = current.items.filterNot { it.id == teamId }
+            current.copy(
+                items = items,
+                total = if (items.size == current.items.size) current.total else (current.total - 1).coerceAtLeast(0),
+                createdTeam = current.createdTeam?.takeUnless { it.id == teamId },
+            )
+        }
+    }
 
     override fun reset() {
         listJob?.cancel(); createJob?.cancel()
@@ -230,6 +264,12 @@ class TeamBrowserStore(
     }
 
     fun changeViewMode(mode: FileViewMode) = mutableState.update { it.copy(viewMode = mode) }
+
+    fun replaceTeamSummary(team: TeamSummary) {
+        mutableState.update { current ->
+            if (current.teamId == team.id) current.copy(team = team) else current
+        }
+    }
     fun selectFile(file: FileItem?) {
         val teamId = state.value.teamId ?: return
         detailJob?.cancel(); mutableState.update { it.copy(selectedFile = file) }

@@ -108,6 +108,14 @@ class TeamStoresTest {
         store.create("  Created  "); runCurrent()
         assertEquals("Created", repository.createdNames.single())
         assertEquals(99, store.state.value.createdTeam?.id)
+        store.upsert(TEAM.copy(name = "Renamed", role = TeamRole.ADMIN))
+        assertEquals("Renamed", store.state.value.items.single { it.id == TEAM.id }.name)
+        store.remove(TEAM.id)
+        assertFalse(store.state.value.items.any { it.id == TEAM.id })
+        store.showFeedback(UiMessage(MobileString.TeamDeleted))
+        assertEquals(MobileString.TeamDeleted, store.state.value.feedback?.message?.key)
+        store.clearFeedback()
+        assertNull(store.state.value.feedback)
         store.reset()
         assertTrue(store.state.value.items.isEmpty())
         assertNull(store.state.value.createdTeam)
@@ -136,6 +144,8 @@ class TeamStoresTest {
         assertEquals(2, store.state.value.teamId)
         assertTrue(store.state.value.breadcrumb.size == 1)
         assertTrue(store.state.value.current.items.isEmpty())
+        store.replaceTeamSummary(TEAM.copy(id = 2, name = "Current"))
+        assertEquals("Current", store.state.value.team?.name)
     }
 
     @Test

@@ -69,6 +69,7 @@ import com.betterclouddrive.mobile.core.model.TeamInvite
 import com.betterclouddrive.mobile.core.model.TeamInviteStatus
 import com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest
 import com.betterclouddrive.mobile.feature.teams.TeamMembersState
+import com.betterclouddrive.mobile.feature.teams.TeamManagementState
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsState
 import com.betterclouddrive.mobile.feature.teams.TeamInvitesState
 import com.betterclouddrive.mobile.feature.teams.TeamPeopleTab
@@ -94,6 +95,9 @@ fun TeamMembersScreen(
     onCancelInvite: (TeamInvite) -> Unit = {},
     onClearInviteError: () -> Unit = {},
     onClearInviteFeedback: () -> Unit = {},
+    management: TeamManagementState = TeamManagementState(),
+    onTransferOwnership: (TeamMember) -> Unit = {},
+    onClearManagementFeedback: () -> Unit = {},
 ) {
     val strings = LocalMobileStrings.current
     val snackbar = remember { SnackbarHostState() }
@@ -102,6 +106,7 @@ fun TeamMembersScreen(
     var pendingRemove by remember { mutableStateOf<TeamMember?>(null) }
     var inviting by remember { mutableStateOf(false) }
     var pendingCancelInvite by remember { mutableStateOf<TeamInvite?>(null) }
+    var pendingTransfer by remember { mutableStateOf<TeamMember?>(null) }
     LaunchedEffect(state.feedback) {
         state.feedback?.let {
             adding = false
@@ -117,6 +122,13 @@ fun TeamMembersScreen(
             pendingCancelInvite = null
             snackbar.showSnackbar(strings.resolve(it).orEmpty())
             onClearInviteFeedback()
+        }
+    }
+    LaunchedEffect(management.feedback?.id) {
+        management.feedback?.let { feedback ->
+            if (!feedback.isError) pendingTransfer = null
+            snackbar.showSnackbar(strings.resolve(feedback.message).orEmpty())
+            onClearManagementFeedback()
         }
     }
     Scaffold(
@@ -169,9 +181,10 @@ fun TeamMembersScreen(
                         TeamMemberRow(
                             member = member,
                             actorRole = state.actorRole,
-                            busy = state.submittingUserId == member.userId,
+                            busy = state.submittingUserId == member.userId || management.transferringUserId == member.userId,
                             onRole = { pendingRole = member to it },
                             onRemove = { pendingRemove = member },
+                            onTransfer = { pendingTransfer = member },
                         )
                         if (member.userId == state.items.lastOrNull()?.userId && state.hasMore) LaunchedEffect(member.userId) { onLoadMore() }
                     }
@@ -210,6 +223,27 @@ fun TeamMembersScreen(
             Text(strings[MobileString.Delete])
         } },
         dismissButton = { OutlinedButton({ pendingRemove = null }) { Text(strings[MobileString.Cancel]) } },
+    ) }
+    pendingTransfer?.let { member -> AlertDialog(
+        onDismissRequest = { if (management.transferringUserId == null) pendingTransfer = null },
+        title = { Text(strings.format(MobileString.TransferOwnershipTitle, member.username)) },
+        text = { Text(strings.format(MobileString.TransferOwnershipMessage, member.username)) },
+        confirmButton = {
+            Button(
+                { onTransferOwnership(member) },
+                enabled = management.transferringUserId == null,
+                modifier = Modifier.testTag("team-owner-transfer-confirm"),
+            ) {
+                if (management.transferringUserId == member.userId) {
+                    CircularProgressIndicator(Modifier.width(18.dp).height(18.dp))
+                } else Text(strings[MobileString.Confirm])
+            }
+        },
+        dismissButton = {
+            OutlinedButton({ pendingTransfer = null }, enabled = management.transferringUserId == null) {
+                Text(strings[MobileString.Cancel])
+            }
+        },
     ) }
     pendingCancelInvite?.let { invite -> AlertDialog(
         onDismissRequest = { if (invites.submittingInviteId == null) pendingCancelInvite = null },
@@ -311,6 +345,7 @@ private fun TeamMemberRow(
     busy: Boolean,
     onRole: (TeamRole) -> Unit,
     onRemove: () -> Unit,
+    onTransfer: () -> Unit,
 ) {
     val strings = LocalMobileStrings.current
     var menu by remember { mutableStateOf(false) }
@@ -329,6 +364,13 @@ private fun TeamMemberRow(
                 modifier = Modifier.testTag("team-member-more-${member.userId}"),
             ) { Icon(Icons.Default.MoreVert, strings[MobileString.MoreActions]) }
             DropdownMenu(menu, { menu = false }) {
+                if (actorRole == TeamRole.OWNER && member.role != TeamRole.OWNER && member.status == 1) {
+                    DropdownMenuItem(
+                        text = { Text(strings[MobileString.TransferOwnership]) },
+                        onClick = { menu = false; onTransfer() },
+                        modifier = Modifier.testTag("team-owner-transfer-${member.userId}"),
+                    )
+                }
                 allowedRoles(actorRole).filter { it != member.role }.forEach { role -> DropdownMenuItem(
                     text = { Text(strings[role.label()]) },
                     onClick = { menu = false; onRole(role) },

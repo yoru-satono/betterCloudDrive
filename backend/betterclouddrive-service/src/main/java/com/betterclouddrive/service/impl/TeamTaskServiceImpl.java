@@ -66,7 +66,7 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         if (!isManager(member)) {
             List<TeamTaskEntity> visible = teamTaskRepository.findAll(
                             spec.and((root, query, cb) -> cb.equal(root.get("actorUserId"), requesterUserId)),
-                            Sort.by(Sort.Direction.DESC, "createdAt"))
+                            Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")))
                     .stream()
                     .filter(task -> canViewMemberTask(requesterUserId, teamId, task))
                     .toList();
@@ -77,7 +77,8 @@ public class TeamTaskServiceImpl implements TeamTaskService {
         }
         Page<TeamTaskEntity> result = teamTaskRepository.findAll(
                 spec,
-                PageRequest.of(Math.max(page - 1, 0), size, Sort.by(Sort.Direction.DESC, "createdAt")));
+                PageRequest.of(Math.max(page - 1, 0), size,
+                        Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
         return PageResult.of(result.getContent(), result.getTotalElements(), page, size);
     }
 
@@ -232,12 +233,9 @@ public class TeamTaskServiceImpl implements TeamTaskService {
     @Override
     @Transactional
     public TeamTaskEntity retryTask(Long requesterUserId, Long teamId, Long taskId) {
+        TeamTaskEntity task = teamTaskRepository.findByIdAndTeamIdForUpdate(taskId, teamId)
+                .orElseThrow(this::taskNotFound);
         TeamMemberEntity member = teamService.requireRead(requesterUserId, teamId);
-        TeamTaskEntity task = teamTaskRepository.findById(taskId)
-                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team task not found"));
-        if (!teamId.equals(task.getTeamId())) {
-            throw taskNotFound();
-        }
         if (!isManager(member) && !canRetryMemberTask(requesterUserId, teamId, task)) {
             throw taskNotFound();
         }

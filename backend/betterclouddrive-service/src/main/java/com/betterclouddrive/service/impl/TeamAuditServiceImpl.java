@@ -3,6 +3,7 @@ package com.betterclouddrive.service.impl;
 import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.common.dto.PageResult;
+import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
 import com.betterclouddrive.dal.repository.TeamMemberRepository;
@@ -88,8 +89,10 @@ public class TeamAuditServiceImpl implements TeamAuditService {
             int page,
             int size) {
         requireManageMembers(requesterUserId, teamId);
+        validateFilter(actorUserId, result, startAt, endAt);
         Specification<TeamOperationLogEntity> spec = auditSpec(teamId, actorUserId, action, targetType, result, startAt, endAt);
-        PageRequest pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageable = PageRequest.of(page - 1, size,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
         Page<TeamOperationLogEntity> logs = teamOperationLogRepository.findAll(spec, pageable);
         return PageResult.of(logs.getContent(), logs.getTotalElements(), page, size);
     }
@@ -106,13 +109,15 @@ public class TeamAuditServiceImpl implements TeamAuditService {
             LocalDateTime endAt,
             int limit) {
         requireManageMembers(requesterUserId, teamId);
+        validateFilter(actorUserId, result, startAt, endAt);
         int safeLimit = Math.min(Math.max(limit, 1), EXPORT_LIMIT_MAX);
         Specification<TeamOperationLogEntity> spec = auditSpec(teamId, actorUserId, action, targetType, result, startAt, endAt);
         long total = teamOperationLogRepository.count(spec);
         if (total > safeLimit) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "Audit export exceeds " + safeLimit + " rows. Please narrow filters.");
         }
-        PageRequest pageable = PageRequest.of(0, safeLimit, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageRequest pageable = PageRequest.of(0, safeLimit,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
         Page<TeamOperationLogEntity> logs = teamOperationLogRepository.findAll(spec, pageable);
         return PageResult.of(logs.getContent(), total, 1, safeLimit);
     }
@@ -122,6 +127,7 @@ public class TeamAuditServiceImpl implements TeamAuditService {
             Long requesterUserId, Long teamId, Long actorUserId, String action, String targetType,
             Integer result, LocalDateTime startAt, LocalDateTime endAt, int page, int size) {
         requireManageMembers(requesterUserId, teamId);
+        validateFilter(actorUserId, result, startAt, endAt);
         Specification<TeamOperationLogEntity> spec = auditSpec(teamId, actorUserId, action, targetType, result, startAt, endAt);
         Sort sort = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
         Page<TeamOperationLogEntity> logs = teamOperationLogRepository.findAll(
@@ -163,12 +169,28 @@ public class TeamAuditServiceImpl implements TeamAuditService {
     }
 
     private void requireManageMembers(Long userId, Long teamId) {
-        teamRepository.findByIdAndDeletedAtIsNull(teamId)
+        TeamEntity team = teamRepository.findByIdAndDeletedAtIsNull(teamId)
                 .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
+        if (team.getArchivedAt() != null) {
+            throw new BusinessException(ApiCode.NOT_FOUND, "Team not found");
+        }
         TeamMemberEntity member = teamMemberRepository.findByTeamIdAndUserIdAndStatus(teamId, userId, 1)
                 .orElseThrow(() -> new BusinessException(ApiCode.FORBIDDEN, "Not a team member"));
         if (!List.of("OWNER", "ADMIN").contains(member.getRole())) {
             throw new BusinessException(ApiCode.FORBIDDEN, "Team role cannot view audit logs");
+        }
+    }
+
+    @Override
+    public void validateFilter(Long actorUserId, Integer result, LocalDateTime startAt, LocalDateTime endAt) {
+        if (actorUserId != null && actorUserId <= 0) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Actor user ID must be positive");
+        }
+        if (result != null && result != 0 && result != 1) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Audit result must be 0 or 1");
+        }
+        if (startAt != null && endAt != null && startAt.isAfter(endAt)) {
+            throw new BusinessException(ApiCode.BAD_REQUEST, "Audit start time must not be after end time");
         }
     }
 }

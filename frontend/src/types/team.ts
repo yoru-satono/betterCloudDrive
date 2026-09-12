@@ -68,11 +68,9 @@ export interface TeamTask {
   targetId: number | null
   titleKey: string
   titleParams: Record<string, string | number | boolean | null>
-  payload?: string | null
   progress: number
   resultMessageKey: string | null
   resultMessageParams: Record<string, string | number | boolean | null>
-  resultPath?: string | null
   resultFileName?: string | null
   resultContentType?: string | null
   resultSizeBytes?: number | null

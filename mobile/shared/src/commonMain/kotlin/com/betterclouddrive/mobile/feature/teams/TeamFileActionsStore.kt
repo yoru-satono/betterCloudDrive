@@ -121,6 +121,24 @@ class TeamFileActionsStore(
         loadDirectoryPermission(teamId, folderId)
     }
 
+    fun updateTeamRole(team: TeamSummary) {
+        val current = state.value
+        if (current.teamId != team.id) return
+        permissionJob?.cancel()
+        pickerJob?.cancel()
+        val root = team.role.rootPermission()
+        mutableState.update { it.copy(
+            rootPermission = root,
+            directoryPermission = root.takeIf { current.folderId == null },
+            permissionLoading = current.folderId != null,
+            itemPermissions = emptyMap(),
+            loadingPermissionIds = emptySet(),
+            selectedIds = emptySet(),
+            folderPicker = null,
+        ) }
+        current.folderId?.let { loadDirectoryPermission(team.id, it) }
+    }
+
     fun requestItemPermission(file: FileItem) {
         val current = state.value
         val teamId = current.teamId ?: return

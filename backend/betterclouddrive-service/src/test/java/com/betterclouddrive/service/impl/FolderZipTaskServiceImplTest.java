@@ -74,6 +74,7 @@ class FolderZipTaskServiceImplTest {
         TeamTaskEntity task = TeamTaskEntity.builder()
                 .id(77L)
                 .teamId(10L)
+                .actorUserId(2L)
                 .taskType("FOLDER_ZIP")
                 .targetType("FILE")
                 .targetId(20L)
@@ -105,6 +106,7 @@ class FolderZipTaskServiceImplTest {
         TeamTaskEntity task = TeamTaskEntity.builder()
                 .id(77L)
                 .teamId(10L)
+                .actorUserId(2L)
                 .taskType("FOLDER_ZIP")
                 .targetType("FILE")
                 .targetId(20L)
@@ -138,6 +140,7 @@ class FolderZipTaskServiceImplTest {
         TeamTaskEntity task = TeamTaskEntity.builder()
                 .id(77L)
                 .teamId(10L)
+                .actorUserId(2L)
                 .taskType("FOLDER_ZIP")
                 .targetType("FILE")
                 .targetId(20L)
@@ -174,6 +177,25 @@ class FolderZipTaskServiceImplTest {
 
         assertThatThrownBy(() -> service.downloadTeamFolderZipResult(2L, 10L, 77L))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void downloadTeamFolderZipResult_shouldRejectManagerThatDidNotCreateTask() {
+        TeamTaskEntity task = TeamTaskEntity.builder()
+                .id(77L)
+                .teamId(10L)
+                .actorUserId(3L)
+                .taskType("FOLDER_ZIP")
+                .targetType("FILE")
+                .targetId(20L)
+                .status(TeamTaskEntity.STATUS_SUCCEEDED)
+                .resultPath("folder-zips/teams/10/20/a.zip")
+                .build();
+        when(teamTaskService.getTask(10L, 77L)).thenReturn(task);
+
+        assertThatThrownBy(() -> service.downloadTeamFolderZipResult(2L, 10L, 77L))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(error -> assertThat(((BusinessException) error).getCode()).isEqualTo(404));
     }
 
     private FileEntity teamFolder() {

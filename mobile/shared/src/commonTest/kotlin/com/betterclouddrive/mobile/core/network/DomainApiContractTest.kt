@@ -43,6 +43,59 @@ import kotlin.test.assertTrue
 
 class NetworkTestFacadeTest {
     @Test
+    fun teamAuditAndTaskCenterUseStableContracts() = runTest {
+        val observed = mutableListOf<Pair<HttpMethod, String>>()
+        val engine = MockEngine { request ->
+            observed += request.method to request.url.toString()
+            when {
+                request.url.encodedPath.endsWith("/audit-logs") -> jsonResponse(
+                    """{"code":200,"data":{"records":[{"id":5,"teamId":3,"actorUserId":2,"action":"FILE_DELETE","targetType":"FILE","targetId":9,"result":1,"statusCode":200,"createdAt":"2026-09-10T10:00:00"}],"total":1,"page":1,"size":20,"pages":1}}""",
+                )
+                request.url.encodedPath.endsWith("/export-tasks") -> jsonResponse(
+                    """{"code":200,"data":{"id":77,"teamId":3,"taskType":"AUDIT_EXPORT","status":"PENDING","titleKey":"task.auditExport.title","progress":0}}""",
+                )
+                request.url.encodedPath.endsWith("/tasks/77/retry") -> jsonResponse(
+                    """{"code":200,"data":{"id":77,"teamId":3,"taskType":"AUDIT_EXPORT","status":"PENDING","titleKey":"task.auditExport.title","progress":0,"retryCount":1}}""",
+                )
+                request.url.encodedPath.endsWith("/tasks/77/download") -> respond(
+                    "a,b\n1,2\n", HttpStatusCode.OK, headersOf(HttpHeaders.ContentLength to listOf("8")),
+                )
+                request.url.encodedPath.endsWith("/tasks") -> jsonResponse(
+                    """{"code":200,"data":{"records":[{"id":77,"teamId":3,"taskType":"AUDIT_EXPORT","status":"FAILED","titleKey":"task.auditExport.title","progress":40,"errorMessageKey":"task.failed"}],"total":1,"page":2,"size":20,"pages":2}}""",
+                )
+                else -> error("Unexpected ${request.method} ${request.url}")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        val logs = client.listTeamAuditLogs(
+            3, 2, "FILE_DELETE", "FILE", 1,
+            "2026-09-01T00:00:00", "2026-09-10T23:59:00", 1, 20,
+        )
+        assertEquals(5, logs.records.single().id)
+        assertEquals(77, client.queueTeamAuditExport(3, null, null, null, null, null, null).id)
+        assertEquals("FAILED", client.listTeamTasks(3, "FAILED", "AUDIT_EXPORT", 2, 20).records.single().status)
+        assertEquals(1, client.retryTeamTask(3, 77).retryCount)
+        val downloaded = client.downloadTeamTask(3, 77) { status, headers, channel ->
+            assertEquals(HttpStatusCode.OK, status)
+            assertEquals("8", headers[HttpHeaders.ContentLength])
+            val bytes = ByteArray(8); channel.readAvailable(bytes); bytes.decodeToString()
+        }
+        assertEquals("a,b\n1,2\n", downloaded)
+        assertTrue(observed.any { (method, url) -> method == HttpMethod.Get &&
+            url.contains("actorUserId=2") && url.contains("action=FILE_DELETE") && url.contains("startAt=2026-09-01") })
+        assertTrue(observed.any { (method, url) -> method == HttpMethod.Post && url.endsWith("/teams/3/audit-logs/export-tasks") })
+        assertTrue(observed.any { (method, url) -> method == HttpMethod.Get && url.contains("status=FAILED&type=AUDIT_EXPORT&page=2&size=20") })
+        assertTrue(observed.any { (method, url) -> method == HttpMethod.Post && url.endsWith("/tasks/77/retry") })
+        assertTrue(observed.any { (method, url) -> method == HttpMethod.Get && url.endsWith("/tasks/77/download") })
+    }
+
+    @Test
     fun teamFileMutationsAndEffectivePermissionUseStableContracts() = runTest {
         val observed = mutableListOf<Triple<HttpMethod, String, String>>()
         val engine = MockEngine { request ->
@@ -733,6 +786,41 @@ class NetworkTestFacadeTest {
         assertTrue(observed.any { it.first.endsWith("/teams/10/files/search?q=note&page=1&size=50") })
         assertTrue(observed.any { it.first.endsWith("/teams/10/download/7") && it.second == "bytes=0-524287" })
         assertTrue(observed.any { it.first.endsWith("/teams/10/office/files/7/config?mobile=true") })
+    }
+
+    @Test
+    fun teamManagementUsesStageTwentyLifecycleContracts() = runTest {
+        val observed = mutableListOf<Triple<HttpMethod, String, String>>()
+        val engine = MockEngine { request ->
+            val body = (request.body as? OutgoingContent.ByteArrayContent)?.bytes()?.decodeToString().orEmpty()
+            observed += Triple(request.method, request.url.encodedPath, body)
+            when {
+                request.url.encodedPath == "/api/v1/teams/10" && request.method == HttpMethod.Get ->
+                    jsonResponse("""{"code":200,"data":{"id":10,"name":"Alpha","ownerId":1,"storageQuota":100,"storageUsed":25,"role":"OWNER"}}""")
+                request.url.encodedPath == "/api/v1/teams/10" && request.method == HttpMethod.Put ->
+                    jsonResponse("""{"code":200,"data":{"id":10,"name":"Renamed","ownerId":1,"role":"OWNER"}}""")
+                request.url.encodedPath == "/api/v1/teams/10/owner" ->
+                    jsonResponse("""{"code":200,"data":{"id":10,"name":"Renamed","ownerId":2,"role":"ADMIN"}}""")
+                else -> jsonResponse("""{"code":200}""")
+            }
+        }
+        val client = NetworkTestFacade(
+            HttpClient(engine), "https://drive.example.com",
+            FakeSessionStore(StoredSession("access", "refresh", Long.MAX_VALUE, "https://drive.example.com")),
+            FakeServerStore("https://drive.example.com"),
+        )
+        client.initialize()
+
+        assertEquals(TeamRole.OWNER, client.getManagedTeam(10).role)
+        assertEquals("Renamed", client.renameTeam(10, "Renamed").name)
+        client.leaveTeam(10)
+        client.deleteTeam(10)
+        assertEquals(TeamRole.ADMIN, client.transferTeamOwner(10, 2).role)
+
+        assertTrue(observed.contains(Triple(HttpMethod.Put, "/api/v1/teams/10", """{"name":"Renamed"}""")))
+        assertTrue(observed.contains(Triple(HttpMethod.Post, "/api/v1/teams/10/leave", "")))
+        assertTrue(observed.contains(Triple(HttpMethod.Delete, "/api/v1/teams/10", "")))
+        assertTrue(observed.contains(Triple(HttpMethod.Post, "/api/v1/teams/10/owner", """{"userId":2}""")))
     }
 
     @Test

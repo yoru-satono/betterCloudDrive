@@ -15,6 +15,7 @@ import com.betterclouddrive.service.dto.TeamView;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -72,12 +73,45 @@ class TeamServiceImplTest {
     }
 
     @Test
+    void updateTeam_shouldLockBeforeRecheckingAdminAndNormalizeName() {
+        TeamEntity team = TeamEntity.builder().id(10L).name("Old").build();
+        TeamMemberEntity admin = TeamMemberEntity.builder()
+                .teamId(10L).userId(2L).role(TeamService.ROLE_ADMIN).status(1).build();
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 2L, 1)).thenReturn(Optional.of(admin));
+        when(teamRepository.save(team)).thenReturn(team);
+
+        TeamView result = teamService.updateTeam(2L, 10L, "  Product  ");
+
+        assertThat(result.team().getName()).isEqualTo("Product");
+        assertThat(result.role()).isEqualTo(TeamService.ROLE_ADMIN);
+        InOrder order = inOrder(teamRepository, teamMemberRepository);
+        order.verify(teamRepository).findActiveByIdForUpdate(10L);
+        order.verify(teamMemberRepository).findByTeamIdAndUserIdAndStatus(10L, 2L, 1);
+        verify(teamAuditService).record(10L, 2L, "TEAM_UPDATE", "TEAM", 10L, "Product");
+    }
+
+    @Test
+    void updateTeam_shouldRejectViewerAfterLock() {
+        TeamEntity team = TeamEntity.builder().id(10L).name("Old").build();
+        TeamMemberEntity viewer = TeamMemberEntity.builder()
+                .teamId(10L).userId(3L).role(TeamService.ROLE_VIEWER).status(1).build();
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 3L, 1)).thenReturn(Optional.of(viewer));
+
+        assertThatThrownBy(() -> teamService.updateTeam(3L, 10L, "Nope"))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(403));
+        verify(teamRepository, never()).save(any());
+    }
+
+    @Test
     void addMember_shouldAddExistingUserByUsername() {
         TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
         TeamMemberEntity owner = TeamMemberEntity.builder()
                 .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
         UserEntity target = UserEntity.builder().id(2L).username("chain").email("chain@test.local").build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(owner));
         when(userRepository.findByUsername("chain")).thenReturn(Optional.of(target));
         when(teamMemberRepository.findByTeamIdAndUserId(10L, 2L)).thenReturn(Optional.empty());
@@ -95,7 +129,7 @@ class TeamServiceImplTest {
         TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
         TeamMemberEntity admin = TeamMemberEntity.builder()
                 .teamId(10L).userId(1L).role(TeamService.ROLE_ADMIN).status(1).build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(admin));
 
         assertThatThrownBy(() -> teamService.addMember(1L, 10L, "chain", TeamService.ROLE_ADMIN))
@@ -113,7 +147,7 @@ class TeamServiceImplTest {
         TeamMemberEntity targetMember = TeamMemberEntity.builder()
                 .teamId(10L).userId(2L).role(TeamService.ROLE_ADMIN).status(1).build();
         UserEntity target = UserEntity.builder().id(2L).username("other-admin").build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(actor));
         when(userRepository.findByUsername("other-admin")).thenReturn(Optional.of(target));
         when(teamMemberRepository.findByTeamIdAndUserId(10L, 2L)).thenReturn(Optional.of(targetMember));
@@ -129,7 +163,7 @@ class TeamServiceImplTest {
         TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
         TeamMemberEntity owner = TeamMemberEntity.builder()
                 .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(owner));
 
         assertThatThrownBy(() -> teamService.updateMember(1L, 10L, 1L, TeamService.ROLE_EDITOR))
@@ -145,7 +179,7 @@ class TeamServiceImplTest {
                 .teamId(10L).userId(1L).role(TeamService.ROLE_ADMIN).status(1).build();
         TeamMemberEntity target = TeamMemberEntity.builder()
                 .teamId(10L).userId(2L).role(TeamService.ROLE_ADMIN).status(1).build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(actor));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 2L, 1)).thenReturn(Optional.of(target));
 
@@ -156,11 +190,32 @@ class TeamServiceImplTest {
     }
 
     @Test
+    void removeMember_shouldLockTeamBeforeRecheckingMembership() {
+        TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
+        TeamMemberEntity actor = TeamMemberEntity.builder()
+                .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
+        TeamMemberEntity target = TeamMemberEntity.builder()
+                .teamId(10L).userId(2L).role(TeamService.ROLE_EDITOR).status(1).build();
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(actor));
+        when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 2L, 1)).thenReturn(Optional.of(target));
+
+        teamService.removeMember(1L, 10L, 2L);
+
+        assertThat(target.getStatus()).isZero();
+        InOrder order = inOrder(teamRepository, teamMemberRepository);
+        order.verify(teamRepository).findActiveByIdForUpdate(10L);
+        order.verify(teamMemberRepository).findByTeamIdAndUserIdAndStatus(10L, 1L, 1);
+        order.verify(teamMemberRepository).findByTeamIdAndUserIdAndStatus(10L, 2L, 1);
+        verify(teamMemberRepository).save(target);
+    }
+
+    @Test
     void leaveTeam_shouldMarkNonOwnerRemoved() {
         TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
         TeamMemberEntity member = TeamMemberEntity.builder()
                 .teamId(10L).userId(2L).role(TeamService.ROLE_EDITOR).status(1).build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 2L, 1)).thenReturn(Optional.of(member));
 
         teamService.leaveTeam(2L, 10L);
@@ -174,7 +229,7 @@ class TeamServiceImplTest {
         TeamEntity team = TeamEntity.builder().id(10L).name("Team").build();
         TeamMemberEntity owner = TeamMemberEntity.builder()
                 .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(owner));
 
         assertThatThrownBy(() -> teamService.leaveTeam(1L, 10L))
@@ -186,7 +241,7 @@ class TeamServiceImplTest {
         TeamEntity team = TeamEntity.builder().id(10L).name("Team").ownerId(1L).build();
         TeamMemberEntity owner = TeamMemberEntity.builder()
                 .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
-        when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(owner));
 
         teamService.deleteTeam(1L, 10L);
@@ -194,6 +249,7 @@ class TeamServiceImplTest {
         assertThat(team.getDeletedAt()).isNotNull();
         assertThat(team.getDeletedBy()).isEqualTo(1L);
         assertThat(team.getPurgeAfter()).isNotNull();
+        assertThat(team.getPurgeAfter()).isEqualTo(team.getDeletedAt().plusDays(30));
         verify(teamRepository).save(team);
         verify(teamAuditService).record(10L, 1L, "TEAM_DELETE", "TEAM", 10L, "Team");
         verify(teamNotificationDispatchService).enqueueTeamMembersNotification(eq(10L), eq(1L), eq("TEAM_DELETE"), anyString(), anyString(), isNull(), eq(true));
@@ -210,7 +266,7 @@ class TeamServiceImplTest {
                 .build();
         TeamMemberEntity owner = TeamMemberEntity.builder()
                 .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
-        when(teamRepository.findById(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(owner));
 
         teamService.deleteTeam(1L, 10L);
@@ -227,7 +283,7 @@ class TeamServiceImplTest {
                 .teamId(10L).userId(1L).role(TeamService.ROLE_OWNER).status(1).build();
         TeamMemberEntity target = TeamMemberEntity.builder()
                 .teamId(10L).userId(2L).role(TeamService.ROLE_EDITOR).status(1).build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(teamRepository.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(team));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 1L, 1)).thenReturn(Optional.of(owner));
         when(teamMemberRepository.findByTeamIdAndUserIdAndStatus(10L, 2L, 1)).thenReturn(Optional.of(target));
         when(teamRepository.save(any(TeamEntity.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -238,5 +294,9 @@ class TeamServiceImplTest {
         assertThat(owner.getRole()).isEqualTo(TeamService.ROLE_ADMIN);
         assertThat(target.getRole()).isEqualTo(TeamService.ROLE_OWNER);
         assertThat(view.role()).isEqualTo(TeamService.ROLE_ADMIN);
+        InOrder order = inOrder(teamRepository, teamMemberRepository);
+        order.verify(teamRepository).findActiveByIdForUpdate(10L);
+        order.verify(teamMemberRepository).findByTeamIdAndUserIdAndStatus(10L, 1L, 1);
+        order.verify(teamMemberRepository).findByTeamIdAndUserIdAndStatus(10L, 2L, 1);
     }
 }

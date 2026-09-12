@@ -76,6 +76,10 @@ class TeamRecycleBinStore(
         }
     }
 
+    fun updateRole(teamId: Long, role: TeamRole) {
+        mutableState.update { current -> if (current.teamId == teamId) current.copy(role = role) else current }
+    }
+
     fun updateQuery(value: String) {
         val teamId = state.value.teamId ?: return
         listJob?.cancel()

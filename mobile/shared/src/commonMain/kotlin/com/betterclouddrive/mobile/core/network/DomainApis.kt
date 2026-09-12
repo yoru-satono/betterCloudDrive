@@ -235,6 +235,105 @@ class TeamWorkspaceApi(private val http: AuthenticatedHttpClient) {
     }
 }
 
+class TeamManagementApi(private val http: AuthenticatedHttpClient) {
+    suspend fun getTeam(teamId: Long): TeamSummary = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId")) { bearer(token) } }
+    }
+
+    suspend fun rename(teamId: Long, name: String): TeamSummary = http.run {
+        authenticatedEnvelope { client, token -> client.put(url("teams/$teamId")) {
+            bearer(token); jsonBody(UpdateTeamRequest(name))
+        } }
+    }
+
+    suspend fun leave(teamId: Long) = http.run {
+        authenticatedNoData { client, token -> client.post(url("teams/$teamId/leave")) { bearer(token) } }
+    }
+
+    suspend fun delete(teamId: Long) = http.run {
+        authenticatedNoData { client, token -> client.delete(url("teams/$teamId")) { bearer(token) } }
+    }
+
+    suspend fun transferOwner(teamId: Long, userId: Long): TeamSummary = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("teams/$teamId/owner")) {
+            bearer(token); jsonBody(TransferTeamOwnerRequest(userId))
+        } }
+    }
+}
+
+class TeamAuditApi(private val http: AuthenticatedHttpClient) {
+    suspend fun list(
+        teamId: Long,
+        actorUserId: Long?,
+        action: String?,
+        targetType: String?,
+        result: Int?,
+        startAt: String?,
+        endAt: String?,
+        page: Int,
+        size: Int,
+    ): PageResult<TeamOperationLog> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/audit-logs")) {
+            bearer(token); url {
+                actorUserId?.let { parameters.append("actorUserId", it.toString()) }
+                action?.takeIf(String::isNotBlank)?.let { parameters.append("action", it) }
+                targetType?.takeIf(String::isNotBlank)?.let { parameters.append("targetType", it) }
+                result?.let { parameters.append("result", it.toString()) }
+                startAt?.takeIf(String::isNotBlank)?.let { parameters.append("startAt", it) }
+                endAt?.takeIf(String::isNotBlank)?.let { parameters.append("endAt", it) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun queueExport(
+        teamId: Long,
+        actorUserId: Long?,
+        action: String?,
+        targetType: String?,
+        result: Int?,
+        startAt: String?,
+        endAt: String?,
+    ): TeamTask = http.run {
+        authenticatedEnvelope { client, token -> client.post(url("teams/$teamId/audit-logs/export-tasks")) {
+            bearer(token); url {
+                actorUserId?.let { parameters.append("actorUserId", it.toString()) }
+                action?.takeIf(String::isNotBlank)?.let { parameters.append("action", it) }
+                targetType?.takeIf(String::isNotBlank)?.let { parameters.append("targetType", it) }
+                result?.let { parameters.append("result", it.toString()) }
+                startAt?.takeIf(String::isNotBlank)?.let { parameters.append("startAt", it) }
+                endAt?.takeIf(String::isNotBlank)?.let { parameters.append("endAt", it) }
+            }
+        } }
+    }
+}
+
+class TeamTasksApi(private val http: AuthenticatedHttpClient) {
+    suspend fun list(teamId: Long, status: String?, type: String?, page: Int, size: Int): PageResult<TeamTask> = http.run {
+        authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/tasks")) {
+            bearer(token); url {
+                status?.takeIf(String::isNotBlank)?.let { parameters.append("status", it) }
+                type?.takeIf(String::isNotBlank)?.let { parameters.append("type", it) }
+                parameters.append("page", page.toString())
+                parameters.append("size", size.toString())
+            }
+        } }
+    }
+
+    suspend fun retry(teamId: Long, taskId: Long): TeamTask = http.run {
+        authenticatedEnvelope { client, token ->
+            client.post(url("teams/$teamId/tasks/$taskId/retry")) { bearer(token) }
+        }
+    }
+
+    suspend fun <T> download(
+        teamId: Long,
+        taskId: Long,
+        consume: suspend (HttpStatusCode, Headers, ByteReadChannel) -> T,
+    ): T = http.authenticatedStream("teams/$teamId/tasks/$taskId/download", null, consume)
+}
+
 class TeamOrganizationApi(private val http: AuthenticatedHttpClient) {
     suspend fun listFavorites(teamId: Long, query: String?, page: Int, size: Int): PageResult<FileItem> = http.run {
         authenticatedEnvelope { client, token -> client.get(url("teams/$teamId/favorites")) {

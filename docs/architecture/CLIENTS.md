@@ -79,7 +79,7 @@ Compose Screen
 ```
 
 - `AppContainer` 显式创建认证 HTTP 核心、领域 API、窄 Repository 和业务 Store。不存在聚合全应用状态的 Controller，页面也不接收全局 actions 集合。
-- `AuthStore`、个人功能 Store、`TeamsStore`、`TeamBrowserStore`、`TeamFileActionsStore`、`TeamSearchStore`、`TeamPreviewStore`、`TransferQueueStore` 和 `DiagnosticsStore` 各自拥有独立 `StateFlow`、作业、缓存与重置边界，不直接读写其他 Store。
+- `AuthStore`、个人功能 Store、`TeamsStore`、`TeamBrowserStore`、`TeamFileActionsStore`、`TeamSearchStore`、`TeamPreviewStore`、`TeamManagementStore`、`TransferQueueStore` 和 `DiagnosticsStore` 各自拥有独立 `StateFlow`、作业、缓存与重置边界，不直接读写其他 Store。
 - `AppCoordinator` 只负责启动、会话生命周期和全局重置。跨域行为使用明确窄端口或事件：例如个人或团队上传批次结束事件只让对应浏览 Store 失效目标目录。
 - `AuthenticatedHttpClient` 是唯一 Token 所有者，集中实现单飞刷新、一次重放、统一 envelope/错误解析和受控流式响应。各领域 API 不自行保存或刷新 Token。
 - DataStore 保存服务器设置，完整 Token 对由 Android Keystore AES-256-GCM 加密后原子保存。
@@ -96,16 +96,18 @@ Compose Screen
 - 个人回收站从“整理”菜单进入，按删除根分页和搜索，支持单项恢复、永久删除及清空。普通文件的各入口可打开版本历史；版本下载作为带 `remoteVersionNumber` 的普通传输任务进入同一可恢复队列，继续使用 SAF、`.part`、Range、MD5 和后台调度。
 - 个人搜索也是类型安全的个人导航分支：输入防抖 300 ms，每页 50 项并按 ID 去重；打开文件夹或所在位置时只导航到目标目录，不把临时下载凭证写入路由。
 - KMP 个人预览按 Office、图片、UTF-8 文本、视频和不支持类型分类。图片与视频复用内存中的下载 ticket，Coil 禁用 ticket 磁盘缓存，Media3 不启用媒体缓存；文本只读取前 512 KiB；OnlyOffice 原样使用后端签名的 `mobile=true` 只读配置。
-- KMP 团队浏览、成员、权限和文件操作使用独立 API、Repository 与 Store，不复用个人状态。`TeamMembersStore` 管理分页成员及角色操作，`TeamPermissionsStore` 管理单个资源的有效权限、来源链和直接覆盖；授权变化通过显式事件使 `TeamFileActionsStore` 的权限缓存失效。按钮只用于降低误操作，后端 403 仍是最终裁决。团队目录支持新建文件夹、单项重命名与移动、当前目录多选删除、最多 100 个文件的当前目录上传及单文件下载；复制、文件夹 ZIP、团队版本和回收站 UI 暂不提供。图片和视频 ticket 仅存在 `TeamPreviewStore` 内存，媒体键包含团队 ID，文本限制为 512 KiB，OnlyOffice 仍原样使用后端签名的 `mobile=true` 配置。
+- KMP 团队浏览、成员、权限、文件操作和生命周期管理使用独立 API、Repository 与 Store，不复用个人状态。`TeamMembersStore` 管理分页成员及角色操作，`TeamManagementStore` 管理改名、退出、软删除和所有权转让，`TeamPermissionsStore` 管理单个资源的有效权限、来源链和直接覆盖；授权或角色变化通过显式事件使 `TeamFileActionsStore` 的权限缓存失效。按钮只用于降低误操作，后端 403 仍是最终裁决。团队目录支持新建文件夹、单项重命名与移动、当前目录多选删除、最多 100 个文件的当前目录上传及单文件下载；团队回收站与历史版本使用各自的独立 Store，复制和文件夹 ZIP 暂不提供。图片和视频 ticket 仅存在 `TeamPreviewStore` 内存，媒体键包含团队 ID，文本限制为 512 KiB，OnlyOffice 仍原样使用后端签名的 `mobile=true` 配置。
 - `TeamInvitesStore` 管理成员页的邀请标签，`IncomingInviteStore` 只在内存中持有当前邀请 token；Android 仅接受严格匹配的 `betterclouddrive://team-invites/{token}`。未登录用户可先查看邀请并续接登录或锁定邀请邮箱的注册流程，换服务器、普通退出或会话失效会清除 token。
 - `NotificationsStore` 负责分页、筛选、已读状态、未读徽标和前台 SSE。流连接只在登录且应用前台时存在，每次连接使用新的单次 ticket，并按 1、2、5、10、30 秒上限退避；ticket 不进入路由、Room、DataStore 或日志。通知目标只解析邀请、团队目录和团队成员设置白名单，其他链接不会作为外部 URL 打开。
+- `TeamManagementStore` 只持有一个绑定团队的详情和修改状态。改名或角色变化通过容器同步到 `TeamsStore` 与 `TeamBrowserStore`，并使角色相关权限状态失效；退出或删除会取消并清空所有团队功能 Store，但保留既有团队传输任务，由服务端权限决定后续结果。
+- `TeamAuditStore` 与 `TeamTasksStore` 分别绑定一个团队。审计仅允许 OWNER/ADMIN 进入，草稿筛选在显式应用后同时用于稳定分页和异步 CSV 导出；导出成功直接跳转并高亮对应任务。任务中心按服务端可见性支持状态/类型分页、失败重试和 SAF 结果保存，仅在页面前台且存在 `PENDING/RUNNING` 任务时每 5 秒刷新。任务 DTO 不暴露服务端 `payload`、`resultPath` 或 trace 字段，结果下载要求完整 `200` 响应并经长度校验，先写入私有临时文件，再提交到用户选择的 SAF 目标；SAF Provider 不保证跨 Provider 原子替换。
 - 顶层传输页是个人与团队任务的唯一管理入口，支持按方向和 `全部/个人/团队` 作用域过滤。团队任务在 Room 中保存 `teamId` 与目标父目录，继续复用同一全局串行引擎、UIDT/WorkManager、分片会话、Range、MD5、通知节流和 URI 生命周期；团队上传批次全部离开活动状态后只刷新目标目录一次。
 - 普通文件详情只展示服务端元数据和单文件下载：手机使用底部页，宽度不小于 600dp 时使用右侧详情栏。个人目录支持新建文件夹，以及单项重命名、移动、递归复制和删除；长按进入的多选模式只提供批量移入回收站。文件修改后重新加载当前已加载页并保持滚动锚点，目标目录缓存同步失效。
 - OnlyOffice 诊断探针只在独立 Debug 诊断页出现；个人 Office 文件则可从产品预览页加载。两者都原样使用后端签名的 `mobile=true` 只读配置，Release 不注册诊断入口和诊断路由。
 
 在新应用达到团队业务功能对等前，`android/` 旧应用不删除、不替换。当前团队成员与权限边界见[阶段 15 团队成员与文件权限](../../mobile/docs/stage-15-team-members-permissions.md)，架构边界见[阶段 11.5 KMP 架构边界收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)。
 
-阶段 7/8 已在 Android 14 上完成 64 MiB 上传会话恢复、非零 Range 下载、三页搜索和全部当前预览类型的真实旅程，并在 Android 9/14 设备矩阵回归。阶段 12 又完成了 64 MiB 历史版本下载的两次进程中断与非零 Range 恢复、Room v1→v2 和回收站删除根真实验收。个人空间已达到旧 Android 的主要个人功能对等；团队分支现已具备基础文件协作、成员和文件权限管理，邀请通知与团队内容整理仍由后续阶段补齐。
+阶段 7/8 已在 Android 14 上完成 64 MiB 上传会话恢复、非零 Range 下载、三页搜索和全部当前预览类型的真实旅程，并在 Android 9/14 设备矩阵回归。阶段 12 又完成了 64 MiB 历史版本下载的两次进程中断与非零 Range 恢复、Room v1→v2 和回收站删除根真实验收。个人空间已达到旧 Android 的主要个人功能对等；团队分支现已具备文件协作、成员/邀请、文件权限、内容整理、分享、回收站、版本、生命周期管理、审计和任务中心，达到迁移路线定义的业务功能对等，发布与切换仍由阶段 22 收口。
 
 ## 能力矩阵
 

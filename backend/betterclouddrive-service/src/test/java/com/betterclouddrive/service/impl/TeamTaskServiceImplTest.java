@@ -187,7 +187,10 @@ class TeamTaskServiceImplTest {
         verify(teamTaskRepository).findAll(any(Specification.class), argThat((Pageable pageable) ->
                 pageable.getPageNumber() == 1
                         && pageable.getPageSize() == 10
-                        && pageable.getSort().getOrderFor("createdAt") != null));
+                        && pageable.getSort().getOrderFor("createdAt") != null
+                        && pageable.getSort().getOrderFor("createdAt").isDescending()
+                        && pageable.getSort().getOrderFor("id") != null
+                        && pageable.getSort().getOrderFor("id").isDescending()));
     }
 
     @Test
@@ -224,7 +227,7 @@ class TeamTaskServiceImplTest {
         TeamTaskEntity task = memberTask(7L, 2L, "FOLDER_ZIP");
         task.setStatus(TeamTaskEntity.STATUS_FAILED);
         when(teamService.requireRead(2L, 10L)).thenReturn(member(TeamService.ROLE_VIEWER));
-        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamTaskRepository.findByIdAndTeamIdForUpdate(7L, 10L)).thenReturn(Optional.of(task));
         when(teamPermissionService.effectivePermissions(2L, 10L, 7L)).thenReturn(TeamEffectivePermission.viewer());
         when(teamTaskRepository.save(task)).thenReturn(task);
 
@@ -236,7 +239,7 @@ class TeamTaskServiceImplTest {
         TeamTaskEntity task = memberTask(7L, 2L, "ONLYOFFICE_SAVE");
         task.setStatus(TeamTaskEntity.STATUS_FAILED);
         when(teamService.requireRead(2L, 10L)).thenReturn(member(TeamService.ROLE_EDITOR));
-        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamTaskRepository.findByIdAndTeamIdForUpdate(7L, 10L)).thenReturn(Optional.of(task));
         when(teamPermissionService.effectivePermissions(2L, 10L, 7L)).thenReturn(TeamEffectivePermission.viewer());
 
         assertThatThrownBy(() -> teamTaskService.retryTask(2L, 10L, 7L))
@@ -254,7 +257,7 @@ class TeamTaskServiceImplTest {
                 .errorMessageKey("task.failed")
                 .retryCount(2)
                 .build();
-        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamTaskRepository.findByIdAndTeamIdForUpdate(7L, 10L)).thenReturn(Optional.of(task));
         when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         when(teamService.requireRead(2L, 10L)).thenReturn(manager());
@@ -269,6 +272,7 @@ class TeamTaskServiceImplTest {
         assertThat(retried.getStartedAt()).isNull();
         assertThat(retried.getCompletedAt()).isNull();
         assertThat(retried.getUpdatedAt()).isNotNull();
+        verify(teamTaskRepository).findByIdAndTeamIdForUpdate(7L, 10L);
         verify(teamTaskOutboxWriter).enqueue(retried);
     }
 
@@ -281,7 +285,7 @@ class TeamTaskServiceImplTest {
                 .status(TeamTaskEntity.STATUS_FAILED)
                 .retryCount(0)
                 .build();
-        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamTaskRepository.findByIdAndTeamIdForUpdate(7L, 10L)).thenReturn(Optional.of(task));
         when(teamTaskRepository.save(any(TeamTaskEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         when(teamService.requireRead(2L, 10L)).thenReturn(manager());
@@ -298,7 +302,7 @@ class TeamTaskServiceImplTest {
                 .teamId(10L)
                 .status(TeamTaskEntity.STATUS_RUNNING)
                 .build();
-        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamTaskRepository.findByIdAndTeamIdForUpdate(7L, 10L)).thenReturn(Optional.of(task));
 
         when(teamService.requireRead(2L, 10L)).thenReturn(manager());
         assertThatThrownBy(() -> teamTaskService.retryTask(2L, 10L, 7L))
@@ -308,14 +312,8 @@ class TeamTaskServiceImplTest {
 
     @Test
     void retryTask_shouldHideTasksFromOtherTeams() {
-        TeamTaskEntity task = TeamTaskEntity.builder()
-                .id(7L)
-                .teamId(11L)
-                .status(TeamTaskEntity.STATUS_FAILED)
-                .build();
-        when(teamTaskRepository.findById(7L)).thenReturn(Optional.of(task));
+        when(teamTaskRepository.findByIdAndTeamIdForUpdate(7L, 10L)).thenReturn(Optional.empty());
 
-        when(teamService.requireRead(2L, 10L)).thenReturn(manager());
         assertThatThrownBy(() -> teamTaskService.retryTask(2L, 10L, 7L))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404));

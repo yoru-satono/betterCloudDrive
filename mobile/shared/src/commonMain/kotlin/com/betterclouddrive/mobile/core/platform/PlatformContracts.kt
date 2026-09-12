@@ -88,6 +88,7 @@ interface LocalDateTimeService {
     fun nowEpochMillis(): Long
     fun localDateTimeToEpochMillis(selectedUtcDateMillis: Long, hour: Int, minute: Int): Long
     fun formatDateTime(epochMillis: Long): String
+    fun formatApiLocalDateTime(epochMillis: Long): String
     fun hourOfDay(epochMillis: Long): Int = 12
     fun minuteOfHour(epochMillis: Long): Int = 0
 }

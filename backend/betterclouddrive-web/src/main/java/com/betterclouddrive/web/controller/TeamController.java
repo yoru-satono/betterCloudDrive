@@ -46,6 +46,7 @@ import com.betterclouddrive.web.dto.response.TeamInviteResponse;
 import com.betterclouddrive.web.dto.response.TeamMemberResponse;
 import com.betterclouddrive.web.dto.response.TeamFilePermissionResponse;
 import com.betterclouddrive.web.dto.response.TeamResponse;
+import com.betterclouddrive.web.dto.response.TeamTaskResponse;
 import com.betterclouddrive.web.export.AuditCsvExporter;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
@@ -272,7 +273,7 @@ public class TeamController {
     }
 
     @PostMapping("/{teamId}/audit-logs/export-tasks")
-    public ApiResponse<TeamTaskEntity> queueAuditExport(
+    public ApiResponse<TeamTaskResponse> queueAuditExport(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @RequestParam(required = false) Long actorUserId,
@@ -281,27 +282,30 @@ public class TeamController {
             @RequestParam(required = false) Integer result,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startAt,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endAt) {
-        return ApiResponse.success(teamAuditExportTaskService.queueExport(
-                user.getUserId(), teamId, actorUserId, action, targetType, result, startAt, endAt));
+        return ApiResponse.success(TeamTaskResponse.from(teamAuditExportTaskService.queueExport(
+                user.getUserId(), teamId, actorUserId, action, targetType, result, startAt, endAt)));
     }
 
     @GetMapping("/{teamId}/tasks")
-    public ApiResponse<PageResult<TeamTaskEntity>> listTasks(
+    public ApiResponse<PageResult<TeamTaskResponse>> listTasks(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") @Max(100) int size) {
-        return ApiResponse.success(teamTaskService.listTasks(user.getUserId(), teamId, status, type, page, size));
+        PageResult<TeamTaskEntity> tasks = teamTaskService.listTasks(user.getUserId(), teamId, status, type, page, size);
+        return ApiResponse.success(PageResult.of(
+                tasks.getRecords().stream().map(TeamTaskResponse::from).toList(),
+                tasks.getTotal(), tasks.getPage(), tasks.getSize()));
     }
 
     @PostMapping("/{teamId}/tasks/{taskId}/retry")
-    public ApiResponse<TeamTaskEntity> retryTask(
+    public ApiResponse<TeamTaskResponse> retryTask(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long taskId) {
-        return ApiResponse.success(teamTaskService.retryTask(user.getUserId(), teamId, taskId));
+        return ApiResponse.success(TeamTaskResponse.from(teamTaskService.retryTask(user.getUserId(), teamId, taskId)));
     }
 
     @GetMapping("/{teamId}/tasks/{taskId}/download")
@@ -866,11 +870,12 @@ public class TeamController {
     }
 
     @PostMapping("/{teamId}/download/folders/{fileId}/zip/tasks")
-    public ApiResponse<TeamTaskEntity> queueFolderZipTask(
+    public ApiResponse<TeamTaskResponse> queueFolderZipTask(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @PathVariable Long fileId) {
-        return ApiResponse.success(folderZipTaskService.queueTeamFolderZip(user.getUserId(), teamId, fileId));
+        return ApiResponse.success(TeamTaskResponse.from(
+                folderZipTaskService.queueTeamFolderZip(user.getUserId(), teamId, fileId)));
     }
 
     @GetMapping("/{teamId}/download/{fileId}")

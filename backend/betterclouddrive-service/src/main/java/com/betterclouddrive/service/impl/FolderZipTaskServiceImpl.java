@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.Optional;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -65,6 +66,11 @@ public class FolderZipTaskServiceImpl implements FolderZipTaskService {
     public TeamTaskDownload downloadTeamFolderZipResult(Long requesterUserId, Long teamId, Long taskId) {
         TeamTaskEntity task = teamTaskService.getTask(teamId, taskId);
         if (!TASK_TYPE_FOLDER_ZIP.equals(task.getTaskType())) {
+            throw new BusinessException(ApiCode.NOT_FOUND, "Task result is not available");
+        }
+        if (!TARGET_TYPE_FILE.equals(task.getTargetType())
+                || task.getTargetId() == null
+                || !Objects.equals(requesterUserId, task.getActorUserId())) {
             throw new BusinessException(ApiCode.NOT_FOUND, "Task result is not available");
         }
         if (!TeamTaskEntity.STATUS_SUCCEEDED.equals(task.getStatus())) {

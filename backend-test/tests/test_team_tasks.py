@@ -23,7 +23,7 @@ def _register(client, registration_code_for):
     tokens = assert_api_ok(client.post("/api/v1/auth/login", json={
         "username": username, "password": "TestPass123!",
     }))
-    return {"Authorization": f"Bearer {tokens['accessToken']}"}
+    return {"username": username, "headers": {"Authorization": f"Bearer {tokens['accessToken']}"}}
 
 
 def _sql(statement):
@@ -54,6 +54,12 @@ def test_team_task_filters_pagination_download_retry_and_authorization(
         "/api/v1/teams", json={"name": f"task_team_{uuid.uuid4().hex[:8]}"}, headers=auth_headers,
     ))
     team_id = team["id"]
+    admin = _register(client, registration_code_for)
+    assert_api_ok(client.post(
+        f"/api/v1/teams/{team_id}/members",
+        json={"username": admin["username"], "role": "ADMIN"},
+        headers=auth_headers,
+    ))
     folder = assert_api_ok(client.post(
         f"/api/v1/teams/{team_id}/files/folder",
         json={"parentId": None, "folderName": "task-folder"}, headers=auth_headers,
@@ -81,6 +87,10 @@ def test_team_task_filters_pagination_download_retry_and_authorization(
     _wait_succeeded(client, auth_headers, team_id, archive["id"])
     assert client.get(f"/api/v1/teams/{team_id}/tasks/{audit['id']}/download", headers=auth_headers).content
     assert client.get(f"/api/v1/teams/{team_id}/tasks/{archive['id']}/download", headers=auth_headers).content
+    assert_api_error(
+        client.get(f"/api/v1/teams/{team_id}/tasks/{archive['id']}/download", headers=admin["headers"]),
+        404,
+    )
 
     _sql(f"UPDATE team_tasks SET status='FAILED', error_message_key='task.failed', updated_at=CURRENT_TIMESTAMP "
          f"WHERE id={archive['id']} AND team_id={team_id}")
@@ -89,10 +99,10 @@ def test_team_task_filters_pagination_download_retry_and_authorization(
     ))
     assert any(item["id"] == archive["id"] for item in failed["records"])
 
-    outsider_headers = _register(client, registration_code_for)
-    hidden = client.get(f"/api/v1/teams/{team_id}/tasks", headers=outsider_headers)
+    outsider = _register(client, registration_code_for)
+    hidden = client.get(f"/api/v1/teams/{team_id}/tasks", headers=outsider["headers"])
     assert_api_error(hidden, 403)
-    denied = client.post(f"/api/v1/teams/{team_id}/tasks/{archive['id']}/retry", headers=outsider_headers)
+    denied = client.post(f"/api/v1/teams/{team_id}/tasks/{archive['id']}/retry", headers=outsider["headers"])
     assert_api_error(denied, 403)
 
     retried = assert_api_ok(client.post(

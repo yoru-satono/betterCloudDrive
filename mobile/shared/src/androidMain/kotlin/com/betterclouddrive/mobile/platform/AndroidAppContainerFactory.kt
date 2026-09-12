@@ -26,6 +26,9 @@ import com.betterclouddrive.mobile.core.network.TeamPreviewApi
 import com.betterclouddrive.mobile.core.network.TeamWorkspaceApi
 import com.betterclouddrive.mobile.core.network.TeamOrganizationApi
 import com.betterclouddrive.mobile.core.network.TeamMembersApi
+import com.betterclouddrive.mobile.core.network.TeamManagementApi
+import com.betterclouddrive.mobile.core.network.TeamAuditApi
+import com.betterclouddrive.mobile.core.network.TeamTasksApi
 import com.betterclouddrive.mobile.core.network.TeamPermissionsApi
 import com.betterclouddrive.mobile.core.network.TeamSharesApi
 import com.betterclouddrive.mobile.core.network.TeamInvitesApi
@@ -47,6 +50,9 @@ import com.betterclouddrive.mobile.feature.teams.TeamPreviewRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamWorkspaceRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamOrganizationRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamMembersRepositoryImpl
+import com.betterclouddrive.mobile.feature.teams.TeamManagementRepositoryImpl
+import com.betterclouddrive.mobile.feature.teams.TeamAuditRepositoryImpl
+import com.betterclouddrive.mobile.feature.teams.TeamTasksRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsRepositoryImpl
 import com.betterclouddrive.mobile.feature.shares.TeamSharesRepositoryImpl
 import com.betterclouddrive.mobile.feature.teams.TeamInvitesRepositoryImpl
@@ -65,6 +71,7 @@ import android.content.ClipboardManager
 import com.betterclouddrive.mobile.core.platform.ClipboardService
 import com.betterclouddrive.mobile.core.platform.LocalDateTimeService
 import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.TimeZone
@@ -111,6 +118,9 @@ object AndroidAppContainerFactory {
         val teamPreviewApi = TeamPreviewApi(http)
         val teamOrganizationApi = TeamOrganizationApi(http)
         val teamMembersApi = TeamMembersApi(http)
+        val teamManagementApi = TeamManagementApi(http)
+        val teamAuditApi = TeamAuditApi(http)
+        val teamTasksApi = TeamTasksApi(http)
         val teamPermissionsApi = TeamPermissionsApi(http)
         val teamSharesApi = TeamSharesApi(http)
         val teamInvitesApi = TeamInvitesApi(http)
@@ -134,6 +144,9 @@ object AndroidAppContainerFactory {
             teamPreview = TeamPreviewRepositoryImpl(teamWorkspaceApi, teamPreviewApi),
             teamOrganization = TeamOrganizationRepositoryImpl(teamOrganizationApi),
             teamMembers = TeamMembersRepositoryImpl(teamMembersApi),
+            teamManagement = TeamManagementRepositoryImpl(teamManagementApi),
+            teamAudit = TeamAuditRepositoryImpl(teamAuditApi),
+            teamTasks = TeamTasksRepositoryImpl(teamTasksApi, fileAccess),
             teamPermissions = TeamPermissionsRepositoryImpl(teamPermissionsApi),
             teamInvites = TeamInvitesRepositoryImpl(teamInvitesApi),
             notifications = NotificationsRepositoryImpl(notificationsApi),
@@ -173,6 +186,9 @@ internal class AndroidLocalDateTimeService : LocalDateTimeService {
 
     override fun formatDateTime(epochMillis: Long): String =
         DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(epochMillis))
+
+    override fun formatApiLocalDateTime(epochMillis: Long): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.ROOT).format(Date(epochMillis))
 
     override fun hourOfDay(epochMillis: Long): Int = Calendar.getInstance().apply { timeInMillis = epochMillis }
         .get(Calendar.HOUR_OF_DAY)

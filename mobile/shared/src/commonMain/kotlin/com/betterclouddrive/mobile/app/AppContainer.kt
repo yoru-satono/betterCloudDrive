@@ -2,6 +2,7 @@ package com.betterclouddrive.mobile.app
 
 import com.betterclouddrive.mobile.core.database.MobileDatabase
 import com.betterclouddrive.mobile.core.localization.PlatformLocaleProvider
+import com.betterclouddrive.mobile.core.localization.UiMessage
 import com.betterclouddrive.mobile.core.platform.ApplicationLocaleController
 import com.betterclouddrive.mobile.core.platform.ThemePreferenceStore
 import com.betterclouddrive.mobile.core.platform.ClipboardService
@@ -46,6 +47,12 @@ import com.betterclouddrive.mobile.feature.teams.TeamWorkspaceRepository
 import com.betterclouddrive.mobile.feature.teams.TeamsStore
 import com.betterclouddrive.mobile.feature.teams.TeamMembersRepository
 import com.betterclouddrive.mobile.feature.teams.TeamMembersStore
+import com.betterclouddrive.mobile.feature.teams.TeamManagementRepository
+import com.betterclouddrive.mobile.feature.teams.TeamManagementStore
+import com.betterclouddrive.mobile.feature.teams.TeamAuditRepository
+import com.betterclouddrive.mobile.feature.teams.TeamAuditStore
+import com.betterclouddrive.mobile.feature.teams.TeamTasksRepository
+import com.betterclouddrive.mobile.feature.teams.TeamTasksStore
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsRepository
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsStore
 import com.betterclouddrive.mobile.feature.teams.TeamInvitesRepository
@@ -76,6 +83,9 @@ class AppContainer(
     val teamPreview: TeamPreviewRepository,
     val teamOrganization: TeamOrganizationRepository,
     val teamMembers: TeamMembersRepository,
+    val teamManagement: TeamManagementRepository,
+    val teamAudit: TeamAuditRepository,
+    val teamTasks: TeamTasksRepository,
     val teamPermissions: TeamPermissionsRepository,
     val teamInvites: TeamInvitesRepository,
     val notifications: NotificationsRepository,
@@ -103,6 +113,7 @@ class AppContainer(
     val previewStore = PersonalPreviewStore(preview, applicationScope)
     val sharesStore = PersonalSharesStore(shares, applicationScope)
     val diagnosticsStore = DiagnosticsStore(preview, applicationScope)
+    val authStore = AuthStore(auth, applicationScope, localeController, themePreferences)
     val teamsStore = TeamsStore(teamWorkspace, applicationScope)
     val teamBrowserStore = TeamBrowserStore(teamWorkspace, applicationScope)
     val teamSearchStore = TeamSearchStore(teamWorkspace, applicationScope)
@@ -131,6 +142,17 @@ class AppContainer(
         invalidateTeamContent(teamId, setOf(fileId))
     }
     val teamInvitesStore = TeamInvitesStore(teamInvites, applicationScope)
+    val teamManagementStore = TeamManagementStore(
+        teamManagement,
+        applicationScope,
+        onTeamUpdated = ::synchronizeTeamSummary,
+        onTeamRemoved = ::clearTeamContext,
+        onOwnershipTransferred = { team ->
+            if (teamMembersStore.state.value.teamId == team.id) teamMembersStore.refresh()
+        },
+    )
+    val teamTasksStore = TeamTasksStore(teamTasks, applicationScope)
+    val teamAuditStore = TeamAuditStore(teamAudit, localDateTime, applicationScope, teamTasksStore::acceptQueued)
     val incomingInviteStore = IncomingInviteStore(teamInvites, applicationScope) { teamId ->
         teamsStore.refresh()
         teamMembersStore.reset()
@@ -146,7 +168,6 @@ class AppContainer(
     }
     val recycleBinStore = PersonalRecycleBinStore(recycleBin, applicationScope, ::invalidatePersonalContent)
     val versionsStore = PersonalVersionsStore(personalVersions, transferQueue, applicationScope, ::invalidatePersonalContent)
-    val authStore = AuthStore(auth, applicationScope, localeController, themePreferences)
     val coordinator = AppCoordinator(
         authStore,
         auth,
@@ -159,7 +180,7 @@ class AppContainer(
             teamFavoritesStore, teamTagsStore, teamSharesStore,
             teamRecycleBinStore, teamVersionsStore,
             teamFileActionsStore, teamMembersStore, teamPermissionsStore,
-            teamInvitesStore, notificationsStore,
+            teamInvitesStore, teamManagementStore, teamAuditStore, teamTasksStore, notificationsStore,
         ),
         incomingInviteStore,
         notificationsStore,
@@ -168,5 +189,44 @@ class AppContainer(
 
     fun reconcileTransfers() {
         applicationScope.launch { transfers.reconcile() }
+    }
+
+    private fun synchronizeTeamSummary(team: com.betterclouddrive.mobile.core.model.TeamSummary) {
+        teamsStore.upsert(team)
+        teamBrowserStore.replaceTeamSummary(team)
+        teamMembersStore.updateActorRole(team.id, team.role)
+        if (teamInvitesStore.state.value.teamId == team.id) teamInvitesStore.activate(team.id, team.role)
+        if (teamFileActionsStore.state.value.teamId == team.id) {
+            teamFileActionsStore.updateTeamRole(team)
+        }
+        teamTagsStore.updateRole(team.id, team.role)
+        teamRecycleBinStore.updateRole(team.id, team.role)
+        if (teamAuditStore.state.value.teamId == team.id) teamAuditStore.activate(team.id, team.role)
+        if (teamTasksStore.state.value.teamId == team.id) teamTasksStore.activate(team.id, team.role)
+        if (teamSharesStore.state.value.teamId == team.id) {
+            teamSharesStore.bind(team.id, authStore.state.value.user?.id, team.role)
+        }
+    }
+
+    private fun clearTeamContext(
+        teamId: Long,
+        feedback: UiMessage,
+    ) {
+        teamsStore.remove(teamId)
+        teamsStore.showFeedback(feedback)
+        teamBrowserStore.reset()
+        teamSearchStore.reset()
+        teamPreviewStore.reset()
+        teamFavoritesStore.reset()
+        teamTagsStore.reset()
+        teamSharesStore.reset()
+        teamRecycleBinStore.reset()
+        teamVersionsStore.reset()
+        teamFileActionsStore.reset()
+        teamMembersStore.reset()
+        teamPermissionsStore.reset()
+        teamInvitesStore.reset()
+        teamAuditStore.reset()
+        teamTasksStore.reset()
     }
 }

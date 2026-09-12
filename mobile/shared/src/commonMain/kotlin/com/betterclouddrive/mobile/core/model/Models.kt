@@ -233,6 +233,56 @@ data class UpdateTeamFilePermissionRequest(
 @Serializable data class DeleteTeamFilesRequest(@SerialName("fileIds") val fileIds: List<Long>)
 
 @Serializable data class CreateTeamRequest(val name: String)
+@Serializable data class UpdateTeamRequest(val name: String)
+@Serializable data class TransferTeamOwnerRequest(@SerialName("userId") val userId: Long)
+
+@Serializable
+data class TeamOperationLog(
+    val id: Long = 0,
+    @SerialName("teamId") val teamId: Long = 0,
+    @SerialName("actorUserId") val actorUserId: Long? = null,
+    val action: String = "",
+    @SerialName("targetType") val targetType: String? = null,
+    @SerialName("targetId") val targetId: Long? = null,
+    val result: Int = 0,
+    @SerialName("statusCode") val statusCode: Int? = null,
+    @SerialName("requestId") val requestId: String? = null,
+    @SerialName("traceId") val traceId: String? = null,
+    val details: String? = null,
+    @SerialName("createdAt") val createdAt: String? = null,
+)
+
+@Serializable
+data class TeamTask(
+    val id: Long = 0,
+    @SerialName("teamId") val teamId: Long? = null,
+    @SerialName("actorUserId") val actorUserId: Long? = null,
+    @SerialName("taskType") val taskType: String = "",
+    val status: String = "PENDING",
+    @SerialName("targetType") val targetType: String? = null,
+    @SerialName("targetId") val targetId: Long? = null,
+    @SerialName("titleKey") val titleKey: String = "",
+    @SerialName("titleParams") val titleParams: Map<String, JsonElement> = emptyMap(),
+    val progress: Int = 0,
+    @SerialName("resultMessageKey") val resultMessageKey: String? = null,
+    @SerialName("resultMessageParams") val resultMessageParams: Map<String, JsonElement> = emptyMap(),
+    @SerialName("resultFileName") val resultFileName: String? = null,
+    @SerialName("resultContentType") val resultContentType: String? = null,
+    @SerialName("resultSizeBytes") val resultSizeBytes: Long? = null,
+    @SerialName("resultExpiresAt") val resultExpiresAt: String? = null,
+    @SerialName("errorMessageKey") val errorMessageKey: String? = null,
+    @SerialName("errorMessageParams") val errorMessageParams: Map<String, JsonElement> = emptyMap(),
+    @SerialName("retryCount") val retryCount: Int = 0,
+    @SerialName("createdAt") val createdAt: String? = null,
+    @SerialName("updatedAt") val updatedAt: String? = null,
+    @SerialName("startedAt") val startedAt: String? = null,
+    @SerialName("completedAt") val completedAt: String? = null,
+) {
+    val isActive: Boolean get() = status == "PENDING" || status == "RUNNING"
+    val canRetry: Boolean get() = status == "FAILED"
+    val canDownload: Boolean get() = status == "SUCCEEDED" &&
+        taskType in setOf("AUDIT_EXPORT", "FOLDER_ZIP") && !resultFileName.isNullOrBlank()
+}
 
 @Serializable
 data class RecycleBinItem(

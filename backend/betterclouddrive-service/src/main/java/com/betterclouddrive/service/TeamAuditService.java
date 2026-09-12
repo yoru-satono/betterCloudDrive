@@ -37,4 +37,6 @@ public interface TeamAuditService {
     PageResult<TeamOperationLogEntity> listExportBatch(
             Long requesterUserId, Long teamId, Long actorUserId, String action, String targetType,
             Integer result, LocalDateTime startAt, LocalDateTime endAt, int page, int size);
+
+    void validateFilter(Long actorUserId, Integer result, LocalDateTime startAt, LocalDateTime endAt);
 }

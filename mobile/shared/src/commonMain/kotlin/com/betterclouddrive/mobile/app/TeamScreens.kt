@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -123,14 +124,23 @@ internal fun TeamsScreen(
     onLoadMore: () -> Unit,
     onCreate: (String) -> Unit,
     onClearCreateError: () -> Unit,
+    onClearFeedback: () -> Unit,
     onOpenTeam: (TeamSummary) -> Unit,
 ) {
     val strings = LocalMobileStrings.current
+    val snackbar = remember { SnackbarHostState() }
     var creating by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
+    LaunchedEffect(state.feedback?.id) {
+        state.feedback?.let { feedback ->
+            snackbar.showSnackbar(strings.resolve(feedback.message).orEmpty())
+            onClearFeedback()
+        }
+    }
     BackHandler(onBack = onBack)
     Scaffold(
         modifier = Modifier.testTag("teams-screen"),
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = { TopAppBar(
             title = { Text(strings[MobileString.TeamsTitle]) },
             navigationIcon = { IconButton(onBack, Modifier.testTag("teams-back")) {
@@ -252,6 +262,7 @@ fun TeamBrowserScreen(
     onOpenFolder: (FileItem) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenMembers: () -> Unit,
+    onOpenSettings: () -> Unit,
     onRetryWorkspace: () -> Unit,
     onRefresh: () -> Unit,
     onLoadMore: () -> Unit,
@@ -363,6 +374,9 @@ fun TeamBrowserScreen(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, strings[MobileString.BackToParent])
             } },
             actions = {
+                IconButton(onOpenSettings, Modifier.testTag("team-settings-open")) {
+                    Icon(Icons.Default.Settings, strings[MobileString.TeamSettings])
+                }
                 IconButton(onOpenMembers, Modifier.testTag("team-members-open")) { Icon(Icons.Default.Groups, strings[MobileString.TeamMembers]) }
                 IconButton(onOpenSearch, Modifier.testTag("team-search-open")) { Icon(Icons.Default.Search, strings[MobileString.TeamSearch]) }
                 Box {

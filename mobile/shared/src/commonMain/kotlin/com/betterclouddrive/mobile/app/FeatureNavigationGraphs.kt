@@ -337,6 +337,7 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             onLoadMore = container.teamsStore::loadMore,
             onCreate = container.teamsStore::create,
             onClearCreateError = container.teamsStore::clearCreateError,
+            onClearFeedback = container.teamsStore::clearFeedback,
             onOpenTeam = { navController.navigate(TeamWorkspaceRoute(it.id)) },
         )
     }
@@ -412,12 +413,18 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
         val teamId = entry.toRoute<TeamMembersRoute>().teamId
         val state by container.teamMembersStore.state.collectAsState()
         val invites by container.teamInvitesStore.state.collectAsState()
+        val management by container.teamManagementStore.state.collectAsState()
         val browser by container.teamBrowserStore.state.collectAsState()
-        val listedTeam = container.teamsStore.state.value.items.firstOrNull { it.id == teamId }
-        val role = browser.team?.takeIf { it.id == teamId }?.role ?: listedTeam?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
+        val teams by container.teamsStore.state.collectAsState()
+        val listedTeam = teams.items.firstOrNull { it.id == teamId }
+        val summary = management.team?.takeIf { it.id == teamId }
+            ?: browser.team?.takeIf { it.id == teamId }
+            ?: listedTeam
+        val role = summary?.role ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
         LaunchedEffect(teamId, role) {
             container.teamMembersStore.activate(teamId, role)
             container.teamInvitesStore.activate(teamId, role)
+            container.teamManagementStore.bind(teamId, summary)
         }
         TeamMembersScreen(
             state = state,
@@ -439,6 +446,106 @@ internal fun NavGraphBuilder.teamWorkspaceGraph(
             onCancelInvite = container.teamInvitesStore::cancel,
             onClearInviteError = container.teamInvitesStore::clearCreateError,
             onClearInviteFeedback = container.teamInvitesStore::clearFeedback,
+            management = management,
+            onTransferOwnership = container.teamManagementStore::transferOwner,
+            onClearManagementFeedback = container.teamManagementStore::clearFeedback,
+        )
+    }
+    composable<TeamSettingsRoute> { entry ->
+        val teamId = entry.toRoute<TeamSettingsRoute>().teamId
+        val state by container.teamManagementStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val summary = browser.team?.takeIf { it.id == teamId } ?: teams.items.firstOrNull { it.id == teamId }
+        LaunchedEffect(teamId) { container.teamManagementStore.activate(teamId, summary) }
+        LaunchedEffect(state.departedTeamId) {
+            if (state.departedTeamId == teamId) {
+                navController.navigate(TeamsRoute) {
+                    popUpTo<TeamsRoute> { inclusive = false }
+                    launchSingleTop = true
+                }
+                container.teamManagementStore.consumeDeparture()
+            }
+        }
+        TeamSettingsScreen(
+            state = state,
+            wide = wide,
+            onBack = navController::popBackStack,
+            onRefresh = container.teamManagementStore::refresh,
+            onRename = container.teamManagementStore::rename,
+            onLeave = container.teamManagementStore::leave,
+            onDelete = container.teamManagementStore::delete,
+            onClearNameError = container.teamManagementStore::clearNameError,
+            onClearFeedback = container.teamManagementStore::clearFeedback,
+            onOpenAudit = { navController.navigate(TeamAuditRoute(teamId)) },
+            onOpenTasks = { navController.navigate(TeamTasksRoute(teamId)) },
+        )
+    }
+    composable<TeamAuditRoute> { entry ->
+        val teamId = entry.toRoute<TeamAuditRoute>().teamId
+        val state by container.teamAuditStore.state.collectAsState()
+        val management by container.teamManagementStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val role = management.team?.takeIf { it.id == teamId }?.role
+            ?: browser.team?.takeIf { it.id == teamId }?.role
+            ?: teams.items.firstOrNull { it.id == teamId }?.role
+            ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
+        LaunchedEffect(teamId, role) { container.teamAuditStore.activate(teamId, role) }
+        LaunchedEffect(state.queuedTaskId) {
+            state.queuedTaskId?.let { taskId ->
+                navController.navigate(TeamTasksRoute(teamId, taskId))
+                container.teamAuditStore.consumeQueuedTask()
+            }
+        }
+        TeamAuditScreen(
+            state = state,
+            wide = wide,
+            dateTime = container.localDateTime,
+            onBack = navController::popBackStack,
+            onRefresh = container.teamAuditStore::refresh,
+            onActor = container.teamAuditStore::updateActorUserId,
+            onAction = container.teamAuditStore::updateAction,
+            onTargetType = container.teamAuditStore::updateTargetType,
+            onResult = container.teamAuditStore::updateResult,
+            onStartAt = container.teamAuditStore::updateStartAt,
+            onEndAt = container.teamAuditStore::updateEndAt,
+            onApply = container.teamAuditStore::applyFilters,
+            onReset = container.teamAuditStore::resetFilters,
+            onExport = container.teamAuditStore::export,
+            onLoadMore = container.teamAuditStore::loadMore,
+            onConsumeFeedback = container.teamAuditStore::consumeFeedback,
+        )
+    }
+    composable<TeamTasksRoute> { entry ->
+        val route = entry.toRoute<TeamTasksRoute>()
+        val state by container.teamTasksStore.state.collectAsState()
+        val management by container.teamManagementStore.state.collectAsState()
+        val browser by container.teamBrowserStore.state.collectAsState()
+        val teams by container.teamsStore.state.collectAsState()
+        val role = management.team?.takeIf { it.id == route.teamId }?.role
+            ?: browser.team?.takeIf { it.id == route.teamId }?.role
+            ?: teams.items.firstOrNull { it.id == route.teamId }?.role
+            ?: com.betterclouddrive.mobile.core.model.TeamRole.VIEWER
+        LaunchedEffect(route.teamId, role, route.highlightedTaskId) {
+            container.teamTasksStore.activate(route.teamId, role, route.highlightedTaskId)
+        }
+        DisposableEffect(route.teamId) {
+            container.teamTasksStore.setVisible(true)
+            onDispose { container.teamTasksStore.setVisible(false) }
+        }
+        TeamTasksScreen(
+            state = state,
+            documentPicker = container.documentPicker,
+            onBack = navController::popBackStack,
+            onRefresh = container.teamTasksStore::refresh,
+            onStatus = container.teamTasksStore::setStatus,
+            onType = container.teamTasksStore::setType,
+            onPrevious = container.teamTasksStore::previousPage,
+            onNext = container.teamTasksStore::nextPage,
+            onRetry = container.teamTasksStore::retry,
+            onDownload = container.teamTasksStore::download,
+            onConsumeFeedback = container.teamTasksStore::consumeFeedback,
         )
     }
     composable<TeamFavoritesRoute> { entry ->
@@ -737,6 +844,7 @@ private fun TeamBrowserDestination(
         },
         onOpenSearch = { navController.navigate(TeamSearchRoute(teamId)) },
         onOpenMembers = { navController.navigate(TeamMembersRoute(teamId)) },
+        onOpenSettings = { navController.navigate(TeamSettingsRoute(teamId)) },
         onOpenFavorites = { navController.navigate(TeamFavoritesRoute(teamId)) },
         onOpenTags = { navController.navigate(TeamTagsRoute(teamId)) },
         onRetryWorkspace = { container.teamBrowserStore.activate(teamId, folderId) },

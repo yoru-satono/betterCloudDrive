@@ -15,7 +15,7 @@
 | GET | `/api/v1/teams/{teamId}` | 团队成员 | 无 | `TeamResponse` |
 | PUT | `/api/v1/teams/{teamId}` | OWNER/ADMIN | `{ "name": "新名称" }` | `TeamResponse` |
 | DELETE | `/api/v1/teams/{teamId}` | OWNER | 无 | 软删除团队 |
-| POST | `/api/v1/teams/{teamId}/leave` | 非唯一 OWNER | 无 | 退出团队 |
+| POST | `/api/v1/teams/{teamId}/leave` | ADMIN/EDITOR/VIEWER | 无 | 退出团队；OWNER 必须先转让所有权 |
 | POST | `/api/v1/teams/{teamId}/owner` | OWNER | `{ "userId": 12 }` | 转让后的 `TeamResponse` |
 | GET | `/api/v1/teams/{teamId}/members?page=1&size=20` | 团队成员 | 无 | `PageResult<TeamMemberResponse>`，`size` 最大 100 |
 | POST | `/api/v1/teams/{teamId}/members` | OWNER/ADMIN | `{ "username": "lisi", "role": "VIEWER" }` | `TeamMemberResponse` |
@@ -26,7 +26,11 @@
 
 成员列表只返回活动成员，固定按 `OWNER`、`ADMIN`、`EDITOR`、`VIEWER`、用户名、用户 ID 排序。OWNER 可以管理所有非 OWNER 成员；ADMIN 只能添加、修改或移除 EDITOR 和 VIEWER，不能授予 ADMIN，也不能修改或移除已有 ADMIN。OWNER 不能通过成员接口修改或移除，必须使用所有权转让流程。重复添加活动成员保持幂等并按同一角色矩阵处理角色变化；已移除成员可重新激活。
 
-**错误码:** 403（非成员或角色不足）、404（团队/成员不存在）、409（重名或状态冲突）。
+团队名称会去除首尾空白，最终长度必须为 1～80 个字符，不要求跨团队唯一。所有权只能转让给同一团队中的其他活动成员；目标成为 OWNER，原 OWNER 固定降为 ADMIN，响应 `TeamResponse.role` 是原 OWNER 的新角色。删除是立即不可访问的软删除，`purgeAfter` 按既有策略设置为删除后 30 天；同一 OWNER 对已经软删除的团队重复删除保持幂等。
+
+改名、退出、删除和所有权转让都会先取得团队行悲观写锁，再重新校验团队状态、活动成员身份和当前角色。客户端的按钮可见性只用于交互引导，服务端始终是权限和并发状态的最终裁决者；并发所有权转让最多一个请求成功，提交后团队中保持唯一 OWNER。
+
+**错误码:** 400（名称或转让目标非法）、403（非成员或角色不足）、404（团队/成员不存在）、409（状态冲突）。
 
 ### 16.2 邀请链接
 
@@ -237,7 +241,7 @@ POST /api/v1/teams/{teamId}/audit-logs/export-tasks?action=&targetType=&actorUse
 Authorization: Bearer <accessToken>
 ```
 
-OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表、同步导出和异步导出任务使用相同过滤语义。`GET /audit-logs/export` 保留同步 CSV 导出兼容旧客户端，响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。`POST /audit-logs/export-tasks` 返回 `TeamTask`；异步任务以创建时刻作为默认结束时间，按 `createdAt DESC, id DESC` 稳定分批读取并流式写入临时 CSV，成功后原子替换结果文件，因此不受 10000 行上限约束且重试不会暴露不完整结果。
+OWNER/ADMIN 可查看和导出团队审计日志。`startAt`、`endAt` 均使用 ISO DateTime，例如 `2026-06-27T12:59:14`。列表固定按 `createdAt DESC, id DESC` 排序；列表、同步导出和异步导出任务使用相同过滤语义。`GET /audit-logs/export` 保留同步 CSV 导出兼容旧客户端，响应为 `text/csv`，文件名格式 `team-{teamId}-audit-yyyyMMddHHmmss.csv`，最多 10000 行。`POST /audit-logs/export-tasks` 返回 `TeamTask`；KMP 移动端只使用异步导出。异步任务以创建时刻作为默认结束时间，按同一稳定顺序分批读取并流式写入临时 CSV，成功后原子替换结果文件，因此不受 10000 行上限约束且重试不会暴露不完整结果。
 
 **错误码:** 400（参数格式错误）、403（非 OWNER/ADMIN）、404（团队不存在）。
 
@@ -250,7 +254,7 @@ GET /api/v1/teams/{teamId}/tasks/{taskId}/download
 Authorization: Bearer <accessToken>
 ```
 
-任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理。OWNER/ADMIN 可查看和重试全部团队任务；普通成员仅能看到自己发起且当前仍有目标文件读取权限的文件夹 ZIP 和 OnlyOffice 保存任务。OnlyOffice 保存、缩略图生成和团队文件夹 ZIP 任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。
+任务中心记录团队审计导出、团队文件夹 ZIP、团队图片缩略图生成、OnlyOffice 团队文档保存和团队回收站清理。列表固定按 `createdAt DESC, id DESC` 排序。OWNER/ADMIN 可查看和重试全部团队任务；普通成员仅能看到自己发起且当前仍有目标文件读取权限的文件夹 ZIP 和 OnlyOffice 保存任务。OnlyOffice 保存、缩略图生成和团队文件夹 ZIP 任务由后台 worker 消费 `PENDING` 任务，失败后可通过重试重新进入队列。审计导出任务由后台 worker 生成 CSV 结果文件，结果文件会按服务端保留时间过期清理。
 
 | 端点 | 权限 | 说明 |
 |------|------|------|
@@ -258,13 +262,15 @@ Authorization: Bearer <accessToken>
 | `POST /tasks/{taskId}/retry` | 按任务类型 | OWNER/ADMIN 可重试全部失败任务；文件夹 ZIP 发起人需仍可读；OnlyOffice 发起人需仍可写；系统任务不允许普通成员重试 |
 | `GET /tasks/{taskId}/download` | 按任务类型 | 审计导出要求 OWNER/ADMIN；文件夹 ZIP 要求发起人身份及当前目标文件夹读取权限；响应为任务结果文件二进制流 |
 
-**TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`titleKey`、`titleParams`、`progress`、`resultMessageKey`、`resultMessageParams`、`errorMessageKey`、`errorMessageParams`、`retryCount`、`payload`、`resultPath`、`resultFileName`、`resultContentType`、`resultSizeBytes`、`resultExpiresAt`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。文案 key 必须由客户端解析，任务状态仍以 `status` 为准。
+**TeamTask 字段:** `id`、`teamId`、`actorUserId`、`taskType`、`status`、`targetType`、`targetId`、`titleKey`、`titleParams`、`progress`、`resultMessageKey`、`resultMessageParams`、`errorMessageKey`、`errorMessageParams`、`retryCount`、`resultFileName`、`resultContentType`、`resultSizeBytes`、`resultExpiresAt`、`createdAt`、`updatedAt`、`startedAt`、`completedAt`。服务端内部的 `payload`、`resultPath`、`traceparent` 和 `tracestate` 不通过任务 API 返回。文案 key 必须由客户端解析，任务状态仍以 `status` 为准。
+
+`payload`、`resultPath`、`traceparent` 和 `tracestate` 是服务端内部执行字段，不会序列化到任务 API 响应。KMP 结果保存不进入持久传输队列且不发送 Range：响应必须为完整 `200`，客户端会校验响应长度并先写入私有临时文件，再写入用户选择的 SAF 目标。Android SAF Provider 不提供跨 Provider 的通用原子替换保证，失败路径会删除私有临时文件和持久 URI 权限。
 
 **状态:** `PENDING`、`RUNNING`、`SUCCEEDED`、`FAILED`。
 
 **当前任务类型:** `AUDIT_EXPORT`、`FOLDER_ZIP`、`THUMBNAIL`、`ONLYOFFICE_SAVE`、`TEAM_CLEANUP`。
 
-后台 worker 使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 原子领取任务，并在同一事务内将状态更新为 `RUNNING`。超过 `TEAM_TASK_RUNNING_TIMEOUT_SECONDS`（默认 1800 秒）的 `RUNNING` 任务会在下一次领取前恢复为 `PENDING` 并增加重试计数。
+后台 worker 使用 PostgreSQL `FOR UPDATE SKIP LOCKED` 原子领取任务，并在同一事务内将状态更新为 `RUNNING`。超过 `TEAM_TASK_RUNNING_TIMEOUT_SECONDS`（默认 1800 秒）的 `RUNNING` 任务会在下一次领取前恢复为 `PENDING` 并增加重试计数。重试端点按团队和任务 ID 取得任务行悲观锁，取得锁后重新校验当前团队成员与任务权限及 `FAILED` 状态；并发重试最多一个请求成功。
 
 **错误码:** 400（非失败任务重试、任务未成功或参数错误）、403（非团队成员或缺少任务结果下载权限）、404（团队、任务或结果文件不存在）。
 

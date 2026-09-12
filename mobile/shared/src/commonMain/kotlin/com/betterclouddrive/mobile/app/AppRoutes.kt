@@ -57,6 +57,15 @@ data class TeamPreviewRoute(val teamId: Long, val fileId: Long) : AppRoute
 data class TeamMembersRoute(val teamId: Long) : AppRoute
 
 @Serializable
+data class TeamSettingsRoute(val teamId: Long) : AppRoute
+
+@Serializable
+data class TeamAuditRoute(val teamId: Long) : AppRoute
+
+@Serializable
+data class TeamTasksRoute(val teamId: Long, val highlightedTaskId: Long? = null) : AppRoute
+
+@Serializable
 data class TeamFavoritesRoute(val teamId: Long) : AppRoute
 
 @Serializable

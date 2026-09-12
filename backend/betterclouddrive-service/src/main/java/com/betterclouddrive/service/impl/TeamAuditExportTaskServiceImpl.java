@@ -48,6 +48,7 @@ public class TeamAuditExportTaskServiceImpl implements TeamAuditExportTaskServic
             java.time.LocalDateTime startAt,
             java.time.LocalDateTime endAt) {
         teamService.requireManageMembers(requesterUserId, teamId);
+        teamAuditService.validateFilter(actorUserId, result, startAt, endAt);
         TeamAuditExportPayload payload = new TeamAuditExportPayload(
                 requesterUserId,
                 teamId,

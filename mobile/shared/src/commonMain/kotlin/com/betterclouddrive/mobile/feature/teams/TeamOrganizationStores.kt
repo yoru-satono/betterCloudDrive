@@ -181,6 +181,10 @@ class TeamTagsStore(
         mutableCanManage.value = role == TeamRole.OWNER || role == TeamRole.ADMIN
     }
 
+    fun updateRole(teamId: Long, role: TeamRole) {
+        if (this.teamId == teamId) mutableCanManage.value = role == TeamRole.OWNER || role == TeamRole.ADMIN
+    }
+
     fun activate(teamId: Long, role: TeamRole) {
         bind(teamId, role)
         if (state.value.tags.isEmpty() && !state.value.loading) refresh()

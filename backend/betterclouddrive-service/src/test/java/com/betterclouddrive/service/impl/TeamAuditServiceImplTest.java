@@ -96,6 +96,39 @@ class TeamAuditServiceImplTest {
 
         assertThat(result.getRecords()).containsExactly(log);
         assertThat(result.getTotal()).isEqualTo(1);
+        verify(teamOperationLogRepository).findAll(any(Specification.class), argThat((PageRequest pageable) ->
+                pageable.getSort().getOrderFor("createdAt") != null
+                        && pageable.getSort().getOrderFor("createdAt").isDescending()
+                        && pageable.getSort().getOrderFor("id") != null
+                && pageable.getSort().getOrderFor("id").isDescending()));
+    }
+
+    @Test
+    void listLogs_shouldRejectArchivedTeam() {
+        TeamEntity team = TeamEntity.builder().id(10L).archivedAt(java.time.LocalDateTime.now()).build();
+        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+
+        assertThatThrownBy(() -> teamAuditService.listLogs(2L, 10L, null, null, null, null, null, null, 1, 20))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404));
+
+        verifyNoInteractions(teamMemberRepository);
+        verify(teamOperationLogRepository, never()).findAll(any(Specification.class), any(PageRequest.class));
+    }
+
+    @Test
+    void validateFilter_shouldRejectInvalidActorResultAndRange() {
+        assertThatThrownBy(() -> teamAuditService.validateFilter(0L, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
+        assertThatThrownBy(() -> teamAuditService.validateFilter(null, 2, null, null))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
+        assertThatThrownBy(() -> teamAuditService.validateFilter(null, null,
+                java.time.LocalDateTime.of(2026, 1, 2, 0, 0),
+                java.time.LocalDateTime.of(2026, 1, 1, 0, 0)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
     }
 
     @Test

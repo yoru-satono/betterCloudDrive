@@ -31,6 +31,9 @@ class NetworkTestFacade private constructor(
     private val recovery = PersonalRecoveryApi(http)
     private val teamRecovery = TeamRecoveryApi(http)
     private val teams = TeamWorkspaceApi(http)
+    private val teamManagement = TeamManagementApi(http)
+    private val teamAudit = TeamAuditApi(http)
+    private val teamTasks = TeamTasksApi(http)
     private val teamPreview = TeamPreviewApi(http)
     private val teamOrganization = TeamOrganizationApi(http)
     private val teamPermissions = TeamPermissionsApi(http)
@@ -129,6 +132,25 @@ class NetworkTestFacade private constructor(
     suspend fun listTeams(page: Int, size: Int) = teams.listTeams(page, size)
     suspend fun createTeam(name: String) = teams.createTeam(name)
     suspend fun getTeam(id: Long) = teams.getTeam(id)
+    suspend fun getManagedTeam(id: Long) = teamManagement.getTeam(id)
+    suspend fun renameTeam(id: Long, name: String) = teamManagement.rename(id, name)
+    suspend fun leaveTeam(id: Long) = teamManagement.leave(id)
+    suspend fun deleteTeam(id: Long) = teamManagement.delete(id)
+    suspend fun transferTeamOwner(id: Long, userId: Long) = teamManagement.transferOwner(id, userId)
+    suspend fun listTeamAuditLogs(
+        id: Long, actorUserId: Long?, action: String?, targetType: String?, result: Int?, startAt: String?, endAt: String?,
+        page: Int, size: Int,
+    ) = teamAudit.list(id, actorUserId, action, targetType, result, startAt, endAt, page, size)
+    suspend fun queueTeamAuditExport(
+        id: Long, actorUserId: Long?, action: String?, targetType: String?, result: Int?, startAt: String?, endAt: String?,
+    ) = teamAudit.queueExport(id, actorUserId, action, targetType, result, startAt, endAt)
+    suspend fun listTeamTasks(id: Long, status: String?, type: String?, page: Int, size: Int) =
+        teamTasks.list(id, status, type, page, size)
+    suspend fun retryTeamTask(id: Long, taskId: Long) = teamTasks.retry(id, taskId)
+    suspend fun <T> downloadTeamTask(
+        id: Long, taskId: Long,
+        consume: suspend (io.ktor.http.HttpStatusCode, io.ktor.http.Headers, io.ktor.utils.io.ByteReadChannel) -> T,
+    ) = teamTasks.download(id, taskId, consume)
     suspend fun listTeamFiles(teamId: Long, parentId: Long?, page: Int, size: Int, sortBy: String, order: String) =
         teams.listFiles(teamId, parentId, page, size, sortBy, order)
     suspend fun getTeamFile(teamId: Long, fileId: Long) = teams.getFile(teamId, fileId)

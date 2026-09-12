@@ -21,6 +21,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -28,6 +30,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -38,6 +42,9 @@ import com.betterclouddrive.mobile.app.TagFilesScreen
 import com.betterclouddrive.mobile.app.TagsScreen
 import com.betterclouddrive.mobile.app.TeamBrowserScreen
 import com.betterclouddrive.mobile.app.TeamMembersScreen
+import com.betterclouddrive.mobile.app.TeamSettingsScreen
+import com.betterclouddrive.mobile.app.TeamAuditScreen
+import com.betterclouddrive.mobile.app.TeamTasksScreen
 import com.betterclouddrive.mobile.app.TeamPermissionsOverlay
 import com.betterclouddrive.mobile.app.TeamRecycleBinScreen
 import com.betterclouddrive.mobile.app.TeamVersionsScreen
@@ -64,6 +71,8 @@ import com.betterclouddrive.mobile.core.model.TeamPermissionSubjectType
 import com.betterclouddrive.mobile.core.model.TeamRole
 import com.betterclouddrive.mobile.core.model.ShareLink
 import com.betterclouddrive.mobile.core.model.TeamSummary
+import com.betterclouddrive.mobile.core.model.TeamOperationLog
+import com.betterclouddrive.mobile.core.model.TeamTask
 import com.betterclouddrive.mobile.core.model.UpdateTeamFilePermissionRequest
 import com.betterclouddrive.mobile.core.platform.DocumentPicker
 import com.betterclouddrive.mobile.core.platform.DownloadRequest
@@ -83,6 +92,9 @@ import com.betterclouddrive.mobile.feature.organization.TagsState
 import com.betterclouddrive.mobile.feature.teams.TeamBrowserState
 import com.betterclouddrive.mobile.feature.teams.TeamFileActionsState
 import com.betterclouddrive.mobile.feature.teams.TeamMembersState
+import com.betterclouddrive.mobile.feature.teams.TeamManagementState
+import com.betterclouddrive.mobile.feature.teams.TeamAuditState
+import com.betterclouddrive.mobile.feature.teams.TeamTasksState
 import com.betterclouddrive.mobile.feature.teams.TeamPermissionsState
 import com.betterclouddrive.mobile.feature.teams.TeamInvitesState
 import com.betterclouddrive.mobile.feature.teams.TeamPeopleTab
@@ -349,6 +361,128 @@ class FeatureScreenDeviceTest {
     }
 
     @Test
+    fun teamSettingsEnforceRoleVisibilityValidationAndResponsiveLayout() {
+        val role = mutableStateOf(TeamRole.OWNER)
+        val wide = mutableStateOf(false)
+        var renamed: String? = null
+        composeRule.setContent { themed("en-US") {
+            TeamSettingsScreen(
+                state = TeamManagementState(
+                    teamId = 9,
+                    team = TeamSummary(
+                        id = 9, name = "Product", ownerId = 1,
+                        storageUsed = 25, storageQuota = 100, role = role.value,
+                    ),
+                ),
+                wide = wide.value,
+                onBack = {}, onRefresh = {}, onRename = { renamed = it }, onLeave = {}, onDelete = {},
+                onClearNameError = {}, onClearFeedback = {}, onOpenAudit = {}, onOpenTasks = {},
+            )
+        } }
+
+        composeRule.onNodeWithTag("team-settings-phone").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-delete").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("team-leave").assertCountEquals(0)
+        composeRule.onNodeWithTag("team-delete").performClick()
+        composeRule.onNodeWithTag("team-delete-confirm").assertIsDisplayed()
+        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.onNodeWithTag("team-name-input").performTextClearance()
+        composeRule.onNodeWithTag("team-name-input").performTextInput("x".repeat(81))
+        composeRule.onNodeWithTag("team-name-save").assertIsNotEnabled()
+        composeRule.onNodeWithTag("team-name-input").performTextClearance()
+        composeRule.onNodeWithTag("team-name-input").performTextInput("Renamed")
+        composeRule.onNodeWithTag("team-name-save").assertIsEnabled().performClick()
+        composeRule.runOnIdle { assertEquals("Renamed", renamed) }
+
+        composeRule.runOnIdle { role.value = TeamRole.ADMIN }
+        composeRule.onNodeWithTag("team-leave").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-name-input").assertIsEnabled()
+        composeRule.onNodeWithTag("team-leave").performClick()
+        composeRule.onNodeWithTag("team-leave-confirm").assertIsDisplayed()
+        composeRule.onNodeWithText("Cancel").performClick()
+        composeRule.runOnIdle { role.value = TeamRole.EDITOR }
+        composeRule.onNodeWithTag("team-leave").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-name-input").assertIsNotEnabled()
+        composeRule.runOnIdle { role.value = TeamRole.VIEWER; wide.value = true }
+        composeRule.onNodeWithTag("team-settings-wide").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-name-input").assertIsNotEnabled()
+    }
+
+    @Test
+    fun teamAuditSupportsPhoneWideAndRoleRestrictedStates() {
+        val wide = mutableStateOf(false)
+        val role = mutableStateOf(TeamRole.OWNER)
+        composeRule.setContent { themed("en-US") {
+            TeamAuditScreen(
+                state = TeamAuditState(
+                    teamId = 9, role = role.value,
+                    logs = listOf(TeamOperationLog(id = 4, teamId = 9, actorUserId = 2, action = "FILE_DELETE", result = 1)),
+                    page = 1, total = 1,
+                ),
+                wide = wide.value, dateTime = TestDateTime,
+                onBack = {}, onRefresh = {}, onActor = {}, onAction = {}, onTargetType = {}, onResult = {},
+                onStartAt = {}, onEndAt = {}, onApply = {}, onReset = {}, onExport = {}, onLoadMore = {},
+                onConsumeFeedback = {},
+            )
+        } }
+        composeRule.onNodeWithTag("team-audit-phone").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-audit-4").assertIsDisplayed()
+        composeRule.runOnIdle { wide.value = true }
+        composeRule.onNodeWithTag("team-audit-wide").assertIsDisplayed()
+        composeRule.runOnIdle { role.value = TeamRole.EDITOR }
+        composeRule.onNodeWithTag("team-audit-forbidden").assertIsDisplayed()
+    }
+
+    @Test
+    fun teamTaskCenterShowsRetryAndDownloadByServerTaskState() {
+        composeRule.setContent { themed("en-US") {
+            TeamTasksScreen(
+                state = TeamTasksState(
+                    teamId = 9,
+                    tasks = listOf(
+                        TeamTask(id = 1, teamId = 9, taskType = "FOLDER_ZIP", status = "FAILED", titleKey = "task.folderZip.title"),
+                        TeamTask(id = 2, teamId = 9, taskType = "AUDIT_EXPORT", status = "SUCCEEDED", titleKey = "task.auditExport.title", resultFileName = "audit.csv"),
+                    ),
+                    total = 2,
+                ),
+                documentPicker = NoopDocumentPicker,
+                onBack = {}, onRefresh = {}, onStatus = {}, onType = {}, onPrevious = {}, onNext = {},
+                onRetry = {}, onDownload = { _, _ -> }, onConsumeFeedback = {},
+            )
+        } }
+        composeRule.onAllNodesWithTag("team-task-retry-1").assertCountEquals(1)
+        composeRule.onAllNodesWithTag("team-task-download-2").assertCountEquals(1)
+        composeRule.onAllNodesWithTag("team-task-download-1").assertCountEquals(0)
+    }
+
+    @Test
+    fun ownerTransferRequiresExplicitMemberConfirmation() {
+        val successor = TeamMember(teamId = 9, userId = 3, username = "successor", role = TeamRole.EDITOR)
+        var transferred: Long? = null
+        composeRule.setContent { themed("en-US") {
+            TeamMembersScreen(
+                state = TeamMembersState(
+                    teamId = 9, actorRole = TeamRole.OWNER, items = listOf(successor), page = 1,
+                ),
+                wide = false,
+                onBack = {}, onRefresh = {}, onLoadMore = {}, onAdd = { _, _ -> },
+                onUpdateRole = { _, _ -> }, onRemove = {}, onClearAddError = {}, onClearFeedback = {},
+                management = TeamManagementState(
+                    teamId = 9,
+                    team = TeamSummary(id = 9, name = "Product", ownerId = 1, role = TeamRole.OWNER),
+                ),
+                onTransferOwnership = { transferred = it.userId },
+            )
+        } }
+
+        composeRule.onNodeWithTag("team-member-more-3").performClick()
+        composeRule.onNodeWithTag("team-owner-transfer-3").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("successor will become OWNER. Your role will immediately change to ADMIN.").assertIsDisplayed()
+        composeRule.onNodeWithTag("team-owner-transfer-confirm").performClick()
+        composeRule.runOnIdle { assertEquals(3L, transferred) }
+    }
+
+    @Test
     fun teamMembersScreenClosesAddSheetAfterSuccess() {
         val state = mutableStateOf(TeamMembersState(teamId = 9, actorRole = TeamRole.OWNER, page = 1))
         composeRule.setContent { themed("en-US") {
@@ -608,7 +742,7 @@ class FeatureScreenDeviceTest {
             state = state, actions = actions, permissions = TeamPermissionsState(), wide = false,
             actorUserId = 1, documentPicker = NoopDocumentPicker,
             onBack = {}, onBackToTeams = {}, onBreadcrumb = {}, onOpenFolder = {}, onOpenSearch = {},
-            onOpenMembers = {},
+            onOpenMembers = {}, onOpenSettings = {},
             onRetryWorkspace = {}, onRefresh = {}, onLoadMore = {}, onSort = { _, _ -> }, onViewMode = {},
             onSelect = {}, onPreview = {}, onRequestPermission = {}, onToggleSelection = {}, onClearSelection = {},
             onCreateFolder = {}, onRename = { _, _ -> }, onDelete = {}, onOpenMovePicker = {},
@@ -651,6 +785,7 @@ class FeatureScreenDeviceTest {
         override fun nowEpochMillis() = 1_700_000_000_000
         override fun localDateTimeToEpochMillis(selectedUtcDateMillis: Long, hour: Int, minute: Int) = selectedUtcDateMillis
         override fun formatDateTime(epochMillis: Long) = epochMillis.toString()
+        override fun formatApiLocalDateTime(epochMillis: Long) = epochMillis.toString()
     }
 
     private fun transfer(

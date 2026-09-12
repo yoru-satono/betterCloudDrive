@@ -60,6 +60,12 @@ class TeamMembersStore(
     }
 
     fun refresh() = load(1, true)
+
+    fun updateActorRole(teamId: Long, role: TeamRole) {
+        mutableState.update { current ->
+            if (current.teamId == teamId) current.copy(actorRole = role) else current
+        }
+    }
     fun loadMore() {
         val current = state.value
         if (!current.hasMore || current.loading || current.refreshing || current.loadingMore) return
