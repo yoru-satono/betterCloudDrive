@@ -3,6 +3,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+fun signingValue(propertyName: String, environmentName: String): String? =
+    providers.gradleProperty(propertyName).orNull
+        ?: providers.environmentVariable(environmentName).orNull
+
 android {
     namespace = "com.betterclouddrive.mobile.android"
     compileSdk = 37
@@ -13,6 +17,8 @@ android {
         targetSdk = 37
         versionCode = 22
         versionName = "0.22.0-stage21"
+        providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()?.let { versionCode = it }
+        providers.gradleProperty("releaseVersionName").orNull?.let { versionName = it }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -29,6 +35,20 @@ android {
                 "proguard-rules.pro",
             )
         }
+    }
+
+    val releaseStoreFile = signingValue("releaseStoreFile", "BCD_RELEASE_STORE_FILE")
+    val releaseStorePassword = signingValue("releaseStorePassword", "BCD_RELEASE_STORE_PASSWORD")
+    val releaseKeyAlias = signingValue("releaseKeyAlias", "BCD_RELEASE_KEY_ALIAS")
+    val releaseKeyPassword = signingValue("releaseKeyPassword", "BCD_RELEASE_KEY_PASSWORD")
+    if (listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { it != null }) {
+        signingConfigs.create("releaseFromEnvironment") {
+            storeFile = file(releaseStoreFile!!)
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+        buildTypes.getByName("release").signingConfig = signingConfigs.getByName("releaseFromEnvironment")
     }
 }
 
