@@ -7,7 +7,7 @@
 - `mobile/` 是当前活跃的 Kotlin Multiplatform 移动端，不是 Android-only 工程。
 - `mobile/shared` 已包含 Android、`iosArm64` 和 `iosSimulatorArm64` 目标。新增共享业务逻辑应保持可供后续 iOS 应用复用。
 - `mobile/androidApp` 是当前已有的 Android 应用壳；iOS 应用壳和平台测试会在后续继续补充。
-- `android/` 是旧版 Android 应用，只用于迁移时查阅行为、接口和交互。除非用户明确要求维护参考代码，否则不要在其中新增功能、修复业务问题、构建或运行测试。
+- 旧版 `android/` 工程已在阶段 22 删除；历史行为以 Git 记录和阶段验收文档为准，不要重新创建旧工程。
 - 不要把 KMP 移动端描述为只支持 Android。Android 是当前已有完整设备验证的目标，iOS 目前至少需要保持共享源码元数据可编译。
 
 ## 目录职责
@@ -16,7 +16,6 @@
 - `backend-test/`：基于 pytest/httpx 的真实 API 黑盒与专项验收。
 - `frontend/`：Vue Web 前端和 Tauri 桌面壳；统一使用 pnpm。
 - `mobile/`：活跃的 KMP 移动端及 Android 应用壳。
-- `android/`：旧 Android 迁移参考，不属于验证范围。
 - `observability/`：Prometheus、Loki、Alloy、Alertmanager 和 Grafana 配置。
 - `config/env-files/`：Compose 服务环境变量模板与本地配置。
 - `docs/`：架构、开发、配置和运维文档；行为变化应同步更新相应文档。
@@ -41,7 +40,7 @@ bash scripts/verify-all.sh --module <module>
 
 可用模块：`backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience` 和 `all`。
 
-- 不得重新加入 `android` 或 `android-unit` 模块。
+- 旧版 `android` 和 `android-unit` 验证模块已经退役，不得重新加入。
 - `scripts/verify-all.sh` 以 Bash 3.2 为最低兼容版本，可以使用索引数组、`[[ ... ]]`、`pipefail` 和 `BASH_SOURCE`；不要引入 Bash 4 才支持的关联数组等语法。
 - 修改验证流程时同步维护 `scripts/verify-all.ps1` 的模块含义和 `docs/development/TESTING.md`。
 - `all` 是完整验收，包含 KMP Android 设备测试，需要可用的 adb 设备或模拟器。

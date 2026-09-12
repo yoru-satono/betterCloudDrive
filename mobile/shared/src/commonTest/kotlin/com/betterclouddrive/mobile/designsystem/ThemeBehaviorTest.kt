@@ -1,16 +1,17 @@
-package com.betterclouddrive.android.ui.theme
+package com.betterclouddrive.mobile.designsystem
 
-import com.betterclouddrive.android.domain.model.ThemeMode
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import com.betterclouddrive.mobile.core.platform.ThemeMode
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
-class ThemeTest {
+class ThemeBehaviorTest {
     @Test
     fun invalidStoredModeFallsBackToSystem() {
         assertEquals(ThemeMode.SYSTEM, ThemeMode.fromStorage("sepia"))
         assertEquals(ThemeMode.SYSTEM, ThemeMode.fromStorage(null))
+        assertEquals(ThemeMode.DARK, ThemeMode.fromStorage("DARK"))
     }
 
     @Test

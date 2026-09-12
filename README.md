@@ -1,6 +1,6 @@
 # BetterCloudDrive
 
-全栈云盘系统，支持 Web、Tauri 桌面端、Android 和 WebDAV 访问。
+全栈云盘系统，支持 Web、Tauri 桌面端、Kotlin Multiplatform 移动端和 WebDAV 访问。
 
 ## 技术栈
 
@@ -15,7 +15,7 @@
 | **可观测性** | Actuator/Micrometer + Prometheus + Alertmanager + Loki + Grafana Alloy + Grafana |
 | **Web 前端** | Vue 3.5.40 + Vite 8.1.5 + Pinia 4.0.2 + Vue Router 5.2.0 |
 | **桌面端** | Tauri 2.11.4 + Rust 1.88.0 |
-| **Android** | Kotlin 2.3.21 + Jetpack Compose 2026.06.00 + Android SDK 37 + Hilt + Retrofit |
+| **KMP 移动端** | Kotlin 2.4.10 + Compose Multiplatform 1.11.1 + Ktor 3.5.1 + Room 2.8.4；Android 应用壳，iOS 共享源码目标 |
 | **测试** | JUnit 5 + Mockito（后端）、pytest + httpx（黑盒）、Vitest + Playwright（前端） |
 | **部署** | Docker Compose 一键编排 |
 
@@ -50,7 +50,6 @@ betterCloudDrive/
 │   └── betterclouddrive-start/      # 启动入口 + Flyway 迁移
 ├── frontend/                # Vue 3 Web 前端与 Tauri 桌面壳
 ├── mobile/                  # 活跃的 Kotlin Multiplatform 移动端
-├── android/                 # 仅供 KMP 迁移参考的旧 Android 应用
 ├── backend-test/            # Python 黑盒 API 测试
 ├── observability/           # Prometheus/Loki/Alloy/Alertmanager/Grafana 配置
 ├── docs/                    # 文档索引、参考资料、运维手册和决策记录
@@ -87,7 +86,7 @@ docker compose up -d --build
 
 部署细节见 [OnlyOffice 部署与排障](docs/operations/ONLYOFFICE_DEPLOYMENT.md) 和 [数据备份与恢复](docs/operations/BACKUP_RESTORE.md)。
 
-前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Tauri 默认地址可用 `VITE_DESKTOP_API_BASE_URL`、`VITE_DESKTOP_WEB_BASE_URL` 覆盖；Android 默认服务器地址可用 `ANDROID_DEFAULT_SERVER_BASE_URL` 覆盖，Android E2E 可用 `ANDROID_E2E_SERVER_BASE_URL`、`ANDROID_E2E_MAILPIT_BASE_URL` 覆盖，用户仍可在登录页设置自己的服务器地址。
+前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Tauri 默认地址可用 `VITE_DESKTOP_API_BASE_URL`、`VITE_DESKTOP_WEB_BASE_URL` 覆盖。KMP Android Debug 在官方模拟器中默认连接 `http://10.0.2.2:8080`，用户也可以在登录页设置自己的服务器地址。
 
 ## 可观测性
 
@@ -145,7 +144,7 @@ cd mobile
 sh ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug :shared:compileIosMainKotlinMetadata
 ```
 
-Android APK 输出在 `mobile/androidApp/build/outputs/apk/debug/`。`shared` 已声明 `iosArm64` 和 `iosSimulatorArm64` 目标，当前门禁会编译 iOS 共享源码元数据；后续 iOS 应用壳仍属于 KMP 移动端规划。旧版 `android/` 不再纳入构建和测试入口。
+Android APK 输出在 `mobile/androidApp/build/outputs/apk/debug/`。正式应用 ID 为 `com.betterclouddrive.mobile`。`shared` 已声明 `iosArm64` 和 `iosSimulatorArm64` 目标，当前门禁会编译 iOS 共享源码元数据；后续 iOS 应用壳仍属于 KMP 移动端规划。
 
 ## API 文档
 
@@ -153,7 +152,7 @@ Android APK 输出在 `mobile/androidApp/build/outputs/apk/debug/`。`shared` �
 
 客户端展示文案采用后端语义 key + 结构化参数协议，详见 [客户端本地化与语义文案协议](docs/reference/LOCALIZATION.md)。此协议不包含自然语言兜底字段，旧客户端不能与当前后端混用。
 
-Web、Tauri 与 Android 支持“跟随系统、浅色、深色”三种主题模式。首次启动默认跟随系统，用户可在个人设置的“外观”区域选择固定主题；偏好仅保存在当前设备并跨登录状态保留。
+Web、Tauri 与 KMP 移动端支持“跟随系统、浅色、深色”三种主题模式。首次启动默认跟随系统，用户可在个人设置的“外观”区域选择固定主题；偏好仅保存在当前设备并跨登录状态保留。
 
 ## 文档
 

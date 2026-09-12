@@ -53,13 +53,15 @@ private val LightColors = lightColorScheme(
 
 @Composable
 fun BetterCloudDriveTheme(mode: ThemeMode = ThemeMode.SYSTEM, content: @Composable () -> Unit) {
-    val dark = when (mode) {
-        ThemeMode.SYSTEM -> isSystemInDarkTheme()
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
+    val dark = resolveDarkTheme(mode, isSystemInDarkTheme())
     MaterialTheme(
         colorScheme = if (dark) DarkColors else LightColors,
         content = content,
     )
+}
+
+internal fun resolveDarkTheme(mode: ThemeMode, systemDark: Boolean): Boolean = when (mode) {
+    ThemeMode.SYSTEM -> systemDark
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
 }

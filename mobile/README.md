@@ -1,6 +1,6 @@
 # BetterCloudDrive KMP 移动端
 
-这是 Kotlin Multiplatform 移动端工程。当前 Android 应用壳已覆盖个人文件完整工作流，以及团队列表、创建、目录浏览、搜索、只读预览、基础文件修改、传输、成员、文件权限、邀请、站内通知、收藏、标签、分享、回收站、历史版本和团队生命周期管理；共享业务代码同时面向 Android 与后续 iOS 应用复用。共享国际化资源支持英语、中国大陆简体中文和新加坡简体中文。旧版 `../android` 应用保持不变，仅作为迁移行为参考。
+这是 Kotlin Multiplatform 移动端工程，也是阶段 22 后唯一的移动端实现。当前 Android 应用壳已覆盖个人文件完整工作流，以及团队列表、创建、目录浏览、搜索、只读预览、基础文件修改、传输、成员、文件权限、邀请、站内通知、收藏、标签、分享、回收站、历史版本、团队生命周期管理和治理任务；共享业务代码同时面向 Android 与后续 iOS 应用复用。共享国际化资源支持英语、中国大陆简体中文和新加坡简体中文。
 
 ## 目标与范围
 
@@ -83,6 +83,8 @@ Windows 无法链接 iOS Framework；完整 iOS 构建仍需 macOS/Xcode。首�
 
 截至 2026-09-10，阶段 20 已完成团队生命周期管理实现：团队设置页支持改名、退出和软删除，现有成员页支持所有权转让；角色和名称变化会同步到团队列表、当前工作区及依赖权限的状态，退出或删除会清除该团队的本地上下文。服务端对四项生命周期写操作统一使用团队行悲观锁并在锁内重验权限。
 
-截至 2026-09-11，阶段 21 已实现团队审计与任务中心：OWNER/ADMIN 可筛选审计并创建异步 CSV 导出，所有成员可按服务端可见性查看、筛选和分页浏览任务，并对有权操作的失败任务重试或通过 SAF 流式保存结果。任务页仅在前台且存在活动任务时轮询；团队切换、退出和会话重置会取消请求并清空团队治理状态。应用版本为 `versionCode=22`、`versionName=0.22.0-stage21`。
+截至 2026-09-11，阶段 21 已实现团队审计与任务中心：OWNER/ADMIN 可筛选审计并创建异步 CSV 导出，所有成员可按服务端可见性查看、筛选和分页浏览任务，并对有权操作的失败任务重试或通过 SAF 流式保存结果。任务页仅在前台且存在活动任务时轮询；团队切换、退出和会话重置会取消请求并清空团队治理状态。
 
-当前治理能力边界见[阶段 21 团队审计与任务中心](docs/stage-21-team-audit-and-tasks.md)，团队管理能力边界见[阶段 20 团队管理](docs/stage-20-team-management.md)，恢复与版本能力边界见[阶段 19 团队回收站与版本](docs/stage-19-team-recovery-versions.md)，分享能力边界见[阶段 18 团队分享](docs/stage-18-team-sharing.md)，整理能力边界见[阶段 17 团队收藏与标签](docs/stage-17-team-organization.md)，邀请与通知边界见[阶段 16 团队邀请与通知](docs/stage-16-team-invitations-notifications.md)，团队成员与权限边界见[阶段 15 团队成员与文件权限](docs/stage-15-team-members-permissions.md)。
+截至 2026-09-12，阶段 22 已完成旧 Android 的 78 项测试行为审计和分层迁移，旧工程已删除。正式 Android 应用 ID 为 `com.betterclouddrive.mobile`，当前版本为 `versionCode=23`、`versionName=1.0.0`；旧应用本地数据不迁移，移动端 OnlyOffice 继续只读，全局管理员界面仍不进入移动端范围。
+
+最终迁移处置见[阶段 22 发布与切换](docs/stage-22-release-cutover.md)，治理能力边界见[阶段 21 团队审计与任务中心](docs/stage-21-team-audit-and-tasks.md)，团队管理能力边界见[阶段 20 团队管理](docs/stage-20-team-management.md)，恢复与版本能力边界见[阶段 19 团队回收站与版本](docs/stage-19-team-recovery-versions.md)。

@@ -268,7 +268,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-当前支持 `en-US`、`zh-Hans`、`zh-CN` 和 `zh-SG`。成功后返回更新后的当前用户资料，结构同 `GET /api/v1/auth/me`。CN、SG 会作为精确账号偏好保存；Web/Tauri、旧 Android 与 Grafana 渲染时兼容映射到 `zh-Hans`。管理员修改语言时，后端还会尽力同步 Grafana；同步失败不影响主应用偏好保存。
+当前支持 `en-US`、`zh-Hans`、`zh-CN` 和 `zh-SG`。成功后返回更新后的当前用户资料，结构同 `GET /api/v1/auth/me`。CN、SG 会作为精确账号偏好保存；Web/Tauri 与 Grafana 渲染时兼容映射到 `zh-Hans`。管理员修改语言时，后端还会尽力同步 Grafana；同步失败不影响主应用偏好保存。
 
 ---
 

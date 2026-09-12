@@ -2,7 +2,7 @@
 
 - 状态：已接受
 - 日期：2026-07-03
-- 适用范围：Android、Web/Tauri 管理端、全局管理员接口
+- 适用范围：KMP 移动端 Android 目标、Web/Tauri 管理端、全局管理员接口
 
 ## 背景与约束
 
@@ -12,9 +12,9 @@ Android 手机布局适合成员日常操作，但在核心团队工作流尚需
 
 ## 决策
 
-Android 不实现完整的全局管理员控制台。全局用户、团队、系统日志、死信和跨团队管理保留在 Web/Tauri；Android 聚焦普通用户及其所属团队内、由服务端权限允许的工作流。
+KMP 移动端不实现完整的全局管理员控制台。全局用户、团队、系统日志、死信和跨团队管理保留在 Web/Tauri；移动端聚焦普通用户及其所属团队内、由服务端权限允许的工作流。
 
-Android 继续支持团队文件、成员、邀请、分享、标签、收藏、回收站、审计查看/导出、通知、权限和文档预览编辑。团队 OWNER/ADMIN 可以在所属团队内使用已有管理能力，但这不等同于 `ROLE_ADMIN` 的平台管理面。
+KMP Android 继续支持团队文件、成员、邀请、分享、标签、收藏、回收站、审计查看/导出、通知、权限和文档只读预览。团队 OWNER/ADMIN 可以在所属团队内使用已有管理能力，但这不等同于 `ROLE_ADMIN` 的平台管理面。
 
 ## 考虑过的替代方案
 
@@ -34,6 +34,6 @@ Android 继续支持团队文件、成员、邀请、分享、标签、收藏、
 ## 实现与验证
 
 - 客户端边界：[客户端架构](../architecture/CLIENTS.md)
-- Android 开发与行为验收：[Android 开发](../development/ANDROID.md)、[测试策略](../development/TESTING.md)
+- KMP Android 开发与行为验收：[KMP Android 开发](../development/ANDROID.md)、[测试策略](../development/TESTING.md)
 - 全局管理员接口：[管理员 API](../reference/api/ADMIN.md)
-- 当前实现入口：Web/Tauri `/admin` 路由与 Android Navigation 图
+- 当前实现入口：Web/Tauri `/admin` 路由与 KMP 共享 Navigation Compose 图

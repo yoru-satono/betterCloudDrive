@@ -1,6 +1,6 @@
 # 客户端架构
 
-本文面向 Web、Tauri 和 Android 开发者，说明三端共享的协议、代码复用边界和平台差异。复用策略见[客户端边界 ADR](../decisions/006-client-boundaries.md)；接口字段以 [API 参考](../reference/API.md) 为准，本地化消息协议以[本地化参考](../reference/LOCALIZATION.md)为准。
+本文面向 Web、Tauri 和 KMP 移动端开发者，说明三端共享的协议、代码复用边界和平台差异。复用策略见[KMP 移动端边界 ADR](../decisions/009-kmp-mobile-boundary.md)；接口字段以 [API 参考](../reference/API.md) 为准，本地化消息协议以[本地化参考](../reference/LOCALIZATION.md)为准。
 
 ## 共同边界
 
@@ -47,28 +47,9 @@ Rust 边界位于 `frontend/src-tauri/src`：
 
 前端通过运行时判断调用桌面 API；普通业务请求仍走共享 REST client。不要在 Rust 层复制团队权限或文件状态机。Tauri 的价值是平台 I/O 与长时间传输，不是建立第二套业务后端。
 
-## Android（旧版）
-
-Android 位于 `android/app`，使用 Jetpack Compose、Navigation Compose、Hilt、Retrofit/OkHttp、DataStore、Coroutines、Coil 和 Media3。
-
-```text
-Compose Screen
-  -> ViewModel
-  -> Repository
-  -> Retrofit ApiService / TransferRepository
-  -> REST API or local device storage
-```
-
-- `data/remote/ApiService.kt` 是 Android 的 HTTP 契约入口。
-- `data/repository` 组合远端调用、认证刷新和上传/下载行为。
-- ViewModel 暴露界面状态与动作，Composable 负责渲染和用户交互。
-- Navigation 定义登录、个人文件、团队、分享、收藏、标签、版本、通知、传输和个人资料等页面。
-- DataStore 保存适合本地持久化的设置/token；客户端不能把它当作服务器状态副本。
-- Android 支持团队文件、成员、邀请、任务、权限、版本和 OnlyOffice 入口，但全局管理功能范围受 [Android 管理范围 ADR](../decisions/001-android-admin-scope.md)约束。移动端 OnlyOffice 当前只提供查看：客户端请求后端签发的 `mobile=true` 只读配置，不在 WebView 中修改已签名权限，也不产生保存回调。
-
 ## KMP 移动端
 
-新移动端位于 `mobile/`，采用 Kotlin Multiplatform、Compose Multiplatform、Ktor、Room 和手动 `AppContainer`。Android 是当前交付目标；iOS 只保留公共代码编译能力，不实现平台服务。
+移动端位于 `mobile/`，采用 Kotlin Multiplatform、Compose Multiplatform、Ktor、Room 和手动 `AppContainer`。Android 是当前已有完整应用壳和设备验证的目标；iOS 当前保持公共代码编译能力，后续补充应用壳与平台服务。
 
 ```text
 Compose Screen
@@ -105,9 +86,9 @@ Compose Screen
 - 普通文件详情只展示服务端元数据和单文件下载：手机使用底部页，宽度不小于 600dp 时使用右侧详情栏。个人目录支持新建文件夹，以及单项重命名、移动、递归复制和删除；长按进入的多选模式只提供批量移入回收站。文件修改后重新加载当前已加载页并保持滚动锚点，目标目录缓存同步失效。
 - OnlyOffice 诊断探针只在独立 Debug 诊断页出现；个人 Office 文件则可从产品预览页加载。两者都原样使用后端签名的 `mobile=true` 只读配置，Release 不注册诊断入口和诊断路由。
 
-在新应用达到团队业务功能对等前，`android/` 旧应用不删除、不替换。当前团队成员与权限边界见[阶段 15 团队成员与文件权限](../../mobile/docs/stage-15-team-members-permissions.md)，架构边界见[阶段 11.5 KMP 架构边界收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)。
+旧版 Android 工程已在阶段 22 完成业务测试迁移后删除。当前团队成员与权限边界见[阶段 15 团队成员与文件权限](../../mobile/docs/stage-15-team-members-permissions.md)，架构边界见[阶段 11.5 KMP 架构边界收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，最终处置见[阶段 22 发布与切换](../../mobile/docs/stage-22-release-cutover.md)。
 
-阶段 7/8 已在 Android 14 上完成 64 MiB 上传会话恢复、非零 Range 下载、三页搜索和全部当前预览类型的真实旅程，并在 Android 9/14 设备矩阵回归。阶段 12 又完成了 64 MiB 历史版本下载的两次进程中断与非零 Range 恢复、Room v1→v2 和回收站删除根真实验收。个人空间已达到旧 Android 的主要个人功能对等；团队分支现已具备文件协作、成员/邀请、文件权限、内容整理、分享、回收站、版本、生命周期管理、审计和任务中心，达到迁移路线定义的业务功能对等，发布与切换仍由阶段 22 收口。
+阶段 7/8 已在 Android 14 上完成 64 MiB 上传会话恢复、非零 Range 下载、三页搜索和全部当前预览类型的真实旅程，并在 Android 9/14 设备矩阵回归。阶段 12 又完成了 64 MiB 历史版本下载的两次进程中断与非零 Range 恢复、Room v1→v2 和回收站删除根真实验收。个人和团队业务均已达到迁移路线定义的功能对等，阶段 22 已完成测试迁移、正式应用标识和旧工程退役。
 
 ## 能力矩阵
 
@@ -116,11 +97,11 @@ Compose Screen
 | 认证、个人文件、回收站、分享、标签、收藏、版本 | 是 | 复用 Web | 是 |
 | 团队文件、成员、邀请、权限与任务 | 是 | 复用 Web | 是 |
 | 浏览器在线预览/OnlyOffice | 按权限查看或编辑 | 复用 Web 页面 | Android WebView 只读查看 |
-| 原生目录上传与持久传输队列 | 受浏览器能力限制 | 是，Rust 实现 | 旧版与 KMP 均支持；KMP 使用 Room + UIDT/WorkManager |
+| 原生目录上传与持久传输队列 | 受浏览器能力限制 | 是，Rust 实现 | KMP 使用 Room + UIDT/WorkManager |
 | 全局管理员界面 | 是 | 复用 Web | 非当前完整支持范围 |
 | WebDAV | 外部 WebDAV 客户端使用 | 外部客户端使用 | 外部客户端使用 |
 
-矩阵描述架构边界，不代替逐接口支持清单。修改共同协议时，应同时检索 Web API wrapper、Tauri 调用适配和 Android `ApiService`。
+矩阵描述架构边界，不代替逐接口支持清单。修改共同协议时，应同时检索 Web API wrapper、Tauri 调用适配和 KMP 各领域 API。
 
 ## 认证与刷新
 

@@ -1016,6 +1016,7 @@ private fun DetailRow(label: String, value: String) {
 }
 
 internal fun formatFileSize(bytes: Long): String = when {
+    bytes <= 0 -> "0 B"
     bytes < 1024 -> "$bytes B"
     bytes < 1024 * 1024 -> "${bytes / 1024} KiB"
     bytes < 1024L * 1024 * 1024 -> "${bytes / (1024 * 1024)} MiB"
@@ -1023,6 +1024,7 @@ internal fun formatFileSize(bytes: Long): String = when {
 }
 
 internal fun formatDate(value: String?): String = value
+    ?.takeIf(String::isNotBlank)
     ?.take(19)
     ?.replace('T', ' ')
     ?: "—"

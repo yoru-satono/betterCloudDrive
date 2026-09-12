@@ -47,7 +47,7 @@ internal class AndroidThemePreferenceStore(
     private val dataStore: DataStore<Preferences>,
 ) : ThemePreferenceStore {
     override val themeMode: Flow<ThemeMode> = dataStore.data.map { preferences ->
-        preferences[THEME_KEY]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: ThemeMode.SYSTEM
+        ThemeMode.fromStorage(preferences[THEME_KEY])
     }
 
     override suspend fun setThemeMode(mode: ThemeMode) {

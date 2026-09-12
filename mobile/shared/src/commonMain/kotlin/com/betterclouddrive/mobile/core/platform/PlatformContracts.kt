@@ -68,7 +68,16 @@ interface DocumentPicker {
     fun rememberDownloadLauncher(onPicked: (PickedDestination) -> Unit): (DownloadRequest) -> Unit
 }
 
-enum class ThemeMode { SYSTEM, LIGHT, DARK }
+enum class ThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK;
+
+    companion object {
+        fun fromStorage(value: String?): ThemeMode =
+            value?.let { runCatching { valueOf(it) }.getOrNull() } ?: SYSTEM
+    }
+}
 
 interface ThemePreferenceStore {
     val themeMode: Flow<ThemeMode>

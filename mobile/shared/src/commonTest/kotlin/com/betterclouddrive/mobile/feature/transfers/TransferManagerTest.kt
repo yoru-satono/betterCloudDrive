@@ -83,6 +83,26 @@ class TransferManagerTest {
         assertEquals(1, fixture.purgeCalls())
     }
 
+    @Test
+    fun pauseCancelAndUnknownTaskOperationsAreSafe() = runTest {
+        val fixture = fixture()
+        val task = fixture.repository.enqueueDownload(
+            fixture.backend.serverBaseUrl, 9, "report.pdf", 42, "uri:target",
+            TransferScope.Team(teamId = 7), "application/pdf",
+        )
+
+        fixture.manager.pause("missing")
+        fixture.manager.cancel("missing")
+        fixture.manager.resume("missing")
+        fixture.manager.pause(task.id)
+        assertEquals(TransferStatus.PAUSED, fixture.manager.find(task.id)?.status)
+
+        fixture.manager.cancel(task.id)
+        assertEquals(TransferStatus.CANCELED, fixture.manager.find(task.id)?.status)
+        assertEquals(listOf("uri:target"), fixture.files.releasedWrites)
+        assertEquals(listOf(task.id), fixture.files.deletedTemps)
+    }
+
     private fun fixture(scheduleSucceeds: Boolean = true): Fixture {
         val dao = ManagerFakeDao()
         var purgeCalls = 0

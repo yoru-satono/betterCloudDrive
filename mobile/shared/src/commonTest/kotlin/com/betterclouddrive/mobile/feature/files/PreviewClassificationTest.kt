@@ -16,9 +16,13 @@ class PreviewClassificationTest {
             FileItem(fileName = "download.bin", mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document").previewKind(),
         )
         assertEquals(PreviewKind.IMAGE, FileItem(fileName = "photo.bin", mimeType = "image/png").previewKind())
+        assertEquals(PreviewKind.IMAGE, FileItem(fileName = "PHOTO.HEIC").previewKind())
         assertEquals(PreviewKind.TEXT, FileItem(fileName = "README.md", mimeType = "application/octet-stream").previewKind())
+        assertEquals(PreviewKind.TEXT, FileItem(fileName = "config.yaml").previewKind())
         assertEquals(PreviewKind.VIDEO, FileItem(fileName = "clip.mp4").previewKind())
+        assertEquals(PreviewKind.VIDEO, FileItem(fileName = "clip.webm").previewKind())
         assertEquals(PreviewKind.UNSUPPORTED, FileItem(fileName = "archive.zip").previewKind())
+        assertEquals(PreviewKind.UNSUPPORTED, FileItem(fileName = "track.ogg").previewKind())
         assertEquals(PreviewKind.UNSUPPORTED, FileItem(fileName = "folder", fileType = "folder").previewKind())
     }
 

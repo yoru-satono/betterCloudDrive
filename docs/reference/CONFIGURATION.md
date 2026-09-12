@@ -483,13 +483,8 @@ pnpm run build
 | `VITE_DEV_BACKEND_PROXY_BASE` | Vite dev server 的 `/api`、`/webdav` 代理目标 |
 | `VITE_DESKTOP_API_BASE_URL` | Tauri 客户端默认 API 根地址 |
 | `VITE_DESKTOP_WEB_BASE_URL` | Tauri 客户端默认 Web 根地址 |
-| `ANDROID_DEFAULT_SERVER_BASE_URL` | Android 默认服务器地址构建参数 |
-| `ANDROID_E2E_SERVER_BASE_URL` | Android E2E 后端地址 |
-| `ANDROID_E2E_MAILPIT_BASE_URL` | Android E2E Mailpit 地址 |
-| `ANDROID_E2E_ONLYOFFICE_BASE_URL` | Android E2E 从模拟器访问 OnlyOffice Document Server 的地址，默认 `http://10.0.2.2:8082` |
-| `ONLYOFFICE_JWT_SECRET` | Android OnlyOffice E2E 触发 force-save 时使用的 JWT 密钥，必须与后端和 Document Server 一致 |
 
-这些 `ANDROID_*` 构建参数仅随旧版 `android/` 保留，供 KMP 迁移时对照；验证脚本不再构建或测试旧应用。KMP 设备测试的 ADB serial 通过 `scripts/verify-all.ps1 -AndroidSerial` 或 `scripts/verify-all.sh --android-serial` 显式传入。
+KMP Android Debug 在官方模拟器中默认使用 `http://10.0.2.2:8080`，登录页可保存其他规范化服务器地址；Release 只接受 HTTPS。设备测试的 ADB serial 通过 `scripts/verify-all.ps1 -AndroidSerial` 或 `scripts/verify-all.sh --android-serial` 显式传入，不属于 `frontend.env`。
 
 Web 前端地址解析顺序：
 

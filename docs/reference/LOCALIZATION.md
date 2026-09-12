@@ -53,14 +53,7 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 - 未知键会写客户端诊断日志；生产界面只显示当前语言的本地通用提示，不显示服务端 key。
 - Tauri Rust 网络信封同样解析 `messageKey/messageParams`，不得重新依赖旧 `message`。
 
-## Android
-
-- 英文默认资源位于 `android/app/src/main/res/values/strings.xml`，简体中文资源位于 `values-b+zh+Hans/strings.xml`。
-- 使用 Android per-app locale；认证页与个人设置提供语言入口，账号同步规则与 Web 一致。
-- `MessageResolver` 集中映射服务端 key，并负责参数格式化和未知键降级。
-- 网络错误模型只携带 `code/messageKey/messageParams/requestId`。
-
-### KMP 移动端
+## KMP 移动端
 
 - KMP 默认英语资源位于 `mobile/shared/src/commonMain/composeResources/values`，简体中文资源分别位于 `values-zh-rCN` 和 `values-zh-rSG`；所有目录使用相同且不带语言前缀的稳定资源键。生产 Kotlin 源码不得硬编码用户可见文本。
 - 当前支持 `en-US`、`zh-CN` 与 `zh-SG`。`zh-CN`、`zh-Hans-CN`、`zh-SG`、`zh-Hans-SG` 选择对应简体资源；`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO`、无限定 `zh`、无地区 `zh-Hans` 和其他语言回退英语，不能把繁体中文区域误映射为简体。
@@ -78,4 +71,4 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 
 数据库仅提供面向全新实例的合并基线。`V1__schema.sql` 直接包含规范化 BCP 47 语言偏好字段和语义化 message key 字段，不提供旧数据库或旧 snake_case key 的原地升级路径。
 
-管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。`zh-Hans`、`zh-CN` 和 `zh-SG` 均映射到 Grafana 的 `zh-Hans`，`en-US` 保持不变；Web/Tauri 和旧 Android 同样把 CN、SG 映射到现有 `zh-Hans` 词典。映射不改写账号保存的精确地区，Grafana 同步失败也不会影响主应用语言保存或管理员排障入口。
+管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。`zh-Hans`、`zh-CN` 和 `zh-SG` 均映射到 Grafana 的 `zh-Hans`，`en-US` 保持不变；Web/Tauri 同样把 CN、SG 映射到现有 `zh-Hans` 词典。映射不改写账号保存的精确地区，Grafana 同步失败也不会影响主应用语言保存或管理员排障入口。

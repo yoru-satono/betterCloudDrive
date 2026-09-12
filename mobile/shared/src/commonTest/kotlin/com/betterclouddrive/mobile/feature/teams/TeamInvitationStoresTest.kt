@@ -22,8 +22,13 @@ class TeamInvitationStoresTest {
     @Test
     fun deepLinksAndNotificationTargetsAreStrictlyWhitelisted() {
         assertEquals("abcdefghijklmnop", parseIncomingInviteDeepLink("betterclouddrive://team-invites/abcdefghijklmnop"))
+        assertEquals("abcdefghijklmnop", parseIncomingInviteDeepLink(" betterclouddrive://team-invites/abcdefghijklmnop/ "))
+        assertNull(parseIncomingInviteDeepLink("http://localhost:3000/team-invites/abcdefghijklmnop"))
+        assertNull(parseIncomingInviteDeepLink("http://127.0.0.1:3000/team-invites/abcdefghijklmnop"))
         assertNull(parseIncomingInviteDeepLink("https://example.com/team-invites/abcdefghijklmnop"))
         assertNull(parseIncomingInviteDeepLink("betterclouddrive://other/abcdefghijklmnop"))
+        assertNull(parseIncomingInviteDeepLink("betterclouddrive://team-invites/short"))
+        assertNull(parseIncomingInviteDeepLink(null))
         assertIs<NotificationTarget.Invite>(parseNotificationTarget("/team-invites/abcdefghijklmnop"))
         assertEquals(NotificationTarget.TeamFolder(7, 8), parseNotificationTarget("/teams/7/files/8"))
         assertEquals(NotificationTarget.TeamMembers(7), parseNotificationTarget("/teams/7/settings"))

@@ -1,6 +1,6 @@
 # Android 开发指南
 
-本文说明 KMP 移动端工程 `mobile/` 的 Android 平台实现、设备调试和测试约定，并不表示 KMP 应用只支持 Android。共享模块已声明 iOS 真机与模拟器目标，后续 iOS 应用继续复用同一套共享业务层。旧版 `android/` 只保留为 KMP 迁移时的行为与协议参考，不再作为活跃应用构建或测试；两个验证脚本及 `all` 均不会运行其 Gradle 任务。
+本文说明 KMP 移动端工程 `mobile/` 的 Android 平台实现、设备调试和测试约定，并不表示 KMP 应用只支持 Android。共享模块已声明 iOS 真机与模拟器目标，后续 iOS 应用继续复用同一套共享业务层。阶段 22 后移动端只有这一套活跃工程。
 
 ## KMP 快速入口
 
@@ -13,30 +13,26 @@ $env:ANDROID_SERIAL = '<adb 设备序列号>'
 .\mobile\gradlew.bat -p mobile :androidApp:assembleRelease
 ```
 
-KMP 当前依赖与状态边界见[阶段 11.5 架构收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，个人恢复与版本见[阶段 12 个人回收站与文件版本](../../mobile/docs/stage-12-personal-recovery-versions.md)。文中涉及 `android/` 的结构说明仅供迁移对照，不构成验证要求。
-
-## 旧版迁移参考
-
-`android/` 的源码、接口封装和交互实现可用于核对尚未迁移的功能，但不运行其 Gradle 构建、JVM 测试或 instrumentation。新增实现、修复和回归验证均落在 `mobile/`。
+KMP 当前依赖与状态边界见[阶段 11.5 架构收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，个人恢复与版本见[阶段 12 个人回收站与文件版本](../../mobile/docs/stage-12-personal-recovery-versions.md)，最终迁移处置见[阶段 22 发布与切换](../../mobile/docs/stage-22-release-cutover.md)。
 
 ## 代码结构
 
 ```text
-app/src/main/java/com/betterclouddrive/android/
-├── data/
-│   ├── remote/       # Retrofit ApiService、HTTP client、协议模型
-│   └── repository/   # 认证、文件、团队、上传下载等数据操作
-├── di/               # Hilt 模块
-├── domain/           # 客户端领域模型
-├── ui/               # Compose Screen、ViewModel、导航和主题
-└── util/             # 格式化及平台辅助
+mobile/
+├── androidApp/                    # Android Application、Manifest 与设备测试
+└── shared/src/
+    ├── commonMain/                # 共享 UI、Store、Repository、API 与模型
+    ├── commonTest/                # 共享业务行为和协议测试
+    ├── androidMain/               # Keystore、SAF、调度、Room 平台实现
+    ├── androidHostTest/           # Android/JVM 平台边界测试
+    └── androidDeviceTest/         # Compose 与设备能力测试
 ```
 
-推荐方向是 Composable → ViewModel → Repository → `ApiService`/设备存储。Composable 不直接发 Retrofit 请求；Repository 不持有界面生命周期对象；服务端状态进入明确的 loading/success/error UI state。
+推荐方向是 Composable → feature Store → 窄 Repository → domain API/设备边界。Composable 不直接发网络请求；Repository 不持有界面生命周期对象；服务端状态进入明确的 loading/success/error UI state。
 
 ## 服务器地址
 
-debug 默认服务器地址来自 `ANDROID_DEFAULT_SERVER_BASE_URL`，未设置时为 `http://10.0.2.2:8080`。地址会编译进 `BuildConfig`，用户也可以在登录页选择服务器。
+Debug 在官方模拟器中的默认服务器地址为 `http://10.0.2.2:8080`，用户也可以在登录页选择并持久化服务器。
 
 | 环境 | 推荐地址 |
 |------|----------|
@@ -44,7 +40,7 @@ debug 默认服务器地址来自 `ANDROID_DEFAULT_SERVER_BASE_URL`，未设置�
 | 真机 → 开发电脑 | `http://<电脑局域网IP>:8080` |
 | KMP Android 测试连接网络 adb 设备 | 设置 `ANDROID_SERIAL=<host:port>` |
 
-修改环境变量后需要重新构建应用。生产服务器应使用 HTTPS；不要把个人开发 IP 或凭据提交到源码。
+Release 只接受 HTTPS；不要把个人开发 IP 或凭据提交到源码。
 
 KMP 登录页直接保存规范化服务器地址。标准 Android Emulator 使用 `http://10.0.2.2:8080`；部分第三方模拟器没有该宿主别名，此时使用开发机局域网地址。KMP 不把个人开发地址编译进生产状态，也不得记录密码、Token、请求正文或 SAF URI。
 
@@ -52,11 +48,11 @@ KMP 认证页提供注册验证码、注册、忘记密码和重置密码。应�
 
 ## API 与认证
 
-`data/remote/ApiService.kt` 是 Android 路径和请求形式的集中入口。新增协议时：
+`mobile/shared/src/commonMain/.../core/network/DomainApis.kt` 是移动端路径和请求形式的集中入口，`AuthenticatedHttpClient` 统一处理认证与响应 envelope。新增协议时：
 
-1. 更新远端 DTO 与 `ApiService`。
-2. 在对应 Repository 统一处理 API envelope、错误和认证刷新。
-3. ViewModel 将结果转换为稳定 UI state。
+1. 更新共享模型与对应领域 API。
+2. 在窄 Repository 中完成领域映射，不复制认证刷新逻辑。
+3. feature Store 将结果转换为稳定 UI state。
 4. Screen 处理加载、空、失败、权限拒绝和重试。
 
 token/服务器设置使用 DataStore 等本地存储；登出应清理用户凭据和会话数据，但保留明确属于设备的主题偏好。并发 401 应合并刷新请求，避免 refresh token 竞争。
@@ -65,12 +61,12 @@ token/服务器设置使用 DataStore 等本地存储；登出应清理用户凭
 
 团队角色控制根目录能力和成员/设置入口，子目录及单项操作按需读取服务端有效权限。创建、重命名、移动、上传、下载和删除都必须接受后端 403 后使权限缓存失效并刷新状态，客户端不能把本地按钮状态当作授权结果。批量删除只允许当前目录已加载且全部具有删除权限的项目；目标选择器只允许确认有效权限可写的目录。
 
-Navigation Compose 的 route 集中在 `ui/navigation`。新增页面应使用稳定参数，敏感 token 只在必要链路短期传递，避免写入日志或可恢复 back stack 文本。
+Navigation Compose 的 route 集中在共享产品外壳和各 feature route。新增页面应使用稳定参数，敏感 token 只在必要链路短期传递，避免写入日志或可恢复 back stack 文本。
 
 ## 上传、下载与预览
 
-- `UploadRepository` 负责分片/秒传协议和团队/个人作用域。
-- `TransferRepository` 负责设备文件 I/O、队列状态和下载。
+- `TransferApi` 与 `TransferEngine` 负责分片/秒传、流式下载和团队/个人作用域。
+- `TransferRepository`、Room 与窄平台接口共同负责队列状态、设备文件 I/O 和调度。
 - 图片使用 Coil，音视频使用 Media3，文本/Office 使用对应预览页面。
 - 大文件不得整体读入 UI 层内存；取消、重试和进程重建应保留明确状态。
 - Android 模拟器访问 OnlyOffice 和 Mailpit 时同样使用 `10.0.2.2` 地址。

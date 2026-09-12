@@ -103,7 +103,7 @@ class NetworkTestFacadeTest {
             observed += Triple(request.method, request.url.encodedPath, body)
             when {
                 request.url.encodedPath.endsWith("effective-permission") -> jsonResponse(
-                    """{"code":200,"data":{"canRead":true,"canWrite":true,"canDelete":true,"sourceType":"ROLE_OVERRIDE"}}""",
+                    """{"code":200,"data":{"canRead":true,"canWrite":true,"canDelete":true,"sourceType":"ROLE_OVERRIDE","sourceChain":[{"type":"USER_OVERRIDE","fileId":7,"fileName":"Parent","subjectRole":"EDITOR","inherited":true,"canRead":true}]}}""",
                 )
                 request.method == HttpMethod.Post && request.url.encodedPath.endsWith("/folder") -> jsonResponse(
                     """{"code":200,"data":{"id":9,"parentId":7,"fileName":"Docs","fileType":"folder"}}""",
@@ -121,7 +121,13 @@ class NetworkTestFacadeTest {
         )
         client.initialize()
 
-        assertTrue(client.getTeamEffectivePermission(3, 9).canWrite)
+        val permission = client.getTeamEffectivePermission(3, 9)
+        assertTrue(permission.canWrite)
+        assertEquals("ROLE_OVERRIDE", permission.sourceType)
+        assertEquals("USER_OVERRIDE", permission.sourceChain.single().type)
+        assertEquals("EDITOR", permission.sourceChain.single().subjectRole)
+        assertTrue(permission.sourceChain.single().inherited)
+        assertEquals("Parent", permission.sourceChain.single().fileName)
         assertEquals("Docs", client.createTeamFolder(3, 7, "Docs").fileName)
         assertEquals("Renamed", client.renameTeamFile(3, 9, "Renamed").fileName)
         client.moveTeamFile(3, 9, null)

@@ -12,11 +12,11 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.betterclouddrive.mobile.spike"
+        applicationId = "com.betterclouddrive.mobile"
         minSdk = 26
         targetSdk = 37
-        versionCode = 22
-        versionName = "0.22.0-stage21"
+        versionCode = 23
+        versionName = "1.0.0"
         providers.gradleProperty("releaseVersionCode").orNull?.toIntOrNull()?.let { versionCode = it }
         providers.gradleProperty("releaseVersionName").orNull?.let { versionName = it }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -7,6 +7,9 @@ object ServerAddress {
     fun normalize(input: String, allowHttp: Boolean = true): Result<String> = runCatching {
         val trimmed = input.trim().trimEnd('/')
         require(trimmed.isNotBlank()) { "server.empty" }
+        require(trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+            "server.scheme"
+        }
         val url = Url(trimmed)
         require(url.protocol == URLProtocol.HTTP || url.protocol == URLProtocol.HTTPS) {
             "server.scheme"

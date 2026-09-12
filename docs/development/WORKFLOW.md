@@ -14,7 +14,7 @@
 | 对象内容和生命周期 | StorageService、文件/版本/上传 Service |
 | 异步任务 | Outbox writer/publisher、`team_tasks`、Worker、DLQ |
 | Web/Tauri 协议 | `frontend/src/api`、共享 client、Rust envelope/command |
-| Android 协议 | Retrofit `ApiService`、Repository、interceptor |
+| KMP 移动端协议 | `DomainApis`、窄 Repository、`AuthenticatedHttpClient` |
 | 运行配置 | 环境模板、Compose、Spring/Vite/Gradle 消费者 |
 
 文档与实现冲突时先判断实现是否仍有效，再修正文档；不要把未完成或废弃代码直接写成当前能力。
@@ -39,7 +39,7 @@
 2. migration、Entity 和 Repository（如需要）。
 3. Service 业务规则、事务和权限。
 4. Controller/WebDAV/Worker 入口。
-5. Web/Tauri/Android 协议适配和 UI 状态。
+5. Web/Tauri/KMP 移动端协议适配和 UI 状态。
 
 只改客户端的功能也应先确认服务端已经支持所需协议。多个客户端共用的业务规则留在后端；Web 与 Tauri 共用的界面/协议逻辑留在 TypeScript；平台文件系统能力才进入 Rust 或 Android 平台层。
 
@@ -49,9 +49,9 @@
 
 - Service + Repository：模块单元测试，再运行 `integration`。
 - Controller + Web 页面：后端 Web 模块、blackbox、Web 单元和相关 Playwright。
-- 共同 API：后端契约、Web/Tauri、Android 相关测试。
+- 共同 API：后端契约、Web/Tauri、KMP 主机及 Android 设备相关测试。
 - 队列恢复：Service/Scheduler 单元、integration、resilience。
-- Android UI：JVM 状态测试和 instrumentation；不生成或检查代码行覆盖率。
+- KMP 移动端 UI：共享主机状态测试和 Android instrumentation；不生成或检查代码行覆盖率。
 
 完整 `all` 只用于准备发布或确认跨系统变更，不应代替开发中的快速反馈。
 

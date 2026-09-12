@@ -60,7 +60,7 @@
 
 - [ADR 索引](decisions/README.md)：全部已接受决策、统一格式和取代规则。
 - 后端与数据：[模块化单体](decisions/003-modular-monolith.md)、[元数据与对象内容分离](decisions/004-metadata-object-storage.md)、[RabbitMQ 投递](decisions/002-message-queue-selection.md)。
-- 权限与客户端：[团队文件权限](decisions/005-team-file-permissions.md)、[三端边界](decisions/006-client-boundaries.md)、[Android 管理范围](decisions/001-android-admin-scope.md)。
+- 权限与客户端：[团队文件权限](decisions/005-team-file-permissions.md)、[KMP 移动端边界](decisions/009-kmp-mobile-boundary.md)、[Android 管理范围](decisions/001-android-admin-scope.md)。
 - 协议与保存：[OnlyOffice 异步保存](decisions/007-onlyoffice-async-save.md)、[语义本地化](decisions/008-semantic-localization.md)。
 - [历史归档](archive/README.md)：带日期且不代表当前实现的快照；当前包含 2026-07-13 团队模块阶段说明。
 

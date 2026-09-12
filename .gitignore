@@ -58,9 +58,9 @@ build/
 !**/src/main/**/target/
 !**/src/test/**/target/
 !gradle/wrapper/gradle-wrapper.jar
-!android/gradle/wrapper/gradle-wrapper.jar
 !mobile/gradle/wrapper/gradle-wrapper.jar
 local.properties
+.factorypath
 
 # Android build outputs
 *.apk
