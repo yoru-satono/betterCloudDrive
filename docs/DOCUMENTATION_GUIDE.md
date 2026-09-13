@@ -46,7 +46,7 @@ docs/
 │   ├── BACKEND.md
 │   ├── WEB.md
 │   ├── TAURI.md
-│   ├── ANDROID.md
+│   ├── KMP.md
 │   └── TESTING.md
 ├── reference/
 │   ├── README.md
@@ -84,13 +84,14 @@ docs/
 │   ├── 005-team-file-permissions.md
 │   ├── 006-client-boundaries.md
 │   ├── 007-onlyoffice-async-save.md
-│   └── 008-semantic-localization.md
+│   ├── 008-semantic-localization.md
+│   └── 009-kmp-mobile-boundary.md
 └── archive/
     ├── README.md
     └── TEAM_RELEASE_NOTES.md
 ```
 
-`reference/TESTING.md` 是标记为 deprecated 的旧链接兼容指针，不是第二份测试策略；权威正文位于 `development/TESTING.md`。除明确的迁移指针和历史归档外，推荐结构中的文件均为 current。
+`reference/TESTING.md` 是标记为 deprecated 的旧链接兼容指针，不是第二份测试策略；权威正文位于 `development/TESTING.md`。ADR 会保留已取代决策的原始记录，当前有效入口以 `decisions/README.md` 为准；其他推荐结构中的文件除明确迁移指针和历史归档外均为 current。
 
 计划新增文件只应先写入分类 README 的计划清单；正文具备实际内容并通过核查后，才加入推荐结构和统一入口，不创建只有标题的空文件。
 
@@ -152,7 +153,7 @@ docs/
 | 修改数据表、实体关系或生命周期 | 数据模型、备份恢复、相关 API |
 | 修改团队角色或文件权限计算 | 权限架构、API、客户端开发指南和测试策略 |
 | 修改 Outbox、RabbitMQ、后台任务或 DLQ | 异步链路、队列 ADR、观测和运维 Runbook |
-| 修改 Web/Tauri/Android 共用协议 | 客户端架构、本地化协议、各端开发指南 |
+| 修改 Web/Tauri/KMP 移动端共用协议 | 客户端架构、本地化协议、各端开发指南 |
 | 增删验证阶段或测试验收条件 | 测试策略和受影响的专项开发指南；若改变首次启动验收，再同步 Quickstart |
 
 ## 迁移规则

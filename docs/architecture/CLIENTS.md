@@ -56,7 +56,7 @@ Compose Screen
   -> feature Store / AppCoordinator（仅会话协调）
   -> narrow Repository / TransferEngine
   -> domain API / AuthenticatedHttpClient / Room
-  -> Android Keystore、SAF、UIDT 或 WorkManager
+  -> platform contract（当前为 Android Keystore、SAF、UIDT 或 WorkManager）
 ```
 
 - `AppContainer` 显式创建认证 HTTP 核心、领域 API、窄 Repository 和业务 Store。不存在聚合全应用状态的 Controller，页面也不接收全局 actions 集合。
@@ -86,19 +86,15 @@ Compose Screen
 - 普通文件详情只展示服务端元数据和单文件下载：手机使用底部页，宽度不小于 600dp 时使用右侧详情栏。个人目录支持新建文件夹，以及单项重命名、移动、递归复制和删除；长按进入的多选模式只提供批量移入回收站。文件修改后重新加载当前已加载页并保持滚动锚点，目标目录缓存同步失效。
 - OnlyOffice 诊断探针只在独立 Debug 诊断页出现；个人 Office 文件则可从产品预览页加载。两者都原样使用后端签名的 `mobile=true` 只读配置，Release 不注册诊断入口和诊断路由。
 
-旧版 Android 工程已在阶段 22 完成业务测试迁移后删除。当前团队成员与权限边界见[阶段 15 团队成员与文件权限](../../mobile/docs/stage-15-team-members-permissions.md)，架构边界见[阶段 11.5 KMP 架构边界收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)，最终处置见[阶段 22 发布与切换](../../mobile/docs/stage-22-release-cutover.md)。
-
-阶段 7/8 已在 Android 14 上完成 64 MiB 上传会话恢复、非零 Range 下载、三页搜索和全部当前预览类型的真实旅程，并在 Android 9/14 设备矩阵回归。阶段 12 又完成了 64 MiB 历史版本下载的两次进程中断与非零 Range 恢复、Room v1→v2 和回收站删除根真实验收。个人和团队业务均已达到迁移路线定义的功能对等，阶段 22 已完成测试迁移、正式应用标识和旧工程退役。
-
 ## 能力矩阵
 
-| 能力 | Web | Tauri | Android |
+| 能力 | Web | Tauri | KMP 移动端 |
 |------|-----|-------|---------|
-| 认证、个人文件、回收站、分享、标签、收藏、版本 | 是 | 复用 Web | 是 |
-| 团队文件、成员、邀请、权限与任务 | 是 | 复用 Web | 是 |
+| 认证、个人文件、回收站、分享、标签、收藏、版本 | 是 | 复用 Web | Android 应用壳已支持 |
+| 团队文件、成员、邀请、权限与任务 | 是 | 复用 Web | Android 应用壳已支持 |
 | 浏览器在线预览/OnlyOffice | 按权限查看或编辑 | 复用 Web 页面 | Android WebView 只读查看 |
 | 原生目录上传与持久传输队列 | 受浏览器能力限制 | 是，Rust 实现 | KMP 使用 Room + UIDT/WorkManager |
-| 全局管理员界面 | 是 | 复用 Web | 非当前完整支持范围 |
+| 全局管理员界面 | 是 | 复用 Web | 非当前支持范围 |
 | WebDAV | 外部 WebDAV 客户端使用 | 外部客户端使用 | 外部客户端使用 |
 
 矩阵描述架构边界，不代替逐接口支持清单。修改共同协议时，应同时检索 Web API wrapper、Tauri 调用适配和 KMP 各领域 API。
@@ -124,6 +120,6 @@ SSE 通知不能把 access token 放在查询参数。客户端先以 Bearer tok
 
 1. API 路径或 DTO 改动同时更新三端契约入口和端点契约测试。
 2. 新增业务错误码时，保持通用错误处理可回退，不在页面硬编码后端英文消息。
-3. 新增消息 key 时同步 Web、Android 和后端 catalog，并运行本地化检查。
+3. 新增消息 key 时同步 Web、KMP 移动端和后端 catalog，并运行本地化检查。
 4. Tauri 原生 command 只处理平台能力；可共享的页面和协议逻辑留在 TypeScript。
-5. Android 测试以行为、状态转换和端到端场景为指标，不生成或校验代码行覆盖率。
+5. KMP 移动端通过共享主机测试、Android 设备场景和 iOS 共享源码元数据编译验收，不以代码行覆盖率替代行为断言。

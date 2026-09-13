@@ -142,7 +142,7 @@ Authorization: Bearer <accessToken>
 
 `messageKey` 是稳定语义键，`messageParams` 是客户端本地化插值参数。后端不返回旧 `message` 字段，也不会把异常诊断文本序列化给客户端。业务代码和自动化测试应优先使用 `code`、对象 `type/status` 或稳定 key 判断状态，不得按中文翻译分支。完整约定见 [客户端本地化与语义文案协议](../LOCALIZATION.md)。
 
-未知或内部异常返回 `error.internal`；Web/Tauri 与 Android 使用各自本地资源显示通用中文提示，生产 UI 不直接展示未知 key。
+未知或内部异常返回 `error.internal`；Web/Tauri 与 KMP 移动端使用各自本地资源显示通用提示，生产 UI 不直接展示未知 key。
 
 `complete` 支持幂等重试：同一 `sessionId` 第一次成功后会记录产物文件 ID，后续重复调用返回同一个 `fileId`，不会重复合并对象、重复创建文件或重复累计存储配额。
 

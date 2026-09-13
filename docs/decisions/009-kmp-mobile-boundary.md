@@ -36,7 +36,7 @@
 ## 实现与验证
 
 - 当前能力与调用层：[客户端架构](../architecture/CLIENTS.md)
-- 移动端开发：[KMP Android 开发](../development/ANDROID.md)
+- 移动端开发：[KMP Android 开发](../development/KMP.md)
 - 迁移边界：[阶段 11.5 架构收口](../../mobile/docs/stage-11-5-architecture-boundaries.md)
 - 最终处置与测试审计：[阶段 22 发布与切换](../../mobile/docs/stage-22-release-cutover.md)
 - 验证：`mobile-unit`、API 28/API 34 的 `mobile-android`，以及共同协议对应的后端/Web/Tauri 验收

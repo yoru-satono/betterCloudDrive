@@ -34,7 +34,7 @@
 - **注册验证码 & 密码重置**：Mailpit 模拟邮件
 - **存储配额**：默认 10GB/用户，管理员可调整
 - **管理员面板**：用户管理/配额调整/日志中心/系统统计
-- **响应式 UI**：Web 端桌面+移动端；KMP Android 端手机+平板双布局，共享业务层面向后续 iOS 客户端复用
+- **响应式 UI**：Web 端支持桌面与移动布局；KMP 移动端在 Android 应用壳提供手机与平板布局，共享业务层面向后续 iOS 应用复用
 
 ## 项目结构
 
@@ -113,7 +113,7 @@ Grafana 通过 Nginx `auth_request` 接入 BetterCloudDrive 管理员身份。�
 
 ### 方式二：本地开发启动
 
-按后端、Web、Tauri 或 Android 组合本地环境的完整说明见[开发环境准备](docs/getting-started/DEVELOPMENT_SETUP.md)和[专项开发指南](docs/development/README.md)。下面仅保留最短 Web 联调入口。
+按后端、Web、Tauri 或 KMP 移动端组合本地环境的完整说明见[开发环境准备](docs/getting-started/DEVELOPMENT_SETUP.md)和[专项开发指南](docs/development/README.md)。下面仅保留最短 Web 联调入口。
 
 启动依赖和后端：
 
@@ -141,10 +141,10 @@ cd frontend && pnpm install && pnpm run dev
 
 ```bash
 cd mobile
-sh ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug :shared:compileIosMainKotlinMetadata
+sh ./gradlew -PenableIos=true :shared:testAndroidHostTest :androidApp:assembleDebug :shared:compileIosMainKotlinMetadata
 ```
 
-Android APK 输出在 `mobile/androidApp/build/outputs/apk/debug/`。正式应用 ID 为 `com.betterclouddrive.mobile`。`shared` 已声明 `iosArm64` 和 `iosSimulatorArm64` 目标，当前门禁会编译 iOS 共享源码元数据；后续 iOS 应用壳仍属于 KMP 移动端规划。
+Android APK 输出在 `mobile/androidApp/build/outputs/apk/debug/`。正式应用 ID 为 `com.betterclouddrive.mobile`。`shared` 已声明 `iosArm64` 和 `iosSimulatorArm64` 目标，当前门禁会编译 iOS 共享源码元数据；后续 iOS 应用壳仍属于 KMP 移动端规划。详细边界见 [KMP 移动端开发指南](docs/development/KMP.md)。
 
 ## API 文档
 
@@ -171,7 +171,7 @@ Web、Tauri 与 KMP 移动端支持“跟随系统、浅色、深色”三种主
 
 ## 测试
 
-测试分层、独立命令、最低验证矩阵、Testcontainers 依赖和报告位置见[测试策略](docs/development/TESTING.md)。Android 测试只按行为和场景断言验收，不生成或检查代码行覆盖率。
+测试分层、独立命令、最低验证矩阵、Testcontainers 依赖和报告位置见[测试策略](docs/development/TESTING.md)。KMP 移动端当前通过共享主机测试、Android 设备场景和 iOS 共享源码元数据编译验收；不以代码行覆盖率替代行为断言。
 
 Windows PowerShell：
 

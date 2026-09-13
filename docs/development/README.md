@@ -8,7 +8,7 @@
 - [后端开发](BACKEND.md)：七个 Maven 模块、运行、数据库、事务、调试和验证。
 - [Web 开发](WEB.md)：Vue 目录、数据流、API client、本地化、主题和 Playwright。
 - [Tauri 开发](TAURI.md)：Rust command、文件系统、传输恢复、构建和桌面 E2E。
-- [KMP Android 开发](ANDROID.md)：Compose Multiplatform、Ktor、Store/Repository、平台边界、地址和设备测试。
+- [KMP 移动端开发](KMP.md)：Compose Multiplatform、Ktor、Store/Repository、跨平台边界、地址和验证矩阵。
 - [测试策略](TESTING.md)：测试分层、完整脚本、最低验证矩阵、数据清理和报告。
 
 首次配置工具和组合启动请先阅读[开发环境准备](../getting-started/DEVELOPMENT_SETUP.md)。

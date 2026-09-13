@@ -9,7 +9,7 @@
 | 第一次启动项目 | [入门指南](getting-started/README.md) |
 | 快速了解当前功能和技术栈 | [项目 README](../README.md) |
 | 理解组件、数据和关键链路 | [架构文档](architecture/README.md) |
-| 修改后端、Web、Tauri 或 Android | [开发指南](development/README.md) |
+| 修改后端、Web、Tauri 或 KMP 移动端 | [开发指南](development/README.md) |
 | 查询 HTTP 接口、配置或本地化协议 | [参考资料](reference/README.md) |
 | 部署、备份、观察或排障 | [运维手册](operations/README.md) |
 | 了解关键选择的原因 | [架构决策记录](decisions/README.md) |
@@ -36,14 +36,14 @@
 
 ### 开发
 
-[development](development/README.md) 负责开发工作流、各端目录、修改路径、调试和最低验证，包含[统一工作流](development/WORKFLOW.md)、后端、Web、Tauri、Android 专项指南和[测试策略](development/TESTING.md)。
+[development](development/README.md) 负责开发工作流、各端目录、修改路径、调试和最低验证，包含[统一工作流](development/WORKFLOW.md)、后端、Web、Tauri、[KMP 移动端](development/KMP.md)专项指南和[测试策略](development/TESTING.md)。
 
 ### 参考
 
 - [API 总入口](reference/API.md)：通用约定、错误码以及按认证、文件、分享、团队、通知、OnlyOffice 和管理员划分的业务域索引。
 - [配置参考](reference/CONFIGURATION.md)：Compose、环境变量、反向代理、Redis、RabbitMQ、安全和配置检查。
 - [测试策略](development/TESTING.md)：测试分层、模块命令、最低验证、Testcontainers、专项验收和报告。
-- [本地化协议](reference/LOCALIZATION.md)：后端语义 key 与 Web、Tauri、Android 客户端文案约定。
+- [本地化协议](reference/LOCALIZATION.md)：后端语义 key 与 Web、Tauri、KMP 移动端文案约定。
 
 ### 运维
 
@@ -60,7 +60,7 @@
 
 - [ADR 索引](decisions/README.md)：全部已接受决策、统一格式和取代规则。
 - 后端与数据：[模块化单体](decisions/003-modular-monolith.md)、[元数据与对象内容分离](decisions/004-metadata-object-storage.md)、[RabbitMQ 投递](decisions/002-message-queue-selection.md)。
-- 权限与客户端：[团队文件权限](decisions/005-team-file-permissions.md)、[KMP 移动端边界](decisions/009-kmp-mobile-boundary.md)、[Android 管理范围](decisions/001-android-admin-scope.md)。
+- 权限与客户端：[团队文件权限](decisions/005-team-file-permissions.md)、[KMP 移动端边界](decisions/009-kmp-mobile-boundary.md)。
 - 协议与保存：[OnlyOffice 异步保存](decisions/007-onlyoffice-async-save.md)、[语义本地化](decisions/008-semantic-localization.md)。
 - [历史归档](archive/README.md)：带日期且不代表当前实现的快照；当前包含 2026-07-13 团队模块阶段说明。
 
@@ -73,7 +73,7 @@
 | 后端 | Spring Boot 4.1.0、JDK 25、MinIO SDK 9.0.3、JJWT 0.13.0 |
 | Web | Node.js 24.18.0、pnpm 11.16.0、Vue 3.5.40、Vue Router 5.2.0、Pinia 4.0.2、Vite 8.1.5、TypeScript 6.0.3 |
 | 桌面端 | Tauri 2.11.4、Rust 1.88.0 |
-| Android | Android Gradle Plugin 9.3.1、Gradle 9.6.1、Kotlin 2.3.21、compileSdk/targetSdk 37、Compose BOM 2026.06.00 |
+| KMP 移动端 | Kotlin 2.4.10、Compose Multiplatform 1.11.1、Android Gradle Plugin 9.1.1、Gradle 9.3.1、Ktor 3.5.1、Room 2.8.4；Android `compileSdk/targetSdk` 37 |
 | 核心服务 | PostgreSQL 18.4、Redis 8.8.1、RabbitMQ 4.3.4、SeaweedFS 4.40、OnlyOffice 9.3.0.1 |
 | 可观测性 | Grafana 13.1.1、Prometheus 3.13.1、Blackbox Exporter 0.28.0、Loki 3.6.13、Alloy 1.18.0、Alertmanager 0.33.1 |
 

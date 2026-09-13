@@ -54,7 +54,7 @@ pnpm run dev
 
 ## 本地化与主题
 
-运行 `pnpm run check:i18n` 检查用户可见硬编码。新增语义 key 时同步后端 catalog、Web 两种语言与 Android；完整约定见[本地化参考](../reference/LOCALIZATION.md)。
+运行 `pnpm run check:i18n` 检查用户可见硬编码。新增语义 key 时同步后端 catalog、Web 两种语言与 KMP 移动端；完整约定见[本地化参考](../reference/LOCALIZATION.md)。
 
 主题模式是 `system`、`light`、`dark`，设备本地键为 `bcd.themeMode`，跨退出登录保留但不与后端同步。新组件应使用现有主题 token，不直接写仅适合浅色模式的颜色。
 
@@ -72,7 +72,7 @@ pnpm run build
 pnpm run test:e2e:docker
 ```
 
-完整脚本中的 `web` 模块会运行 Web 单元测试/JavaScript 覆盖率和 core E2E；`office` 单独验证 OnlyOffice。测试数据必须使用运行前缀并接受脚本清理。修改共同 API 时还要运行 Android/Tauri 受影响测试。
+完整脚本中的 `web` 模块会运行 Web 单元测试/JavaScript 覆盖率和 core E2E；`office` 单独验证 OnlyOffice。测试数据必须使用运行前缀并接受脚本清理。修改共同 API 时还要运行 KMP 移动端和 Tauri 的受影响测试。
 
 ## 提交前检查
 

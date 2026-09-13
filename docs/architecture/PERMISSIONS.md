@@ -110,6 +110,6 @@ flowchart TD
 
 - `TeamService`、`TeamPermissionServiceImpl` 与数据库约束。
 - 团队文件列表、搜索、预览、下载、上传、移动、分享、回收站和版本端点。
-- Web、Tauri 和 Android 的按钮、菜单、路由守卫与错误处理。
+- Web、Tauri 和 KMP 移动端的按钮、菜单、路由守卫与错误处理。
 - 用户覆盖优先级、父目录继承、移动后重算、自锁保护和 OWNER 不可覆盖测试。
 - [API 参考](../reference/API.md)中的角色、有效权限和覆盖 DTO。

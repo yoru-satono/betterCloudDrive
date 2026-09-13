@@ -72,14 +72,14 @@ Android 出现 cleartext HTTP 拒绝时，确认使用的是 debug 构建和项�
 - 若 8080 被占用，先检查是否仍有 Compose backend 或旧 Java 进程。
 - Repository 集成失败时确认 Docker 引擎可用；Testcontainers 不应被静默跳过。
 
-## Android 构建或设备测试失败
+## KMP 移动端构建或 Android 设备测试失败
 
 - 使用项目 Gradle wrapper，不要用系统 Gradle 替代。
 - 确认 SDK 37 已安装，并由 JDK 17 启动 Gradle。
 - `adb devices` 应显示目标设备为 `device`，不是 `offline` 或 `unauthorized`。
 - 多设备时设置 `ANDROID_SERIAL`，网络设备可先执行 `adb connect <serial>`。
 - JVM 测试不要求设备；设备测试使用 `connectedDebugAndroidTest`。
-- Android 验收不生成覆盖率报告，也不使用代码行数或行覆盖率作为质量指标。
+- KMP 移动端验收不生成覆盖率报告，也不使用代码行数或行覆盖率作为质量指标。
 
 ## Tauri 启动或 E2E 失败
 

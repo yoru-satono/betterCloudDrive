@@ -7,7 +7,7 @@
 1. [系统架构总览](OVERVIEW.md)：运行组件、数据归属、同步/异步边界和部署形态。
 2. [后端架构](BACKEND.md)：七个 Maven 模块、依赖方向、事务和安全边界。
 3. [数据模型](DATA_MODEL.md)：核心实体关系、个人/团队作用域和生命周期。
-4. [客户端架构](CLIENTS.md)：Web、Tauri、Android 的共同协议与平台差异。
+4. [客户端架构](CLIENTS.md)：Web、Tauri、KMP 移动端的共同协议与平台差异。
 5. [权限模型](PERMISSIONS.md)：全局角色、团队角色、文件覆盖与继承顺序。
 
 ## 关键链路
@@ -20,7 +20,6 @@
 
 - [ADR 索引](../decisions/README.md)：模块化单体、数据存储、权限、客户端、队列、OnlyOffice 和本地化等关键选择。
 - [RabbitMQ 投递决策](../decisions/002-message-queue-selection.md)：PostgreSQL Outbox、RabbitMQ 和死信边界的选择原因。
-- [Android 管理范围](../decisions/001-android-admin-scope.md)：移动端与全局管理能力的边界。
 - [备份与恢复](../operations/BACKUP_RESTORE.md)：PostgreSQL 与对象存储的一致恢复要求。
 - [观测与排障](../operations/OBSERVABILITY.md)：日志、指标、队列和任务的运行检查。
 - [OnlyOffice 部署与排障](../operations/ONLYOFFICE_DEPLOYMENT.md)：地址、JWT、健康检查和常见错误。

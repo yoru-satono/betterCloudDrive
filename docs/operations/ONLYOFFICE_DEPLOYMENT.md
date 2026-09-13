@@ -46,7 +46,7 @@ docker exec bcd-onlyoffice curl -fsS http://backend:8080/actuator/health
 
 ## 保存链路
 
-1. Web、Tauri 或 Android 从后端获取带 JWT 的 OnlyOffice 配置。
+1. Web、Tauri 或 KMP 移动端从后端获取带 JWT 的 OnlyOffice 配置。
 2. 浏览器从 public URL 加载 SDK。
 3. Document Server 通过配置中的内容 URL 从后端下载源文件。
 4. 保存时 Document Server 调用团队 callback URL。

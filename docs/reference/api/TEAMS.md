@@ -48,7 +48,7 @@
 
 邀请列表固定按 `createdAt DESC, id DESC` 排序。读取列表或详情时，已超过有效期的待处理邀请会变为 `EXPIRED`。同一团队和邮箱只保留一个待处理邀请；重复创建会刷新角色、token 和有效期，旧链接立即失效。重发允许 `PENDING` 和 `EXPIRED`，会签发新 token 并恢复为 `PENDING`；取消保持幂等。
 
-同一账号重复接受或拒绝已经处于相同终态的邀请保持幂等；尝试执行相反操作、处理已取消或过期邀请会失败。接受账号的邮箱必须与邀请邮箱一致。OWNER 可以邀请、重发或取消 ADMIN、EDITOR、VIEWER 邀请，ADMIN 只能管理 EDITOR、VIEWER 邀请。邀请邮件始终指向 `${APP_PUBLIC_URL}/team-invites/{token}` 的 Web 页面，Web 页面可由用户显式打开 `betterclouddrive://team-invites/{token}` 交给 KMP Android；服务端结构化审计会脱敏 URL 中的 token。
+同一账号重复接受或拒绝已经处于相同终态的邀请保持幂等；尝试执行相反操作、处理已取消或过期邀请会失败。接受账号的邮箱必须与邀请邮箱一致。OWNER 可以邀请、重发或取消 ADMIN、EDITOR、VIEWER 邀请，ADMIN 只能管理 EDITOR、VIEWER 邀请。邀请邮件始终指向 `${APP_PUBLIC_URL}/team-invites/{token}` 的 Web 页面，Web 页面可由用户显式打开 `betterclouddrive://team-invites/{token}` 交给 KMP Android 应用壳；服务端结构化审计会脱敏 URL 中的 token。
 
 **错误码:** 400（邀请状态不允许当前操作）、403（无管理成员权限或账号邮箱不匹配）、404（邀请不存在）、409（账号已经是团队成员）。
 
@@ -191,7 +191,7 @@ Authorization: Bearer <accessToken>
 
 `sourceType` 表示最终生效来源：`BASE_ROLE`、`ROLE_OVERRIDE` 或 `USER_OVERRIDE`。`sourceChain` 按解析顺序返回来源链，第一项通常是基础角色权限；后续项是最终命中的用户或角色覆盖。`inherited=true` 表示该覆盖来自父文件夹。
 
-Web/Tauri 与 Android 均展示该来源链；Android 团队文件页会标明基础角色、用户/角色覆盖、命中文件夹及是否继承。
+Web/Tauri 与 KMP 移动端均展示该来源链；KMP 移动端团队文件页会标明基础角色、用户/角色覆盖、命中文件夹及是否继承。
 
 **PUT Request Body:**
 ```json

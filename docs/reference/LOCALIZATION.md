@@ -1,6 +1,6 @@
 # 客户端本地化与语义文案协议
 
-BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务端只传递稳定的文案键和结构化参数，由 Web/Tauri 与 Android 使用本地简体中文或英文资源渲染；选择原因见[语义本地化 ADR](../decisions/008-semantic-localization.md)。
+BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务端只传递稳定的文案键和结构化参数，由 Web/Tauri 与 KMP 移动端使用本地简体中文或英文资源渲染；选择原因见[语义本地化 ADR](../decisions/008-semantic-localization.md)。
 
 后端账号偏好接受 `en-US`、`zh-Hans`、`zh-CN` 和 `zh-SG`。未登录时使用当前设备已保存的选择，首次访问按系统语言选择；注册会保存当前语言。登录后以账号的 `preferredLocale` 为准，并同步到当前设备。全新数据库实例中的账号默认使用 `zh-Hans`。
 
@@ -40,7 +40,7 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 
 - 所有协议 key 和前端内部 key 使用 `domain.feature.intent` 形式，每段均为 lowerCamelCase。
 - 禁止哈希、序号、自然语言、`migrated.*` 和 snake_case 作为 key；通用动作、状态和分页文案归入 `common`。
-- 本次语义化改名是破坏性协议升级，不提供旧 key 别名或双读。后端、Web/Tauri 与 Android 必须同步发布。
+- 本次语义化改名是破坏性协议升级，不提供旧 key 别名或双读。后端、Web/Tauri 与 KMP 移动端必须同步发布。
 - HTTP 路径、响应结构和 `messageParams` 形状不变；只有 `messageKey`、通知、任务、活动和权限描述 key 改名。
 
 ## Web 与 Tauri

@@ -40,7 +40,7 @@
 | `config/env-files/storage.env` | SeaweedFS / S3 存储变量 |
 | `config/env-files/security.env` | JWT 和分享密码加密密钥 |
 | `config/env-files/backend.env` | 后端日志、OnlyOffice、队列和后台任务变量 |
-| `config/env-files/frontend.env` | 前端 Nginx 代理、Web/Tauri/Android 构建与测试地址 |
+| `config/env-files/frontend.env` | 前端 Nginx 代理、Web/Tauri/KMP 移动端构建与测试地址 |
 | `config/env-files/mail.env` | 邮件服务变量 |
 | `config/env-files/observability.env` | Prometheus、Loki、Alloy、Alertmanager、Grafana 和审计日志变量 |
 | `config/redis/redis.conf` | Redis 配置 |

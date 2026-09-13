@@ -11,8 +11,8 @@
 | Python 黑盒测试 | Python、推荐 `uv` | Python 3.12+ |
 | Web | Node.js、pnpm | Node.js 24.18.0、pnpm 11.16.0 |
 | Tauri | Web 工具、Rust、平台依赖 | Rust 1.88.0，由 `rust-toolchain.toml` 固定 |
-| Android | Android Studio/SDK、JDK | SDK 37、Gradle wrapper 9.6.1、构建 JVM 17 |
-| 完整验收 | 上述工具、rclone、adb 和可用 Android 设备 | 由验证脚本预检 |
+| KMP 移动端 | Android Studio/SDK、JDK；iOS 完整构建另需 macOS/Xcode | Kotlin 2.4.10、SDK 37、Gradle wrapper 9.3.1、构建 JVM 17 |
+| 完整验收 | 上述工具、rclone、adb 和可用 Android 设备 | 由验证脚本预检；iOS 当前只编译共享源码元数据 |
 
 精确依赖版本以各构建文件为准。升级工具链时同时更新文档入口中的版本基线。
 
@@ -72,18 +72,19 @@ pnpm run tauri:dev
 
 桌面端默认连接 `http://127.0.0.1:8080/api/v1`，登录页可覆盖 API 和 Web 分享地址。具体平台依赖与调试方法见 [Tauri 开发指南](../development/TAURI.md)。
 
-### Android
+### KMP 移动端
 
-用 Android Studio 打开 `android`，同步 Gradle 并选择 API 26+ 的设备。Android 模拟器访问宿主机后端时使用 `http://10.0.2.2:8080`，真机必须使用电脑在局域网中的可达地址。
+用 Android Studio 打开 `mobile` 并同步 Gradle。当前 Android 应用壳要求 API 26+；官方模拟器访问宿主机后端时使用 `http://10.0.2.2:8080`，真机必须使用电脑在局域网中的可达地址。共享模块还声明 `iosArm64` 与 `iosSimulatorArm64`，当前只做 iOS 共享源码元数据编译，不代表已有 iOS 应用壳。
 
 命令行构建：
 
 ```bash
-cd android
-./gradlew assembleDebug
+cd mobile
+bash ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug
+bash ./gradlew -PenableIos=true :shared:compileIosMainKotlinMetadata
 ```
 
-Windows 使用 `gradlew.bat`。详细结构和测试见 [Android 开发指南](../development/ANDROID.md)。
+Windows 使用 `gradlew.bat`。详细结构和测试见 [KMP 移动端开发指南](../development/KMP.md)。
 
 ## 按修改范围选择启动项
 
@@ -94,7 +95,7 @@ Windows 使用 `gradlew.bat`。详细结构和测试见 [Android 开发指南](.
 | REST/安全/队列端到端 | Compose 后端栈 + Python 验收 |
 | Vue 页面/Store/API wrapper | 本机或 Compose 后端 + Vite |
 | Tauri 原生传输 | 后端 + Tauri dev；目录/下载功能还需本地文件系统权限 |
-| Android Repository/ViewModel | JVM 测试；真实传输/Compose 场景再连接设备 |
+| KMP Repository/Store/共享 UI | 共享主机测试；真实传输、平台服务或 Compose 场景再连接 Android 设备 |
 | OnlyOffice | 后端、前端、Document Server，并确认浏览器与容器双向地址 |
 
 最低验证矩阵见[测试策略](../development/TESTING.md)。

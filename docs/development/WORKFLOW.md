@@ -1,6 +1,6 @@
 # 开发工作流
 
-本文面向跨模块功能开发和代码评审，给出从确认事实、选择修改位置到验证与文档同步的统一流程。各端具体命令分别见[后端](BACKEND.md)、[Web](WEB.md)、[Tauri](TAURI.md)、[Android](ANDROID.md)和[测试策略](TESTING.md)。
+本文面向跨模块功能开发和代码评审，给出从确认事实、选择修改位置到验证与文档同步的统一流程。各端具体命令分别见[后端](BACKEND.md)、[Web](WEB.md)、[Tauri](TAURI.md)、[KMP 移动端](KMP.md)和[测试策略](TESTING.md)。
 
 ## 1. 先确定事实来源
 
@@ -41,7 +41,7 @@
 4. Controller/WebDAV/Worker 入口。
 5. Web/Tauri/KMP 移动端协议适配和 UI 状态。
 
-只改客户端的功能也应先确认服务端已经支持所需协议。多个客户端共用的业务规则留在后端；Web 与 Tauri 共用的界面/协议逻辑留在 TypeScript；平台文件系统能力才进入 Rust 或 Android 平台层。
+只改客户端的功能也应先确认服务端已经支持所需协议。多个客户端共用的业务规则留在后端；Web 与 Tauri 共用的界面/协议逻辑留在 TypeScript；平台文件系统能力才进入 Rust 或 KMP 的平台 source set。
 
 ## 4. 先跑最小反馈，再跑边界验收
 

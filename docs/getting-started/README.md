@@ -5,7 +5,7 @@
 ## 推荐阅读顺序
 
 1. [Docker Compose 快速启动](QUICKSTART.md)：复制配置、设置密钥、启动、健康检查和首次注册。
-2. [开发环境准备](DEVELOPMENT_SETUP.md)：按后端、Web、Tauri 或 Android 组合本地环境。
+2. [开发环境准备](DEVELOPMENT_SETUP.md)：按后端、Web、Tauri 或 KMP 移动端组合本地环境。
 3. [常见排障](TROUBLESHOOTING.md)：容器、端口、地址、工具链和专项服务问题。
 
 根目录 [README](../../README.md) 只保留项目概览和最短启动入口；完整变量表仍以[配置参考](../reference/CONFIGURATION.md)为准，生产操作以[运维手册](../operations/README.md)为准。

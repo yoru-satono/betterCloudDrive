@@ -34,6 +34,6 @@ KMP Android 继续支持团队文件、成员、邀请、分享、标签、收�
 ## 实现与验证
 
 - 客户端边界：[客户端架构](../architecture/CLIENTS.md)
-- KMP Android 开发与行为验收：[KMP Android 开发](../development/ANDROID.md)、[测试策略](../development/TESTING.md)
+- KMP Android 开发与行为验收：[KMP Android 开发](../development/KMP.md)、[测试策略](../development/TESTING.md)
 - 全局管理员接口：[管理员 API](../reference/api/ADMIN.md)
 - 当前实现入口：Web/Tauri `/admin` 路由与 KMP 共享 Navigation Compose 图

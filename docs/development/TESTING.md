@@ -39,7 +39,7 @@ Linux/macOS 也可以使用 Bash 3.2 或更高版本：
 bash scripts/verify-all.sh
 ```
 
-`all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability 和 resilience。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。旧版 Android 工程已退役并删除；移动端验证只使用 `mobile-unit` 和 `mobile-android`。
+`all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability 和 resilience。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。KMP 移动端验证使用 `mobile-unit` 和 `mobile-android`。
 
 两个入口会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。PowerShell 入口在 Windows 使用 `.venv/Scripts/pytest.exe` 和 `gradlew.bat`，在 Linux 使用 `.venv/bin/pytest` 和 Bash Gradle wrapper；缺少虚拟环境时两端都依次回退到 `uv` 与系统 Python。Web、OnlyOffice 和 Tauri E2E runner 会加载根 `.env`、`config/env-files/database.env` 与 `config/env-files/backend.env`，将与 Compose 一致的数据库端口、凭据和 OnlyOffice JWT 传给测试子进程；配置不一致时只报告键名，不输出密钥。`all` 是完整验收，不能再配合跳过 Tauri、KMP Android 或 OnlyOffice 的参数。
 
@@ -80,7 +80,7 @@ bash scripts/verify-all.sh --module observability --keep-going
 | KMP 移动端主机 | `cd mobile && sh ./gradlew :shared:testAndroidHostTest` | 认证、并发刷新、语义错误与传输状态机 |
 | KMP Android 设备 | `cd mobile && ANDROID_SERIAL=<device-id> sh ./gradlew :androidApp:connectedDebugAndroidTest` | 产品导航、Keystore、平台调度和设备 I/O |
 | KMP Android Release | `cd mobile && sh ./gradlew :androidApp:assembleRelease` | Release、R8 与 lint vital |
-| KMP iOS 共享源码 | `cd mobile && sh ./gradlew :shared:compileIosMainKotlinMetadata` | iOS source set 和跨平台依赖编译边界；不等同于完整 iOS 应用构建 |
+| KMP iOS 共享源码 | `cd mobile && sh ./gradlew -PenableIos=true :shared:compileIosMainKotlinMetadata` | iOS source set 和跨平台依赖编译边界；不等同于完整 iOS 应用构建 |
 
 KMP 传输改动必须在 Android 9/API 28 与 Android 14/API 34 上分别运行设备测试。API 28 用例不得跳过 WorkManager 集成测试；API 34 允许该低版本专用用例按条件跳过，但必须通过 UIDT 选择、通知和真实 OkHttp 流式 Range 恢复测试。每次运行都显式传入 `AndroidSerial`，不能依赖当前默认设备。
 
@@ -97,7 +97,7 @@ KMP 产品外壳测试覆盖四个顶层入口、返回行为、页面状态保�
 
 个人搜索与预览改动必须覆盖 300 ms 防抖、旧请求取消、50 条分页去重、尾部重试、目录/搜索返回栈恢复、打开所在位置和预览类型分类。文本预览验证认证 Range、UTF-8 BOM、512 KiB 截断及空文件；图片验证 Coil 不落盘缓存 ticket；视频验证 Media3 Range、拖动、前后台暂停和播放器释放；个人 OnlyOffice 验证 `mobile=true`、只读和无商业许可警告。Logcat 扫描必须确认 ticket、Token、正文和 SAF URI 未泄漏。
 
-阶段 7/8 的完成验收除自动化外，还必须包含 64 MiB 批量上传、断网、强制停止、非零 Range 下载、MD5 与 URI/WAL 清理联合旅程，以及真实三页搜索和全部当前预览类型旅程。2026-08-25 的 API 34 联合旅程已覆盖这些门槛；后续修改相关链路时按同一矩阵回归。
+传输与预览联合验收还必须包含大文件批量上传、断网、强制停止、非零 Range 下载、MD5 与 URI/WAL 清理，以及多页搜索和全部当前预览类型；后续修改相关链路时按同一矩阵回归。
 
 个人文件管理改动必须同时覆盖后端父目录所有权与类型、名称规范化、共享名称空间冲突、幂等操作、非法子树目标、递归复制、配额和批量删除原子性；KMP 测试覆盖五类请求、单飞提交、选择生命周期、目标文件夹分页和缓存刷新。API 28 与 API 34 的 Compose 测试需覆盖创建/重命名对话框、显式更多菜单、长按多选、批量删除和手机/宽屏目标选择器。
 
@@ -125,17 +125,7 @@ KMP 团队邀请与通知改动必须覆盖邀请稳定分页、同邮箱待处�
 
 KMP 团队收藏与标签改动必须覆盖团队切换和个人/团队隔离、收藏与标签文件三页稳定分页、300 ms 搜索防抖、收藏状态按需读取、标签名称和颜色规范化、OWNER/ADMIN 管理矩阵、目标文件有效读写权限和原子替换失败回滚。Compose 设备测试需覆盖团队工作区“整理”入口、手机页面、宽屏标签双栏、Editor/Viewer 隐藏标签管理入口，以及有 `canWrite` 时的文件标签编辑。网络契约测试必须断言团队文件标签使用一次 `PUT /teams/{teamId}/files/{fileId}/tags`，Web/Tauri 不得通过逐条解绑和绑定模拟替换。
 
-2026-09-08 的阶段 17 实现加入 105 个团队收藏与标签文件的三页真实 API 旅程、原子替换与清空、跨团队标签拒绝、KMP Store/MockEngine 契约和 Android Compose 权限入口覆盖。该高频旅程同时验证通知和团队任务优先于无需外部投递的普通审计 outbox 事实，避免批量整理操作延迟后续邀请通知。Android API 28/34、完整黑盒与全栈结果以本阶段实际验收记录为准，不以 iOS 共享源码元数据编译替代未来 iOS 应用测试。
-
-2026-09-08 的阶段 18 实现加入 105 个团队分享的三页真实 API 旅程、密码/有效期筛选、文件与文件夹分享、创建者/管理者权限矩阵、限制清空、公开访问与下载统计、访问上限、权限撤销、幂等取消和审计覆盖；KMP 增加完整 MockEngine 契约、Store 请求世代与密码清理测试及 Compose 手机/宽屏入口覆盖。后端、黑盒、安全、Web、Tauri 和 `mobile-unit` 通过；2026-09-09 通过显式 `-gpu host` 规避 Emulator 37.1.11 的 SwiftShader `RenderThread` 崩溃后，API 28/34 设备门禁及 API 34 在线时的完整 `all --keep-going` 均已通过。
-
-2026-09-09 的阶段 19 实现加入 105 个团队删除根的三页真实 API 旅程、有效读取过滤、安全 DTO、递归文件夹恢复、恢复配额、有效写入/删除权限矩阵、权限撤销、清空与审计覆盖；团队历史版本同时覆盖安全列表、Range 下载、恢复前归档、恢复/删除容量增量和最后版本保护。KMP 增加独立恢复 Store、300 ms 防抖、分页去重、请求世代、团队作用域版本下载和全局清理测试。API 28 设备套件 38/38 通过，API 34 为 37 通过、1 项按平台条件跳过、0 失败；后端、集成、黑盒、安全、Web/Tauri、Android 发布构建、iOS 元数据及 API 34 在线时的完整 `all --keep-going` 均已通过。
-
-2026-09-06 的阶段 16 验收使用受控夹具验证了 105 条邀请和 105 条通知的三页稳定分页，不通过生产接口批量造数，因此没有放宽限额。API 28/API 34 完整设备套件和深链注册专项、Web/Tauri、后端黑盒、一次性 SSE ticket、Prometheus 规则及 7 项可观测性测试均通过；真实 ticket 被禁止写入 pytest、应用和结构化审计日志。
-
-2026-09-01 的阶段 12 验收已完成上述矩阵。API 34 的 64 MiB 历史版本 SAF 下载在两次强制停止后分别从 1,261,535 和 20,060,313 字节偏移获得 `206` 并继续，最终文件大小和 MD5 与源文件一致；最终黑盒运行通过 148 项测试，可观测性专项通过 Prometheus 规则测试和 7 项测试。
-
-Windows KMP Android 使用 `mobile/gradlew.bat`。完整专项命令优先通过验证脚本运行，因为脚本还会设置运行 ID、报告位置、服务健康和数据清理。
+Windows 上 KMP 移动端使用 `mobile/gradlew.bat`。完整专项命令优先通过验证脚本运行，因为脚本还会设置运行 ID、报告位置、服务健康和数据清理。
 
 ## 修改范围到最低验证
 
@@ -154,7 +144,7 @@ Windows KMP Android 使用 `mobile/gradlew.bat`。完整专项命令优先通过
 | Tauri Rust command/路径/恢复 | `cargo test --locked` + Tauri E2E |
 | `mobile/shared` 会话或传输状态机 | `:shared:testAndroidHostTest`；涉及 Keystore、SAF 或调度再加 KMP Android 设备测试 |
 | `mobile/androidApp`、Manifest 或 R8 | KMP Android 设备测试 + `:androidApp:assembleRelease` |
-| API 或本地化共同协议 | 后端测试 + Web、Tauri、KMP Android 受影响契约/场景 |
+| API 或本地化共同协议 | 后端测试 + Web、Tauri、KMP 移动端受影响契约/场景 |
 | Compose/生产代理/观测配置 | 配置渲染/健康检查 + observability；故障路径加 resilience |
 | OnlyOffice 回调或编辑 | 后端单元 + office E2E + 保存失败/重试场景 |
 
@@ -189,7 +179,7 @@ Prometheus 告警测试应证明健康基线、`for` 等待窗口、firing 和�
 - `java/<artifactId>/index.html`
 - `web/index.html`、`web/coverage-summary.json` 和 `web/lcov.info`
 
-Java/Web 覆盖率是辅助诊断，不替代关键行为断言。KMP Android 不生成覆盖率报告，也不以代码行数、行覆盖比例或类似统计作为通过条件；其质量由 Store/Repository 协议、状态转换、错误处理、Compose 交互和端到端场景判断。
+Java/Web 覆盖率是辅助诊断，不替代关键行为断言。KMP 移动端不生成覆盖率报告，也不以代码行数、行覆盖比例或类似统计作为通过条件；其质量由 Store/Repository 协议、状态转换、错误处理、Compose 交互和端到端场景判断。
 
 ## 通用测试规则
 
@@ -198,17 +188,3 @@ Java/Web 覆盖率是辅助诊断，不替代关键行为断言。KMP Android �
 - 时间、重试和并发测试使用可控时钟/事件，避免无条件 sleep。
 - 不通过降低断言、扩大重试、吞掉异常或跳过 Docker 测试掩盖失败。
 - 失败报告必须保留首个错误、阶段名和必要 request ID/trace ID，同时脱敏 token、Cookie、密码和 payload。
-
-## 当前验证快照
-
-2026-09-02 完成阶段 13 验收：团队网络和 Store 主机测试、后端团队排序与权限过滤测试、API 28/34 设备矩阵、Debug、Release/R8、iOS 元数据、Web/Tauri、148 项黑盒及 7 项可观测性验收通过。API 34 真实旅程覆盖 106 个团队、105 个搜索结果、三级目录和全部团队预览类型；视频 Range 返回 `206`，OnlyOffice 等待 25 秒保持只读且无许可警告。团队浏览未创建 Room 传输任务，媒体 ticket 在客户端不持久化并由后端审计日志脱敏。
-
-2026-08-30 完成阶段 11.5 架构收口验收：KMP 74 项主机测试、国际化门禁、Debug、Release/R8、iOS 元数据，以及 API 28/34 各 27 项设备测试套件均通过；重构前的 Store 与 Compose 回归断言已迁移到新边界。完整 Docker 栈重新构建后 7 项可观测性验收通过。API 34 一次性账号旅程验证真实登录、根目录加载、强制停止后会话与目录恢复，且 Logcat 无崩溃或 ANR。
-
-2026-08-28 完成阶段 11 验收：后端单元与 Testcontainers 集成、Web 165 个单元测试和 30 条 Core E2E、Tauri 14 个 Rust 单元测试和 3 个桌面 E2E spec、后端黑盒 145 项、可观测性 7 项，以及 KMP 主机、Debug、Release/R8、iOS 元数据和 API 28/34 设备矩阵均通过。黑盒真实 API 旅程包含 105 个个人分享的稳定三页分页、筛选、个人/团队隔离、密码和限制生命周期、公开访问与下载、访问上限及取消后立即失效。
-
-2026-08-28 完成阶段 10 验收：后端单元与 Testcontainers 集成、Web 165 个单元测试和 30 条 Core E2E、Tauri 14 个 Rust 单元测试和 3 个桌面 E2E spec、后端黑盒 143 项、可观测性 7 项，以及 KMP 主机、发布构建、iOS 元数据和 API 28/34 设备矩阵均通过。黑盒包含 105 个个人项目与团队项目隔离的收藏/标签三页真实 API 旅程。
-
-2026-07-15 曾完成一次全量验证：Testcontainers 4 项、API 黑盒 139 项、安全 7 项、Web 单元 156 项、Web Core E2E 30 项、OnlyOffice E2E 7 项、Tauri Rust 单元 14 项、Tauri 桌面 E2E 3 个 spec、WebDAV 4 项、可观测性 3 项、韧性 2 项、Android JVM 48 项和 instrumentation 30 项通过。
-
-该数量仅是带日期的历史快照，不是固定门禁；新增、合并或重命名测试后应更新快照日期，不以测试数量替代场景完整性。
