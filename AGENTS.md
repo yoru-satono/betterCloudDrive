@@ -1,112 +1,115 @@
 # BetterCloudDrive Agent Guide
 
-本文件适用于整个仓库。若子目录以后出现更具体的 `AGENTS.md`，以距离目标文件最近的说明为准。
+本文件适用于整个仓库。子目录存在更具体的 `AGENTS.md` 时，以距离目标文件最近的说明为准。
+
+## 必须读取本地说明
+
+开始任何工作前，开发者或代理必须读取仓库根目录的 `AGENTS.local.md`。
+
+- 如果 `AGENTS.local.md` 不存在，必须先参考 `AGENTS.local.md.example` 自行创建，再继续工作。
+- `AGENTS.local.md` 只记录本机路径、SDK 位置、设备序列号、AVD 名称、端口占用和已知环境限制等本地差异。
+- 不得在 `AGENTS.local.md` 中保存密码、Token、私钥或其他真实凭据。
+- `AGENTS.local.md` 已被 Git 忽略，不得强制加入版本控制；可共享的通用规则应更新本文件或正式文档。
+- 本地说明只能补充环境信息，不能放宽本文件、子目录 `AGENTS.md` 或项目安全规则。
 
 ## 项目定位
 
-- `mobile/` 是当前活跃的 Kotlin Multiplatform 移动端，不是 Android-only 工程。
-- `mobile/shared` 已包含 Android、`iosArm64` 和 `iosSimulatorArm64` 目标。新增共享业务逻辑应保持可供后续 iOS 应用复用。
-- `mobile/androidApp` 是当前已有的 Android 应用壳；iOS 应用壳和平台测试会在后续继续补充。
-- 旧版 `android/` 工程已在阶段 22 删除；历史行为以 Git 记录和阶段验收文档为准，不要重新创建旧工程。
-- 不要把 KMP 移动端描述为只支持 Android。Android 是当前已有完整设备验证的目标，iOS 目前至少需要保持共享源码元数据可编译。
+BetterCloudDrive 是同时提供个人空间和团队空间的云盘系统，包含统一后端、Web、Tauri 桌面端、Kotlin Multiplatform 移动端、WebDAV 和完整观测栈。
 
-## 目录职责
-
-- `backend/`：Spring Boot/Maven 多模块后端。
-- `backend-test/`：基于 pytest/httpx 的真实 API 黑盒与专项验收。
-- `frontend/`：Vue Web 前端和 Tauri 桌面壳；统一使用 pnpm。
-- `mobile/`：活跃的 KMP 移动端及 Android 应用壳。
+- `backend/`：Spring Boot/Maven 模块化单体，负责认证、权限、元数据、传输、分享、版本、通知和异步任务。
+- `backend-test/`：基于 pytest/httpx 的真实 API 黑盒及 security、WebDAV、OnlyOffice、observability、resilience 专项验收。
+- `frontend/`：Vue Web 前端与 Tauri 桌面壳，统一使用 pnpm；原生能力位于 `frontend/src-tauri/`。
+- `mobile/`：Kotlin Multiplatform 移动端。`shared` 承载共享业务与 Compose UI，`androidApp` 是当前 Android 应用壳；iOS 当前保持共享源码元数据可编译。
 - `observability/`：Prometheus、Loki、Alloy、Alertmanager 和 Grafana 配置。
 - `config/env-files/`：Compose 服务环境变量模板与本地配置。
-- `docs/`：架构、开发、配置和运维文档；行为变化应同步更新相应文档。
+- `docs/`：架构、开发、接口、配置、决策和运维文档。
 
-## 实现原则
+不要把 `mobile/` 描述成 Android-only 工程。Android 是当前已有完整应用壳和设备验证的目标；共享实现必须继续保持可供后续 iOS 应用复用。
 
-- 优先修复根因，不通过放宽断言、吞掉异常或增加无条件等待掩盖问题。
-- 保持现有模块边界。协议变化应同步检查后端、Web、Tauri 和 KMP 客户端的 DTO、错误语义与调用方。
-- KMP 共享代码不得直接依赖 Android API。平台能力放入对应 source set，必要时通过窄接口或 `expect`/`actual` 暴露。
-- 敏感信息不得写入源码、日志、测试报告或提交。Token、ticket、密码、请求正文和 SAF URI 必须遵守现有脱敏规则。
-- 数据库结构变化使用新的 Flyway migration；不要修改已经发布的 migration。
-- 不直接编辑生成目录，例如 `build/`、`target/`、`dist/`、测试报告或 Gradle 缓存。
-- 保留用户已有的工作区改动；不要为了完成任务重置或覆盖无关文件。
+## 架构与实现原则
 
-## 验证入口
+- 优先修复根因，不通过放宽断言、吞掉异常、无条件等待或扩大重试掩盖问题。
+- 保持模块边界。协议变化应同步检查后端、Web、Tauri 和 KMP 移动端的 DTO、错误语义、权限与调用方。
+- 后端业务约束与事务放在 Service，Controller 负责 HTTP 协议，Repository 只负责持久化，Storage 只封装对象存储。
+- 数据库结构变化使用新的 Flyway migration；不要修改已发布的 migration。
+- Web 与 Tauri 共用的页面、Store 和协议逻辑留在 TypeScript；Rust command 只处理桌面平台能力。
+- KMP 的 `commonMain` 不得直接依赖 Android API。平台能力放入对应 source set，并通过窄接口或必要的 `expect`/`actual` 暴露。
+- 客户端按钮与路由守卫不能替代后端授权；权限拒绝必须保留明确的刷新和恢复路径。
+- Token、ticket、密码、Cookie、验证码、请求正文和 SAF URI 等敏感信息不得写入源码、日志、测试报告或提交。
+- 不直接编辑 `build/`、`target/`、`dist/`、测试报告、Gradle 缓存或其他生成目录。
+- 保留已有工作区改动，不重置、不覆盖、不顺带提交无关文件。
 
-Linux/macOS 统一使用 Bash 入口：
+## 依赖与构建约定
+
+- 后端使用仓库 Maven 配置和对应模块命令。
+- Web/Tauri 使用 pnpm，不使用 npm 或 yarn 生成额外锁文件。
+- Rust 依赖验证使用 `cargo test --locked`。
+- KMP 使用 `mobile/gradlew` 或 `mobile/gradlew.bat`，不要使用系统 Gradle 替代 wrapper。
+- 修改依赖或工具链版本时，以构建文件和锁文件为准，并同步更新相关文档基线。
+
+## 统一验证入口
+
+Linux/macOS 使用 Bash 入口：
 
 ```sh
 bash scripts/verify-all.sh --module <module>
 ```
 
-可用模块：`backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience` 和 `all`。
+Windows 使用 PowerShell 入口：
 
-- 旧版 `android` 和 `android-unit` 验证模块已经退役，不得重新加入。
-- `scripts/verify-all.sh` 以 Bash 3.2 为最低兼容版本，可以使用索引数组、`[[ ... ]]`、`pipefail` 和 `BASH_SOURCE`；不要引入 Bash 4 才支持的关联数组等语法。
-- 修改验证流程时同步维护 `scripts/verify-all.ps1` 的模块含义和 `docs/development/TESTING.md`。
-- `all` 是完整验收，包含 KMP Android 设备测试，需要可用的 adb 设备或模拟器。
-- 优先运行与改动范围匹配的模块；跨模块协议或全局配置变化再扩大验证范围。
+```powershell
+.\scripts\verify-all.ps1 -Module <module>
+```
+
+可用模块为 `backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience` 和 `all`。
+
+- 优先运行与改动范围匹配的模块；共同协议、全局配置或发布准备再扩大验证范围。
+- `all` 是完整验收，需要 Docker、Maven/JDK、Python、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。
+- `scripts/verify-all.sh` 最低兼容 Bash 3.2，不得使用 Bash 4 才支持的关联数组等语法。
+- 修改验证流程时同步维护 `scripts/verify-all.sh`、`scripts/verify-all.ps1` 和 `docs/development/TESTING.md` 的模块含义。
+- 修改 Bash 验证脚本至少运行 `bash -n`、帮助、错误参数检查和一个实际模块路径。
 
 常用命令：
 
 ```sh
-# KMP 主机测试、Android Debug/Release 和 iOS 共享源码元数据
-bash scripts/verify-all.sh --module mobile-unit
-
-# KMP Android 设备测试
-bash scripts/verify-all.sh --module mobile-android --android-serial emulator-5556
-
-# 后端与真实依赖
 bash scripts/verify-all.sh --module backend --module integration
-
-# 已启动 Compose 时跳过镜像重建
-bash scripts/verify-all.sh --module security --skip-docker-build
+bash scripts/verify-all.sh --module web --skip-docker-build
+bash scripts/verify-all.sh --module mobile-unit
+bash scripts/verify-all.sh --module mobile-android --android-serial <device-id>
 ```
-
-AVD 生命周期继续在验证脚本外管理。当前本机使用 Android Emulator 37.1.11 无窗口启动时，SwiftShader 软件渲染会在 `RenderThread` 中崩溃，因此应在单独终端显式传入 `-gpu host`：
-
-```sh
-# Android 9 / API 28
-emulator -avd bcd_api28 -port 5556 -no-window -no-audio -no-boot-anim -no-snapshot -gpu host -camera-back none -camera-front none
-
-# Android 14 / API 34
-emulator -avd bcd_api34 -port 5556 -no-window -no-audio -no-boot-anim -no-snapshot -gpu host -camera-back none -camera-front none
-```
-
-两套 AVD 共用 `emulator-5556`，必须依次启动和验证；切换前使用 `adb -s emulator-5556 emu kill` 关闭当前实例，并等待设备从 `adb devices` 消失。
-
-KMP 设备相关变更应在 API 28 和 API 34 上分别验证，以覆盖 WorkManager 与 UIDT。当前 iOS 门禁为：
-
-```sh
-cd mobile
-sh ./gradlew :shared:compileIosMainKotlinMetadata
-```
-
-该任务只验证共享 iOS source set 的编译边界，不等同于完整 iOS 应用构建或平台测试。
 
 ## 分模块最低检查
 
 - 后端 Java：运行相关 Maven 单元测试；Repository、存储、队列或事务变化再运行 `integration`。
-- API、安全和跨模块契约：运行相应后端测试，并按影响补充 `blackbox` 或 `security`。
-- Vue/Pinia：运行相关 Vitest；路由、认证、上传下载或真实用户流程再运行 Web Playwright。
+- API、安全和跨模块契约：运行相关后端测试，并按影响增加 `blackbox` 或 `security`。
+- Vue/Pinia：运行相关 Vitest；路由、认证、传输或真实用户流程再运行 Web Playwright。
 - Tauri Rust 或原生桥：运行 `cargo test --locked`；窗口和端到端流程再运行 `tauri`。
 - `mobile/shared`：至少运行 `mobile-unit`；涉及 Keystore、SAF、通知或平台调度时增加 `mobile-android`。
-- `mobile/androidApp`、Manifest 或 R8：运行 Android 设备测试和 Release 构建。
-- iOS source set：至少运行 `:shared:compileIosMainKotlinMetadata`；未来存在 iOS 应用壳后再加入对应构建和平台测试。
-- Compose、代理或观测配置：先渲染/启动相关 Compose 组合，再运行健康检查和对应专项测试。
+- `mobile/androidApp`、Manifest、网络安全配置或 R8：运行 Android 设备测试和 Release 构建。
+- Android 设备相关变化：分别在 API 28 和 API 34 验证，以覆盖 WorkManager 与 UIDT；设备和 AVD 细节从 `AGENTS.local.md` 读取。
+- iOS source set 或公共平台接口：运行 `mobile-unit`，或独立执行 `cd mobile && sh ./gradlew -PenableIos=true :shared:compileIosMainKotlinMetadata`。该任务不等同于完整 iOS 应用构建或平台测试。
+- Compose、代理或观测配置：先渲染或启动相关 Compose 组合，再运行健康检查和对应专项测试。
 
-## Docker 与本地配置
+## 配置、Docker 与测试数据
 
-- Compose 服务不得设置开机自启；保持 `restart: "no"`，除非用户明确改变这一策略。
-- 不提交 `.env` 或 `config/env-files/*.env` 中的实际密钥。模板文件只提供结构和安全占位说明。
-- 新环境生成本机独立密钥，不复用其他系统盘、旧机器或外部环境中的密钥。
-- 不用模板覆盖已存在的本地配置。
-- 常规全栈使用 `docker-compose.yml`；宿主机观测端口需要时叠加 `docker-compose.diagnostics.yml`。
-- E2E 临时放宽限流后必须在成功、失败和信号退出路径恢复默认值，并执行受范围约束的数据清理。
+- 不提交 `.env` 或 `config/env-files/*.env` 中的实际值；模板只提供结构和安全占位说明。
+- 新环境生成独立密钥，不复用其他机器或外部环境中的凭据，也不用模板覆盖已有本地配置。
+- Compose 服务保持 `restart: "no"`，除非用户明确改变该策略。
+- 常规全栈使用 `docker-compose.yml`；需要宿主机观测端口时叠加 `docker-compose.diagnostics.yml`。
+- 测试数据使用运行 ID 和受控前缀。E2E 临时放宽限流后，必须在成功、失败和信号退出路径恢复默认值并执行范围受限的清理。
+- 删除卷、清空队列、清理数据库或执行其他破坏性操作前，必须确认精确目标和可恢复点。
+
+## 文档规则
+
+- 当前行为变化应同步更新对应架构、开发、API、配置或运维文档。
+- HTTP 路径和字段以 Controller、SecurityConfig、DTO 及 `docs/reference` 为准；运行命令以构建文件和验证脚本为准。
+- KMP 移动端文档使用“KMP 移动端”作为客户端身份；只有描述应用壳、source set、SDK、设备或平台 API 时才使用 Android。
+- 历史 ADR、阶段记录和归档只用于追溯，不应反推当前实现。
+- 新增或移动 Markdown 后检查所有相对链接，避免产生重复权威入口。
 
 ## 提交与交付
 
 - 提交前至少运行相关语法检查、目标模块测试和 `git diff --check`。
-- `scripts/verify-all.sh` 变化至少运行 `bash -n`、帮助与错误参数检查，并实际执行一个模块路径。
-- 不提交本地 SDK、AVD、IDE 配置、缓存、构建产物或测试结果。
-- 只有用户明确要求时才创建 Git 提交。提交信息应准确描述本次单一变更，不夹带无关文件。
-- 交付说明应列出已运行的检查、未运行的检查及原因，并明确剩余失败是实现问题、环境问题还是已知平台限制。
+- 不提交本地 SDK、AVD、IDE 配置、缓存、构建产物、测试结果或 `AGENTS.local.md`。
+- 只有用户明确要求时才创建 Git 提交或推送远端；提交信息应准确描述单一变更。
+- 交付说明列出已运行和未运行的检查，并区分实现问题、环境问题和已知平台限制。

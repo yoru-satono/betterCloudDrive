@@ -1,0 +1,46 @@
+# BetterCloudDrive Local Agent Guide
+
+> 将本文件复制为 `AGENTS.local.md` 并填写本机信息。`AGENTS.local.md` 不受 Git 跟踪；不要在其中保存密码、Token、私钥或其他真实凭据。
+
+## 本机工具
+
+- 操作系统：`<OS 与版本>`
+- Shell：`<shell 与版本>`
+- JDK/Maven：`<版本或路径>`
+- Node/pnpm：`<版本或路径>`
+- Rust：`<toolchain 或路径>`
+- Android SDK：`<路径>`
+- Docker：`<引擎与 Compose 版本>`
+
+## Android 设备与 AVD
+
+- 默认 adb 序列号：`<device-id>`
+- API 28 AVD：`<avd-name>`
+- API 34 AVD：`<avd-name>`
+- 模拟器端口：`<port>`
+- GPU/无窗口参数：`<本机需要的参数；无则写“默认”>`
+- 设备切换或启动顺序：`<本机约束>`
+
+示例命令：
+
+```sh
+emulator -avd <avd-name> -port <port> <本机参数>
+bash scripts/verify-all.sh --module mobile-android --android-serial <device-id>
+adb -s <device-id> emu kill
+```
+
+## 本地服务与端口
+
+- 已占用或覆盖的宿主机端口：`<端口及用途>`
+- Docker/虚拟机访问宿主机方式：`<host.docker.internal、局域网地址等>`
+- 本机代理、证书或防火墙限制：`<说明；无则写“无”>`
+
+## 已知环境限制
+
+- `<只记录本机可复现的问题、规避参数和验证方法>`
+
+## 本地工作偏好
+
+- 推荐验证子集：`<可选>`
+- 高成本或不可用检查：`<原因和替代验证；无则写“无”>`
+- 其他不会改变仓库规则的本地说明：`<可选>`
