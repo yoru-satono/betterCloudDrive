@@ -23,7 +23,10 @@ vi.mock('@tauri-apps/api/window', () => ({
 }))
 
 vi.mock('vue-sonner', () => ({
-  Toaster: { template: '<div />' },
+  Toaster: {
+    props: ['visibleToasts', 'duration'],
+    template: '<div data-testid="toaster" :data-visible-toasts="visibleToasts" :data-duration="duration" />',
+  },
   toast: {
     error: vi.fn(),
     success: vi.fn(),
@@ -70,5 +73,17 @@ describe('App desktop shell', () => {
 
     expect(wrapper.find('[data-testid="desktop-titlebar"]').exists()).toBe(false)
     expect(wrapper.classes()).not.toContain('app-shell--desktop')
+  })
+
+  it('bounds the number and lifetime of global notifications', async () => {
+    vi.resetModules()
+    isDesktopRuntime.mockReturnValue(true)
+    const App = (await import('@/App.vue')).default
+
+    const wrapper = mountApp(App)
+    const toaster = wrapper.get('[data-testid="toaster"]')
+
+    expect(toaster.attributes('data-visible-toasts')).toBe('3')
+    expect(toaster.attributes('data-duration')).toBe('4000')
   })
 })

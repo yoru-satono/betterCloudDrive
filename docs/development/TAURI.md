@@ -30,6 +30,8 @@ pnpm run tauri:dev
 
 默认 API 是 `http://127.0.0.1:8080/api/v1`，默认 Web 分享地址是 `http://127.0.0.1:3000`。登录页和桌面设置可调整地址；调试目录上传/下载时确认应用具有目标目录权限。
 
+桌面端冷启动会在挂载主界面前校验本地会话。过期、吊销或无法恢复的凭据会被清除，并通过 Hash 路由直接进入登录页；运行中会话失效也遵循同一路径。全局提示由固定定位的 Toaster 承载，自动消失且最多同时显示三条，不能参与主页面布局或无限挤压内容区。
+
 Linux Wayland 下应用保持原生 Wayland backend。为规避部分 WebKitGTK/显卡组合在 DMA-BUF 分配失败后触发的 GDK protocol error，应用会在调用方未显式配置时于 WebView 初始化前设置 `WEBKIT_DISABLE_DMABUF_RENDERER=1`，不会回退到 XWayland。
 
 ## Command 设计

@@ -57,6 +57,48 @@ describe('auth store', () => {
     expect(store.user).toBeNull()
   })
 
+  it('clears stale credentials when startup session validation fails', async () => {
+    localStorage.setItem('accessToken', 'stale-access')
+    localStorage.setItem('refreshToken', 'stale-refresh')
+    vi.mocked(authApi.getMe).mockRejectedValue(new Error('unauthorized'))
+    const store = useAuthStore()
+
+    await expect(store.initializeSession()).resolves.toBe(false)
+
+    expect(authApi.getMe).toHaveBeenCalledWith(true)
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(localStorage.getItem('refreshToken')).toBeNull()
+    expect(store.user).toBeNull()
+    expect(store.initialized).toBe(true)
+  })
+
+  it('shares one profile request across concurrent startup checks', async () => {
+    localStorage.setItem('accessToken', 'access')
+    let resolveProfile: ((value: unknown) => void) | undefined
+    vi.mocked(authApi.getMe).mockReturnValue(new Promise(resolve => {
+      resolveProfile = resolve
+    }) as never)
+    const store = useAuthStore()
+
+    const first = store.initializeSession()
+    const second = store.initializeSession()
+    resolveProfile?.({ data: { data: user } })
+
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true])
+    expect(authApi.getMe).toHaveBeenCalledTimes(1)
+    expect(store.user?.username).toBe('alice')
+  })
+
+  it('clears an orphan refresh token without requesting the profile', async () => {
+    localStorage.setItem('refreshToken', 'orphan-refresh')
+    const store = useAuthStore()
+
+    await expect(store.initializeSession()).resolves.toBe(false)
+
+    expect(authApi.getMe).not.toHaveBeenCalled()
+    expect(localStorage.getItem('refreshToken')).toBeNull()
+  })
+
   it('clears local credentials even when remote logout fails', async () => {
     localStorage.setItem('accessToken', 'access')
     localStorage.setItem('refreshToken', 'refresh')

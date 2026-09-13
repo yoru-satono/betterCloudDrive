@@ -1,7 +1,14 @@
 import axios from 'axios'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { toast } from 'vue-sonner'
-import api, { ensureFreshAccessToken } from '@/api/client'
+import api, { ensureFreshAccessToken, refreshAccessToken } from '@/api/client'
+
+const isDesktopRuntime = vi.hoisted(() => vi.fn())
+
+vi.mock('@/config/runtime', () => ({
+  getApiBaseUrl: () => '/api/v1',
+  isDesktopRuntime,
+}))
 
 vi.mock('vue-sonner', () => ({
   toast: {
@@ -22,6 +29,7 @@ beforeEach(() => {
   toastError.mockReset()
   api.defaults.adapter = adapter
   localStorage.clear()
+  isDesktopRuntime.mockReturnValue(false)
   window.history.replaceState({}, '', '/')
 })
 
@@ -136,6 +144,30 @@ describe('api client', () => {
     expect(axiosPost).toHaveBeenCalledWith('/api/v1/auth/refresh', { refreshToken: 'old-refresh' })
     expect(localStorage.getItem('accessToken')).toBe('new-access')
     expect(localStorage.getItem('refreshToken')).toBe('new-refresh')
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  it('uses the hash login route when a desktop refresh token is missing', async () => {
+    isDesktopRuntime.mockReturnValue(true)
+
+    await expect(refreshAccessToken()).rejects.toBeTruthy()
+
+    expect(window.location.hash).toBe('#/login')
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(localStorage.getItem('refreshToken')).toBeNull()
+  })
+
+  it('returns a revoked desktop session to login without an auth toast', async () => {
+    isDesktopRuntime.mockReturnValue(true)
+    localStorage.setItem('accessToken', 'revoked-access')
+    localStorage.setItem('refreshToken', 'refresh')
+    adapter.mockImplementation(apiResponse({ code: 401002, messageKey: 'error.tokenBlacklisted', messageParams: {} }))
+
+    await expect(api.get('/files')).rejects.toBeTruthy()
+
+    expect(window.location.hash).toBe('#/login')
+    expect(localStorage.getItem('accessToken')).toBeNull()
+    expect(localStorage.getItem('refreshToken')).toBeNull()
     expect(toastError).not.toHaveBeenCalled()
   })
 })

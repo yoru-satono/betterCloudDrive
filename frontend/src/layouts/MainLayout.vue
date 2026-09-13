@@ -4,19 +4,16 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import SearchOverlay from '@/components/layout/SearchOverlay.vue'
 import TransferQueue from '@/components/file/TransferQueue.vue'
 import FilePreviewModal from '@/components/file/FilePreviewModal.vue'
-import { useAuthStore } from '@/stores/auth'
 import { onMounted, onUnmounted } from 'vue'
 import { useUIStore } from '@/stores/ui'
 import { i18n } from '@/i18n'
 
-const auth = useAuthStore()
 const ui = useUIStore()
 const t = i18n.global.t
 function closeDrawerOnEscape(event: KeyboardEvent) {
   if (event.key === 'Escape') ui.closeMobileNav()
 }
 onMounted(() => {
-  if (!auth.user) auth.fetchMe()
   window.addEventListener('keydown', closeDrawerOnEscape)
 })
 onUnmounted(() => window.removeEventListener('keydown', closeDrawerOnEscape))

@@ -1,5 +1,7 @@
 import { createRouter, createWebHashHistory, createWebHistory } from 'vue-router'
 import { isDesktopRuntime } from '@/config/runtime'
+import { useAuthStore } from '@/stores/auth'
+import { resolveAuthRedirect } from './authGuard'
 
 const routes = [
   {
@@ -56,22 +58,9 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach(async (to, _from, next) => {
-  const token = localStorage.getItem('accessToken')
-  const isLoggedIn = !!token
-
-  if (to.meta.requiresAuth && !isLoggedIn) return next('/login')
-
-  if (to.meta.requiresAdmin) {
-    const { useAuthStore } = await import('@/stores/auth')
-    const auth = useAuthStore()
-    if (!auth.user) await auth.fetchMe()
-    if (!auth.isAdmin) return next('/files')
-  }
-
-  if (to.meta.guest && isLoggedIn) return next('/files')
-
-  next()
+router.beforeEach(async (to) => {
+  const redirect = await resolveAuthRedirect(to.meta, useAuthStore())
+  return redirect || true
 })
 
 export default router

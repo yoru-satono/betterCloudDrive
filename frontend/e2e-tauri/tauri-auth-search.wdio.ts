@@ -33,6 +33,33 @@ const password = 'TestPass123!'
 const resetPassword = 'ResetPass123!'
 
 describe('Tauri auth and context search', () => {
+  it('rejects a stale startup session before rendering the main workspace', async () => {
+    await browser.execute(() => {
+      localStorage.setItem('accessToken', 'stale-access-token')
+      localStorage.setItem('refreshToken', 'stale-refresh-token')
+      window.location.hash = '#/files'
+    })
+    await browser.refresh()
+    await waitForTauriWindow()
+
+    const state = await browser.execute(() => {
+      const toaster = document.querySelector<HTMLElement>('[data-sonner-toaster]')
+      return {
+        hash: window.location.hash,
+        mainWorkspaceVisible: !!document.querySelector('.main-layout'),
+        toasterPosition: toaster ? getComputedStyle(toaster).position : null,
+        authPromptCount: Array.from(document.body.querySelectorAll('*'))
+          .filter(element => element.children.length === 0 && element.textContent?.trim() === '请先登录')
+          .length,
+      }
+    })
+
+    expect(state.hash).toContain('/login')
+    expect(state.mainWorkspaceVisible).toBe(false)
+    expect(state.toasterPosition).toBe('fixed')
+    expect(state.authPromptCount).toBe(0)
+  })
+
   it('keeps connection settings available while registering and resetting a password', async () => {
     const request = await createApiRequestContext()
     try {

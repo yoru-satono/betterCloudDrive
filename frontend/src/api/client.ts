@@ -3,7 +3,7 @@ const __t = __i18n.global.t
 import axios, { AxiosError } from 'axios'
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { toast } from 'vue-sonner'
-import { getApiBaseUrl } from '@/config/runtime'
+import { getApiBaseUrl, isDesktopRuntime } from '@/config/runtime'
 import { resolveMessage } from '@/i18n'
 
 declare module 'axios' {
@@ -56,7 +56,8 @@ const shouldSkipEnvelopeCheck = (res: AxiosResponse) => {
 const redirectToLogin = () => {
   localStorage.removeItem('accessToken')
   localStorage.removeItem('refreshToken')
-  window.location.href = '/login'
+  if (isDesktopRuntime()) window.location.hash = '#/login'
+  else window.location.href = '/login'
 }
 
 export async function refreshAccessToken() {
@@ -132,6 +133,11 @@ const handleApiError = async (error: AxiosError<ApiEnvelope>) => {
     } catch (e) {
       return Promise.reject(e)
     }
+  }
+
+  if (code === 401 || code === 401002) {
+    redirectToLogin()
+    return Promise.reject(error)
   }
 
   const envelope = error.response?.data

@@ -7,6 +7,8 @@ import { locale, resolveSupportedLocale, setLocale, type SupportedLocale } from 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserEntity | null>(null)
   const loading = ref(false)
+  const initialized = ref(false)
+  let initializationPromise: Promise<boolean> | null = null
 
   const isLoggedIn = computed(() => !!localStorage.getItem('accessToken'))
   const isAdmin = computed(() => user.value?.role === 'ROLE_ADMIN')
@@ -19,7 +21,12 @@ export const useAuthStore = defineStore('auth', () => {
     const { data } = await authApi.login(username, password)
     localStorage.setItem('accessToken', data.data.accessToken)
     localStorage.setItem('refreshToken', data.data.refreshToken)
-    await fetchMe()
+    const authenticated = await fetchMe()
+    initialized.value = true
+    if (!authenticated) {
+      clearLocalSession()
+      throw new Error()
+    }
     return data
   }
 
@@ -27,14 +34,20 @@ export const useAuthStore = defineStore('auth', () => {
     return authApi.register(username, password, email, verificationCode, locale.value)
   }
 
-  async function fetchMe() {
+  function clearLocalSession() {
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    user.value = null
+  }
+
+  async function fetchMe(suppressToast = false) {
     let currentUser: UserEntity
     try {
-      const { data } = await authApi.getMe()
+      const { data } = await authApi.getMe(suppressToast)
       currentUser = data.data
     } catch {
       user.value = null
-      return
+      return false
     }
     user.value = currentUser
     try {
@@ -42,13 +55,38 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (error) {
       console.warn('Failed to load the preferred locale', error)
     }
+    return true
+  }
+
+  async function initializeSession() {
+    const accessToken = localStorage.getItem('accessToken')
+    if (initialized.value) {
+      if (!accessToken) user.value = null
+      return !!accessToken && !!user.value
+    }
+    if (initializationPromise) return initializationPromise
+
+    initializationPromise = (async () => {
+      if (!accessToken) {
+        clearLocalSession()
+        return false
+      }
+
+      const authenticated = await fetchMe(true)
+      if (!authenticated) clearLocalSession()
+      return authenticated
+    })().finally(() => {
+      initialized.value = true
+      initializationPromise = null
+    })
+
+    return initializationPromise
   }
 
   async function logout() {
     try { await authApi.logout() } catch { /* ignore */ }
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('refreshToken')
-    user.value = null
+    clearLocalSession()
+    initialized.value = true
   }
 
   async function updateWebDavSettings(enabled: boolean, password?: string) {
@@ -71,7 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   return {
-    user, loading, isLoggedIn, isAdmin, storagePercent,
-    login, register, fetchMe, logout, updateWebDavSettings, updateLocale
+    user, loading, initialized, isLoggedIn, isAdmin, storagePercent,
+    login, register, fetchMe, initializeSession, logout, updateWebDavSettings, updateLocale
   }
 })

@@ -20,6 +20,8 @@ const desktopRuntime = isDesktopRuntime()
     <Toaster
       position="bottom-right"
       :theme="resolvedTheme"
+      :visible-toasts="3"
+      :duration="4000"
       :toast-options="{
         style: {
           background: 'var(--bg-overlay)',

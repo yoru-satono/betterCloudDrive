@@ -20,8 +20,8 @@ export const refresh = (refreshToken: string) =>
 export const logout = () =>
   api.post<ApiResponse<void>>('/auth/logout')
 
-export const getMe = () =>
-  api.get<ApiResponse<UserEntity>>('/auth/me')
+export const getMe = (suppressToast = false) =>
+  api.get<ApiResponse<UserEntity>>('/auth/me', { suppressToast })
 
 export const getWebDavSettings = () =>
   api.get<ApiResponse<{ enabled: boolean }>>('/auth/webdav')
