@@ -21,13 +21,19 @@ Java 与 Web 生成覆盖率报告，用于辅助发现未验证实现；KMP 移
 
 ## 一键验证
 
-Windows PowerShell：
+PowerShell 7（Windows）：
 
 ```powershell
 .\scripts\verify-all.ps1
 ```
 
-Linux/macOS（需要 Bash 3.2 或更高版本）：
+PowerShell 7（Linux）：
+
+```bash
+pwsh ./scripts/verify-all.ps1
+```
+
+Linux/macOS 也可以使用 Bash 3.2 或更高版本：
 
 ```bash
 bash scripts/verify-all.sh
@@ -35,7 +41,7 @@ bash scripts/verify-all.sh
 
 `all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability 和 resilience。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。旧版 Android 工程已退役并删除；移动端验证只使用 `mobile-unit` 和 `mobile-android`。
 
-脚本会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。Web、OnlyOffice 和 Tauri E2E runner 会加载根 `.env`、`config/env-files/database.env` 与 `config/env-files/backend.env`，将与 Compose 一致的数据库端口、凭据和 OnlyOffice JWT 传给测试子进程；配置不一致时只报告键名，不输出密钥。`all` 是完整验收，不能再配合跳过 Tauri、KMP Android 或 OnlyOffice 的参数。
+两个入口会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。PowerShell 入口在 Windows 使用 `.venv/Scripts/pytest.exe` 和 `gradlew.bat`，在 Linux 使用 `.venv/bin/pytest` 和 Bash Gradle wrapper；缺少虚拟环境时两端都依次回退到 `uv` 与系统 Python。Web、OnlyOffice 和 Tauri E2E runner 会加载根 `.env`、`config/env-files/database.env` 与 `config/env-files/backend.env`，将与 Compose 一致的数据库端口、凭据和 OnlyOffice JWT 传给测试子进程；配置不一致时只报告键名，不输出密钥。`all` 是完整验收，不能再配合跳过 Tauri、KMP Android 或 OnlyOffice 的参数。
 
 常用子集：
 
@@ -47,6 +53,8 @@ bash scripts/verify-all.sh
 .\scripts\verify-all.ps1 -Module mobile-android -AndroidSerial emulator-5556
 .\scripts\verify-all.ps1 -Module observability -KeepGoing
 ```
+
+Linux 下使用相同参数，将命令前缀改为 `pwsh ./scripts/verify-all.ps1`。
 
 ```bash
 bash scripts/verify-all.sh --module backend --module integration
