@@ -1,6 +1,9 @@
 package com.betterclouddrive.storage.s3;
 
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.storage.ContentDigest;
+import com.betterclouddrive.storage.ObjectNotFoundException;
+import io.minio.errors.ErrorResponseException;
 import com.betterclouddrive.storage.metrics.StorageMetrics;
 import io.minio.*;
 import jakarta.annotation.PostConstruct;
@@ -69,6 +72,10 @@ public class S3StorageServiceImpl implements StorageService {
                             .object(objectKey)
                             .build()));
         } catch (Exception e) {
+            if (e instanceof ErrorResponseException error
+                    && ("NoSuchKey".equals(error.errorResponse().code()) || "NoSuchObject".equals(error.errorResponse().code()))) {
+                throw new ObjectNotFoundException(e);
+            }
             log.error("Failed to download object: {}", objectKey, e);
             throw new RuntimeException("Storage download failed: " + objectKey, e);
         }
@@ -122,27 +129,24 @@ public class S3StorageServiceImpl implements StorageService {
     }
 
     @Override
-    public void composeParts(String finalObjectKey, String sourcePrefix, int totalParts) {
+    public ContentDigest composeParts(String finalObjectKey, String sourcePrefix, int totalParts) {
         try {
-            uploadComposedObject(finalObjectKey, sourcePrefix, totalParts);
-            // Clean up parts after successful composition
-            for (int i = 0; i < totalParts; i++) {
-                deleteObject(partKey(sourcePrefix, i));
-            }
+            return uploadComposedObject(finalObjectKey, sourcePrefix, totalParts);
         } catch (Exception e) {
             log.error("Failed to compose parts into: {}", finalObjectKey, e);
             throw new RuntimeException("Composition failed", e);
         }
     }
 
-    private void uploadComposedObject(String finalObjectKey, String sourcePrefix, int totalParts) throws Exception {
-        try (InputStream stream = new SequenceInputStream(partStreams(sourcePrefix, totalParts))) {
+    private ContentDigest uploadComposedObject(String finalObjectKey, String sourcePrefix, int totalParts) throws Exception {
+        try (ContentDigest.Stream stream = new ContentDigest.Stream(new SequenceInputStream(partStreams(sourcePrefix, totalParts)))) {
             metrics.observe(StorageMetrics.Operation.PUT, () -> client.putObject(
                     PutObjectArgs.builder()
                             .bucket(props.getBucket())
                             .object(finalObjectKey)
                             .stream(stream, -1L, COMPOSE_UPLOAD_PART_SIZE)
                             .build()));
+            return stream.result();
         }
     }
 

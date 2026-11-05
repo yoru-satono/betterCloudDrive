@@ -819,22 +819,22 @@ class PreviewApi(private val http: AuthenticatedHttpClient) {
 open class TransferApi(private val http: AuthenticatedHttpClient) {
     val serverBaseUrl get() = http.serverBaseUrl
 
-    suspend fun instantUpload(scope: TransferScope, fileName: String, fileSize: Long, md5: String): Long = http.run {
-        authenticatedEnvelope<InstantUploadResult> { client, token -> client.post(url(scope.path("upload/instant"))) {
-            bearer(token); jsonBody(InstantUploadRequest(scope.parentId, fileName, fileSize, md5))
-        } }.fileId
-    }
-    suspend fun initUpload(scope: TransferScope, fileName: String, fileSize: Long, md5: String, chunks: Int): InitUploadResult = http.run {
-        authenticatedEnvelope { client, token -> client.post(url(scope.path("upload/init"))) {
-            bearer(token); jsonBody(InitUploadRequest(scope.parentId, fileName, fileSize, md5, chunks))
-        } }
+    suspend fun initUpload(scope: TransferScope, fileName: String, fileSize: Long, md5: String): InitUploadResult = http.run {
+        val result = try {
+            authenticatedEnvelope<InitUploadResult> { client, token -> client.post(url(scope.path("upload/init"))) {
+                bearer(token); jsonBody(InitUploadRequest(scope.parentId, fileName, fileSize, md5))
+            } }
+        } catch (_: kotlinx.serialization.SerializationException) {
+            throw IllegalArgumentException("transfer.invalidInitResponse")
+        }
+        result.validate(fileSize)
     }
     suspend fun uploadStatus(scope: TransferScope, sessionId: String): UploadStatusResult = http.run {
         authenticatedEnvelope { client, token -> client.get(url(scope.path("upload/$sessionId/status"))) { bearer(token) } }
     }
-    suspend fun uploadChunk(scope: TransferScope, sessionId: String, number: Int, fileName: String, provider: InputProvider) = http.run {
+    suspend fun uploadChunk(scope: TransferScope, sessionId: String, number: Int, fileName: String, chunkMd5: String, provider: InputProvider) = http.run {
         authenticatedEnvelope<UploadChunkResult> { client, token -> client.post(url(scope.path("upload/$sessionId/chunk"))) {
-            bearer(token); url { parameters.append("chunkNumber", number.toString()) }
+            bearer(token); url { parameters.append("chunkNumber", number.toString()); parameters.append("chunkMd5", chunkMd5) }
             setBody(MultiPartFormDataContent(formData { append("file", provider, Headers.build {
                 append(HttpHeaders.ContentType, "application/octet-stream")
                 append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")

@@ -38,7 +38,9 @@ public class ExpiredUploadSessionCleanupTask {
 
         for (UploadSessionEntity session : expired) {
             try {
-                String chunkPrefix = "uploads/" + session.getUserId() + "/" + session.getId() + "/chunks";
+                String chunkPrefix = session.getTeamId() == null
+                        ? "uploads/" + session.getUserId() + "/" + session.getId() + "/chunks"
+                        : "uploads/teams/" + session.getTeamId() + "/" + session.getId() + "/chunks";
                 storageService.deleteParts(chunkPrefix, session.getTotalChunks());
                 redisTemplate.delete("upload:bitmap:" + session.getId());
                 session.setStatus(3);

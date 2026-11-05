@@ -42,7 +42,6 @@ object NetworkDefaults {
     const val DEFAULT_HTTPS_SERVER = "https://drive.example.com"
     const val TOKEN_EXPIRED = 401001
     const val TOKEN_REVOKED = 401002
-    const val INSTANT_UPLOAD_MISS = 419010
     const val REFRESH_EARLY_MILLIS = 60_000L
 }
 

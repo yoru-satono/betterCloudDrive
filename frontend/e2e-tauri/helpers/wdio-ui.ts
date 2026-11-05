@@ -62,10 +62,12 @@ export async function expectDesktopSettings() {
   await (await buttonByLabel('连接设置')).click()
   const apiInput = await inputByLabel('API 地址')
   const webInput = await inputByLabel('Web 分享地址')
-  await apiInput.setValue('http://127.0.0.1:8080/api/v1')
-  await webInput.setValue('http://127.0.0.1:3000')
-  await expect(apiInput).toHaveValue('http://127.0.0.1:8080/api/v1')
-  await expect(webInput).toHaveValue('http://127.0.0.1:3000')
+  const apiUrl = `${(process.env.E2E_BACKEND_URL || 'http://127.0.0.1:8080').replace(/\/$/, '')}/api/v1`
+  const webUrl = process.env.E2E_BASE_URL || 'http://127.0.0.1:3000'
+  await apiInput.setValue(apiUrl)
+  await webInput.setValue(webUrl)
+  await expect(apiInput).toHaveValue(apiUrl)
+  await expect(webInput).toHaveValue(webUrl)
   await (await buttonByText('保存')).click()
   await expect(apiInput).not.toBeDisplayed()
 }

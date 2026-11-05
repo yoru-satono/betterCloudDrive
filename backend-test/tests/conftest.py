@@ -45,15 +45,21 @@ def sample_image():
 def _chunked_upload(client, headers, parent_id, file_name, content):
     response = client.post("/api/v1/upload/init", json={
         "parentId": parent_id, "fileName": file_name,
-        "fileSize": len(content), "totalChunks": 1,
+        "fileSize": len(content),
         "md5Hash": hashlib.md5(content).hexdigest(),
     }, headers=headers)
-    session_id = response.json()["data"]["sessionId"]
-    chunk = client.post(
-        f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
-        files={"file": (file_name, content, "text/plain")}, headers=headers,
-    )
-    assert chunk.json()["code"] == 200, chunk.text
+    assert response.json()["code"] == 200, response.text
+    result = response.json()["data"]
+    if result["mode"] == "INSTANT":
+        return {"fileId": result["fileId"]}
+    assert result["mode"] == "MULTIPART"
+    session_id = result["sessionId"]
+    for number in range(result["totalChunks"]):
+        part = content[number * result["chunkSize"]:(number + 1) * result["chunkSize"]]
+        chunk = client.post(f"/api/v1/upload/{session_id}/chunk",
+                            params={"chunkNumber": number, "chunkMd5": hashlib.md5(part).hexdigest()},
+                            files={"file": (file_name, part, "text/plain")}, headers=headers)
+        assert chunk.json()["code"] == 200, chunk.text
     complete = client.post(f"/api/v1/upload/{session_id}/complete", headers=headers)
     assert complete.json()["code"] == 200, complete.text
     return complete.json()["data"]
@@ -114,7 +120,7 @@ def created_folder(client, auth_headers):
 
 @pytest.fixture
 def uploaded_file(client, auth_headers, created_folder, sample_file):
-    """Upload a fresh physical object; instant upload has dedicated coverage."""
+    """Upload through unified initialization, accepting verified reuse or multipart."""
     content = sample_file.read_bytes()
     file_name = f"tf_{uuid.uuid4().hex[:6]}.txt"
     data = _chunked_upload(client, auth_headers, created_folder["id"], file_name, content)

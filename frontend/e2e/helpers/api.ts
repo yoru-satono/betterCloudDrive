@@ -794,28 +794,22 @@ async function uploadToApi(
     : Buffer.from(content ?? fs.readFileSync(filePath).toString())
   const md5Hash = crypto.createHash('md5').update(data).digest('hex')
 
-  const instant = await request.post(`${backendURL}/api/v1${uploadPath}/instant`, {
-    headers: authHeaders(token),
-    data: { parentId, fileName, fileSize: data.length, md5Hash },
-  })
-  const instantBody = await instant.json()
-  if (instantBody.code === 200) return { fileId: instantBody.data.fileId as number, fileName }
-  expect(instantBody.code).toBe(419010)
-
-  const chunkSize = 5 * 1024 * 1024
-  const totalChunks = data.length === 0 ? 0 : Math.ceil(data.length / chunkSize)
   const init = await request.post(`${backendURL}/api/v1${uploadPath}/init`, {
-    headers: authHeaders(token),
-    data: { parentId, fileName, fileSize: data.length, md5Hash, totalChunks },
+    headers: authHeaders(token), data: { parentId, fileName, fileSize: data.length, md5Hash },
   })
   await expect(init, await init.text()).toBeOK()
-  const sessionId = (await init.json()).data.sessionId as string
+  const initBody = await init.json()
+  expect(initBody.code).toBe(200)
+  if (initBody.data.mode === 'INSTANT') return { fileId: initBody.data.fileId as number, fileName }
+  expect(initBody.data.mode).toBe('MULTIPART')
+  const { sessionId, chunkSize, totalChunks } = initBody.data as { sessionId: string; chunkSize: number; totalChunks: number }
 
   for (let chunkNumber = 0; chunkNumber < totalChunks; chunkNumber += 1) {
     const start = chunkNumber * chunkSize
     const chunkData = data.subarray(start, start + chunkSize)
     const chunk = await request.post(`${backendURL}/api/v1${uploadPath}/${sessionId}/chunk?chunkNumber=${chunkNumber}`, {
       headers: authHeaders(token),
+      params: { chunkNumber, chunkMd5: crypto.createHash('md5').update(chunkData).digest('hex') },
       multipart: {
         file: {
           name: fileName,

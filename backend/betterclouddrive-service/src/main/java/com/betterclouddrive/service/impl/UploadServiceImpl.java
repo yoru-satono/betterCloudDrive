@@ -1,6 +1,7 @@
 package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.common.constant.ApiCode;
+import com.betterclouddrive.common.dto.UploadInitResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.TeamEntity;
@@ -16,6 +17,8 @@ import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.ThumbnailService;
 import com.betterclouddrive.service.UploadService;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.storage.ContentDigest;
+import com.betterclouddrive.storage.ObjectNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -58,59 +61,34 @@ public class UploadServiceImpl implements UploadService {
 
     @Override
     @Transactional
-    public UploadSessionEntity initUpload(Long userId, Long parentId, String fileName, Long fileSize, String md5Hash, int totalChunks) {
-        validateUploadShape(fileSize, totalChunks);
+    public UploadInitResult initUpload(Long userId, Long parentId, String fileName, Long fileSize, String md5Hash) {
+        int chunks = uploadChunkCount(fileSize);
+        md5Hash = normalizeMd5(md5Hash);
+        fileName = normalizeFileName(fileName);
         validatePersonalParent(userId, parentId);
         checkStorageQuota(userId, fileSize);
-
-        String sessionId = UUID.randomUUID().toString();
-        UploadSessionEntity session = UploadSessionEntity.builder()
-                .id(sessionId)
-                .userId(userId)
-                .teamId(null)
-                .parentId(parentId)
-                .fileName(fileName)
-                .fileSize(fileSize)
-                .md5Hash(md5Hash)
-                .chunkSize(CHUNK_SIZE)
-                .totalChunks(totalChunks)
-                .receivedChunks(0)
-                .status(1)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-        return uploadSessionRepository.save(session);
+        Optional<FileEntity> candidate = verifiedInstantCandidate(fileSize, md5Hash);
+        if (candidate.isPresent()) {
+            FileEntity file = fileRepository.save(buildFileEntity(userId, parentId, fileName, fileSize, md5Hash, candidate.get().getStoragePath()));
+            scheduleThumbnailAfterCommit(file);
+            incrementAfterCommit(STORAGE_INCR_PREFIX + userId, fileSize);
+            return UploadInitResult.instant(file.getId());
+        }
+        return createUploadSession(null, userId, parentId, fileName, fileSize, md5Hash, chunks);
     }
 
     @Override
     @Transactional
     public void uploadChunk(String sessionId, Long userId, int chunkNumber, byte[] data, String chunkMd5) {
-        UploadSessionEntity session = uploadSessionRepository.findById(sessionId).orElse(null);
+        UploadSessionEntity session = uploadSessionRepository.findByIdForUpdate(sessionId).orElse(null);
         if (session == null || session.getTeamId() != null || !session.getUserId().equals(userId)) {
             throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
         }
         if (session.getStatus() != 1) {
             throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Upload session is not active");
         }
-        if (chunkNumber < 0 || chunkNumber >= session.getTotalChunks()) {
-            throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Invalid chunk number");
-        }
-
-        String bitmapKey = UPLOAD_BITMAP_PREFIX + sessionId;
-        Boolean alreadyUploaded = redisTemplate.opsForValue().getBit(bitmapKey, chunkNumber);
-        if (Boolean.TRUE.equals(alreadyUploaded)) {
-            return;
-        }
-
-        String chunkPrefix = "uploads/" + userId + "/" + sessionId + "/chunks";
-        storageService.uploadPart(chunkPrefix, chunkNumber, new ByteArrayInputStream(data), data.length);
-
-        redisTemplate.opsForValue().setBit(bitmapKey, chunkNumber, true);
-        redisTemplate.expire(bitmapKey, 24, TimeUnit.HOURS);
-
-        session.setReceivedChunks(session.getReceivedChunks() + 1);
-        session.setUpdatedAt(LocalDateTime.now());
-        uploadSessionRepository.save(session);
+        validatePersonalParent(userId, session.getParentId());
+        receiveChunk(session, "uploads/" + userId + "/" + sessionId + "/chunks", chunkNumber, data, chunkMd5);
     }
 
     @Override
@@ -121,9 +99,12 @@ public class UploadServiceImpl implements UploadService {
         }
         validatePersonalParent(userId, session.getParentId());
 
+        validateSession(session);
+        if (Objects.equals(session.getStatus(), 3)) throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
+
         String bitmapKey = UPLOAD_BITMAP_PREFIX + sessionId;
         List<Integer> missingChunks = new ArrayList<>();
-        for (int i = 0; i < session.getTotalChunks(); i++) {
+        for (int i = 0; !Objects.equals(session.getStatus(), 2) && i < session.getTotalChunks(); i++) {
             Boolean bit = redisTemplate.opsForValue().getBit(bitmapKey, i);
             if (!Boolean.TRUE.equals(bit)) {
                 missingChunks.add(i);
@@ -133,7 +114,7 @@ public class UploadServiceImpl implements UploadService {
         Map<String, Object> result = new HashMap<>();
         result.put("sessionId", sessionId);
         result.put("totalChunks", session.getTotalChunks());
-        result.put("uploadedChunks", session.getReceivedChunks());
+        result.put("uploadedChunks", session.getTotalChunks() - missingChunks.size());
         result.put("missingChunks", missingChunks);
         return result;
     }
@@ -145,6 +126,7 @@ public class UploadServiceImpl implements UploadService {
         if (session == null || session.getTeamId() != null || !session.getUserId().equals(userId)) {
             throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
         }
+        validateSession(session);
         if (Objects.equals(session.getStatus(), 2)) {
             return resolveCompletedFileId(session, userId, null);
         }
@@ -162,15 +144,11 @@ public class UploadServiceImpl implements UploadService {
 
         String objectKey = generateStoragePath(userId, session.getFileName());
         String chunkPrefix = "uploads/" + userId + "/" + sessionId + "/chunks";
-        if (session.getFileSize() != null && session.getFileSize() == 0L) {
-            storageService.uploadObject(objectKey, new ByteArrayInputStream(new byte[0]), 0, guessMimeType(session.getFileName()));
-        } else {
-            storageService.composeParts(objectKey, chunkPrefix, session.getTotalChunks());
-        }
-        ensureObjectExists(objectKey);
+        ContentDigest actual = composeVerified(objectKey, chunkPrefix, session.getTotalChunks(),
+                session.getFileSize(), session.getMd5Hash(), session.getFileName());
 
         FileEntity file = buildFileEntity(userId, session.getParentId(), session.getFileName(),
-                session.getFileSize(), session.getMd5Hash(), objectKey);
+                actual.size(), actual.md5(), objectKey);
         file = fileRepository.save(file);
         scheduleThumbnailAfterCommit(file);
 
@@ -180,9 +158,9 @@ public class UploadServiceImpl implements UploadService {
         session.setUpdatedAt(LocalDateTime.now());
         uploadSessionRepository.save(session);
 
-        redisTemplate.delete(bitmapKey);
+        cleanupAfterCommit(chunkPrefix, session.getTotalChunks(), bitmapKey);
         if (session.getFileSize() != null && session.getFileSize() > 0) {
-            redisTemplate.opsForValue().increment("storage:incr:" + userId, session.getFileSize());
+            incrementAfterCommit(STORAGE_INCR_PREFIX + userId, session.getFileSize());
         }
 
         return file.getId();
@@ -191,11 +169,12 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public void cancelUpload(String sessionId, Long userId) {
-        UploadSessionEntity session = uploadSessionRepository.findById(sessionId).orElse(null);
+        UploadSessionEntity session = uploadSessionRepository.findByIdForUpdate(sessionId).orElse(null);
         if (session == null || session.getTeamId() != null || !session.getUserId().equals(userId)) {
             throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
         }
 
+        if (!Objects.equals(session.getStatus(), 1)) return;
         String chunkPrefix = "uploads/" + userId + "/" + sessionId + "/chunks";
         storageService.deleteParts(chunkPrefix, session.getTotalChunks());
 
@@ -208,86 +187,56 @@ public class UploadServiceImpl implements UploadService {
 
     @Override
     @Transactional
-    public Long instantUpload(Long userId, Long parentId, String fileName, Long fileSize, String md5Hash) {
-        validatePersonalParent(userId, parentId);
-        checkStorageQuota(userId, fileSize);
-
-        FileEntity existing = fileRepository.findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc(md5Hash).orElse(null);
-        if (existing == null) {
-            throw new BusinessException(ApiCode.INSTANT_UPLOAD_NOT_FOUND);
-        }
-
-        FileEntity file = buildFileEntity(userId, parentId, fileName, fileSize, md5Hash, existing.getStoragePath());
-        file = fileRepository.save(file);
-        scheduleThumbnailAfterCommit(file);
-
-        redisTemplate.opsForValue().increment("storage:incr:" + userId, fileSize);
-        return file.getId();
-    }
-
-    @Override
-    @Transactional
-    public UploadSessionEntity initTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash, int totalChunks) {
+    public UploadInitResult initTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash) {
         lockTeamMutations(teamId);
         teamPermissionService.requireParentWrite(userId, teamId, parentId);
         fileName = normalizeFileName(fileName);
-        validateUploadShape(fileSize, totalChunks);
+        int chunks = uploadChunkCount(fileSize);
+        md5Hash = normalizeMd5(md5Hash);
         validateTeamParent(teamId, parentId);
         requireTeamNameAvailable(teamId, parentId, fileName);
         checkTeamStorageQuota(teamId, fileSize);
+        Optional<FileEntity> candidate = verifiedInstantCandidate(fileSize, md5Hash);
+        if (candidate.isPresent()) {
+            FileEntity file = fileRepository.save(buildTeamFileEntity(teamId, userId, parentId, fileName, fileSize, md5Hash, candidate.get().getStoragePath()));
+            scheduleThumbnailAfterCommit(file);
+            incrementAfterCommit(TEAM_STORAGE_INCR_PREFIX + teamId, fileSize);
+            notificationService.checkTeamQuota(teamId);
+            teamAuditService.record(teamId, userId, "UPLOAD_INSTANT", "FILE", file.getId(), file.getFileName());
+            return UploadInitResult.instant(file.getId());
+        }
+        return createUploadSession(teamId, userId, parentId, fileName, fileSize, md5Hash, chunks);
+    }
 
-        String sessionId = UUID.randomUUID().toString();
-        UploadSessionEntity session = UploadSessionEntity.builder()
-                .id(sessionId)
-                .userId(userId)
-                .teamId(teamId)
-                .parentId(parentId)
-                .fileName(fileName)
-                .fileSize(fileSize)
-                .md5Hash(md5Hash)
-                .chunkSize(CHUNK_SIZE)
-                .totalChunks(totalChunks)
-                .receivedChunks(0)
-                .status(1)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
-                .build();
-        return uploadSessionRepository.save(session);
+    private UploadInitResult createUploadSession(Long teamId, Long userId, Long parentId, String name, long size, String md5, int chunks) {
+        UploadSessionEntity session = UploadSessionEntity.builder().id(UUID.randomUUID().toString())
+                .userId(userId).teamId(teamId).parentId(parentId).fileName(name).fileSize(size).md5Hash(md5)
+                .chunkSize(CHUNK_SIZE).totalChunks(chunks).receivedChunks(0).status(1)
+                .createdAt(LocalDateTime.now()).updatedAt(LocalDateTime.now()).build();
+        uploadSessionRepository.save(session);
+        return UploadInitResult.multipart(session.getId(), CHUNK_SIZE, chunks);
     }
 
     @Override
     @Transactional
     public void uploadTeamChunk(Long teamId, String sessionId, Long userId, int chunkNumber, byte[] data, String chunkMd5) {
-        UploadSessionEntity session = getActiveTeamSession(teamId, sessionId, userId);
+        UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
+        lockTeamMutations(teamId);
+        if (!Objects.equals(session.getStatus(), 1)) throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
         teamPermissionService.requireParentWrite(userId, teamId, session.getParentId());
-        if (chunkNumber < 0 || chunkNumber >= session.getTotalChunks()) {
-            throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID, "Invalid chunk number");
-        }
-
-        String bitmapKey = UPLOAD_BITMAP_PREFIX + sessionId;
-        Boolean alreadyUploaded = redisTemplate.opsForValue().getBit(bitmapKey, chunkNumber);
-        if (Boolean.TRUE.equals(alreadyUploaded)) {
-            return;
-        }
-
-        String chunkPrefix = teamChunkPrefix(teamId, sessionId);
-        storageService.uploadPart(chunkPrefix, chunkNumber, new ByteArrayInputStream(data), data.length);
-
-        redisTemplate.opsForValue().setBit(bitmapKey, chunkNumber, true);
-        redisTemplate.expire(bitmapKey, 24, TimeUnit.HOURS);
-
-        session.setReceivedChunks(session.getReceivedChunks() + 1);
-        session.setUpdatedAt(LocalDateTime.now());
-        uploadSessionRepository.save(session);
+        receiveChunk(session, teamChunkPrefix(teamId, sessionId), chunkNumber, data, chunkMd5);
     }
 
     @Override
     public Map<String, Object> getTeamUploadStatus(Long teamId, String sessionId, Long userId) {
         UploadSessionEntity session = getTeamSession(teamId, sessionId, userId);
         teamPermissionService.requireParentWrite(userId, teamId, session.getParentId());
+        validateSession(session);
+        if (Objects.equals(session.getStatus(), 3)) throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
+
         String bitmapKey = UPLOAD_BITMAP_PREFIX + sessionId;
         List<Integer> missingChunks = new ArrayList<>();
-        for (int i = 0; i < session.getTotalChunks(); i++) {
+        for (int i = 0; !Objects.equals(session.getStatus(), 2) && i < session.getTotalChunks(); i++) {
             Boolean bit = redisTemplate.opsForValue().getBit(bitmapKey, i);
             if (!Boolean.TRUE.equals(bit)) {
                 missingChunks.add(i);
@@ -297,7 +246,7 @@ public class UploadServiceImpl implements UploadService {
         Map<String, Object> result = new HashMap<>();
         result.put("sessionId", sessionId);
         result.put("totalChunks", session.getTotalChunks());
-        result.put("uploadedChunks", session.getReceivedChunks());
+        result.put("uploadedChunks", session.getTotalChunks() - missingChunks.size());
         result.put("missingChunks", missingChunks);
         return result;
     }
@@ -308,6 +257,7 @@ public class UploadServiceImpl implements UploadService {
         UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
         lockTeamMutations(teamId);
         teamPermissionService.requireParentWrite(userId, teamId, session.getParentId());
+        validateSession(session);
         if (Objects.equals(session.getStatus(), 2)) {
             return resolveCompletedFileId(session, userId, teamId);
         }
@@ -327,15 +277,11 @@ public class UploadServiceImpl implements UploadService {
 
         String objectKey = generateTeamStoragePath(teamId, session.getFileName());
         String chunkPrefix = teamChunkPrefix(teamId, sessionId);
-        if (session.getFileSize() != null && session.getFileSize() == 0L) {
-            storageService.uploadObject(objectKey, new ByteArrayInputStream(new byte[0]), 0, guessMimeType(session.getFileName()));
-        } else {
-            storageService.composeParts(objectKey, chunkPrefix, session.getTotalChunks());
-        }
-        ensureObjectExists(objectKey);
+        ContentDigest actual = composeVerified(objectKey, chunkPrefix, session.getTotalChunks(),
+                session.getFileSize(), session.getMd5Hash(), session.getFileName());
 
         FileEntity file = buildTeamFileEntity(teamId, session.getUserId(), session.getParentId(), session.getFileName(),
-                session.getFileSize(), session.getMd5Hash(), objectKey);
+                actual.size(), actual.md5(), objectKey);
         file = fileRepository.save(file);
         scheduleThumbnailAfterCommit(file);
 
@@ -345,9 +291,9 @@ public class UploadServiceImpl implements UploadService {
         session.setUpdatedAt(LocalDateTime.now());
         uploadSessionRepository.save(session);
 
-        redisTemplate.delete(bitmapKey);
+        cleanupAfterCommit(chunkPrefix, session.getTotalChunks(), bitmapKey);
         if (session.getFileSize() != null && session.getFileSize() > 0) {
-            redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, session.getFileSize());
+            incrementAfterCommit(TEAM_STORAGE_INCR_PREFIX + teamId, session.getFileSize());
         }
         notificationService.checkTeamQuota(teamId);
         teamAuditService.record(teamId, userId, "UPLOAD_COMPLETE", "FILE", file.getId(), file.getFileName());
@@ -357,8 +303,10 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public void cancelTeamUpload(Long teamId, String sessionId, Long userId) {
-        UploadSessionEntity session = getTeamSession(teamId, sessionId, userId);
+        UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
+        lockTeamMutations(teamId);
         teamPermissionService.requireParentWrite(userId, teamId, session.getParentId());
+        if (!Objects.equals(session.getStatus(), 1)) return;
         storageService.deleteParts(teamChunkPrefix(teamId, sessionId), session.getTotalChunks());
         redisTemplate.delete(UPLOAD_BITMAP_PREFIX + sessionId);
         session.setStatus(3);
@@ -369,97 +317,188 @@ public class UploadServiceImpl implements UploadService {
 
     @Override
     @Transactional
-    public Long instantTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash) {
-        lockTeamMutations(teamId);
-        teamPermissionService.requireParentWrite(userId, teamId, parentId);
-        fileName = normalizeFileName(fileName);
-        validateTeamParent(teamId, parentId);
-        requireTeamNameAvailable(teamId, parentId, fileName);
-        checkTeamStorageQuota(teamId, fileSize);
-
-        FileEntity existing = fileRepository.findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc(md5Hash).orElse(null);
-        if (existing == null) {
-            throw new BusinessException(ApiCode.INSTANT_UPLOAD_NOT_FOUND);
-        }
-
-        FileEntity file = buildTeamFileEntity(teamId, userId, parentId, fileName, fileSize, md5Hash, existing.getStoragePath());
-        file = fileRepository.save(file);
-        scheduleThumbnailAfterCommit(file);
-
-        redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, fileSize);
-        notificationService.checkTeamQuota(teamId);
-        teamAuditService.record(teamId, userId, "UPLOAD_INSTANT", "FILE", file.getId(), file.getFileName());
-        return file.getId();
-    }
-
-    @Override
-    @Transactional
     public Long streamUpload(Long userId, Long parentId, String fileName,
                              Long fileSize, InputStream inputStream, String md5Hash) {
         validatePersonalParent(userId, parentId);
         checkStorageQuota(userId, fileSize);
 
-        int totalChunks = (int) Math.ceil((double) fileSize / CHUNK_SIZE);
-        String sessionId = UUID.randomUUID().toString();
-        String chunkPrefix = "uploads/" + userId + "/" + sessionId + "/chunks";
-
-        MessageDigest digest = null;
-        if (md5Hash == null) {
-            try {
-                digest = MessageDigest.getInstance("MD5");
-            } catch (NoSuchAlgorithmException e) {
-                throw new RuntimeException("MD5 not available", e);
-            }
-        }
-
+        if (fileSize == null || fileSize < 0) throw new BusinessException(ApiCode.BAD_REQUEST);
+        String expected = md5Hash == null ? null : normalizeMd5(md5Hash);
+        String prefix = "uploads/" + userId + "/" + UUID.randomUUID() + "/chunks";
+        int parts = 0;
+        long received = 0;
+        MessageDigest digest = newMd5();
         try {
             byte[] buffer = new byte[CHUNK_SIZE];
-            int chunkIndex = 0;
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                byte[] chunk = bytesRead == buffer.length ? buffer : Arrays.copyOf(buffer, bytesRead);
-                if (digest != null) {
-                    digest.update(chunk, 0, bytesRead);
-                }
-                storageService.uploadPart(chunkPrefix, chunkIndex, new ByteArrayInputStream(chunk), bytesRead);
-                chunkIndex++;
+            int count;
+            while ((count = readChunkFully(inputStream, buffer)) > 0) {
+                received += count;
+                if (received > fileSize) throw new BusinessException(ApiCode.UPLOAD_SIZE_MISMATCH);
+                digest.update(buffer, 0, count);
+                storageService.uploadPart(prefix, parts, new ByteArrayInputStream(buffer, 0, count), count);
+                parts++;
             }
+            if (received != fileSize) throw new BusinessException(ApiCode.UPLOAD_SIZE_MISMATCH);
+            String actualMd5 = HexFormat.of().formatHex(digest.digest());
+            if (expected != null && !expected.equals(actualMd5)) throw new BusinessException(ApiCode.FILE_MD5_MISMATCH);
+            String key = generateStoragePath(userId, fileName);
+            ContentDigest actual = composeVerified(key, prefix, parts, received, actualMd5, fileName);
+            FileEntity file = fileRepository.save(buildFileEntity(userId, parentId, fileName, actual.size(), actual.md5(), key));
+            scheduleThumbnailAfterCommit(file);
+            cleanupAfterCommit(prefix, parts, null);
+            if (received > 0) incrementAfterCommit(STORAGE_INCR_PREFIX + userId, received);
+            return file.getId();
         } catch (IOException e) {
-            storageService.deleteParts(chunkPrefix, totalChunks);
-            throw new RuntimeException("Failed to read upload stream", e);
+            int uploaded = parts;
+            safeCleanup(() -> storageService.deleteParts(prefix, uploaded));
+            throw new BusinessException(ApiCode.UPLOAD_FAILED);
+        } catch (RuntimeException e) {
+            int uploaded = parts;
+            safeCleanup(() -> storageService.deleteParts(prefix, uploaded));
+            throw e;
         }
-
-        if (digest != null) {
-            md5Hash = HexFormat.of().formatHex(digest.digest());
-        }
-
-        String objectKey = generateStoragePath(userId, fileName);
-        if (fileSize == 0L) {
-            storageService.uploadObject(objectKey, new ByteArrayInputStream(new byte[0]), 0, guessMimeType(fileName));
-        } else {
-            storageService.composeParts(objectKey, chunkPrefix, totalChunks);
-        }
-
-        FileEntity file = buildFileEntity(userId, parentId, fileName, fileSize, md5Hash, objectKey);
-        file = fileRepository.save(file);
-        scheduleThumbnailAfterCommit(file);
-
-        if (fileSize > 0) {
-            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, fileSize);
-        }
-        return file.getId();
     }
 
-    private void validateUploadShape(Long fileSize, int totalChunks) {
-        if (fileSize == null || fileSize < 0 || totalChunks < 0) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Invalid upload size or chunk count");
+    private int readChunkFully(InputStream input, byte[] buffer) throws IOException {
+        int length = 0;
+        while (length < buffer.length) {
+            int count = input.read(buffer, length, buffer.length - length);
+            if (count < 0) break;
+            if (count == 0) {
+                int value = input.read();
+                if (value < 0) break;
+                buffer[length++] = (byte) value;
+            } else length += count;
         }
-        if (fileSize == 0 && totalChunks != 0) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Zero-byte uploads must not include chunks");
+        return length;
+    }
+
+    private int uploadChunkCount(Long size) {
+        if (size == null || size < 0) throw new BusinessException(ApiCode.BAD_REQUEST);
+        return chunkCount(size);
+    }
+
+    private int chunkCount(long size) {
+        long chunks = size / CHUNK_SIZE + (size % CHUNK_SIZE == 0 ? 0 : 1);
+        if (chunks > Integer.MAX_VALUE) throw new BusinessException(ApiCode.BAD_REQUEST);
+        return (int) chunks;
+    }
+
+    private void validateUploadShape(Long size, int chunks) {
+        if (size == null || size < 0 || chunks != chunkCount(size)) throw new BusinessException(ApiCode.BAD_REQUEST);
+    }
+
+    private String normalizeMd5(String value) {
+        if (value == null || !value.matches("[0-9a-fA-F]{32}")) throw new BusinessException(ApiCode.BAD_REQUEST);
+        return value.toLowerCase(Locale.ROOT);
+    }
+
+    private MessageDigest newMd5() {
+        try { return MessageDigest.getInstance("MD5"); }
+        catch (NoSuchAlgorithmException e) { throw new IllegalStateException("MD5 unavailable", e); }
+    }
+
+    private void validateSession(UploadSessionEntity session) {
+        try {
+            validateUploadShape(session.getFileSize(), session.getTotalChunks());
+            normalizeMd5(session.getMd5Hash());
+            if (!Objects.equals(session.getChunkSize(), CHUNK_SIZE)) throw new BusinessException(ApiCode.BAD_REQUEST);
+        } catch (BusinessException | NullPointerException e) {
+            throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
         }
-        if (fileSize > 0 && totalChunks <= 0) {
-            throw new BusinessException(ApiCode.BAD_REQUEST, "Chunk count is required for non-empty uploads");
+    }
+
+    private void receiveChunk(UploadSessionEntity session, String prefix, int number, byte[] data, String chunkMd5) {
+        validateSession(session);
+        String expected = normalizeMd5(chunkMd5);
+        if (number < 0 || number >= session.getTotalChunks()) throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
+        long length = Math.min(CHUNK_SIZE, session.getFileSize() - (long) number * CHUNK_SIZE);
+        if (data.length != length) throw new BusinessException(ApiCode.UPLOAD_SIZE_MISMATCH);
+        String actual = HexFormat.of().formatHex(newMd5().digest(data));
+        if (!actual.equals(expected)) throw new BusinessException(ApiCode.CHUNK_MD5_MISMATCH);
+        String bitmapKey = UPLOAD_BITMAP_PREFIX + session.getId();
+        if (Boolean.TRUE.equals(redisTemplate.opsForValue().getBit(bitmapKey, number))) {
+            ContentDigest stored = inspectObject(prefix + ".part." + (number + 1));
+            if (stored.size() != length || !stored.md5().equals(actual)) throw new BusinessException(ApiCode.CHUNK_MD5_MISMATCH);
+            return;
         }
+        storageService.uploadPart(prefix, number, new ByteArrayInputStream(data), data.length);
+        redisTemplate.opsForValue().setBit(bitmapKey, number, true);
+        redisTemplate.expire(bitmapKey, 24, TimeUnit.HOURS);
+        session.setReceivedChunks(session.getReceivedChunks() + 1);
+        session.setUpdatedAt(LocalDateTime.now());
+        uploadSessionRepository.save(session);
+    }
+
+    private ContentDigest inspectObject(String key) {
+        try { return storageService.inspectObject(key); }
+        catch (ObjectNotFoundException e) { throw e; }
+        catch (RuntimeException e) { throw new BusinessException(ApiCode.STORAGE_ERROR); }
+    }
+
+    private Optional<FileEntity> verifiedInstantCandidate(Long size, String md5) {
+        if (size == null || size < 0) throw new BusinessException(ApiCode.BAD_REQUEST);
+        for (FileEntity candidate : fileRepository.findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc(md5, size)) {
+            if (candidate.getStoragePath() == null || !"file".equals(candidate.getFileType())) continue;
+            try {
+                ContentDigest actual = inspectObject(candidate.getStoragePath());
+                if (actual.size() == size && actual.md5().equals(md5)) return Optional.of(candidate);
+            } catch (ObjectNotFoundException e) {
+                // Absent candidates are misses; storage outages propagate.
+            }
+        }
+        return Optional.empty();
+    }
+
+    private ContentDigest composeVerified(String key, String prefix, int parts, long size, String md5, String name) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) safeCleanup(() -> storageService.deleteObject(key));
+                }
+            });
+        }
+        try {
+            ContentDigest actual;
+            if (size == 0) {
+                storageService.uploadObject(key, new ByteArrayInputStream(new byte[0]), 0, guessMimeType(name));
+                actual = new ContentDigest(0, HexFormat.of().formatHex(newMd5().digest()));
+            } else {
+                actual = storageService.composeParts(key, prefix, parts);
+            }
+            if (actual.size() != size) throw new BusinessException(ApiCode.UPLOAD_SIZE_MISMATCH);
+            if (!actual.md5().equalsIgnoreCase(md5)) throw new BusinessException(ApiCode.FILE_MD5_MISMATCH);
+            return actual;
+        } catch (RuntimeException e) {
+            safeCleanup(() -> storageService.deleteObject(key));
+            if (e instanceof BusinessException) throw e;
+            throw new BusinessException(ApiCode.STORAGE_ERROR);
+        }
+    }
+
+    private void incrementAfterCommit(String key, long size) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { safeCleanup(() -> redisTemplate.opsForValue().increment(key, size)); }
+            });
+        } else redisTemplate.opsForValue().increment(key, size);
+    }
+
+    private void cleanupAfterCommit(String prefix, int parts, String bitmapKey) {
+        Runnable cleanup = () -> {
+            safeCleanup(() -> storageService.deleteParts(prefix, parts));
+            if (bitmapKey != null) safeCleanup(() -> redisTemplate.delete(bitmapKey));
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { cleanup.run(); }
+            });
+        } else cleanup.run();
+    }
+
+    private void safeCleanup(Runnable cleanup) {
+        try { cleanup.run(); }
+        catch (RuntimeException e) { log.warn("Upload cleanup failed; exception type={}", e.getClass().getSimpleName()); }
     }
 
     private String generateStoragePath(Long userId, String fileName) {

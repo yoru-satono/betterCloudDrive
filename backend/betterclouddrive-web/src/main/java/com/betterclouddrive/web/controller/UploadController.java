@@ -1,10 +1,9 @@
 package com.betterclouddrive.web.controller;
 
 import com.betterclouddrive.common.dto.ApiResponse;
-import com.betterclouddrive.dal.entity.UploadSessionEntity;
+import com.betterclouddrive.common.dto.UploadInitResult;
 import com.betterclouddrive.service.UploadService;
 import com.betterclouddrive.web.dto.request.InitUploadRequest;
-import com.betterclouddrive.web.dto.request.InstantUploadRequest;
 import com.betterclouddrive.web.security.CurrentUser;
 import com.betterclouddrive.web.security.UserPrincipal;
 import jakarta.validation.Valid;
@@ -22,17 +21,13 @@ public class UploadController {
     private final UploadService uploadService;
 
     @PostMapping("/init")
-    public ApiResponse<Map<String, Object>> initUpload(
+    public ApiResponse<UploadInitResult> initUpload(
             @CurrentUser UserPrincipal user,
             @Valid @RequestBody InitUploadRequest request) {
-        UploadSessionEntity session = uploadService.initUpload(
+        UploadInitResult result = uploadService.initUpload(
                 user.getUserId(), request.getParentId(), request.getFileName(),
-                request.getFileSize(), request.getMd5Hash(), request.getTotalChunks());
-        return ApiResponse.success(Map.of(
-                "sessionId", session.getId(),
-                "chunkSize", session.getChunkSize(),
-                "totalChunks", session.getTotalChunks()
-        ));
+                request.getFileSize(), request.getMd5Hash());
+        return ApiResponse.success(result);
     }
 
     @PostMapping("/{sessionId}/chunk")
@@ -40,13 +35,15 @@ public class UploadController {
             @CurrentUser UserPrincipal user,
             @PathVariable String sessionId,
             @RequestParam int chunkNumber,
-            @RequestParam(required = false) String chunkMd5,
+            @RequestParam String chunkMd5,
             @RequestParam("file") MultipartFile file) {
+        byte[] bytes;
         try {
-            uploadService.uploadChunk(sessionId, user.getUserId(), chunkNumber, file.getBytes(), chunkMd5);
-        } catch (Exception e) {
+            bytes = file.getBytes();
+        } catch (java.io.IOException e) {
             throw new RuntimeException("Failed to read chunk data", e);
         }
+        uploadService.uploadChunk(sessionId, user.getUserId(), chunkNumber, bytes, chunkMd5);
         return ApiResponse.success(Map.of("chunkNumber", chunkNumber));
     }
 
@@ -73,13 +70,4 @@ public class UploadController {
         return ApiResponse.success();
     }
 
-    @PostMapping("/instant")
-    public ApiResponse<Map<String, Object>> instantUpload(
-            @CurrentUser UserPrincipal user,
-            @Valid @RequestBody InstantUploadRequest request) {
-        Long fileId = uploadService.instantUpload(
-                user.getUserId(), request.getParentId(), request.getFileName(),
-                request.getFileSize(), request.getMd5Hash());
-        return ApiResponse.success(Map.of("fileId", fileId, "instant", true));
-    }
 }

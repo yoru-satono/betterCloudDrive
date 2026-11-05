@@ -1,5 +1,7 @@
 package com.betterclouddrive.mobile.feature.transfers
 
+import com.betterclouddrive.mobile.core.model.UploadStatusResult
+import com.betterclouddrive.mobile.core.model.UploadInitMode
 import com.betterclouddrive.mobile.core.model.ApiException
 import com.betterclouddrive.mobile.core.model.SessionExpiredException
 import com.betterclouddrive.mobile.core.network.NetworkDefaults
@@ -44,6 +46,14 @@ class TransferEngine(
             if (status != TransferStatus.PAUSED && status != TransferStatus.CANCELED) throw cancelled
             TransferRunResult.PAUSED
         } catch (error: ApiException) {
+            if (task.direction == TransferDirection.UPLOAD && error.code in setOf(419006, 419016, 419017)) {
+                repository.find(task.id)?.sessionId?.let { session ->
+                    try { backend.cancelUpload(task.scope, session) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { /* Expired-session cleanup remains the fallback. */ }
+                }
+                repository.updateActive(task.id) { it.copy(sessionId = null, md5Hash = null, bytesDone = 0) }
+            }
             if (isRetryableTransferError(error.code)) {
                 repository.updateActive(task.id) { it.copy(status = TransferStatus.QUEUED, retryCount = it.retryCount + 1, errorKey = error.messageKey) }
                 TransferRunResult.RETRY
@@ -77,34 +87,35 @@ class TransferEngine(
         }
         val md5 = digest.md5
         var task = repository.updateActive(initial.id) {
-            it.copy(md5Hash = md5, bytesTotal = digest.size, totalChunks = chunkCount(digest.size))
+            it.copy(md5Hash = md5, bytesTotal = digest.size, totalChunks = if (it.sessionId == null) chunkCount(digest.size) else it.totalChunks)
         } ?: return
         ensureRunnable(initial.id)
 
-        if (task.sessionId == null) {
+        var restoredStatus: UploadStatusResult? = null
+        task.sessionId?.let { previousSession ->
             try {
-                val fileId = backend.instantUpload(task.scope, task.fileName, task.bytesTotal, md5)
-                repository.updateActive(initial.id) {
-                    it.copy(status = TransferStatus.SUCCEEDED, bytesDone = it.bytesTotal, remoteResultFileId = fileId, errorKey = null)
-                }
-                return
+                restoredStatus = backend.uploadStatus(task.scope, previousSession)
             } catch (error: ApiException) {
-                if (error.code != NetworkDefaults.INSTANT_UPLOAD_MISS) throw error
+                if (error.code != 419006 && error.code != 404001) throw error
+                task = repository.updateActive(task.id) { it.copy(sessionId = null, bytesDone = 0) } ?: return
             }
         }
 
-        task = repository.find(initial.id) ?: return
         if (task.sessionId == null) {
-            val session = backend.initUpload(task.scope, task.fileName, task.bytesTotal, md5, task.totalChunks)
-            check(session.chunkSize == DEFAULT_CHUNK_SIZE) { "transfer.chunkSizeMismatch" }
-            check(session.totalChunks == task.totalChunks) { "transfer.chunkCountMismatch" }
+            val result = backend.initUpload(task.scope, task.fileName, task.bytesTotal, md5)
+            if (result.mode == UploadInitMode.INSTANT) {
+                repository.updateActive(task.id) {
+                    it.copy(status = TransferStatus.SUCCEEDED, bytesDone = it.bytesTotal, remoteResultFileId = result.fileId, errorKey = null)
+                }
+                return
+            }
             task = repository.updateActive(task.id) {
-                it.copy(sessionId = session.sessionId, chunkSize = session.chunkSize, totalChunks = session.totalChunks)
+                it.copy(sessionId = requireNotNull(result.sessionId), chunkSize = requireNotNull(result.chunkSize), totalChunks = requireNotNull(result.totalChunks))
             } ?: return
         }
 
         val sessionId = requireNotNull(task.sessionId)
-        val status = backend.uploadStatus(task.scope, sessionId)
+        val status = restoredStatus ?: backend.uploadStatus(task.scope, sessionId)
         check(status.sessionId == sessionId) { "transfer.sessionMismatch" }
         check(status.totalChunks == task.totalChunks) { "transfer.statusChunkCountMismatch" }
         check(status.missingChunks.all { it in 0 until task.totalChunks }) { "transfer.invalidMissingChunk" }
@@ -141,6 +152,7 @@ class TransferEngine(
                         sessionId,
                         chunk,
                         task.fileName,
+                        files.computePartDigest(source, offset, length).md5,
                         files.uploadPart(source, offset, length) { progress.trySend(it) },
                     )
                 } finally {

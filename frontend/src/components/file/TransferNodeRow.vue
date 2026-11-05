@@ -2,6 +2,7 @@
 import { i18n as __i18n } from '@/i18n'
 const __t = __i18n.global.t
 
+import { resolveMessage } from '@/i18n'
 import OButton from '@/components/base/OButton.vue'
 import type { TransferNode, TransferTask } from '@/api/desktopTransfer'
 import { isActive, isFinished, useTransferStore } from '@/stores/transfer'
@@ -51,7 +52,7 @@ const store = useTransferStore()
           <div v-if="isActive(node.status)" class="transfer-node__bar">
             <div class="transfer-node__bar-fill" :style="{ width: `${node.progress}%` }" />
           </div>
-          <p v-if="node.error" class="transfer-node__error">{{ node.error }}</p>
+          <p v-if="node.error" class="transfer-node__error">{{ node.error.startsWith('error.') ? resolveMessage(node.error) : node.error }}</p>
         </div>
       </div>
 

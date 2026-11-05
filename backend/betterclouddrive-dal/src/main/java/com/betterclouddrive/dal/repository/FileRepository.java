@@ -63,6 +63,8 @@ public interface FileRepository extends JpaRepository<FileEntity, Long>, JpaSpec
 
     Optional<FileEntity> findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc(String md5Hash);
 
+    List<FileEntity> findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc(String md5Hash, Long fileSize);
+
     Optional<FileEntity> findFirstByStoragePathAndIsDeletedFalseOrderByIdDesc(String storagePath);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

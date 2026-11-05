@@ -2,7 +2,15 @@
 
 import hashlib
 import uuid
+import pytest
 from tests.helpers.assert_helper import assert_api_ok, assert_api_error
+
+
+@pytest.fixture
+def sample_file(tmp_path):
+    path = tmp_path / "unique-upload.txt"
+    path.write_bytes(f"upload-{uuid.uuid4().hex}".encode())
+    return path
 
 
 class TestInitUpload:
@@ -11,7 +19,8 @@ class TestInitUpload:
             "parentId": created_folder["id"],
             "fileName": "test_upload.bin",
             "fileSize": 5242880 * 2,
-            "totalChunks": 2,
+            "md5Hash": "a" * 32,
+
         }, headers=auth_headers)
         data = assert_api_ok(r)
         assert "sessionId" in data
@@ -24,7 +33,8 @@ class TestInitUpload:
             "parentId": 99999,
             "fileName": "test.bin",
             "fileSize": 100,
-            "totalChunks": 1,
+            "md5Hash": "a" * 32,
+
         }, headers=auth_headers)
         assert_api_error(r, 404001)
 
@@ -36,12 +46,14 @@ class TestUploadChunk:
             "parentId": created_folder["id"],
             "fileName": f"chunk_{uuid.uuid4().hex[:6]}.txt",
             "fileSize": file_size,
-            "totalChunks": 1,
+            "md5Hash": hashlib.md5(sample_file.read_bytes()).hexdigest(),
+
         }, headers=auth_headers)
         session_id = r.json()["data"]["sessionId"]
 
         r2 = client.post(
             f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+            params={"chunkNumber": 0, "chunkMd5": hashlib.md5(sample_file.read_bytes()).hexdigest()},
             files={"file": sample_file.open("rb")},
             headers=auth_headers,
         )
@@ -54,7 +66,8 @@ class TestUploadStatus:
             "parentId": created_folder["id"],
             "fileName": "status_test.bin",
             "fileSize": 5242880 * 3,
-            "totalChunks": 3,
+            "md5Hash": "a" * 32,
+
         }, headers=auth_headers)
         session_id = r.json()["data"]["sessionId"]
 
@@ -71,12 +84,14 @@ class TestCompleteUpload:
             "parentId": created_folder["id"],
             "fileName": f"complete_{uuid.uuid4().hex[:6]}.txt",
             "fileSize": file_size,
-            "totalChunks": 1,
+            "md5Hash": hashlib.md5(sample_file.read_bytes()).hexdigest(),
+
         }, headers=auth_headers)
         session_id = r.json()["data"]["sessionId"]
 
         client.post(
             f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+            params={"chunkNumber": 0, "chunkMd5": hashlib.md5(sample_file.read_bytes()).hexdigest()},
             files={"file": sample_file.open("rb")},
             headers=auth_headers,
         )
@@ -89,7 +104,8 @@ class TestCompleteUpload:
             "parentId": created_folder["id"],
             "fileName": "incomplete.bin",
             "fileSize": 5242880 * 2,
-            "totalChunks": 2,
+            "md5Hash": "a" * 32,
+
         }, headers=auth_headers)
         session_id = r.json()["data"]["sessionId"]
         # Don't upload any chunks
@@ -103,7 +119,8 @@ class TestCancelUpload:
             "parentId": created_folder["id"],
             "fileName": "cancel_test.bin",
             "fileSize": 5242880,
-            "totalChunks": 1,
+            "md5Hash": "a" * 32,
+
         }, headers=auth_headers)
         session_id = r.json()["data"]["sessionId"]
         r2 = client.post(f"/api/v1/upload/{session_id}/cancel", headers=auth_headers)
@@ -111,15 +128,17 @@ class TestCancelUpload:
 
 
 class TestInstantUpload:
-    def test_instant_upload_not_found(self, client, auth_headers, created_folder):
-        r = client.post("/api/v1/upload/instant", json={
+    def test_init_miss_creates_multipart_session(self, client, auth_headers, created_folder):
+        r = client.post("/api/v1/upload/init", json={
             "parentId": created_folder["id"],
             "fileName": "instant_test.txt",
             "fileSize": 100,
             "md5Hash": "a" * 32,
         }, headers=auth_headers)
-        # Should return 419010 (no matching file) — this is normal
-        assert_api_error(r, 419010)
+        data = assert_api_ok(r)
+        assert data["mode"] == "MULTIPART"
+        assert data["totalChunks"] == 1
+        assert "fileId" not in data
 
     def test_instant_upload_success(self, client, auth_headers, created_folder, sample_file):
         """Second upload of same content should succeed via deduplication (秒传)."""
@@ -133,25 +152,27 @@ class TestInstantUpload:
             "fileName": f"orig_{uuid.uuid4().hex[:6]}.txt",
             "fileSize": file_size,
             "md5Hash": md5,
-            "totalChunks": 1,
+
         }, headers=auth_headers)
         session_id = r.json()["data"]["sessionId"]
         client.post(
             f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+            params={"chunkNumber": 0, "chunkMd5": hashlib.md5(sample_file.read_bytes()).hexdigest()},
             files={"file": sample_file.open("rb")},
             headers=auth_headers,
         )
         client.post(f"/api/v1/upload/{session_id}/complete", headers=auth_headers)
 
         # Now instant upload the same content — should find existing file
-        r2 = client.post("/api/v1/upload/instant", json={
+        r2 = client.post("/api/v1/upload/init", json={
             "parentId": created_folder["id"],
             "fileName": f"instant_{uuid.uuid4().hex[:6]}.txt",
             "fileSize": file_size,
             "md5Hash": md5,
         }, headers=auth_headers)
         data = assert_api_ok(r2)
-        assert "fileId" in data
+        assert data["mode"] == "INSTANT"
+        assert set(data) == {"mode", "fileId"}
 
 
 class TestUploadChunkIdempotent:
@@ -162,18 +183,21 @@ class TestUploadChunkIdempotent:
             "parentId": created_folder["id"],
             "fileName": f"idem_{uuid.uuid4().hex[:6]}.txt",
             "fileSize": file_size,
-            "totalChunks": 1,
+            "md5Hash": hashlib.md5(sample_file.read_bytes()).hexdigest(),
+
         }, headers=auth_headers)
         session_id = r.json()["data"]["sessionId"]
 
         # Upload chunk 0 twice — second call should be idempotent (200)
         client.post(
             f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+            params={"chunkNumber": 0, "chunkMd5": hashlib.md5(sample_file.read_bytes()).hexdigest()},
             files={"file": sample_file.open("rb")},
             headers=auth_headers,
         )
         r2 = client.post(
             f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+            params={"chunkNumber": 0, "chunkMd5": hashlib.md5(sample_file.read_bytes()).hexdigest()},
             files={"file": sample_file.open("rb")},
             headers=auth_headers,
         )
@@ -188,6 +212,7 @@ class TestQuotaExceeded:
             "parentId": created_folder["id"],
             "fileName": "huge.bin",
             "fileSize": 9999999999999,  # ~9TB, exceeds default 10GB quota
-            "totalChunks": 1,
+            "md5Hash": "a" * 32,
+
         }, headers=auth_headers)
         assert_api_error(r, 419001)

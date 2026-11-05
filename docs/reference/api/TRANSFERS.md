@@ -4,7 +4,7 @@
 
 ## 三、文件上传 `/api/v1/upload`
 
-### 3.1 初始化上传会话
+### 3.1 统一初始化上传
 
 ```
 POST /api/v1/upload/init
@@ -17,26 +17,40 @@ Authorization: Bearer <accessToken>
   "parentId": 10,                // 可选，目标文件夹 ID；null 表示根目录
   "fileName": "report.pdf",     // 必填
   "fileSize": 10485760,         // 必填，文件总大小（字节），可为 0
-  "md5Hash": "d41d8cd...",      // 可选，完整文件 MD5
-  "totalChunks": 3              // 必填，分片总数；0 字节文件传 0
+  "md5Hash": "d41d8cd98f00b204e9800998ecf8427e" // 必填，32 位十六进制完整文件 MD5
 }
 ```
 
-> 当前服务端分片大小为 5MB。0 字节文件应使用 `fileSize: 0` 和 `totalChunks: 0` 初始化，会话创建后直接调用 `complete`，不上传分片。
+服务端先完成身份、目录、权限、名称及配额检查，再核验秒传候选。有效候选直接创建文件并返回 `INSTANT`；未命中则创建会话并返回 `MULTIPART`。两种结果仅包含各自字段。请求不再包含 `totalChunks`，由服务端按 5 MiB（5242880 字节）向上取整计算；客户端按响应的 `chunkSize`、`totalChunks` 分片。摘要接受大小写，内部统一保存小写。
 
-**Response `200`:**
+零字节文件也使用此接口。返回 `MULTIPART` 时 `totalChunks` 为 0，直接调用 `complete`，不上传分片；返回 `INSTANT` 时已经完成。
+
+**Response `200`（分片上传）:**
 ```json
 {
   "code": 200,
   "messageKey": "common.success",
   "messageParams": {},
   "data": {
+    "mode": "MULTIPART",
     "sessionId": "a1b2c3d4-e5f6-...",
     "chunkSize": 5242880,
-    "totalChunks": 3
+    "totalChunks": 2
   }
 }
 ```
+
+**Response `200`（秒传完成）:**
+```json
+{
+  "code": 200,
+  "messageKey": "common.success",
+  "messageParams": {},
+  "data": {"mode": "INSTANT", "fileId": 43}
+}
+```
+
+客户端必须拒绝未知 `mode`、缺少必要字段、分支字段混用或不合法分片形状的响应，不能将其视为完成。
 
 **Response `419001`（配额超限）:**
 ```json
@@ -63,7 +77,7 @@ Content-Type: multipart/form-data
 |------|------|:--:|------|
 | file | File | 是 | 分片文件数据 |
 | chunkNumber | int | 是 | 分片序号，从 0 开始 |
-| chunkMd5 | String | 否 | 分片 MD5 校验值 |
+| chunkMd5 | String | 是 | 当前分片内容的 32 位十六进制 MD5 |
 
 **Response `200`:**
 ```json
@@ -77,7 +91,7 @@ Content-Type: multipart/form-data
 }
 ```
 
-> 同一分片重复上传会被自动忽略。服务端使用 Redis bitmap 记录已接收分片，bitmap 有效期为 24 小时。
+> 服务端检查分片的预期长度及实际 MD5，验证后才更新进度。同一编号重复上传会核验已存分片，相同内容幂等返回，不同内容返回 `419007` 且保留原分片。服务端使用 Redis bitmap 记录已接收分片，bitmap 有效期为 24 小时。
 
 ---
 
@@ -117,7 +131,7 @@ Authorization: Bearer <accessToken>
 - `totalChunks`
 - `chunkSize`
 
-恢复时先调用 `GET /api/v1/upload/{sessionId}/status`，只补传 `missingChunks` 中的分片，全部分片完成后再调用 `complete`。当前前端和 Tauri 客户端均按 24 小时窗口保存可续传上传记录。
+恢复时先调用 `GET /api/v1/upload/{sessionId}/status`，只补传 `missingChunks` 中的分片，全部分片完成后再调用 `complete`。合法会话恢复时不再次初始化；`complete` 响应丢失时仍用原会话幂等恢复。会话失效后才重新调用统一 `/init`，并处理 `INSTANT` 和 `MULTIPART` 两种结果。当前 Web 和 Tauri 客户端均按 24 小时窗口保存可续传上传记录。
 
 ---
 
@@ -177,55 +191,11 @@ Authorization: Bearer <accessToken>
 
 ---
 
-### 3.6 秒传
+### 3.6 秒传核验与升级
 
-如果文件 MD5 与服务端已有文件匹配，直接创建记录而不需要上传数据。
+秒传由 `/init` 自动尝试。按 MD5 和文件大小查找候选，再流式读取源对象核验实际大小与摘要；候选不存在或内容不符属于正常未命中，返回 `MULTIPART`，存储服务故障仍返回存储错误。秒传不创建上传会话；文件提交后才累计容量，并沿用缩略图及团队 `UPLOAD_INSTANT` 审计。会话初始化不累计容量。
 
-```
-POST /api/v1/upload/instant
-Authorization: Bearer <accessToken>
-```
-
-**Request Body:**
-```json
-{
-  "parentId": 10,
-  "fileName": "report.pdf",
-  "fileSize": 10485760,
-  "md5Hash": "d41d8cd98f00b204e9800998ecf8427e"
-}
-```
-
-**Response `200`:**
-```json
-{
-  "code": 200,
-  "messageKey": "common.success",
-  "messageParams": {},
-  "data": {
-    "fileId": 43,
-    "instant": true
-  }
-}
-```
-
-**Response `419001`（配额超限）:**
-```json
-{
-  "code": 419001,
-  "messageKey": "error.storageQuotaExceeded",
-  "messageParams": {}
-}
-```
-
-**Response `419010`（无匹配文件，需走分片上传）:**
-```json
-{
-  "code": 419010,
-  "messageKey": "error.instantUploadNotFound",
-  "messageParams": {}
-}
-```
+个人及团队的 `/upload/instant` 已删除，已认证请求返回 HTTP `404`、API `404`。`419010` 已停用并保留编号，不得复用。旧客户端须与后端协调升级：只调用一次 `/init`，移除请求 `totalChunks` 和秒传未命中回退逻辑。秒传资源复用范围不变，MD5 不作为内容所有权证明。
 
 ---
 
@@ -363,3 +333,17 @@ Authorization: Bearer <accessToken>
 **Response:** 二进制流，`Content-Type: image/jpeg`，`Content-Disposition: inline`，`Cache-Control: private, max-age=86400`。
 
 ---
+
+### 上传完整性与恢复约定
+
+`init.md5Hash` 与 `chunkMd5` 必须是 32 位十六进制摘要；缺失或格式非法返回 `400`。不满足摘要和分片形状约定的旧会话，在状态、分片和完成接口返回 `419006`，客户端必须重新初始化。旧客户端需要与后端协调升级。
+
+合并时服务端流式计算实际字节数和整文件 MD5，通过后才创建文件记录；零字节文件仍核验空内容 MD5。分片与会话完成使用数据库锁串行协调。临时分片和位图保留到数据库提交成功，校验失败保留续传数据，回滚清理本次最终对象。
+
+| 错误码 | 语义 key | 客户端恢复 |
+|--------|----------|------------|
+| 419007 | `error.chunkMd5Mismatch` | 停止当前上传，保留会话，允许重试分片 |
+| 419016 | `error.fileMd5Mismatch` | 停止自动重试，取消旧会话，用户重试时重新计算摘要和初始化 |
+| 419017 | `error.uploadSizeMismatch` | 与整文件摘要不匹配采用相同恢复流程 |
+
+流式上传始终计算实际大小与 MD5；调用方提供摘要时必须匹配。网络和存储暂时故障保留分片上传的续传状态。

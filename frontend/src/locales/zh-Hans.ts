@@ -1028,6 +1028,11 @@ export default {
     daysAgo: "{count} 天前",
   },
   error: {
+    chunkUploadInvalid: "上传会话无效，请重新上传",
+    chunkMd5Mismatch: "分片校验失败，请重试上传",
+    fileMd5Mismatch: "文件校验失败，请重新上传",
+    uploadSizeMismatch: "上传内容大小不符，请重新上传",
+
     internal: "服务暂时不可用，请稍后重试",
     validation: "提交的信息有误：{fields}",
     methodNotAllowed: "不支持此操作",
@@ -1050,7 +1055,6 @@ export default {
     invalidTagColor: "请选择有效的标签颜色",
     rateLimited: "操作过于频繁，请稍后重试",
     storageQuotaExceeded: "存储空间不足",
-    instantUploadNotFound: "未找到可秒传的文件",
     invalidShareCode: "分享码无效",
     sharePasswordRequired: "请输入分享密码",
     shareExpired: "分享链接已过期",

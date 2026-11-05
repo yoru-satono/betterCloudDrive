@@ -73,4 +73,15 @@ class ExpiredUploadSessionCleanupTaskTest {
         assertThatCode(() -> task.cleanupExpiredUploadSessions()).doesNotThrowAnyException();
         verify(uploadSessionRepository, never()).save(any());
     }
+    @Test
+    void shouldUseTeamPrefixForExpiredTeamSessions() {
+        UploadSessionEntity session = session("team-session", 2L, 3);
+        session.setTeamId(10L);
+        when(uploadSessionRepository.findByStatusAndCreatedAtLessThanEqual(eq(1), any(LocalDateTime.class)))
+                .thenReturn(List.of(session));
+        task.cleanupExpiredUploadSessions();
+        verify(storageService).deleteParts("uploads/teams/10/team-session/chunks", 3);
+        verify(redisTemplate).delete("upload:bitmap:team-session");
+    }
+
 }

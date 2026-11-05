@@ -32,6 +32,17 @@ describe('API endpoint contracts', () => {
     localStorage.clear()
   })
 
+  it.each([
+    {}, { mode: 'UNKNOWN' }, { mode: 'INSTANT' }, { mode: 'INSTANT', fileId: 0 },
+    { mode: 'INSTANT', fileId: 1, sessionId: 'unexpected' },
+    { mode: 'MULTIPART', sessionId: 's', chunkSize: 0, totalChunks: 1 },
+    { mode: 'MULTIPART', sessionId: 's', chunkSize: 5 },
+    { mode: 'MULTIPART', sessionId: 's', chunkSize: 5, totalChunks: 2 },
+  ])('rejects an invalid initialization result %j', async result => {
+    apiMock.post.mockResolvedValueOnce({ data: { code: 200, data: result } })
+    await expect(uploadApi.initUpload(null, 'x', 5, 'a'.repeat(32))).rejects.toThrow()
+  })
+
   it('uses registration code and verified registration routes', async () => {
     await authApi.sendRegistrationCode('user@test.local')
     expect(apiMock.post).toHaveBeenCalledWith('/auth/register-code/send', { email: 'user@test.local' })
@@ -50,32 +61,25 @@ describe('API endpoint contracts', () => {
   })
 
   it('uses backend upload routes and md5Hash field', async () => {
-    await uploadApi.instantUpload(10, 'a.txt', 12, 'hash')
-    expect(apiMock.post).toHaveBeenCalledWith(
-      '/upload/instant',
-      { parentId: 10, fileName: 'a.txt', fileSize: 12, md5Hash: 'hash' },
-      { suppressToast: true },
-    )
-
-    await uploadApi.initMultipart(10, 'a.txt', 12, 'hash', 2)
-    expect(apiMock.post).toHaveBeenCalledWith(
-      '/upload/init',
-      { parentId: 10, fileName: 'a.txt', fileSize: 12, md5Hash: 'hash', totalChunks: 2 },
-      { suppressToast: true },
-    )
-
-    await uploadApi.initMultipart(null, 'empty.txt', 0, 'd41d8cd98f00b204e9800998ecf8427e', 0)
-    expect(apiMock.post).toHaveBeenCalledWith(
-      '/upload/init',
-      { parentId: null, fileName: 'empty.txt', fileSize: 0, md5Hash: 'd41d8cd98f00b204e9800998ecf8427e', totalChunks: 0 },
-      { suppressToast: true },
-    )
+    apiMock.post.mockResolvedValueOnce({ data: { code: 200, data: { mode: 'INSTANT', fileId: 7 } } })
+    const instant = await uploadApi.initUpload(10, 'a.txt', 12, 'hash')
+    expect(instant.data.data).toEqual({ mode: 'INSTANT', fileId: 7 })
+    expect(apiMock.post).toHaveBeenLastCalledWith('/upload/init',
+      { parentId: 10, fileName: 'a.txt', fileSize: 12, md5Hash: 'hash' }, { suppressToast: true })
+    apiMock.post.mockResolvedValueOnce({ data: { code: 200, data: { mode: 'MULTIPART', sessionId: 'session-1', chunkSize: 5242880, totalChunks: 1 } } })
+    await uploadApi.initUpload(10, 'a.txt', 12, 'hash')
+    expect(apiMock.post).toHaveBeenLastCalledWith('/upload/init',
+      { parentId: 10, fileName: 'a.txt', fileSize: 12, md5Hash: 'hash' }, { suppressToast: true })
+    apiMock.post.mockResolvedValueOnce({ data: { code: 200, data: { mode: 'MULTIPART', sessionId: 'empty', chunkSize: 5242880, totalChunks: 0 } } })
+    await uploadApi.initUpload(null, 'empty.txt', 0, 'd41d8cd98f00b204e9800998ecf8427e')
+    expect(apiMock.post).toHaveBeenLastCalledWith('/upload/init',
+      { parentId: null, fileName: 'empty.txt', fileSize: 0, md5Hash: 'd41d8cd98f00b204e9800998ecf8427e' }, { suppressToast: true })
 
     await uploadApi.uploadChunk('session-1', 1, new Blob(['x']))
     expect(apiMock.post).toHaveBeenCalledWith(
       '/upload/session-1/chunk',
       expect.any(FormData),
-      expect.objectContaining({ params: { chunkNumber: 1 }, suppressToast: true }),
+      expect.objectContaining({ params: { chunkNumber: 1, chunkMd5: '9dd4e461268c8034f5c8564e155c67a6' }, suppressToast: true }),
     )
 
     await uploadApi.completeMultipart('session-1')
@@ -401,10 +405,11 @@ describe('API endpoint contracts', () => {
   })
 
   it('uses team upload and preview routes', async () => {
-    await uploadApi.initMultipart(null, 'team.txt', 12, 'hash', 1, undefined, { teamId: 10 })
+    apiMock.post.mockResolvedValueOnce({ data: { code: 200, data: { mode: 'MULTIPART', sessionId: 'team-session', chunkSize: 5242880, totalChunks: 1 } } })
+    await uploadApi.initUpload(null, 'team.txt', 12, 'hash', { teamId: 10 })
     expect(apiMock.post).toHaveBeenCalledWith(
       '/teams/10/upload/init',
-      { parentId: null, fileName: 'team.txt', fileSize: 12, md5Hash: 'hash', totalChunks: 1 },
+      { parentId: null, fileName: 'team.txt', fileSize: 12, md5Hash: 'hash' },
       { suppressToast: true },
     )
 
@@ -412,7 +417,7 @@ describe('API endpoint contracts', () => {
     expect(apiMock.post).toHaveBeenCalledWith(
       '/teams/10/upload/team-session/chunk',
       expect.any(FormData),
-      expect.objectContaining({ params: { chunkNumber: 0 }, suppressToast: true }),
+      expect.objectContaining({ params: { chunkNumber: 0, chunkMd5: '9dd4e461268c8034f5c8564e155c67a6' }, suppressToast: true }),
     )
 
     await uploadApi.completeMultipart('team-session', { teamId: 10 })

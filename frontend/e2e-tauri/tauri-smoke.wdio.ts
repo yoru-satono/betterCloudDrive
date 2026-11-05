@@ -1,8 +1,11 @@
+import crypto from 'node:crypto'
 import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import {
+  authHeaders,
+  backendURL,
   createFolder,
   createTeam,
   createTeamFolder,
@@ -80,7 +83,12 @@ describe('Tauri desktop window smoke', () => {
       const emptyUploadName = 'empty.txt'
       const folderName = await uploadFolderViaPicker(uniqueName('tauri-folder'), emptyUploadName, '')
 
-      await setAuthTokens('expired-access-token', user.refreshToken)
+      const expiredToken = await createExpiredAccessToken(user.accessToken)
+      const expiredResponse = await request.get(`${backendURL}/api/v1/auth/me`, {
+        headers: authHeaders(expiredToken),
+      })
+      assert.equal((await expiredResponse.json()).code, 401001)
+      await setAuthTokens(expiredToken, user.refreshToken)
       const partial = fileContents.slice(0, 8)
       await fs.writeFile(path.join(downloadDir, `${file.fileName}.part`), partial)
       await downloadFromContextMenu(file.fileName)
@@ -357,4 +365,20 @@ async function expectApiChildFile(
     timeout: 20_000,
     timeoutMsg: `Uploaded folder ${folderName} did not contain ${childName}`,
   })
+}
+
+// Expiry and malformed credentials have intentionally different recovery semantics.
+async function createExpiredAccessToken(accessToken: string) {
+  const config = process.env.JWT_ACCESS_SECRET ? '' : await fs.readFile(path.resolve('..', 'config', 'env-files', 'security.env'), 'utf8')
+  const configured = config.match(/^JWT_ACCESS_SECRET=(.+)$/m)?.[1]?.trim().replace(/^["']|["']$/g, '')
+  const secret = process.env.JWT_ACCESS_SECRET || configured
+  assert.ok(secret, 'JWT_ACCESS_SECRET must be configured for the expiry scenario')
+  const [header, encodedPayload] = accessToken.split('.')
+  const algorithm = JSON.parse(Buffer.from(header, 'base64url').toString()).alg as string
+  const hash = { HS256: 'sha256', HS384: 'sha384', HS512: 'sha512' }[algorithm]
+  assert.ok(hash, 'The expiry fixture requires a supported HMAC token')
+  const now = Math.floor(Date.now() / 1000)
+  const payload = { ...JSON.parse(Buffer.from(encodedPayload, 'base64url').toString()), iat: now - 120, exp: now - 60 }
+  const input = `${header}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
+  return `${input}.${crypto.createHmac(hash, Buffer.from(secret, 'base64')).update(input).digest('base64url')}`
 }

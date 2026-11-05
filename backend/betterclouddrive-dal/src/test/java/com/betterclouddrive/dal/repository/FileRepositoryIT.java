@@ -55,6 +55,24 @@ class FileRepositoryIT {
     private TagRepository tagRepository;
 
     @Test
+    void instantCandidatesMatchCaseInsensitiveDigestAndExactSize() {
+        var matching = file(1L, null, null, "matching", false);
+        matching.setMd5Hash("A".repeat(32));
+        matching.setFileSize(5L);
+        repository.save(matching);
+        var wrongSize = file(2L, null, null, "wrong-size", false);
+        wrongSize.setMd5Hash("a".repeat(32));
+        wrongSize.setFileSize(6L);
+        repository.save(wrongSize);
+        var deleted = file(3L, null, null, "deleted", true);
+        deleted.setMd5Hash("a".repeat(32));
+        deleted.setFileSize(5L);
+        repository.save(deleted);
+        assertThat(repository.findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc("a".repeat(32), 5L))
+                .extracting(FileEntity::getFileName).containsExactly("matching");
+    }
+
+    @Test
     void personalQueriesIsolateOwnersTeamsAndSoftDeletedFiles() {
         repository.save(file(1L, null, null, "visible.txt", false));
         repository.save(file(2L, null, null, "other-user.txt", false));

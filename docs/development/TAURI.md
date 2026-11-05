@@ -81,3 +81,7 @@ Linux 推荐运行 `./scripts/verify-all.sh --module tauri`，脚本会临时放
 | Tauri 配置/plugin/capability | E2E build + release build |
 
 共享 Vue 页面规范见 [Web 开发指南](WEB.md)，整体客户端边界见[客户端架构](../architecture/CLIENTS.md)。
+
+桌面 E2E 的 API 请求与连接设置断言统一使用 `E2E_BACKEND_URL`（默认 `http://127.0.0.1:8080`），Web 分享地址使用 `E2E_BASE_URL`（默认 `http://127.0.0.1:3000`）。宿主机端口冲突时可通过进程环境覆盖，并对应设置 Compose 的 `HOST_BACKEND_PORT`。
+
+下载刷新场景使用真实签名的过期 JWT，并先验证服务端返回 `401001`；测试签名密钥从进程 `JWT_ACCESS_SECRET` 或本地 `config/env-files/security.env` 读取。格式非法的 Token 用于验证退出登录，不用于模拟过期刷新。

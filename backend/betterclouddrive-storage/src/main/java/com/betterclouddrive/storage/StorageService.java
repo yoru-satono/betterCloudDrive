@@ -18,8 +18,17 @@ public interface StorageService {
     /** Upload a chunk/part for later composition. Returns the part object key. */
     String uploadPart(String prefix, int partNumber, InputStream data, long size);
 
-    /** Compose all parts into the final object, then delete the parts. */
-    void composeParts(String finalObjectKey, String sourcePrefix, int totalParts);
+    /** Compose parts and return their actual digest. The caller owns cleanup after commit. */
+    ContentDigest composeParts(String finalObjectKey, String sourcePrefix, int totalParts);
+
+    /** Read actual object bytes. Missing objects must be distinguished from storage failures. */
+    default ContentDigest inspectObject(String objectKey) {
+        try (InputStream input = downloadObject(objectKey)) {
+            return ContentDigest.read(input);
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Failed to inspect storage content", e);
+        }
+    }
 
     /** Delete remaining parts (for cancelled/aborted uploads). */
     void deleteParts(String prefix, int maxParts);

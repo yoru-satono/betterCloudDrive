@@ -2,6 +2,7 @@ package com.betterclouddrive.web.controller;
 
 import com.betterclouddrive.common.constant.ApiCode;
 import com.betterclouddrive.common.dto.ApiResponse;
+import com.betterclouddrive.common.dto.UploadInitResult;
 import com.betterclouddrive.common.dto.PageResult;
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.dal.entity.FileEntity;
@@ -12,7 +13,6 @@ import com.betterclouddrive.dal.entity.TagEntity;
 import com.betterclouddrive.dal.entity.TeamMemberEntity;
 import com.betterclouddrive.dal.entity.TeamOperationLogEntity;
 import com.betterclouddrive.dal.entity.TeamTaskEntity;
-import com.betterclouddrive.dal.entity.UploadSessionEntity;
 import com.betterclouddrive.service.FavoriteService;
 import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.FileService;
@@ -690,19 +690,14 @@ public class TeamController {
     }
 
     @PostMapping("/{teamId}/upload/init")
-    public ApiResponse<Map<String, Object>> initUpload(
+    public ApiResponse<UploadInitResult> initUpload(
             @CurrentUser UserPrincipal user,
             @PathVariable Long teamId,
             @Valid @RequestBody InitUploadRequest request) {
-        teamPermissionService.requireParentWrite(user.getUserId(), teamId, request.getParentId());
-        UploadSessionEntity session = uploadService.initTeamUpload(
+        UploadInitResult result = uploadService.initTeamUpload(
                 teamId, user.getUserId(), request.getParentId(), request.getFileName(),
-                request.getFileSize(), request.getMd5Hash(), request.getTotalChunks());
-        return ApiResponse.success(Map.of(
-                "sessionId", session.getId(),
-                "chunkSize", session.getChunkSize(),
-                "totalChunks", session.getTotalChunks()
-        ));
+                request.getFileSize(), request.getMd5Hash());
+        return ApiResponse.success(result);
     }
 
     @PostMapping("/{teamId}/upload/{sessionId}/chunk")
@@ -711,12 +706,12 @@ public class TeamController {
             @PathVariable Long teamId,
             @PathVariable String sessionId,
             @RequestParam int chunkNumber,
-            @RequestParam(required = false) String chunkMd5,
+            @RequestParam String chunkMd5,
             @RequestParam("file") MultipartFile file) {
         byte[] bytes;
         try {
             bytes = file.getBytes();
-        } catch (Exception e) {
+        } catch (java.io.IOException e) {
             throw new RuntimeException("Failed to read chunk data", e);
         }
         uploadService.uploadTeamChunk(teamId, sessionId, user.getUserId(), chunkNumber, bytes, chunkMd5);
@@ -747,18 +742,6 @@ public class TeamController {
             @PathVariable String sessionId) {
         uploadService.cancelTeamUpload(teamId, sessionId, user.getUserId());
         return ApiResponse.success();
-    }
-
-    @PostMapping("/{teamId}/upload/instant")
-    public ApiResponse<Map<String, Object>> instantUpload(
-            @CurrentUser UserPrincipal user,
-            @PathVariable Long teamId,
-            @Valid @RequestBody InstantUploadRequest request) {
-        teamPermissionService.requireParentWrite(user.getUserId(), teamId, request.getParentId());
-        Long fileId = uploadService.instantTeamUpload(
-                teamId, user.getUserId(), request.getParentId(), request.getFileName(),
-                request.getFileSize(), request.getMd5Hash());
-        return ApiResponse.success(Map.of("fileId", fileId, "instant", true));
     }
 
     @PostMapping("/{teamId}/shares")

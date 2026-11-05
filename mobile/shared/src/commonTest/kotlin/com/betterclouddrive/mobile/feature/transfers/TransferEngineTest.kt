@@ -26,6 +26,7 @@ import kotlinx.io.Buffer
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class TransferEngineTest {
     @Test
@@ -37,12 +38,10 @@ class TransferEngineTest {
         var completeCalls = 0
         val backend = authenticatedBackend(MockEngine { request ->
             when {
-                request.url.encodedPath.endsWith("/upload/instant") -> jsonResponse(
-                    """{"code":419010,"messageKey":"error.instantUploadMiss"}""",
-                )
                 request.url.encodedPath.endsWith("/upload/init") -> {
                     initCalls++
-                    jsonResponse("""{"code":200,"data":{"sessionId":"session-1","chunkSize":5242880,"totalChunks":2}}""")
+                    assertFalse((request.body as io.ktor.http.content.TextContent).text.contains("totalChunks"))
+                    jsonResponse("""{"code":200,"data":{"mode":"MULTIPART","sessionId":"session-1","chunkSize":5242880,"totalChunks":2}}""")
                 }
                 request.url.encodedPath.endsWith("/status") -> {
                     statusCalls++
@@ -85,8 +84,8 @@ class TransferEngineTest {
     @Test
     fun zeroByteUploadCanFinishThroughInstantUpload() = runTest {
         val backend = authenticatedBackend(MockEngine { request ->
-            assertEquals("/api/v1/upload/instant", request.url.encodedPath)
-            jsonResponse("""{"code":200,"data":{"fileId":5,"instant":true}}""")
+            assertEquals("/api/v1/upload/init", request.url.encodedPath)
+            jsonResponse("""{"code":200,"data":{"mode":"INSTANT","fileId":5}}""")
         })
         val repository = TransferRepository(FakeTransferDao(), now = { 1 })
         val task = repository.enqueueUpload(
@@ -236,6 +235,116 @@ class TransferEngineTest {
         assertEquals(1, files.deleteCount)
     }
 
+    @Test
+    fun uploadIntegrityFailuresStopAndRestartOnlyWhenNecessary() = runTest {
+        for (code in listOf(419007, 419016, 419017)) {
+            var initCalls = 0
+            var cancellations = 0
+            var fail = true
+            val backend = authenticatedBackend(MockEngine { request ->
+                when {
+                    request.url.encodedPath.endsWith("/init") -> {
+                        initCalls++
+                        jsonResponse("""{"code":200,"data":{"mode":"MULTIPART","sessionId":"session-$initCalls","chunkSize":5242880,"totalChunks":1}}""")
+                    }
+                    request.url.encodedPath.endsWith("/status") -> jsonResponse("""{"code":200,"data":{"sessionId":"session-$initCalls","totalChunks":1,"uploadedChunks":0,"missingChunks":[0]}}""")
+                    request.url.encodedPath.endsWith("/chunk") -> {
+                        assertEquals("test-part-md5", request.url.parameters["chunkMd5"])
+                        if (fail && code == 419007) jsonResponse("""{"code":419007,"messageKey":"error.chunkMd5Mismatch"}""")
+                        else jsonResponse("""{"code":200,"data":{"chunkNumber":0}}""")
+                    }
+                    request.url.encodedPath.endsWith("/complete") -> if (fail) jsonResponse("""{"code":$code,"messageKey":"error.fileMd5Mismatch"}""")
+                        else jsonResponse("""{"code":200,"data":{"fileId":99}}""")
+                    request.url.encodedPath.endsWith("/cancel") -> { cancellations++; jsonResponse("""{"code":200}""") }
+                    else -> error("Unexpected upload route")
+                }
+            })
+            val repository = TransferRepository(FakeTransferDao(), now = { 1 })
+            val task = repository.enqueueUpload(backend.serverBaseUrl, PickedDocument("source", "hello", 5), TransferScope.Personal())
+            val engine = TransferEngine(backend, repository, FakeTransferFiles(source = "hello".encodeToByteArray()))
+            assertEquals(TransferRunResult.COMPLETE, engine.run(task.id))
+            assertEquals(TransferStatus.FAILED, repository.find(task.id)?.status)
+            assertEquals(if (code == 419007) "session-1" else null, repository.find(task.id)?.sessionId)
+            assertEquals(if (code == 419007) 0 else 1, cancellations)
+            assertEquals(TransferRunResult.COMPLETE, engine.run(task.id)) // failed tasks do not retry automatically
+            fail = false
+            repository.update(task.id) { it.copy(status = TransferStatus.QUEUED) }
+            engine.run(task.id)
+            assertEquals(TransferStatus.SUCCEEDED, repository.find(task.id)?.status)
+            assertEquals(if (code == 419007) 1 else 2, initCalls)
+        }
+    }
+
+    @Test
+    fun uploadReplayAfterRefreshRetainsChunkDigest() = runTest {
+        var chunks = 0
+        var refreshes = 0
+        val backend = authenticatedBackend(MockEngine { request ->
+            when {
+                request.url.encodedPath.endsWith("/init") -> jsonResponse("""{"code":200,"data":{"mode":"MULTIPART","sessionId":"session","chunkSize":5242880,"totalChunks":1}}""")
+                request.url.encodedPath.endsWith("/status") -> jsonResponse("""{"code":200,"data":{"sessionId":"session","totalChunks":1,"uploadedChunks":0,"missingChunks":[0]}}""")
+                request.url.encodedPath.endsWith("/chunk") -> {
+                    chunks++
+                    assertEquals("test-part-md5", request.url.parameters["chunkMd5"])
+                    if (chunks == 1) jsonResponse("""{"code":401001,"messageKey":"error.tokenExpired"}""")
+                    else jsonResponse("""{"code":200,"data":{"chunkNumber":0}}""")
+                }
+                request.url.encodedPath.endsWith("/auth/refresh") -> { refreshes++; jsonResponse("""{"code":200,"data":{"accessToken":"new","refreshToken":"new-refresh","expiresIn":3600}}""") }
+                request.url.encodedPath.endsWith("/complete") -> jsonResponse("""{"code":200,"data":{"fileId":99}}""")
+                else -> error("Unexpected upload route")
+            }
+        })
+        val repository = TransferRepository(FakeTransferDao(), now = { 1 })
+        val task = repository.enqueueUpload(backend.serverBaseUrl, PickedDocument("source", "hello", 5), TransferScope.Personal())
+        TransferEngine(backend, repository, FakeTransferFiles(source = "hello".encodeToByteArray())).run(task.id)
+        assertEquals(TransferStatus.SUCCEEDED, repository.find(task.id)?.status)
+        assertEquals(2, chunks)
+        assertEquals(1, refreshes)
+    }
+
+    @Test
+    fun malformedInitializationResultsFailWithoutStartingATransfer() = runTest {
+        for (response in listOf(
+            """{"mode":"UNKNOWN"}""", """{"mode":"INSTANT"}""", """{"mode":"INSTANT","fileId":0}""",
+            """{"mode":"MULTIPART","sessionId":"s","chunkSize":5,"totalChunks":2}""",
+        )) {
+            var calls = 0
+            val backend = authenticatedBackend(MockEngine { request ->
+                assertEquals("/api/v1/upload/init", request.url.encodedPath)
+                calls++
+                jsonResponse("""{"code":200,"data":$response}""")
+            })
+            val repository = TransferRepository(FakeTransferDao(), now = { 1 })
+            val task = repository.enqueueUpload(backend.serverBaseUrl, PickedDocument("source", "hello", 5), TransferScope.Personal())
+            val result = TransferEngine(backend, repository, FakeTransferFiles(source = "hello".encodeToByteArray())).run(task.id)
+            assertEquals(TransferRunResult.COMPLETE, result)
+            assertEquals(TransferStatus.FAILED, repository.find(task.id)?.status)
+            assertEquals(null, repository.find(task.id)?.remoteResultFileId)
+            assertEquals(1, calls)
+        }
+    }
+
+    @Test
+    fun expiredRestoredSessionCanRestartAsInstantWithoutUploading() = runTest {
+        var initCalls = 0
+        var statusCalls = 0
+        val backend = authenticatedBackend(MockEngine { request ->
+            when {
+                request.url.encodedPath.endsWith("/expired/status") -> { statusCalls++; jsonResponse("""{"code":419006,"messageKey":"error.chunkUploadInvalid"}""") }
+                request.url.encodedPath.endsWith("/init") -> { initCalls++; jsonResponse("""{"code":200,"data":{"mode":"INSTANT","fileId":77}}""") }
+                else -> error("Unexpected transfer after instant initialization")
+            }
+        })
+        val repository = TransferRepository(FakeTransferDao(), now = { 1 })
+        val task = repository.enqueueUpload(backend.serverBaseUrl, PickedDocument("source", "hello", 5), TransferScope.Team(10))
+        repository.update(task.id) { it.copy(sessionId = "expired", md5Hash = "test-md5") }
+        TransferEngine(backend, repository, FakeTransferFiles(source = "hello".encodeToByteArray())).run(task.id)
+        assertEquals(TransferStatus.SUCCEEDED, repository.find(task.id)?.status)
+        assertEquals(77L, repository.find(task.id)?.remoteResultFileId)
+        assertEquals(1, initCalls)
+        assertEquals(1, statusCalls)
+    }
+
     private suspend fun authenticatedBackend(engine: MockEngine): NetworkTestFacade {
         val server = "https://drive.example.com"
         return NetworkTestFacade(
@@ -280,6 +389,7 @@ private class FakeTransferFiles(
     override suspend fun releaseReadable(sourceHandle: String) = Unit
     override suspend fun releaseWritable(destinationHandle: String) = Unit
     override suspend fun computeDigest(sourceHandle: String): FileDigest = FileDigest("test-md5", source.size.toLong())
+    override suspend fun computePartDigest(sourceHandle: String, offset: Long, length: Long): FileDigest = FileDigest("test-part-md5", length)
     override fun uploadPart(sourceHandle: String, offset: Long, length: Long, onBytes: (Long) -> Unit): InputProvider = InputProvider(length) {
         onBytes(length)
         Buffer().apply { write(source.copyOfRange(offset.toInt(), (offset + length).toInt())) }

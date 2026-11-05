@@ -157,26 +157,22 @@ def upload_team_file(client, headers, team_id, parent_id, sample_file, name=None
             "fileName": file_name,
             "fileSize": len(content),
             "md5Hash": md5,
-            "totalChunks": 1,
+
         },
         headers=headers,
     ))
-    session_id = init["sessionId"]
-    with sample_file.open("rb") as file_handle:
-        assert_api_ok(client.post(
-            f"/api/v1/teams/{team_id}/upload/{session_id}/chunk?chunkNumber=0",
-            files={"file": file_handle},
-            headers=headers,
-        ))
-    completed = assert_api_ok(client.post(
-        f"/api/v1/teams/{team_id}/upload/{session_id}/complete",
-        headers=headers,
-    ))
-    return {
-        "fileId": completed["fileId"],
-        "fileName": file_name,
-        "content": content,
-    }
+    if init["mode"] == "INSTANT":
+        file_id = init["fileId"]
+    else:
+        assert init["mode"] == "MULTIPART"
+        session_id = init["sessionId"]
+        for number in range(init["totalChunks"]):
+            part = content[number * init["chunkSize"]:(number + 1) * init["chunkSize"]]
+            assert_api_ok(client.post(f"/api/v1/teams/{team_id}/upload/{session_id}/chunk",
+                                     params={"chunkNumber": number, "chunkMd5": hashlib.md5(part).hexdigest()},
+                                     files={"file": (file_name, part)}, headers=headers))
+        file_id = assert_api_ok(client.post(f"/api/v1/teams/{team_id}/upload/{session_id}/complete", headers=headers))["fileId"]
+    return {"fileId": file_id, "fileName": file_name, "content": content, "uploadMode": init["mode"]}
 
 
 def assert_team_audit_action(client, headers, team_id, action):
@@ -371,7 +367,7 @@ class TestTeamLifecycle:
             "INVITE_REJECT",
             "INVITE_ACCEPT",
             "FILE_CREATE_FOLDER",
-            "UPLOAD_COMPLETE",
+            "UPLOAD_INSTANT" if uploaded["uploadMode"] == "INSTANT" else "UPLOAD_COMPLETE",
             "MEMBER_ROLE_UPDATE",
             "SHARE_CREATE",
             "FILE_DELETE",
@@ -676,7 +672,7 @@ class TestTeamFilesSharesTagsFavoritesAudit:
 
         for action in [
             "FILE_CREATE_FOLDER",
-            "UPLOAD_COMPLETE",
+            "UPLOAD_INSTANT" if uploaded["uploadMode"] == "INSTANT" else "UPLOAD_COMPLETE",
             "FILE_DELETE",
             "FILE_RESTORE",
             "SHARE_CREATE",

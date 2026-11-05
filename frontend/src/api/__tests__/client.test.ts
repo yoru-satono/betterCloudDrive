@@ -64,9 +64,9 @@ describe('api client', () => {
   })
 
   it('does not show a toast when suppressToast is set', async () => {
-    adapter.mockImplementation(apiResponse({ code: 419010, messageKey: 'error.instantUploadNotFound', messageParams: {} }))
+    adapter.mockImplementation(apiResponse({ code: 419007, messageKey: 'error.chunkMd5Mismatch', messageParams: {} }))
 
-    await expect(api.post('/upload/instant', {}, { suppressToast: true })).rejects.toBeTruthy()
+    await expect(api.post('/upload/session/chunk', {}, { suppressToast: true })).rejects.toBeTruthy()
     expect(toastError).not.toHaveBeenCalled()
   })
 

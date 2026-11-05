@@ -39,6 +39,10 @@ export interface RecycleBinItem {
   deletedAt: string
 }
 
+export type UploadInitResult =
+  | { mode: 'INSTANT'; fileId: number }
+  | { mode: 'MULTIPART'; sessionId: string; chunkSize: number; totalChunks: number }
+
 export interface UploadSession {
   sessionId: string
   chunkSize?: number

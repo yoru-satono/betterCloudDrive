@@ -68,12 +68,11 @@
 | POST | `/api/v1/teams/{teamId}/recycle-bin/{fileId}/restore` | 可写 | 从团队回收站恢复 |
 | DELETE | `/api/v1/teams/{teamId}/recycle-bin/{fileId}` | 可删除 | 永久删除单个回收站根项目 |
 | DELETE | `/api/v1/teams/{teamId}/recycle-bin` | OWNER/ADMIN | 清空团队回收站 |
-| POST | `/api/v1/teams/{teamId}/upload/init` | 父目录可写 | 初始化分片上传，Body 同个人上传 |
+| POST | `/api/v1/teams/{teamId}/upload/init` | 父目录可写 | 统一初始化，Body 及 INSTANT/MULTIPART 结果同个人上传 |
 | POST | `/api/v1/teams/{teamId}/upload/{sessionId}/chunk` | 上传会话所有者 | 上传分片 |
 | GET | `/api/v1/teams/{teamId}/upload/{sessionId}/status` | 上传会话所有者 | 查询上传状态 |
 | POST | `/api/v1/teams/{teamId}/upload/{sessionId}/complete` | 上传会话所有者 | 完成上传；支持幂等重试，重复调用返回同一 `fileId` |
 | POST | `/api/v1/teams/{teamId}/upload/{sessionId}/cancel` | 上传会话所有者 | 取消上传 |
-| POST | `/api/v1/teams/{teamId}/upload/instant` | 父目录可写 | 秒传 |
 | POST | `/api/v1/teams/{teamId}/download/{fileId}/ticket` | 可读 | 创建团队文件下载 ticket |
 | POST | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip/ticket` | 可读 | 创建团队文件夹 ZIP ticket |
 | POST | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip/tasks` | 可读 | 创建团队文件夹 ZIP 后台任务，返回 `TeamTask` |
@@ -81,7 +80,7 @@
 | GET | `/api/v1/teams/{teamId}/download/folders/{fileId}/zip?ticket=` | 可读或有效 ticket | 兼容旧客户端的同步 ZIP 下载，支持 Range |
 | GET | `/api/v1/teams/{teamId}/preview/{fileId}` | 可读 | 内联预览文件内容 |
 
-**错误码:** 400（名称或目标非法）、403（权限不足）、404001（文件不存在）、409001（同名冲突）、419001（团队配额不足）、419006/419007（上传状态或分片 MD5 错误）、419015（ZIP 超限）。
+**错误码:** 400（名称或目标非法）、403（权限不足）、404001（文件不存在）、409001（同名冲突）、419001（团队配额不足）、419006/419007（上传状态或分片 MD5 错误）、419016（整文件 MD5 不匹配）、419017（上传长度不符）、419015（ZIP 超限）。
 
 团队列表固定按 `name ASC, id ASC` 排序。团队目录的 `sortBy` 支持 `fileName`、`updatedAt`、`fileSize`，`order` 支持 `asc`、`desc`；非法值分别回退 `fileName` 和 `asc`。目录始终文件夹优先，选定字段同值时按名称、ID 升序，`updatedAt` 空值位于末尾。目录和搜索都先过滤当前用户不可读项目，再计算分页；搜索词会去除首尾空白，空查询返回空页，搜索结果按文件夹、名称、ID 稳定排序。
 
@@ -288,3 +287,5 @@ Authorization: Bearer <accessToken>
 **错误码:** 403（非团队成员）、404（团队不存在）。
 
 ---
+
+团队上传沿用[个人上传完整性与恢复约定](TRANSFERS.md#上传完整性与恢复约定)：完整文件和分片摘要必填，严格检查分片数量与长度，完成校验后才写文件记录，事务提交后清理临时分片；秒传先核验源对象实际内容。每次分片与完成操作均重新校验目标目录写权限。统一 `/init` 不接收 `totalChunks`；秒传命中直接返回 `INSTANT`，未命中返回 `MULTIPART` 及服务端计算的分片参数。旧 `/upload/instant` 已删除（HTTP/API `404`），`419010` 停用且不复用；后端与三端须协调升级。

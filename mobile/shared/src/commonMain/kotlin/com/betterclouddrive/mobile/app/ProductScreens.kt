@@ -568,6 +568,10 @@ private fun transferErrorKey(key: String): MobileString = when (key) {
     "error.network", "error.interrupted" -> MobileString.ErrorNetworkRetry
     "error.serverChanged" -> MobileString.ErrorServerChanged
     "error.invalidTransfer" -> MobileString.ErrorInvalidTransfer
+    "error.chunkUploadInvalid" -> MobileString.ErrorChunkUploadInvalid
+    "error.chunkMd5Mismatch" -> MobileString.ErrorChunkMd5Mismatch
+    "error.fileMd5Mismatch" -> MobileString.ErrorFileMd5Mismatch
+    "error.uploadSizeMismatch" -> MobileString.ErrorUploadSizeMismatch
     "error.fileUnavailable" -> MobileString.ErrorFileUnavailable
     "error.backgroundScheduling" -> MobileString.ErrorBackgroundScheduling
     else -> MobileString.ErrorTransfer

@@ -1,12 +1,12 @@
 package com.betterclouddrive.service;
 
-import com.betterclouddrive.dal.entity.UploadSessionEntity;
+import com.betterclouddrive.common.dto.UploadInitResult;
 import java.io.InputStream;
 import java.util.Map;
 
 public interface UploadService {
-    /** Initialize a chunked upload session */
-    UploadSessionEntity initUpload(Long userId, Long parentId, String fileName, Long fileSize, String md5Hash, int totalChunks);
+    /** Start an upload by verifying reusable content or creating a multipart session. */
+    UploadInitResult initUpload(Long userId, Long parentId, String fileName, Long fileSize, String md5Hash);
 
     /** Upload a single chunk */
     void uploadChunk(String sessionId, Long userId, int chunkNumber, byte[] data, String chunkMd5);
@@ -20,10 +20,7 @@ public interface UploadService {
     /** Cancel an upload session */
     void cancelUpload(String sessionId, Long userId);
 
-    /** Instant upload: if MD5 matches an existing file, link it directly */
-    Long instantUpload(Long userId, Long parentId, String fileName, Long fileSize, String md5Hash);
-
-    UploadSessionEntity initTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash, int totalChunks);
+    UploadInitResult initTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash);
 
     void uploadTeamChunk(Long teamId, String sessionId, Long userId, int chunkNumber, byte[] data, String chunkMd5);
 
@@ -32,8 +29,6 @@ public interface UploadService {
     Long completeTeamUpload(Long teamId, String sessionId, Long userId);
 
     void cancelTeamUpload(Long teamId, String sessionId, Long userId);
-
-    Long instantTeamUpload(Long teamId, Long userId, Long parentId, String fileName, Long fileSize, String md5Hash);
 
     /**
      * Server-side streaming upload: auto-chunks the InputStream internally and runs

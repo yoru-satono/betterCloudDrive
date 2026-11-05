@@ -405,16 +405,30 @@ data class InitUploadRequest(
     @SerialName("parentId") val parentId: Long? = null,
     @SerialName("fileName") val fileName: String,
     @SerialName("fileSize") val fileSize: Long,
-    @SerialName("md5Hash") val md5Hash: String? = null,
-    @SerialName("totalChunks") val totalChunks: Int,
+    @SerialName("md5Hash") val md5Hash: String,
 )
 
 @Serializable
+enum class UploadInitMode { INSTANT, MULTIPART }
+
+@Serializable
 data class InitUploadResult(
-    @SerialName("sessionId") val sessionId: String,
-    @SerialName("chunkSize") val chunkSize: Long,
-    @SerialName("totalChunks") val totalChunks: Int,
-)
+    val mode: UploadInitMode,
+    val fileId: Long? = null,
+    val sessionId: String? = null,
+    val chunkSize: Long? = null,
+    val totalChunks: Int? = null,
+) {
+    fun validate(fileSize: Long): InitUploadResult = apply {
+        when (mode) {
+            UploadInitMode.INSTANT -> require(fileId != null && fileId > 0 && sessionId == null && chunkSize == null && totalChunks == null)
+            UploadInitMode.MULTIPART -> {
+                require(fileId == null && !sessionId.isNullOrBlank() && chunkSize != null && chunkSize > 0 && totalChunks != null && totalChunks >= 0)
+                require(totalChunks.toLong() == fileSize / chunkSize + if (fileSize % chunkSize == 0L) 0 else 1)
+            }
+        }
+    }
+}
 
 @Serializable
 data class UploadStatusResult(
@@ -424,15 +438,6 @@ data class UploadStatusResult(
     @SerialName("missingChunks") val missingChunks: List<Int> = emptyList(),
 )
 
-@Serializable
-data class InstantUploadRequest(
-    @SerialName("parentId") val parentId: Long? = null,
-    @SerialName("fileName") val fileName: String,
-    @SerialName("fileSize") val fileSize: Long,
-    @SerialName("md5Hash") val md5Hash: String,
-)
-
-@Serializable data class InstantUploadResult(val fileId: Long, val instant: Boolean = true)
 @Serializable data class UploadChunkResult(@SerialName("chunkNumber") val chunkNumber: Int)
 @Serializable data class CompleteResult(@SerialName("fileId") val fileId: Long)
 

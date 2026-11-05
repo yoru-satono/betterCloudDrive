@@ -190,7 +190,6 @@ class NetworkTestFacade private constructor(
         const val DEFAULT_HTTPS_SERVER = NetworkDefaults.DEFAULT_HTTPS_SERVER
         const val TOKEN_EXPIRED = NetworkDefaults.TOKEN_EXPIRED
         const val TOKEN_REVOKED = NetworkDefaults.TOKEN_REVOKED
-        const val INSTANT_UPLOAD_MISS = NetworkDefaults.INSTANT_UPLOAD_MISS
     }
 }
 

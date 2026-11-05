@@ -1,6 +1,7 @@
 package com.betterclouddrive.web.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 import lombok.Data;
@@ -12,7 +13,6 @@ public class InitUploadRequest {
     private String fileName;
     @NotNull @PositiveOrZero
     private Long fileSize;
+    @NotBlank @Pattern(regexp = "[0-9a-fA-F]{32}")
     private String md5Hash;
-    @PositiveOrZero
-    private int totalChunks;
 }

@@ -999,6 +999,11 @@ export default {
     passwordLength: "At least 6 characters",
   },
   error: {
+    chunkUploadInvalid: "Upload session is invalid. Please upload again",
+    chunkMd5Mismatch: "Chunk verification failed. Retry the upload",
+    fileMd5Mismatch: "File verification failed. Please upload again",
+    uploadSizeMismatch: "Upload size changed. Please upload again",
+
     internal: "Service temporarily unavailable. Please try again later",
     validation: "Invalid submission: {fields}",
     methodNotAllowed: "Operation not supported",
@@ -1021,7 +1026,6 @@ export default {
     invalidTagColor: "Choose a valid tag color",
     rateLimited: "Too many requests. Please try again later",
     storageQuotaExceeded: "Not enough storage space",
-    instantUploadNotFound: "Instant upload source not found",
     invalidShareCode: "Invalid share code",
     sharePasswordRequired: "Enter the share password",
     shareExpired: "This share link has expired",

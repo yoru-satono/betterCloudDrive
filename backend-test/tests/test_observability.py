@@ -227,19 +227,20 @@ def test_storage_lifecycle_changes_bounded_metrics(client, auth_headers, created
     }
     baseline = {name: _metric_total(query) for name, query in queries.items()}
 
-    content = b"observability-storage-lifecycle"
+    content = f"observability-storage-lifecycle-{uuid.uuid4().hex}".encode()
     file_name = f"obs_{uuid.uuid4().hex[:8]}.txt"
     init = client.post("/api/v1/upload/init", json={
         "parentId": created_folder["id"],
         "fileName": file_name,
         "fileSize": len(content),
-        "totalChunks": 1,
+
         "md5Hash": hashlib.md5(content).hexdigest(),
     }, headers=auth_headers)
     assert init.status_code == 200 and init.json()["code"] == 200, init.text
     session_id = init.json()["data"]["sessionId"]
     chunk = client.post(
         f"/api/v1/upload/{session_id}/chunk?chunkNumber=0",
+        params={"chunkNumber": 0, "chunkMd5": hashlib.md5(content).hexdigest()},
         files={"file": (file_name, content, "text/plain")},
         headers=auth_headers,
     )

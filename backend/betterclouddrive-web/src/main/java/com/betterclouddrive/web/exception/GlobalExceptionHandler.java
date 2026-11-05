@@ -77,6 +77,12 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(ApiCode.BAD_REQUEST.getCode(), MessageKeys.INVALID_PARAMETER, Map.of("name", e.getName()));
     }
 
+    @ExceptionHandler({org.springframework.web.servlet.resource.NoResourceFoundException.class, org.springframework.web.servlet.NoHandlerFoundException.class})
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleMissingResource() {
+        return ApiResponse.error(ApiCode.NOT_FOUND.getCode(), ApiCode.NOT_FOUND.getMessageKey());
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleUnknown(Exception e) {

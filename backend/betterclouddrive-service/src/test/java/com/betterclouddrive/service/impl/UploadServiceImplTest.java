@@ -1,6 +1,7 @@
 package com.betterclouddrive.service.impl;
 
 import com.betterclouddrive.common.exception.BusinessException;
+import com.betterclouddrive.common.dto.UploadInitResult;
 import com.betterclouddrive.dal.entity.FileEntity;
 import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.dal.entity.UploadSessionEntity;
@@ -14,6 +15,8 @@ import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.ThumbnailService;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.storage.ContentDigest;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +37,11 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class UploadServiceImplTest {
+    private static final String MD5 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    private static String md5(byte[] data) {
+        try { return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("MD5").digest(data)); }
+        catch (Exception e) { throw new AssertionError(e); }
+    }
 
     @Mock private UploadSessionRepository uploadSessionRepository;
     @Mock private FileRepository fileRepository;
@@ -59,9 +67,9 @@ class UploadServiceImplTest {
     }
 
     private UploadSessionEntity activeSession(String id, int totalChunks) {
-        return UploadSessionEntity.builder()
+        return UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id(id).userId(1L).fileName("test.bin")
-                .fileSize(1024L).totalChunks(totalChunks)
+                .fileSize((long) (totalChunks - 1) * 5242880 + 100).totalChunks(totalChunks)
                 .receivedChunks(0).status(1).build();
     }
 
@@ -83,7 +91,7 @@ class UploadServiceImplTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get("storage:incr:1")).thenReturn(null);
 
-        assertThatThrownBy(() -> uploadService.initUpload(1L, null, "big.bin", 100L, null, 1))
+        assertThatThrownBy(() -> uploadService.initUpload(1L, null, "big.bin", 100L, MD5))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419001));
     }
@@ -94,7 +102,7 @@ class UploadServiceImplTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get("storage:incr:1")).thenReturn("600");
 
-        assertThatThrownBy(() -> uploadService.initUpload(1L, null, "big.bin", 100L, null, 1))
+        assertThatThrownBy(() -> uploadService.initUpload(1L, null, "big.bin", 100L, MD5))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419001));
     }
@@ -107,7 +115,7 @@ class UploadServiceImplTest {
         when(uploadSessionRepository.save(any(UploadSessionEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        uploadService.initUpload(1L, null, "small.bin", 100L, null, 1);
+        uploadService.initUpload(1L, null, "small.bin", 100L, MD5);
 
         verify(uploadSessionRepository).save(any(UploadSessionEntity.class));
     }
@@ -116,7 +124,7 @@ class UploadServiceImplTest {
     void initUpload_shouldRejectTeamParent() {
         when(fileRepository.findById(10L)).thenReturn(Optional.of(folder(10L, 2L, 99L)));
 
-        assertThatThrownBy(() -> uploadService.initUpload(1L, 10L, "bad.bin", 100L, null, 1))
+        assertThatThrownBy(() -> uploadService.initUpload(1L, 10L, "bad.bin", 100L, MD5))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(404001));
 
@@ -131,15 +139,18 @@ class UploadServiceImplTest {
         when(uploadSessionRepository.save(any(UploadSessionEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        UploadSessionEntity session = uploadService.initUpload(1L, null, "empty.txt", 0L, "d41d8cd98f00b204e9800998ecf8427e", 0);
+        UploadInitResult result = uploadService.initUpload(1L, null, "empty.txt", 0L, "d41d8cd98f00b204e9800998ecf8427e");
 
-        assertThat(session.getFileSize()).isZero();
-        assertThat(session.getTotalChunks()).isZero();
+        assertThat(result.mode()).isEqualTo(UploadInitResult.Mode.MULTIPART);
+        assertThat(result.totalChunks()).isZero();
+        var capture = org.mockito.ArgumentCaptor.forClass(UploadSessionEntity.class);
+        verify(uploadSessionRepository).save(capture.capture());
+        assertThat(capture.getValue().getFileSize()).isZero();
     }
 
     @Test
-    void initUpload_shouldRejectPositiveFilesWithoutChunks() {
-        assertThatThrownBy(() -> uploadService.initUpload(1L, null, "bad.bin", 10L, null, 0))
+    void initUpload_shouldRejectMissingDigest() {
+        assertThatThrownBy(() -> uploadService.initUpload(1L, null, "bad.bin", 10L, null))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(400));
         verifyNoInteractions(userRepository);
@@ -153,11 +164,14 @@ class UploadServiceImplTest {
         when(valueOps.get("team:storage:incr:10")).thenReturn(null);
         when(uploadSessionRepository.save(any(UploadSessionEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UploadSessionEntity session = uploadService.initTeamUpload(10L, 2L, null, "team.bin", 100L, "md5", 1);
+        UploadInitResult result = uploadService.initTeamUpload(10L, 2L, null, "team.bin", 100L, MD5);
 
-        assertThat(session.getTeamId()).isEqualTo(10L);
-        assertThat(session.getUserId()).isEqualTo(2L);
-        assertThat(session.getFileName()).isEqualTo("team.bin");
+        assertThat(result.mode()).isEqualTo(UploadInitResult.Mode.MULTIPART);
+        var capture = org.mockito.ArgumentCaptor.forClass(UploadSessionEntity.class);
+        verify(uploadSessionRepository).save(capture.capture());
+        assertThat(capture.getValue().getTeamId()).isEqualTo(10L);
+        assertThat(capture.getValue().getUserId()).isEqualTo(2L);
+        assertThat(capture.getValue().getFileName()).isEqualTo("team.bin");
     }
 
     @Test
@@ -167,12 +181,14 @@ class UploadServiceImplTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(uploadSessionRepository.save(any(UploadSessionEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UploadSessionEntity session = uploadService.initTeamUpload(10L, 2L, null, "  team.bin  ", 100L, "md5", 1);
-        assertThat(session.getFileName()).isEqualTo("team.bin");
+        UploadInitResult result = uploadService.initTeamUpload(10L, 2L, null, "  team.bin  ", 100L, MD5);
+        var capture = org.mockito.ArgumentCaptor.forClass(UploadSessionEntity.class);
+        verify(uploadSessionRepository).save(capture.capture());
+        assertThat(capture.getValue().getFileName()).isEqualTo("team.bin");
 
         when(fileRepository.existsByTeamIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(10L, "taken.bin"))
                 .thenReturn(true);
-        assertThatThrownBy(() -> uploadService.initTeamUpload(10L, 2L, null, "taken.bin", 100L, "md5", 1))
+        assertThatThrownBy(() -> uploadService.initTeamUpload(10L, 2L, null, "taken.bin", 100L, MD5))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(409001));
     }
@@ -181,13 +197,13 @@ class UploadServiceImplTest {
 
     @Test
     void uploadChunk_shouldUploadAndSetBitmap() {
-        UploadSessionEntity session = activeSession("sess-1", 3);
-        when(uploadSessionRepository.findById("sess-1")).thenReturn(Optional.of(session));
+        UploadSessionEntity session = activeSession("sess-1", 1);
+        when(uploadSessionRepository.findByIdForUpdate("sess-1")).thenReturn(Optional.of(session));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.getBit("upload:bitmap:sess-1", 0)).thenReturn(false);
 
         byte[] data = new byte[100];
-        uploadService.uploadChunk("sess-1", 1L, 0, data, null);
+        uploadService.uploadChunk("sess-1", 1L, 0, data, md5(data));
 
         verify(storageService).uploadPart(eq("uploads/1/sess-1/chunks"), eq(0), any(), eq(100L));
         verify(valueOps).setBit("upload:bitmap:sess-1", 0, true);
@@ -196,19 +212,20 @@ class UploadServiceImplTest {
 
     @Test
     void uploadChunk_shouldSkipAlreadyUploadedChunk() {
-        UploadSessionEntity session = activeSession("sess-2", 3);
-        when(uploadSessionRepository.findById("sess-2")).thenReturn(Optional.of(session));
+        UploadSessionEntity session = activeSession("sess-2", 1);
+        when(uploadSessionRepository.findByIdForUpdate("sess-2")).thenReturn(Optional.of(session));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.getBit("upload:bitmap:sess-2", 1)).thenReturn(true);
+        when(valueOps.getBit("upload:bitmap:sess-2", 0)).thenReturn(true);
 
-        uploadService.uploadChunk("sess-2", 1L, 1, new byte[50], null);
+        when(storageService.inspectObject("uploads/1/sess-2/chunks.part.1")).thenReturn(new ContentDigest(100, md5(new byte[100])));
+        uploadService.uploadChunk("sess-2", 1L, 0, new byte[100], md5(new byte[100]));
 
         verify(storageService, never()).uploadPart(any(), anyInt(), any(), anyInt());
     }
 
     @Test
     void uploadChunk_shouldThrowWhenSessionNotFound() {
-        when(uploadSessionRepository.findById("missing")).thenReturn(Optional.empty());
+        when(uploadSessionRepository.findByIdForUpdate("missing")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> uploadService.uploadChunk("missing", 1L, 0, new byte[10], null))
                 .isInstanceOf(BusinessException.class);
@@ -217,10 +234,10 @@ class UploadServiceImplTest {
     @Test
     void uploadChunk_shouldThrowWhenInvalidChunkNumber() {
         UploadSessionEntity session = activeSession("sess-3", 2);
-        when(uploadSessionRepository.findById("sess-3")).thenReturn(Optional.of(session));
+        when(uploadSessionRepository.findByIdForUpdate("sess-3")).thenReturn(Optional.of(session));
 
         // chunk number >= totalChunks is invalid
-        assertThatThrownBy(() -> uploadService.uploadChunk("sess-3", 1L, 5, new byte[10], null))
+        assertThatThrownBy(() -> uploadService.uploadChunk("sess-3", 1L, 5, new byte[10], md5(new byte[10])))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -228,8 +245,8 @@ class UploadServiceImplTest {
 
     @Test
     void getUploadStatus_shouldReturnMissingChunks() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
-                .id("sess-4").userId(1L).totalChunks(3).receivedChunks(2).status(1).build();
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
+                .id("sess-4").userId(1L).fileSize(10485761L).totalChunks(3).receivedChunks(2).status(1).build();
         when(uploadSessionRepository.findById("sess-4")).thenReturn(Optional.of(session));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.getBit("upload:bitmap:sess-4", 0)).thenReturn(true);
@@ -249,7 +266,7 @@ class UploadServiceImplTest {
 
     @Test
     void completeUpload_shouldCreateFileEntity() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id("sess-5").userId(1L).fileName("doc.pdf").fileSize(512L)
                 .totalChunks(1).status(1).build();
         when(uploadSessionRepository.findByIdForUpdate("sess-5")).thenReturn(Optional.of(session));
@@ -260,9 +277,9 @@ class UploadServiceImplTest {
             f.setId(99L);
             return f;
         });
-        when(storageService.objectExists(anyString())).thenReturn(true);
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
+        when(storageService.composeParts(anyString(), anyString(), anyInt())).thenReturn(new ContentDigest(session.getFileSize(), session.getMd5Hash()));
         Long fileId = uploadService.completeUpload("sess-5", 1L);
 
         assertThat(fileId).isEqualTo(99L);
@@ -274,7 +291,7 @@ class UploadServiceImplTest {
 
     @Test
     void completeUpload_shouldScheduleThumbnailForImage() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id("image-session").userId(1L).fileName("photo.png").fileSize(512L)
                 .totalChunks(1).status(1).build();
         when(uploadSessionRepository.findByIdForUpdate("image-session")).thenReturn(Optional.of(session));
@@ -285,9 +302,9 @@ class UploadServiceImplTest {
             f.setId(101L);
             return f;
         });
-        when(storageService.objectExists(anyString())).thenReturn(true);
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
+        when(storageService.composeParts(anyString(), anyString(), anyInt())).thenReturn(new ContentDigest(session.getFileSize(), session.getMd5Hash()));
         Long fileId = uploadService.completeUpload("image-session", 1L);
 
         assertThat(fileId).isEqualTo(101L);
@@ -296,7 +313,7 @@ class UploadServiceImplTest {
 
     @Test
     void completeUpload_shouldCreateZeroByteObjectWithoutPartsOrStorageIncrement() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id("empty-session").userId(1L).fileName("empty.txt").fileSize(0L)
                 .md5Hash("d41d8cd98f00b204e9800998ecf8427e")
                 .totalChunks(0).status(1).build();
@@ -306,7 +323,6 @@ class UploadServiceImplTest {
             f.setId(100L);
             return f;
         });
-        when(storageService.objectExists(anyString())).thenReturn(true);
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Long fileId = uploadService.completeUpload("empty-session", 1L);
@@ -321,8 +337,8 @@ class UploadServiceImplTest {
 
     @Test
     void completeUpload_shouldThrowWhenChunkMissing() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
-                .id("sess-6").userId(1L).totalChunks(2).status(1).build();
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
+                .id("sess-6").userId(1L).fileSize(5242881L).totalChunks(2).status(1).build();
         when(uploadSessionRepository.findByIdForUpdate("sess-6")).thenReturn(Optional.of(session));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.getBit("upload:bitmap:sess-6", 0)).thenReturn(false);
@@ -333,7 +349,7 @@ class UploadServiceImplTest {
 
     @Test
     void completeUpload_shouldReturnCompletedFileIdWhenRetried() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id("done-session").userId(1L).fileName("done.txt").fileSize(512L)
                 .storagePath("objects/done.txt").completedFileId(123L)
                 .totalChunks(1).status(2).build();
@@ -355,7 +371,7 @@ class UploadServiceImplTest {
 
     @Test
     void completeTeamUpload_shouldCreateTeamFileAndIncrementTeamStorage() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id("team-session").userId(2L).teamId(10L).fileName("team.txt").fileSize(128L)
                 .totalChunks(1).status(1).build();
         when(uploadSessionRepository.findByIdForUpdate("team-session")).thenReturn(Optional.of(session));
@@ -366,9 +382,9 @@ class UploadServiceImplTest {
             file.setId(50L);
             return file;
         });
-        when(storageService.objectExists(anyString())).thenReturn(true);
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
+        when(storageService.composeParts(anyString(), anyString(), anyInt())).thenReturn(new ContentDigest(session.getFileSize(), session.getMd5Hash()));
         Long fileId = uploadService.completeTeamUpload(10L, "team-session", 2L);
 
         assertThat(fileId).isEqualTo(50L);
@@ -383,7 +399,7 @@ class UploadServiceImplTest {
 
     @Test
     void completeTeamUpload_shouldScheduleThumbnailForImage() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id("team-image").userId(2L).teamId(10L).fileName("team-photo.jpg").fileSize(128L)
                 .totalChunks(1).status(1).build();
         when(uploadSessionRepository.findByIdForUpdate("team-image")).thenReturn(Optional.of(session));
@@ -394,9 +410,9 @@ class UploadServiceImplTest {
             file.setId(52L);
             return file;
         });
-        when(storageService.objectExists(anyString())).thenReturn(true);
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
+        when(storageService.composeParts(anyString(), anyString(), anyInt())).thenReturn(new ContentDigest(session.getFileSize(), session.getMd5Hash()));
         Long fileId = uploadService.completeTeamUpload(10L, "team-image", 2L);
 
         assertThat(fileId).isEqualTo(52L);
@@ -405,7 +421,7 @@ class UploadServiceImplTest {
 
     @Test
     void completeTeamUpload_shouldReturnCompletedFileIdWhenRetriedWithoutQuotaOrAuditSideEffects() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id("team-done").userId(2L).teamId(10L).fileName("team.txt").fileSize(128L)
                 .storagePath("objects/team.txt").completedFileId(50L)
                 .totalChunks(1).status(2).build();
@@ -429,10 +445,10 @@ class UploadServiceImplTest {
 
     @Test
     void cancelTeamUpload_shouldMarkSessionCanceledAndWriteAuditLog() {
-        UploadSessionEntity session = UploadSessionEntity.builder()
+        UploadSessionEntity session = UploadSessionEntity.builder().chunkSize(5242880).md5Hash(MD5)
                 .id("team-cancel").userId(2L).teamId(10L).fileName("team.txt").fileSize(128L)
                 .totalChunks(2).status(1).build();
-        when(uploadSessionRepository.findById("team-cancel")).thenReturn(Optional.of(session));
+        when(uploadSessionRepository.findByIdForUpdate("team-cancel")).thenReturn(Optional.of(session));
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         uploadService.cancelTeamUpload(10L, "team-cancel", 2L);
@@ -450,15 +466,15 @@ class UploadServiceImplTest {
         when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get("team:storage:incr:10")).thenReturn(null);
-        when(fileRepository.findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc("md5"))
-                .thenReturn(Optional.of(existing));
+        when(fileRepository.findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc(eq(MD5), anyLong())).thenReturn(List.of(existing));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity file = inv.getArgument(0);
             file.setId(51L);
             return file;
         });
 
-        Long fileId = uploadService.instantTeamUpload(10L, 2L, null, "copy.txt", 64L, "md5");
+        when(storageService.inspectObject("objects/existing")).thenReturn(new ContentDigest(64, MD5));
+        Long fileId = uploadService.initTeamUpload(10L, 2L, null, "copy.txt", 64L, MD5).fileId();
 
         assertThat(fileId).isEqualTo(51L);
         verify(valueOps).increment("team:storage:incr:10", 64L);
@@ -470,7 +486,7 @@ class UploadServiceImplTest {
     @Test
     void cancelUpload_shouldMarkSessionCanceled() {
         UploadSessionEntity session = activeSession("sess-7", 2);
-        when(uploadSessionRepository.findById("sess-7")).thenReturn(Optional.of(session));
+        when(uploadSessionRepository.findByIdForUpdate("sess-7")).thenReturn(Optional.of(session));
         when(uploadSessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         uploadService.cancelUpload("sess-7", 1L);
@@ -488,7 +504,7 @@ class UploadServiceImplTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get("storage:incr:1")).thenReturn(null);
 
-        assertThatThrownBy(() -> uploadService.instantUpload(1L, null, "f", 20L, "md5"))
+        assertThatThrownBy(() -> uploadService.initUpload(1L, null, "f", 20L, MD5).fileId())
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(419001));
     }
@@ -499,15 +515,15 @@ class UploadServiceImplTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(valueOps.get("storage:incr:1")).thenReturn(null);
         FileEntity existing = FileEntity.builder().id(5L).storagePath("path/to/obj").build();
-        when(fileRepository.findFirstByMd5HashAndIsDeletedFalseOrderByCreatedAtDesc("abc123"))
-                .thenReturn(Optional.of(existing));
+        when(fileRepository.findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc(eq(MD5), anyLong())).thenReturn(List.of(existing));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity f = inv.getArgument(0);
             f.setId(10L);
             return f;
         });
 
-        Long fileId = uploadService.instantUpload(1L, null, "copy.txt", 100L, "abc123");
+        when(storageService.inspectObject("path/to/obj")).thenReturn(new ContentDigest(100, MD5));
+        Long fileId = uploadService.initUpload(1L, null, "copy.txt", 100L, MD5).fileId();
 
         assertThat(fileId).isEqualTo(10L);
         verify(valueOps).increment("storage:incr:1", 100L);
@@ -532,6 +548,7 @@ class UploadServiceImplTest {
             return f;
         });
 
+        when(storageService.composeParts(anyString(), anyString(), anyInt())).thenReturn(new ContentDigest(data.length, md5(data)));
         Long fileId = uploadService.streamUpload(1L, 10L, "large.bin", (long) dataSize, stream, null);
 
         assertThat(fileId).isEqualTo(42L);
@@ -557,6 +574,7 @@ class UploadServiceImplTest {
             return f;
         });
 
+        when(storageService.composeParts(anyString(), anyString(), anyInt())).thenReturn(new ContentDigest(data.length, md5(data)));
         uploadService.streamUpload(1L, null, "hello.txt", (long) data.length, stream, null);
 
         // Capture saved entity and verify md5 was computed (known MD5 of "hello world")
@@ -566,7 +584,7 @@ class UploadServiceImplTest {
     }
 
     @Test
-    void streamUpload_shouldUseProvidedMd5WithoutRecomputing() {
+    void streamUpload_shouldVerifyProvidedMd5() {
         byte[] data = "test".getBytes();
         InputStream stream = new ByteArrayInputStream(data);
 
@@ -579,11 +597,12 @@ class UploadServiceImplTest {
             return f;
         });
 
-        uploadService.streamUpload(1L, null, "test.txt", (long) data.length, stream, "precomputed-md5");
+        when(storageService.composeParts(anyString(), anyString(), anyInt())).thenReturn(new ContentDigest(data.length, md5(data)));
+        uploadService.streamUpload(1L, null, "test.txt", (long) data.length, stream, md5(data));
 
         org.mockito.ArgumentCaptor<FileEntity> captor = org.mockito.ArgumentCaptor.forClass(FileEntity.class);
         verify(fileRepository).save(captor.capture());
-        assertThat(captor.getValue().getMd5Hash()).isEqualTo("precomputed-md5");
+        assertThat(captor.getValue().getMd5Hash()).isEqualTo(md5(data));
     }
 
     @Test

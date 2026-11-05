@@ -106,6 +106,7 @@ interface TransferFileAccess {
     suspend fun validateReadable(sourceHandle: String)
     suspend fun validateWritable(destinationHandle: String)
     suspend fun computeDigest(sourceHandle: String): FileDigest
+    suspend fun computePartDigest(sourceHandle: String, offset: Long, length: Long): FileDigest
     fun uploadPart(sourceHandle: String, offset: Long, length: Long, onBytes: (Long) -> Unit): InputProvider
     suspend fun tempLength(taskId: String): Long
     suspend fun tempMd5(taskId: String): String

@@ -520,4 +520,8 @@
     <string name="notification_member_changed_content">{0} 中与 {1} 相关的成员信息发生了变化。</string>
     <string name="notification_permission_changed_content">你对 {0} 的访问权限发生了变化。</string>
     <string name="notification_office_save_failed_content">在线文档 {0} 未能保存。</string>
+    <string name="error_chunk_upload_invalid">上传会话无效，请重新上传</string>
+    <string name="error_chunk_md5_mismatch">分片校验失败，请重试上传</string>
+    <string name="error_file_md5_mismatch">文件校验失败，请重新上传</string>
+    <string name="error_upload_size_mismatch">上传内容大小不符，请重新上传</string>
 </resources>

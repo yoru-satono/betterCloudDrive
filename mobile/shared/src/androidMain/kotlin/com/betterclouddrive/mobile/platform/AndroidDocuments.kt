@@ -166,10 +166,32 @@ class AndroidTransferFileAccess(private val context: Context) : TransferFileAcce
         FileDigest(digest.digest().toHex(), size)
     }
 
+    override suspend fun computePartDigest(sourceHandle: String, offset: Long, length: Long): FileDigest = withContext(Dispatchers.IO) {
+        require(offset >= 0 && length >= 0)
+        val digest = MessageDigest.getInstance("MD5")
+        var remaining = length
+        open(sourceHandle).use { input ->
+            skipFully(input, offset)
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (remaining > 0) {
+                val count = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                check(count >= 0) { "transfer.sourceChanged" }
+                digest.update(buffer, 0, count)
+                remaining -= count
+            }
+        }
+        FileDigest(digest.digest().toHex(), length)
+    }
+
     override fun uploadPart(sourceHandle: String, offset: Long, length: Long, onBytes: (Long) -> Unit): InputProvider = InputProvider(length) {
         val input = open(sourceHandle)
-        skipFully(input, offset)
-        LimitedInputStream(input, length, onBytes).asSource().buffered()
+        try {
+            skipFully(input, offset)
+            LimitedInputStream(input, length, onBytes).asSource().buffered()
+        } catch (error: Throwable) {
+            input.close()
+            throw error
+        }
     }
 
     override suspend fun tempLength(taskId: String): Long = withContext(Dispatchers.IO) { temp(taskId).let { if (it.exists()) it.length() else 0L } }

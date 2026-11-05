@@ -19,7 +19,6 @@ use tauri_plugin_dialog::DialogExt;
 
 const CHUNK_SIZE: u64 = 5 * 1024 * 1024;
 const FILE_NAME_CONFLICT_CODE: i64 = 409001;
-const INSTANT_UPLOAD_NOT_FOUND_CODE: i64 = 419010;
 
 #[derive(Clone, Debug, Default)]
 pub struct DesktopUploadState {
@@ -142,11 +141,25 @@ struct FileResponse {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct InitUploadResponse {
-    session_id: String,
-    chunk_size: Option<u64>,
-    total_chunks: Option<u64>,
+#[serde(tag = "mode", deny_unknown_fields)]
+enum InitUploadResponse {
+    INSTANT { #[serde(rename = "fileId")] file_id: i64 },
+    MULTIPART {
+        #[serde(rename = "sessionId")] session_id: String,
+        #[serde(rename = "chunkSize")] chunk_size: u64,
+        #[serde(rename = "totalChunks")] total_chunks: u64,
+    },
+}
+
+impl InitUploadResponse {
+    fn validate(self, size: u64) -> Result<Self, String> {
+        let valid = match &self {
+            Self::INSTANT { file_id } => *file_id > 0,
+            Self::MULTIPART { session_id, chunk_size, total_chunks } => !session_id.trim().is_empty()
+                && *chunk_size > 0 && *total_chunks == size / chunk_size + u64::from(size % chunk_size != 0),
+        };
+        if valid { Ok(self) } else { Err("error.uploadFailed".to_string()) }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -155,12 +168,6 @@ struct UploadStatusResponse {
     total_chunks: Option<u64>,
     uploaded_chunks: Option<u64>,
     missing_chunks: Option<Vec<u64>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct InstantUploadResponse {
-    instant: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -500,19 +507,37 @@ async fn upload_file<R: Runtime>(
     }
     emit_item(ctx, &file, &id, parent_id, "hashing", 30.0, "", None, None, Some(md5_hash.clone()), total_chunks, false);
 
-    if try_instant_upload(ctx, parent_id, &file, &md5_hash).await? {
-        emit_item(ctx, &file, &id, parent_id, "instant", 100.0, "", None, None, Some(md5_hash), total_chunks, false);
-        return Ok(());
-    }
-
-    let session = if let Some(record) = find_resumable_upload(ctx, parent_id, &file, &md5_hash) {
-        validate_upload_session(ctx, &record)
-            .await
-            .unwrap_or(init_upload(ctx, parent_id, &file, &md5_hash, total_chunks).await?)
-    } else {
-        init_upload(ctx, parent_id, &file, &md5_hash, total_chunks).await?
+    let resume_record = find_resumable_upload(ctx, parent_id, &file, &md5_hash);
+    let start = async {
+        if let Some(record) = resume_record {
+            if let Some(session) = validate_upload_session(ctx, &record).await? {
+                return Ok(InitUploadResponse::MULTIPART {
+                    session_id: session.session_id, chunk_size: session.chunk_size, total_chunks: session.total_chunks,
+                });
+            }
+        }
+        init_upload(ctx, parent_id, &file, &md5_hash).await
+    }.await;
+    let result = match start.and_then(|result| result.validate(file.file_size)) {
+        Ok(result) => result,
+        Err(error) => {
+            emit_item(ctx, &file, &id, parent_id, "error", 0.0, "", None, Some(error.clone()), Some(md5_hash), total_chunks, false);
+            return Err(error);
+        }
+    };
+    let session = match result {
+        InitUploadResponse::INSTANT { .. } => {
+            emit_item(ctx, &file, &id, parent_id, "instant", 100.0, "", None, None, Some(md5_hash), total_chunks, false);
+            return Ok(());
+        }
+        InitUploadResponse::MULTIPART { session_id, chunk_size, total_chunks } => UploadSession {
+            session_id, chunk_size, total_chunks, created_at: epoch_millis(),
+        },
     };
     let upload_id = session.session_id.clone();
+    let _ = ctx.transfer_state.update_node(&ctx.app, &id, TransferNodePatch {
+        chunk_size: Some(session.chunk_size), ..TransferNodePatch::default()
+    });
     let record = ResumableUploadRecord {
         session_id: upload_id.clone(),
         parent_id,
@@ -555,7 +580,9 @@ async fn upload_file<R: Runtime>(
             emit_item(ctx, &file, &id, parent_id, "canceled", 0.0, "", Some(upload_id), None, Some(md5_hash), session.total_chunks, false);
             return Ok(());
         }
-        upload_chunk(ctx, &upload_id, &file.path, *chunk_number, session.chunk_size).await?;
+        if let Err(error) = upload_chunk(ctx, &upload_id, &file.path, *chunk_number, session.chunk_size).await {
+            return Err(report_upload_failure(ctx, &file, &id, parent_id, &upload_id, &md5_hash, session.total_chunks, error).await);
+        }
         if is_transfer_canceled(ctx.transfer_state.wait_if_blocked(&ctx.app, &id).await) {
             mark_transfer_canceled(ctx, &file, &id, parent_id, Some(upload_id), Some(md5_hash), session.total_chunks);
             return Ok(());
@@ -581,7 +608,9 @@ async fn upload_file<R: Runtime>(
         mark_transfer_canceled(ctx, &file, &id, parent_id, Some(upload_id), Some(md5_hash), session.total_chunks);
         return Ok(());
     }
-    complete_upload(ctx, &upload_id).await?;
+    if let Err(error) = complete_upload(ctx, &upload_id).await {
+        return Err(report_upload_failure(ctx, &file, &id, parent_id, &upload_id, &md5_hash, session.total_chunks, error).await);
+    }
     emit_item(ctx, &file, &id, parent_id, "done", 100.0, "", Some(upload_id), None, Some(md5_hash), session.total_chunks, false);
     Ok(())
 }
@@ -595,71 +624,34 @@ struct UploadSession {
 }
 
 async fn validate_upload_session<R: Runtime>(
-    ctx: &UploadContext<R>,
-    record: &ResumableUploadRecord,
-) -> Option<UploadSession> {
-    let status = get_upload_status(ctx, &record.session_id).await.ok()?;
-    Some(UploadSession {
+    ctx: &UploadContext<R>, record: &ResumableUploadRecord,
+) -> Result<Option<UploadSession>, String> {
+    let status = match get_upload_status(ctx, &record.session_id).await {
+        Ok(status) => status,
+        Err(error) if error.code == Some(419006) || error.code == Some(404001) => {
+            let _ = ctx.app.emit("desktop-upload:session-invalidated", &record.session_id);
+            return Ok(None);
+        }
+        Err(error) => return Err(error.message),
+    };
+    Ok(Some(UploadSession {
         session_id: record.session_id.clone(),
         total_chunks: status.total_chunks.unwrap_or(record.total_chunks),
         chunk_size: record.chunk_size,
         created_at: record.created_at,
-    })
+    }))
 }
 
-async fn init_upload<R: Runtime>(
-    ctx: &UploadContext<R>,
-    parent_id: Option<i64>,
-    file: &LocalUploadFile,
+async fn init_upload<R: Runtime>(ctx: &UploadContext<R>, parent_id: Option<i64>, file: &LocalUploadFile,
     md5_hash: &str,
-    total_chunks: u64,
-) -> Result<UploadSession, String> {
-    let data = post_json::<_, InitUploadResponse>(
-        ctx,
-        "/upload/init",
-        serde_json::json!({
-            "parentId": parent_id,
-            "fileName": file.file_name,
-            "fileSize": file.file_size,
-            "md5Hash": md5_hash,
-            "totalChunks": total_chunks,
-        }),
-    )
-    .await?;
-    Ok(UploadSession {
-        session_id: data.session_id,
-        total_chunks: data.total_chunks.unwrap_or(total_chunks),
-        chunk_size: data.chunk_size.unwrap_or(CHUNK_SIZE),
-        created_at: epoch_millis(),
-    })
-}
-
-async fn try_instant_upload<R: Runtime>(
-    ctx: &UploadContext<R>,
-    parent_id: Option<i64>,
-    file: &LocalUploadFile,
-    md5_hash: &str,
-) -> Result<bool, String> {
-    match post_json::<_, InstantUploadResponse>(
-        ctx,
-        "/upload/instant",
-        serde_json::json!({
-            "parentId": parent_id,
-            "fileName": file.file_name,
-            "fileSize": file.file_size,
-            "md5Hash": md5_hash,
-        }),
-    )
-    .await
-    {
-        Ok(data) => Ok(data.instant.unwrap_or(false)),
-        Err(error) if error.contains(&INSTANT_UPLOAD_NOT_FOUND_CODE.to_string()) => Ok(false),
-        Err(error) => Err(error),
-    }
+) -> Result<InitUploadResponse, String> {
+    post_json(ctx, "/upload/init", serde_json::json!({
+        "parentId": parent_id, "fileName": file.file_name, "fileSize": file.file_size, "md5Hash": md5_hash,
+    })).await
 }
 
 async fn missing_chunks<R: Runtime>(ctx: &UploadContext<R>, session_id: &str, total_chunks: u64) -> Result<Vec<u64>, String> {
-    let status = get_upload_status(ctx, session_id).await?;
+    let status = get_upload_status(ctx, session_id).await.map_err(|error| error.message)?;
     if let Some(missing) = status.missing_chunks {
         return Ok(missing);
     }
@@ -667,7 +659,7 @@ async fn missing_chunks<R: Runtime>(ctx: &UploadContext<R>, session_id: &str, to
     Ok((uploaded..total_chunks).collect())
 }
 
-async fn get_upload_status<R: Runtime>(ctx: &UploadContext<R>, session_id: &str) -> Result<UploadStatusResponse, String> {
+async fn get_upload_status<R: Runtime>(ctx: &UploadContext<R>, session_id: &str) -> Result<UploadStatusResponse, UploadApiError> {
     let url = format!("{}/upload/{}/status", ctx.api_base_url, session_id);
     let response = ctx
         .client
@@ -676,7 +668,7 @@ async fn get_upload_status<R: Runtime>(ctx: &UploadContext<R>, session_id: &str)
         .send()
         .await
         .map_err(|e| format!("读取上传状态失败: {e}"))?;
-    parse_response(response).await
+    parse_api_response(response).await
 }
 
 async fn upload_chunk<R: Runtime>(
@@ -685,15 +677,16 @@ async fn upload_chunk<R: Runtime>(
     path: &Path,
     chunk_number: u64,
     chunk_size: u64,
-) -> Result<(), String> {
+) -> Result<(), UploadApiError> {
     let bytes = read_chunk(path, chunk_number, chunk_size).map_err(|e| format!("读取分片失败: {e}"))?;
     ctx.upload_limiter
         .throttle(bytes.len() as u64, ctx.settings.upload_limit_bytes_per_sec)
         .await;
     let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("chunk").to_string();
+    let chunk_md5 = format!("{:x}", md5::compute(&bytes));
     let part = Part::bytes(bytes).file_name(file_name);
     let form = Form::new().part("file", part);
-    let url = format!("{}/upload/{}/chunk?chunkNumber={}", ctx.api_base_url, session_id, chunk_number);
+    let url = format!("{}/upload/{}/chunk?chunkNumber={}&chunkMd5={}", ctx.api_base_url, session_id, chunk_number, chunk_md5);
     let response = ctx
         .client
         .post(url)
@@ -702,11 +695,13 @@ async fn upload_chunk<R: Runtime>(
         .send()
         .await
         .map_err(|e| format!("上传分片失败: {e}"))?;
-    parse_response::<serde_json::Value>(response).await.map(|_| ())
+    parse_api_response::<serde_json::Value>(response).await.map(|_| ())
 }
 
-async fn complete_upload<R: Runtime>(ctx: &UploadContext<R>, session_id: &str) -> Result<(), String> {
-    post_json::<_, serde_json::Value>(ctx, &format!("/upload/{session_id}/complete"), serde_json::json!({})).await.map(|_| ())
+async fn complete_upload<R: Runtime>(ctx: &UploadContext<R>, session_id: &str) -> Result<(), UploadApiError> {
+    let response = ctx.client.post(format!("{}/upload/{session_id}/complete", ctx.api_base_url))
+        .bearer_auth(&ctx.token).send().await.map_err(|_| UploadApiError::from("error.uploadFailed".to_string()))?;
+    parse_api_response::<serde_json::Value>(response).await.map(|_| ())
 }
 
 async fn create_remote_directories<R: Runtime>(
@@ -755,7 +750,7 @@ async fn create_unique_remote_folder<R: Runtime>(
         } else {
             format!("{folder_name} ({index})")
         };
-        match post_json::<_, FileResponse>(
+        match post_api_json::<_, FileResponse>(
             ctx,
             "/files/folder",
             serde_json::json!({
@@ -766,45 +761,64 @@ async fn create_unique_remote_folder<R: Runtime>(
         .await
         {
             Ok(file) => return Ok(file),
-            Err(error) if error.contains(&FILE_NAME_CONFLICT_CODE.to_string()) => continue,
-            Err(error) => return Err(error),
+            Err(error) if error.code == Some(FILE_NAME_CONFLICT_CODE) => continue,
+            Err(error) => return Err(error.message),
         }
     }
     Err("无法创建唯一远端文件夹名称".to_string())
 }
 
-async fn post_json<R: Runtime, T: for<'de> Deserialize<'de>>(
-    ctx: &UploadContext<R>,
-    path: &str,
-    body: serde_json::Value,
-) -> Result<T, String> {
-    let url = format!("{}{}", ctx.api_base_url, path);
-    let response = ctx
-        .client
-        .post(url)
-        .bearer_auth(&ctx.token)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {e}"))?;
-    parse_response(response).await
+async fn post_api_json<R: Runtime, T: for<'de> Deserialize<'de>>(
+    ctx: &UploadContext<R>, path: &str, body: serde_json::Value,
+) -> Result<T, UploadApiError> {
+    let response = ctx.client.post(format!("{}{}", ctx.api_base_url, path))
+        .bearer_auth(&ctx.token).json(&body).send().await
+        .map_err(|_| UploadApiError::from("error.uploadFailed".to_string()))?;
+    parse_api_response(response).await
 }
 
-async fn parse_response<T: for<'de> Deserialize<'de>>(response: reqwest::Response) -> Result<T, String> {
+async fn post_json<R: Runtime, T: for<'de> Deserialize<'de>>(
+    ctx: &UploadContext<R>, path: &str, body: serde_json::Value,
+) -> Result<T, String> {
+    post_api_json(ctx, path, body).await.map_err(|error| error.message)
+}
+
+#[derive(Debug)]
+struct UploadApiError {
+    code: Option<i64>,
+    message: String,
+}
+
+impl From<String> for UploadApiError {
+    fn from(message: String) -> Self { Self { code: None, message } }
+}
+
+impl UploadApiError {
+    fn requires_restart(&self) -> bool { matches!(self.code, Some(419006 | 419016 | 419017)) }
+}
+
+async fn parse_api_response<T: for<'de> Deserialize<'de>>(response: reqwest::Response) -> Result<T, UploadApiError> {
     let status = response.status();
-    let text = response.text().await.map_err(|e| format!("读取响应失败: {e}"))?;
-    if !status.is_success() {
-        return Err(format!("请求失败 ({status}): {text}"));
+    let envelope: ApiEnvelope<T> = response.json().await.map_err(|_| UploadApiError::from("error.uploadFailed".to_string()))?;
+    if envelope.code != 200 || !status.is_success() {
+        return Err(UploadApiError { code: Some(envelope.code), message: envelope.message_key });
     }
-    let envelope: ApiEnvelope<T> = serde_json::from_str(&text).map_err(|e| format!("解析响应失败: {e}: {text}"))?;
-    if envelope.code != 200 {
-        eprintln!(
-            "Desktop upload API rejected request: code={} messageKey={} messageParams={}",
-            envelope.code, envelope.message_key, envelope.message_params
-        );
-        return Err(format!("服务端拒绝了上传请求（代码 {}）", envelope.code));
+    envelope.data.ok_or_else(|| UploadApiError::from("error.uploadFailed".to_string()))
+}
+
+
+async fn report_upload_failure<R: Runtime>(ctx: &UploadContext<R>, file: &LocalUploadFile, id: &str,
+    parent: Option<i64>, session: &str, md5: &str, chunks: u64, error: UploadApiError) -> String {
+    let restart = error.requires_restart();
+    if restart {
+        let _ = post_json::<_, serde_json::Value>(ctx, &format!("/upload/{session}/cancel"), serde_json::json!({})).await;
+        let _ = ctx.app.emit("desktop-upload:session-invalidated", session);
     }
-    envelope.data.ok_or_else(|| "响应缺少 data".to_string())
+    let key = error.message;
+    emit_item(ctx, file, id, parent, "error", 0.0, "",
+        if restart { None } else { Some(session.to_string()) }, Some(key.clone()),
+        Some(md5.to_string()), chunks, !restart);
+    key
 }
 
 fn find_resumable_upload<R: Runtime>(
@@ -1068,7 +1082,12 @@ fn read_chunk(path: &Path, chunk_number: u64, chunk_size: u64) -> std::io::Resul
     let mut file = fs::File::open(path)?;
     file.seek(SeekFrom::Start(chunk_number * chunk_size))?;
     let mut buffer = vec![0; chunk_size as usize];
-    let read = file.read(&mut buffer)?;
+    let mut read = 0;
+    while read < buffer.len() {
+        let count = file.read(&mut buffer[read..])?;
+        if count == 0 { break; }
+        read += count;
+    }
     buffer.truncate(read);
     Ok(buffer)
 }
@@ -1127,7 +1146,7 @@ fn emit_item<R: Runtime>(
             md5_hash: Some(md5_hash.clone()),
             total_chunks: Some(total_chunks),
             completed_chunks: Some(completed_chunks),
-            chunk_size: Some(CHUNK_SIZE),
+            chunk_size: None,
             remote_parent_id: Some(parent_id),
             ..TransferNodePatch::default()
         },
@@ -1213,6 +1232,44 @@ fn epoch_millis() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn initialization_modes_require_complete_exclusive_fields() {
+        for json in [
+            r#"{"mode":"UNKNOWN"}"#,
+            r#"{"mode":"INSTANT"}"#,
+            r#"{"mode":"MULTIPART","sessionId":"s","chunkSize":5}"#,
+            r#"{"mode":"INSTANT","fileId":1,"sessionId":"s"}"#,
+        ] {
+            assert!(serde_json::from_str::<super::InitUploadResponse>(json).is_err());
+        }
+        let instant: super::InitUploadResponse = serde_json::from_str(r#"{"mode":"INSTANT","fileId":1}"#).unwrap();
+        assert!(instant.validate(7).is_ok());
+        let multipart: super::InitUploadResponse = serde_json::from_str(r#"{"mode":"MULTIPART","sessionId":"s","chunkSize":4,"totalChunks":2}"#).unwrap();
+        assert!(multipart.validate(7).is_ok());
+        let invalid: super::InitUploadResponse = serde_json::from_str(r#"{"mode":"MULTIPART","sessionId":"s","chunkSize":0,"totalChunks":1}"#).unwrap();
+        assert!(invalid.validate(7).is_err());
+    }
+
+    #[test]
+    fn checksum_failures_have_structured_restart_policy() {
+        for code in [419006, 419016, 419017] {
+            assert!(super::UploadApiError { code: Some(code), message: String::new() }.requires_restart());
+        }
+        for code in [419007, 500001, 429] {
+            assert!(!super::UploadApiError { code: Some(code), message: String::new() }.requires_restart());
+        }
+    }
+
+    #[test]
+    fn reads_exact_chunk_ranges_and_hashes_the_sent_bytes() {
+        let path = std::env::temp_dir().join(format!("bcd-upload-{}-{}", std::process::id(), super::epoch_millis()));
+        std::fs::write(&path, b"hello world").unwrap();
+        let bytes = super::read_chunk(&path, 1, 6).unwrap();
+        assert_eq!(bytes, b"world");
+        assert_eq!(format!("{:x}", md5::compute(&bytes)), "7d793037a0760186574b0282f2f435e7");
+        std::fs::remove_file(path).unwrap();
+    }
+
     use super::{collect_directory_paths, directory_path_key, total_chunks, LocalUploadFile, LocalUploadPlan, CHUNK_SIZE};
     use std::path::PathBuf;
 

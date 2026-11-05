@@ -37,12 +37,15 @@ public enum ApiCode {
     CHUNK_MD5_MISMATCH(419007, "chunk MD5 does not match"),
     FILE_TOO_LARGE(419008, "file exceeds maximum allowed size"),
     VERSION_LIMIT_REACHED(419009, "maximum version limit reached"),
-    INSTANT_UPLOAD_NOT_FOUND(419010, "no matching file found for instant upload"),
+    // 419010 retired: initialization now handles a deduplication miss normally.
     EMAIL_VERIFICATION_FAILED(419011, "email verification failed"),
     EMAIL_CODE_EXPIRED(419012, "verification code expired"),
     EMAIL_CODE_MISMATCH(419013, "verification code mismatch"),
     PASSWORD_RESET_FAILED(419014, "password reset failed"),
     FOLDER_DOWNLOAD_LIMIT_EXCEEDED(419015, "folder download limit exceeded"),
+
+    FILE_MD5_MISMATCH(419016, "file MD5 does not match"),
+    UPLOAD_SIZE_MISMATCH(419017, "upload size does not match"),
 
     // ==================== 5xx Server Errors ====================
     INTERNAL_ERROR(500, "internal server error"),

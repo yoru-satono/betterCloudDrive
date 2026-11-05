@@ -520,4 +520,8 @@
     <string name="notification_member_changed_content">Membership in {0} changed for {1}.</string>
     <string name="notification_permission_changed_content">Your access to {0} changed.</string>
     <string name="notification_office_save_failed_content">The online document {0} could not be saved.</string>
+    <string name="error_chunk_upload_invalid">Upload session is invalid. Please upload again</string>
+    <string name="error_chunk_md5_mismatch">Chunk verification failed. Retry the upload</string>
+    <string name="error_file_md5_mismatch">File verification failed. Please upload again</string>
+    <string name="error_upload_size_mismatch">Upload size changed. Please upload again</string>
 </resources>

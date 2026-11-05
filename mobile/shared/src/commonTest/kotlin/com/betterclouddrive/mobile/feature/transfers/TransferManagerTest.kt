@@ -149,6 +149,7 @@ private class ManagerFakeFiles : TransferFileAccess {
     override suspend fun releaseReadable(sourceHandle: String) { releasedReads += sourceHandle }
     override suspend fun releaseWritable(destinationHandle: String) { releasedWrites += destinationHandle }
     override suspend fun computeDigest(sourceHandle: String): FileDigest = FileDigest("md5", 0)
+    override suspend fun computePartDigest(sourceHandle: String, offset: Long, length: Long): FileDigest = FileDigest("test-part-md5", length)
     override fun uploadPart(sourceHandle: String, offset: Long, length: Long, onBytes: (Long) -> Unit): InputProvider =
         InputProvider(length) { Buffer() }
     override suspend fun tempLength(taskId: String): Long = 0

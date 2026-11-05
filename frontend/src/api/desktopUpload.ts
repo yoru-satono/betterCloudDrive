@@ -1,5 +1,6 @@
 import { i18n as __i18n } from '@/i18n'
 const __t = __i18n.global.t
+import { resolveMessage } from '@/i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getApiBaseUrl, isDesktopRuntime } from '@/config/runtime'
@@ -91,6 +92,7 @@ export async function registerDesktopUploadListeners(handlers: {
         removeResumableUpload(item.uploadId)
       }
     }),
+    listen<string>('desktop-upload:session-invalidated', event => removeResumableUpload(event.payload)),
     listen<ResumableUploadRecord>('desktop-upload:resumable-record', (event) => {
       saveResumableUpload(event.payload)
     }),
@@ -101,7 +103,8 @@ export async function registerDesktopUploadListeners(handlers: {
       handlers.onBatchCompleted()
     }),
     listen<{ message?: string }>('desktop-upload:error', (event) => {
-      handlers.onError(event.payload.message || __t('commonUi.desktopupload.failedToUploadFolder'))
+      const message = event.payload.message || __t('commonUi.desktopupload.failedToUploadFolder')
+      handlers.onError(message.startsWith('error.') ? resolveMessage(message) : message)
     }),
   ])
 

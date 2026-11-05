@@ -33,6 +33,24 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AndroidSecurityDeviceTest {
     @Test
+    fun uploadPartDigestCoversOnlyTheRequestedRangeAndRejectsTruncation() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val file = java.io.File(context.cacheDir, "part-digest-${System.nanoTime()}")
+        try {
+            file.writeText("hello world")
+            val files = AndroidTransferFileAccess(context)
+            val handle = android.net.Uri.fromFile(file).toString()
+            val digest = files.computePartDigest(handle, 6, 5)
+            assertEquals(5L, digest.size)
+            assertEquals("7d793037a0760186574b0282f2f435e7", digest.md5)
+            var rejected = false
+            try { files.computePartDigest(handle, 6, 6) }
+            catch (_: IllegalStateException) { rejected = true }
+            assertTrue(rejected)
+        } finally { file.delete() }
+    }
+
+    @Test
     fun roomMigrationFromV1PreservesTransferAndAddsNullableVersion() = runTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val name = "migration-${System.nanoTime()}.db"

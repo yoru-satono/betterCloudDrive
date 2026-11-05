@@ -30,6 +30,10 @@ data class FileMutationFeedback(
 internal fun uiError(error: Throwable): UiMessage = when (error) {
     is CancellationException -> throw error
     is ApiException -> when (error.messageKey) {
+        "error.chunkUploadInvalid" -> UiMessage(MobileString.ErrorChunkUploadInvalid)
+        "error.chunkMd5Mismatch" -> UiMessage(MobileString.ErrorChunkMd5Mismatch)
+        "error.fileMd5Mismatch" -> UiMessage(MobileString.ErrorFileMd5Mismatch)
+        "error.uploadSizeMismatch" -> UiMessage(MobileString.ErrorUploadSizeMismatch)
         "error.unauthorized", "error.invalidCredentials" -> UiMessage(MobileString.ErrorCredentials)
         "error.storageQuotaExceeded" -> UiMessage(MobileString.ErrorQuota)
         "error.fileNameExists", "error.fileNameConflict" -> UiMessage(MobileString.ErrorNameConflict)

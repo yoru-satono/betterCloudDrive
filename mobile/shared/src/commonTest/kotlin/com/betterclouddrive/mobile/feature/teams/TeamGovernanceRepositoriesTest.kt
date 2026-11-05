@@ -125,6 +125,7 @@ private class FakeResultFiles : TransferFileAccess {
         if (failValidation) error("destination unavailable")
     }
     override suspend fun computeDigest(sourceHandle: String) = FileDigest("unused", 0)
+    override suspend fun computePartDigest(sourceHandle: String, offset: Long, length: Long): FileDigest = FileDigest("test-part-md5", length)
     override fun uploadPart(sourceHandle: String, offset: Long, length: Long, onBytes: (Long) -> Unit): InputProvider =
         error("not used")
     override suspend fun tempLength(taskId: String) = temp.size.toLong()
