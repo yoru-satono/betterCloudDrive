@@ -1,0 +1,16 @@
+name: bcd_warehouse
+version: 0.1.0
+config-version: 2
+profile: bcd_warehouse
+model-paths: [models]
+test-paths: [tests]
+clean-targets: [target, dbt_packages]
+models:
+  bcd_warehouse:
+    +materialized: view
+    ads:
+      +materialized: incremental
+      +incremental_strategy: append
+      +engine: MergeTree()
+      +order_by: "(generation_id, day, scope_type, scope_id)"
+      +ttl: day + INTERVAL 365 DAY

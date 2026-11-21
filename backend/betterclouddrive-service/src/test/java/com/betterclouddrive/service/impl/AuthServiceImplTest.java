@@ -34,6 +34,7 @@ class AuthServiceImplTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private EmailService emailService;
+    @Mock private com.betterclouddrive.service.WarehouseEventService warehouseEvents;
     @Spy private LocaleCatalog localeCatalog = new LocaleCatalog("zh-Hans");
 
     @InjectMocks

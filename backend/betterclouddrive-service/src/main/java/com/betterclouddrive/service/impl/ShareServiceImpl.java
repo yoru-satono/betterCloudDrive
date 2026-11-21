@@ -11,6 +11,8 @@ import com.betterclouddrive.dal.repository.ShareLinkRepository;
 import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.service.SharePasswordCryptoService;
 import com.betterclouddrive.service.ShareService;
+import com.betterclouddrive.service.WarehouseEventService;
+import com.betterclouddrive.common.dto.WarehouseEvent.Type;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.dto.ShareUpdateCommand;
@@ -46,6 +48,7 @@ public class ShareServiceImpl implements ShareService {
     private final TeamAuditService teamAuditService;
     private final TeamPermissionService teamPermissionService;
     private final StringRedisTemplate redisTemplate;
+    private final WarehouseEventService warehouseEvents;
     private static final String SHARE_CODE_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int SHARE_CODE_LENGTH = 8;
     private static final int MIN_SHARE_PASSWORD_LENGTH = 4;
@@ -95,7 +98,9 @@ public class ShareServiceImpl implements ShareService {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-        return shareLinkRepository.save(share);
+        ShareLinkEntity saved = shareLinkRepository.save(share);
+        warehouseEvents.record(Type.SHARE_CREATED, userId, teamId, saved.getId(), "share-created:" + saved.getId());
+        return saved;
     }
 
     @Override
@@ -265,7 +270,7 @@ public class ShareServiceImpl implements ShareService {
     @Transactional
     public void cancelShare(Long userId, Long shareId) {
         ShareLinkEntity share = getShare(userId, shareId);
-        cancelShareRecord(share);
+        cancelShareRecord(share, userId);
     }
 
     @Override
@@ -273,18 +278,20 @@ public class ShareServiceImpl implements ShareService {
     public void cancelTeamShare(Long actorUserId, boolean canManageAll, Long teamId, Long shareId) {
         ShareLinkEntity share = getTeamShare(teamId, shareId);
         requireShareEditor(actorUserId, canManageAll, share);
-        cancelShareRecord(share);
+        cancelShareRecord(share, actorUserId);
         teamAuditService.record(teamId, actorUserId, "SHARE_CANCEL", "SHARE", share.getId(),
                 "share " + share.getShareCode() + " file " + share.getFileId());
     }
 
-    private void cancelShareRecord(ShareLinkEntity share) {
+    private void cancelShareRecord(ShareLinkEntity share, Long actorUserId) {
         if (Boolean.TRUE.equals(share.getIsCanceled())) {
             return;
         }
         share.setIsCanceled(true);
         share.setUpdatedAt(LocalDateTime.now());
         shareLinkRepository.save(share);
+        warehouseEvents.record(Type.SHARE_CANCELED, actorUserId, share.getTeamId(), share.getId(),
+                "share-canceled:" + share.getId());
     }
 
     private void requireShareEditor(Long actorUserId, boolean canManageAll, ShareLinkEntity share) {
@@ -294,6 +301,7 @@ public class ShareServiceImpl implements ShareService {
     }
 
     @Override
+    @Transactional
     public FileEntity accessShare(String shareCode, String password) {
         ShareLinkEntity share = validateShareAccess(shareCode, password, true);
 
@@ -301,6 +309,8 @@ public class ShareServiceImpl implements ShareService {
         if (!isActiveInFileSpace(file)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
         }
+        warehouseEvents.record(Type.SHARE_ACCESSED, null, share.getTeamId(), share.getId(),
+                "share-access:" + java.util.UUID.randomUUID());
         return file;
     }
 

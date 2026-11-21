@@ -18,6 +18,7 @@ const driverPort = Number(process.env.TAURI_DRIVER_PORT || 4444)
 const nativePort = Number(process.env.TAURI_NATIVE_DRIVER_PORT || 4445)
 const tauriDriverPath = process.env.TAURI_DRIVER_PATH || 'tauri-driver'
 const wdioBin = path.resolve(root, 'node_modules/@wdio/cli/bin/wdio.js')
+const wdioArgs = process.argv.slice(2).filter((argument, index) => argument !== '--' || index !== 0)
 const wdioConfig = path.resolve(root, process.platform === 'linux'
   ? 'wdio.tauri.linux.conf.ts'
   : 'wdio.tauri.conf.ts')
@@ -49,8 +50,8 @@ if (process.platform === 'linux') {
     fail('No graphical display is available. Install xvfb and ensure xvfb-run is on PATH.')
   }
   const args = process.env.DISPLAY
-    ? [wdioBin, 'run', wdioConfig]
-    : ['-a', process.execPath, wdioBin, 'run', wdioConfig]
+    ? [wdioBin, 'run', wdioConfig, ...wdioArgs]
+    : ['-a', process.execPath, wdioBin, 'run', wdioConfig, ...wdioArgs]
   const wdio = spawn(command, args, {
     cwd: root,
     env,
@@ -144,7 +145,7 @@ try {
   fail(`tauri-driver did not start on port ${driverPort}.${hint}\n${tauriDriverOutput || String(error)}`)
 }
 
-const wdio = spawn(process.execPath, [wdioBin, 'run', wdioConfig], {
+const wdio = spawn(process.execPath, [wdioBin, 'run', wdioConfig, ...wdioArgs], {
   cwd: root,
   env: {
     ...process.env,

@@ -34,6 +34,7 @@ class UploadIntegrityTest {
     @Mock NotificationService notifications;
     @Mock TeamPermissionService permissions;
     @Mock ThumbnailService thumbnails;
+    @Mock com.betterclouddrive.service.WarehouseEventService warehouseEvents;
     @InjectMocks UploadServiceImpl service;
 
     @AfterEach void clearTransactions() {

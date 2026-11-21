@@ -17,6 +17,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import com.betterclouddrive.web.warehouse.WarehouseTransferContext;
+import com.betterclouddrive.common.dto.WarehouseEvent.Channel;
+import com.betterclouddrive.common.dto.WarehouseEvent.Mode;
 
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -48,6 +51,7 @@ public class FileVersionController {
             @RequestHeader(value = HttpHeaders.RANGE, required = false) String rangeHeader) {
         FileEntity file = fileService.getFile(user.getUserId(), fileId);
         FileVersionEntity version = fileVersionService.getVersion(user.getUserId(), fileId, versionNumber);
+        WarehouseTransferContext.bind(user.getUserId(), null, fileId, Channel.API, Mode.VERSION);
         String mimeType = file.getMimeType() != null ? file.getMimeType() : "application/octet-stream";
         String disposition = attachmentDisposition("v" + versionNumber + "_" + file.getFileName());
         ByteRange range;

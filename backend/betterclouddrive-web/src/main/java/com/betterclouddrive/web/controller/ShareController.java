@@ -28,6 +28,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import com.betterclouddrive.web.warehouse.WarehouseTransferContext;
+import com.betterclouddrive.common.dto.WarehouseEvent.Channel;
+import com.betterclouddrive.common.dto.WarehouseEvent.Mode;
 
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -154,6 +157,7 @@ public class ShareController {
             @RequestHeader(value = "Range", required = false) String rangeHeader) {
         String password = body != null ? body.get("password") : null;
         FileEntity file = shareService.resolveSharedFileDownload(shareCode, fileId, password);
+        WarehouseTransferContext.bind(null, file.getTeamId(), fileId, Channel.API, Mode.SHARE);
         String mimeType = file.getMimeType() != null ? file.getMimeType() : "application/octet-stream";
         String disposition = attachmentDisposition(file.getFileName());
 
@@ -169,6 +173,7 @@ public class ShareController {
             @RequestBody(required = false) Map<String, String> body) {
         String password = body != null ? body.get("password") : null;
         FileEntity folder = shareService.resolveSharedFolderDownload(shareCode, fileId, password);
+        WarehouseTransferContext.bind(null, folder.getTeamId(), fileId, Channel.API, Mode.ZIP);
         folderZipDownloadService.validateDownloadable(folder);
         shareService.recordSharedDownload(shareCode, password);
         String zipFileName = folder.getFileName() + ".zip";

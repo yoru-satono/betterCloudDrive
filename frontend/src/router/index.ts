@@ -43,6 +43,7 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
     children: [
       { path: '',       name: 'AdminDashboard', component: () => import('@/pages/admin/AdminDashboard.vue') },
+      { path: 'analytics', name: 'AdminAnalytics', component: () => import('@/pages/admin/AdminAnalytics.vue') },
       { path: 'users',  name: 'AdminUsers',     component: () => import('@/pages/admin/AdminUsers.vue') },
       { path: 'teams',  name: 'AdminTeams',     component: () => import('@/pages/admin/AdminTeams.vue') },
       { path: 'users/:userId/files', name: 'AdminUserFiles', component: () => import('@/pages/admin/AdminUserFiles.vue') },

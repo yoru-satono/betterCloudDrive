@@ -114,6 +114,8 @@ frontend/src-tauri/target/release/wix/
 *.pdb
 
 # Python
+# dbt local telemetry identity
+warehouse/dbt/.user.yml
 __pycache__/
 *.py[cod]
 *$py.class

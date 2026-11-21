@@ -16,6 +16,8 @@ import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.ThumbnailService;
 import com.betterclouddrive.service.UploadService;
+import com.betterclouddrive.service.WarehouseEventService;
+import com.betterclouddrive.common.dto.WarehouseEvent.Mode;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.storage.ContentDigest;
 import com.betterclouddrive.storage.ObjectNotFoundException;
@@ -51,6 +53,7 @@ public class UploadServiceImpl implements UploadService {
     private final NotificationService notificationService;
     private final TeamPermissionService teamPermissionService;
     private final ThumbnailService thumbnailService;
+    private final WarehouseEventService warehouseEvents;
 
     private static final String UPLOAD_BITMAP_PREFIX = "upload:bitmap:";
     private static final String STORAGE_INCR_PREFIX = "storage:incr:";
@@ -71,6 +74,7 @@ public class UploadServiceImpl implements UploadService {
         if (candidate.isPresent()) {
             FileEntity file = fileRepository.save(buildFileEntity(userId, parentId, fileName, fileSize, md5Hash, candidate.get().getStoragePath()));
             scheduleThumbnailAfterCommit(file);
+            warehouseEvents.uploadCommitted(file, Mode.INSTANT);
             incrementAfterCommit(STORAGE_INCR_PREFIX + userId, fileSize);
             return UploadInitResult.instant(file.getId());
         }
@@ -158,6 +162,7 @@ public class UploadServiceImpl implements UploadService {
         session.setUpdatedAt(LocalDateTime.now());
         uploadSessionRepository.save(session);
 
+        warehouseEvents.uploadCommitted(file, Mode.MULTIPART);
         cleanupAfterCommit(chunkPrefix, session.getTotalChunks(), bitmapKey);
         if (session.getFileSize() != null && session.getFileSize() > 0) {
             incrementAfterCommit(STORAGE_INCR_PREFIX + userId, session.getFileSize());
@@ -203,6 +208,7 @@ public class UploadServiceImpl implements UploadService {
             incrementAfterCommit(TEAM_STORAGE_INCR_PREFIX + teamId, fileSize);
             notificationService.checkTeamQuota(teamId);
             teamAuditService.record(teamId, userId, "UPLOAD_INSTANT", "FILE", file.getId(), file.getFileName());
+            warehouseEvents.uploadCommitted(file, Mode.INSTANT);
             return UploadInitResult.instant(file.getId());
         }
         return createUploadSession(teamId, userId, parentId, fileName, fileSize, md5Hash, chunks);
@@ -297,6 +303,7 @@ public class UploadServiceImpl implements UploadService {
         }
         notificationService.checkTeamQuota(teamId);
         teamAuditService.record(teamId, userId, "UPLOAD_COMPLETE", "FILE", file.getId(), file.getFileName());
+        warehouseEvents.uploadCommitted(file, Mode.MULTIPART);
         return file.getId();
     }
 
@@ -344,6 +351,7 @@ public class UploadServiceImpl implements UploadService {
             String key = generateStoragePath(userId, fileName);
             ContentDigest actual = composeVerified(key, prefix, parts, received, actualMd5, fileName);
             FileEntity file = fileRepository.save(buildFileEntity(userId, parentId, fileName, actual.size(), actual.md5(), key));
+            warehouseEvents.uploadCommitted(file, Mode.STREAM);
             scheduleThumbnailAfterCommit(file);
             cleanupAfterCommit(prefix, parts, null);
             if (received > 0) incrementAfterCommit(STORAGE_INCR_PREFIX + userId, received);

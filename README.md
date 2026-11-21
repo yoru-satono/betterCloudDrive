@@ -13,6 +13,7 @@
 | **存储** | SeaweedFS（S3 兼容对象存储） |
 | **邮件** | Mailpit（开发环境邮件模拟） |
 | **可观测性** | Actuator/Micrometer + Prometheus + Alertmanager + Loki + Grafana Alloy + Grafana |
+| **业务数仓（可选）** | ClickHouse 26.8.41.14 + dbt Core 1.12.7 + Airflow 3.4.0 + Python 3.12 |
 | **Web 前端** | Vue 3.5.40 + Vite 8.1.5 + Pinia 4.0.2 + Vue Router 5.2.0 |
 | **桌面端** | Tauri 2.11.4 + Rust 1.88.0 |
 | **KMP 移动端** | Kotlin 2.4.10 + Compose Multiplatform 1.11.1 + Ktor 3.5.1 + Room 2.8.4；Android 应用壳，iOS 共享源码目标 |
@@ -34,6 +35,7 @@
 - **注册验证码 & 密码重置**：Mailpit 模拟邮件
 - **存储配额**：默认 10GB/用户，管理员可调整
 - **管理员面板**：用户管理/配额调整/日志中心/系统统计
+- **业务数仓**：管理员容量日报、活跃用户/团队、上传下载与分享趋势；[独立部署与统计口径](warehouse/README.md)
 - **响应式 UI**：Web 端支持桌面与移动布局；KMP 移动端在 Android 应用壳提供手机与平板布局，共享业务层面向后续 iOS 应用复用
 
 ## 项目结构
@@ -52,6 +54,7 @@ betterCloudDrive/
 ├── mobile/                  # 活跃的 Kotlin Multiplatform 移动端
 ├── backend-test/            # Python 黑盒 API 测试
 ├── observability/           # Prometheus/Loki/Alloy/Alertmanager/Grafana 配置
+├── warehouse/               # 白名单采集、ClickHouse、dbt、Airflow 与验证
 ├── docs/                    # 文档索引、参考资料、运维手册和决策记录
 │   └── README.md            # 文档入口
 ├── config/redis/redis.conf  # Redis 配置
@@ -73,6 +76,8 @@ docker compose up -d --build
 `SHARE_PASSWORD_ENCRYPTION_KEY` 用于加密分享链接密码，建议使用 32 字节随机密钥的 Base64 字符串生成，例如 `openssl rand -base64 32`。该值必须长期保持稳定，否则已加密的分享密码无法解密。
 
 完整健康检查和首次注册步骤仍以 [Docker Compose 快速启动](docs/getting-started/QUICKSTART.md)为准。
+
+基础网盘不依赖业务数仓；ClickHouse、dbt 和 Airflow 仅在叠加数仓配置时部署。不部署数仓的环境可设置 `WAREHOUSE_CAPTURE_ENABLED=false` 停止采集业务分析事件；关闭期间的历史行为不会补采。
 
 默认访问地址：
 
@@ -155,6 +160,7 @@ Android APK 输出在 `mobile/androidApp/build/outputs/apk/debug/`。正式应�
 Web、Tauri 与 KMP 移动端支持“跟随系统、浅色、深色”三种主题模式。首次启动默认跟随系统，用户可在个人设置的“外观”区域选择固定主题；偏好仅保存在当前设备并跨登录状态保留。
 
 ## 文档
+
 
 - [统一文档入口](docs/README.md)
 - [入门指南](docs/getting-started/README.md)

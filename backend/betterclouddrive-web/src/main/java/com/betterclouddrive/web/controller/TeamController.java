@@ -62,6 +62,9 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import com.betterclouddrive.web.warehouse.WarehouseTransferContext;
+import com.betterclouddrive.common.dto.WarehouseEvent.Channel;
+import com.betterclouddrive.common.dto.WarehouseEvent.Mode;
 
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -319,6 +322,7 @@ public class TeamController {
             download = teamAuditExportTaskService.downloadExportResult(user.getUserId(), teamId, taskId);
         } else if ("FOLDER_ZIP".equals(task.getTaskType())) {
             download = folderZipTaskService.downloadTeamFolderZipResult(user.getUserId(), teamId, taskId);
+            WarehouseTransferContext.bind(user.getUserId(), teamId, task.getTargetId(), Channel.API, Mode.ZIP);
         } else {
             throw new BusinessException(ApiCode.NOT_FOUND, "Task result is not available");
         }
@@ -663,6 +667,7 @@ public class TeamController {
         teamPermissionService.requireRead(user.getUserId(), teamId, fileId);
         FileEntity file = fileService.getTeamFile(teamId, fileId);
         FileVersionEntity version = fileVersionService.getTeamVersion(teamId, fileId, versionNumber);
+        WarehouseTransferContext.bind(user.getUserId(), teamId, fileId, Channel.API, Mode.VERSION);
         String mimeType = file.getMimeType() != null ? file.getMimeType() : "application/octet-stream";
         return rangedObjectResponse(version.getStoragePath(), version.getFileSize(), mimeType,
                 attachmentDisposition(versionFileName(file.getFileName(), versionNumber)), rangeHeader);
@@ -952,11 +957,15 @@ public class TeamController {
     }
 
     private FileEntity resolveTeamDownload(UserPrincipal user, String ticket, Long teamId, Long fileId, DownloadTicketType type) {
+        Long actorId;
         if (user != null) {
+            actorId = user.getUserId();
             teamPermissionService.requireRead(user.getUserId(), teamId, fileId);
         } else {
-            downloadTicketService.consumeTicket(ticket, fileId, type);
+            actorId = downloadTicketService.consumeTicket(ticket, fileId, type).userId();
         }
+        WarehouseTransferContext.bind(actorId, teamId, fileId, Channel.API,
+                type == DownloadTicketType.TEAM_FOLDER_ZIP ? Mode.ZIP : Mode.FILE);
         return fileService.getTeamFile(teamId, fileId);
     }
 

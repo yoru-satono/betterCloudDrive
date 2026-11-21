@@ -1,0 +1,14 @@
+bcd_warehouse:
+  target: warehouse
+  outputs:
+    warehouse:
+      type: clickhouse
+      host: "{{ env_var('WAREHOUSE_CLICKHOUSE_HOST', 'clickhouse') }}"
+      port: "{{ env_var('WAREHOUSE_CLICKHOUSE_PORT', '8123') | int }}"
+      schema: "{{ env_var('WAREHOUSE_CLICKHOUSE_DATABASE', 'bcd_warehouse') }}"
+      user: "{{ env_var('WAREHOUSE_CLICKHOUSE_USER', 'warehouse_writer') }}"
+      password: "{{ env_var('WAREHOUSE_CLICKHOUSE_PASSWORD') }}"
+      secure: false
+      threads: 1
+      connect_timeout: 5
+      send_receive_timeout: 120

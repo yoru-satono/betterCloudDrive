@@ -8,6 +8,8 @@ import com.betterclouddrive.dal.repository.UserRepository;
 import com.betterclouddrive.dal.repository.UserTokenRepository;
 import com.betterclouddrive.service.AuthService;
 import com.betterclouddrive.service.EmailService;
+import com.betterclouddrive.service.WarehouseEventService;
+import com.betterclouddrive.common.dto.WarehouseEvent.Type;
 import com.betterclouddrive.service.i18n.LocaleCatalog;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,6 +34,7 @@ public class AuthServiceImpl implements AuthService {
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
     private final LocaleCatalog localeCatalog;
+    private final WarehouseEventService warehouseEvents;
 
     @Value("${drive.storage.default-quota-bytes:10737418240}")
     private long defaultQuotaBytes;
@@ -76,11 +79,13 @@ public class AuthServiceImpl implements AuthService {
                 .updatedAt(LocalDateTime.now())
                 .build();
         UserEntity saved = userRepository.save(user);
+        warehouseEvents.record(Type.USER_REGISTERED, saved.getId(), null, saved.getId(), "register:" + saved.getId());
         redisTemplate.delete(EMAIL_REGISTER_PREFIX + normalizedEmail);
         return saved;
     }
 
     @Override
+    @Transactional
     public UserEntity login(String username, String password) {
         UserEntity user = userRepository.findByUsername(username).orElse(null);
         if (user == null || user.getDeletedAt() != null) {
@@ -92,6 +97,8 @@ public class AuthServiceImpl implements AuthService {
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             throw new BusinessException(ApiCode.INVALID_CREDENTIALS);
         }
+        warehouseEvents.record(Type.LOGIN_SUCCEEDED, user.getId(), null, null,
+                "login:" + java.util.UUID.randomUUID());
         return user;
     }
 

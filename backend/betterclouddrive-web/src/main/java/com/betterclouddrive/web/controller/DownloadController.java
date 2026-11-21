@@ -23,6 +23,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
+import com.betterclouddrive.web.warehouse.WarehouseTransferContext;
+import com.betterclouddrive.common.dto.WarehouseEvent.Channel;
+import com.betterclouddrive.common.dto.WarehouseEvent.Mode;
 
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -153,11 +156,11 @@ public class DownloadController {
     }
 
     private Long resolveDownloadUserId(UserPrincipal user, String ticket, Long resourceId, DownloadTicketType type) {
-        if (user != null) {
-            return user.getUserId();
-        }
-        DownloadTicket resolved = downloadTicketService.consumeTicket(ticket, resourceId, type);
-        return resolved.userId();
+        Long actorId = user != null ? user.getUserId()
+                : downloadTicketService.consumeTicket(ticket, resourceId, type).userId();
+        WarehouseTransferContext.bind(actorId, null, resourceId, Channel.API,
+                type == DownloadTicketType.FOLDER_ZIP ? Mode.ZIP : Mode.FILE);
+        return actorId;
     }
 
     private ResponseEntity<StreamingResponseBody> rangedObjectResponse(

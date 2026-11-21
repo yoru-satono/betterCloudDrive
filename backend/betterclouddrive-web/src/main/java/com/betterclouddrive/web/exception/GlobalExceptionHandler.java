@@ -24,6 +24,12 @@ import com.betterclouddrive.common.message.MessageKeys;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.betterclouddrive.common.exception.WarehouseUnavailableException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ApiResponse<Void> handleWarehouseUnavailable() {
+        return ApiResponse.error(503, "error.warehouseUnavailable");
+    }
+
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusinessException(BusinessException e) {
         log.warn("Business exception: code={}, message={}", e.getCode(), e.getMessage());

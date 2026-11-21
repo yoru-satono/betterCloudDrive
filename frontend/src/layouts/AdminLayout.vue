@@ -19,6 +19,7 @@ onMounted(() => { if (!auth.isAdmin) router.push('/files') })
     </div>
     <nav class="admin-layout__nav">
       <RouterLink to="/admin" exact-active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.overview') }}</RouterLink>
+      <RouterLink to="/admin/analytics" active-class="admin-nav--active" class="admin-nav-link">{{ t('warehouse.title') }}</RouterLink>
       <RouterLink to="/admin/users" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.users') }}</RouterLink>
       <RouterLink to="/admin/teams" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.teams') }}</RouterLink>
       <RouterLink to="/admin/logs" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.logs') }}</RouterLink>
@@ -44,11 +45,11 @@ onMounted(() => { if (!auth.isAdmin) router.push('/files') })
 }
 .admin-layout__title { font-size: 14px; font-weight: 600; flex: 1; }
 .admin-layout__nav {
-  display: flex; gap: 2px; padding: 12px 24px 0;
+  display: flex; gap: 2px; padding: 12px 24px 0; overflow-x: auto;
   border-bottom: 1px solid var(--border); background: var(--bg-surface);
 }
 .admin-nav-link {
-  padding: 8px 14px; font-size: 13px; text-decoration: none;
+  padding: 8px 14px; font-size: 13px; text-decoration: none; white-space: nowrap; flex-shrink: 0;
   color: var(--text-secondary); border-radius: 7px 7px 0 0;
   border: 1px solid transparent; border-bottom: none;
   transition: all var(--fast);
@@ -62,6 +63,14 @@ onMounted(() => { if (!auth.isAdmin) router.push('/files') })
   position: relative; bottom: -1px;
 }
 .admin-layout__content { padding: 24px; }
+:global(.app-shell--desktop .admin-layout) {
+  height: 100%; min-height: 0; display: flex; flex-direction: column;
+}
+:global(.app-shell--desktop .admin-layout__header),
+:global(.app-shell--desktop .admin-layout__nav) { flex-shrink: 0; }
+:global(.app-shell--desktop .admin-layout__content) {
+  flex: 1; min-height: 0; overflow: auto;
+}
 @media (max-width: 719px) {
   .admin-layout__header { height: auto; min-height: 52px; padding: 10px 16px; flex-wrap: wrap; }
   .admin-layout__nav { padding: 8px 12px 0; overflow-x: auto; }

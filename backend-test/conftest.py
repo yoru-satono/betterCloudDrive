@@ -9,7 +9,23 @@ import os
 import re
 import subprocess
 import time
+import logging
 from pathlib import Path
+from report_privacy import RedactingFilter, redact
+
+
+def pytest_configure(config):
+    # HTTPX logs URLs before report hooks run; protect one-use tickets in live CLI output too.
+    logging.getLogger("httpx").addFilter(RedactingFilter())
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    if report.failed and report.longrepr:
+        report.longrepr = redact(str(report.longrepr))
+    report.sections = [(title, redact(contents)) for title, contents in report.sections]
 
 BASE_URL = os.getenv("BACKEND_URL", "http://localhost:8080")
 MAILPIT_URL = os.getenv("MAILPIT_URL", "http://localhost:8025")

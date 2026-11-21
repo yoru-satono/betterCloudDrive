@@ -4,6 +4,50 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
+  - name: disabled warehouse does not alert
+    interval: 1m
+    input_series:
+      - series: 'bcd_warehouse_query_enabled'
+        values: '0x15'
+      - series: 'bcd_warehouse_query_available'
+        values: '0x15'
+      - series: 'bcd_warehouse_publication_age_seconds'
+        values: '10000x15'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: BetterCloudDriveWarehouseUnavailable
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: BetterCloudDriveWarehouseDelayed
+        exp_alerts: []
+
+  - name: enabled warehouse reports unavailable and delayed states
+    interval: 1m
+    input_series:
+      - series: 'bcd_warehouse_query_enabled'
+        values: '1x15'
+      - series: 'bcd_warehouse_query_available'
+        values: '0x15'
+      - series: 'bcd_warehouse_publication_age_seconds'
+        values: '10000x15'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: BetterCloudDriveWarehouseUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Business warehouse queries are unavailable
+              description: The enabled warehouse has failed its read-only query probe for five minutes.
+      - eval_time: 11m
+        alertname: BetterCloudDriveWarehouseDelayed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: Business warehouse processing is delayed
+              description: A publication or unexported source event is more than two hours old.
+
   - name: low traffic does not trigger ratio or latency alerts
     interval: 1m
     input_series:

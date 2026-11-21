@@ -1,0 +1,9 @@
+version: 2
+sources:
+  - name: raw
+    schema: "{{ env_var('WAREHOUSE_CLICKHOUSE_DATABASE', 'bcd_warehouse') }}"
+    tables:
+      - name: ods_events
+      - name: ods_snapshots
+      - name: ods_snapshot_batches
+      - name: publications

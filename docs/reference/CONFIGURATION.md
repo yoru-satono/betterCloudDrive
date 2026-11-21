@@ -21,6 +21,7 @@
 | `alertmanager` | 核心告警的邮件和 Webhook 路由 |
 | `blackbox-exporter` | 前端、后端、SeaweedFS S3 和 OnlyOffice 探活 |
 | `grafana` | 指标与日志查询界面，通过前端 Nginx 同域代理并由后端管理员身份鉴权 |
+| `clickhouse`、`warehouse-airflow-*` | 可选业务数仓，通过 `docker-compose.warehouse.yml` 叠加启动；[部署与口径](../../warehouse/README.md) |
 
 ## 配置文件位置
 
@@ -34,6 +35,8 @@
 | `docker-compose.production.yml` | 生产端口收紧 overlay |
 | `docker-compose.production-observability.yml` | 生产观测配置 overlay |
 | `docker-compose.diagnostics.yml` | 将诊断端口绑定到宿主机回环地址的 overlay |
+| `docker-compose.warehouse.yml` | 独立 ClickHouse、Airflow 与一次性最小权限初始化 |
+| `config/env-files/warehouse*.env` | 数仓加工、数据库、一次性初始化与后端只读身份；从对应 example 生成，不纳入 Git |
 | `deploy/Caddyfile.production.example` | 宿主机 Caddy HTTPS 双域名反向代理示例 |
 | `config/env-files/database.env` | PostgreSQL、Redis 连接和容器变量 |
 | `config/env-files/rabbitmq.env` | RabbitMQ 容器与后端连接变量 |

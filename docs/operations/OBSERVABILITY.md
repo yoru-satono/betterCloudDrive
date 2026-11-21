@@ -64,6 +64,14 @@ docker compose --env-file .env.production -f docker-compose.yml -f docker-compos
 
 ## 业务指标
 
+### 业务数仓
+
+启用数仓后，`bcd_warehouse_pending_events` 与 `bcd_warehouse_oldest_pending_age_seconds` 表示源端积压；`bcd_warehouse_query_available`、`bcd_warehouse_report_ready` 和 `bcd_warehouse_publication_age_seconds` 表示只读查询可用性、首次发布和发布延迟。探测由独立定时任务执行，不参与主业务健康检查。
+
+`BetterCloudDriveWarehouseUnavailable` 在已启用的查询持续失败五分钟后告警；`BetterCloudDriveWarehouseDelayed` 在发布或未导出事件超过两小时且持续十分钟后告警。数仓未启用时不触发这两类告警。终态保存失败通过 `bcd_warehouse_capture_failures_total` 计数，相关下载保留未确认状态。
+
+排障先检查源数据库、ClickHouse、Airflow 的 DAG 导入错误和任务状态，再查看管理后台运行记录与本机 dbt artifacts。不要通过清空未导出事件、修改发布标记或用当前状态覆盖历史快照来消除告警。重跑和补数步骤见[业务数仓](../../warehouse/README.md)。
+
 ### 对象存储
 
 - `bcd_storage_operations_total{operation,outcome}`：`put/get/delete/head/copy` 成功或失败次数。

@@ -45,6 +45,7 @@ class ShareServiceImplTest {
     @Mock private TeamAuditService teamAuditService;
     @Mock private TeamPermissionService teamPermissionService;
     @Mock private StringRedisTemplate redisTemplate;
+    @Mock private com.betterclouddrive.service.WarehouseEventService warehouseEvents;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private ZSetOperations<String, String> zSetOps;
     @InjectMocks private ShareServiceImpl shareService;

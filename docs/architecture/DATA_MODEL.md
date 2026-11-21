@@ -1,6 +1,6 @@
 # 数据模型
 
-本文面向后端开发者、数据库维护者和备份设计者，描述核心实体关系、个人/团队作用域和数据生命周期。字段、约束与索引的最终事实来源是 `V1__schema.sql`、JPA Entity 和 Repository；本文只解释稳定结构，不复制完整 DDL。
+本文面向后端开发者、数据库维护者和备份设计者，描述核心实体关系、个人/团队作用域和数据生命周期。字段、约束与索引的最终事实来源是 Flyway migration、JPA Entity 和 Repository；本文只解释稳定结构，不复制完整 DDL。
 
 ## 存储分工
 
@@ -83,6 +83,10 @@ erDiagram
 通知以与语言无关的 `title_key`、`content_key` 和 JSON 参数保存，由客户端按本地语言渲染；未配置的通知偏好默认启用。`operation_logs` 按月份分区，`team_operation_logs` 单独保存团队资源操作，二者服务于不同查询入口。
 
 ## 异步状态
+
+业务数仓新增 `warehouse_events` 作为源数据库中的持久业务事实。业务幂等键唯一，事件不包含请求正文、凭据、文件名或对象路径；领取租约、批次及导出确认状态随记录保存，避免使用自增高水位漏掉晚提交事务。只清理已经确认导出的过期源端事实。
+
+`warehouse_source_*` 为用户、团队、成员、文件、版本和分享的白名单投影，独立采集身份只读取投影、领取和确认事件，不直接读取业务原表。ClickHouse 原始数据、dbt 明细/汇总及发布批次的结构见[业务数仓](../../warehouse/README.md)。业务权限、配额和文件状态仍以业务 PostgreSQL 事务为准。
 
 - `team_event_outbox` 是待发布领域事件的持久事实，状态包括 `PENDING`、`PROCESSING`、`PROCESSED`、`FAILED`。
 - `team_tasks` 是长任务状态中心，保存进度、结果/错误消息 key、重试次数和临时结果路径。

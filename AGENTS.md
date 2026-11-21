@@ -61,7 +61,7 @@ Windows 使用 PowerShell 入口：
 .\scripts\verify-all.ps1 -Module <module>
 ```
 
-可用模块为 `backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience` 和 `all`。
+可用模块为 `backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience`、`warehouse` 和 `all`。
 
 - 优先运行与改动范围匹配的模块；共同协议、全局配置或发布准备再扩大验证范围。
 - `all` 是完整验收，需要 Docker、Maven/JDK、Python、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。
@@ -111,5 +111,5 @@ bash scripts/verify-all.sh --module mobile-android --android-serial <device-id>
 
 - 提交前至少运行相关语法检查、目标模块测试和 `git diff --check`。
 - 不提交本地 SDK、AVD、IDE 配置、缓存、构建产物、测试结果或 `AGENTS.local.md`。
-- 只有用户明确要求时才创建 Git 提交或推送远端；提交信息应准确描述单一变更。
+- 代理可以自行决定向本地 Git 仓库创建提交的时机；只有用户主动明确要求时才能推送到远程 Git 仓库；提交信息应准确描述单一变更。
 - 交付说明列出已运行和未运行的检查，并区分实现问题、环境问题和已知平台限制。

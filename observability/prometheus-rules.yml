@@ -204,3 +204,33 @@ groups:
         annotations:
           summary: Loki dropped log entries
           description: Loki dropped entries or could not write its WAL because storage was full.
+
+  - name: better-cloud-drive-warehouse
+    interval: 30s
+    rules:
+      - alert: BetterCloudDriveWarehouseUnavailable
+        expr: bcd_warehouse_query_enabled == 1 and bcd_warehouse_query_available == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Business warehouse queries are unavailable
+          description: The enabled warehouse has failed its read-only query probe for five minutes.
+
+      - alert: BetterCloudDriveWarehouseDelayed
+        expr: bcd_warehouse_query_enabled == 1 and (bcd_warehouse_publication_age_seconds > 7200 or bcd_warehouse_oldest_pending_age_seconds > 7200)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Business warehouse processing is delayed
+          description: A publication or unexported source event is more than two hours old.
+
+      - alert: BetterCloudDriveWarehouseCaptureFailure
+        expr: increase(bcd_warehouse_capture_failures_total[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: A transfer result could not be captured
+          description: Inspect source database health; affected started transfers remain unconfirmed.

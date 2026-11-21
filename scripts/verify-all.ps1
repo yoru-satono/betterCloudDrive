@@ -54,7 +54,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 3.0
 
 $AllowedModules = [System.Collections.Generic.HashSet[string]]::new(
-    [string[]]@("all", "backend", "integration", "blackbox", "security", "web", "tauri", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience"),
+    [string[]]@("all", "backend", "integration", "blackbox", "security", "web", "tauri", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience", "warehouse"),
     [System.StringComparer]::OrdinalIgnoreCase
 )
 $SelectedModules = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -96,9 +96,12 @@ $RunOffice = ($RunAll -or $SelectedModules.Contains("office")) -and -not $SkipOn
 $RunWebDav = $RunAll -or $SelectedModules.Contains("webdav")
 $RunObservability = $RunAll -or $SelectedModules.Contains("observability")
 $RunResilience = $RunAll -or $SelectedModules.Contains("resilience")
-$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience
+$RunWarehouse = $RunAll -or $SelectedModules.Contains("warehouse")
+$script:ComposeArguments = @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml")
+if ($RunWarehouse) { $script:ComposeArguments += @("-f", "docker-compose.warehouse.yml") }
+$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience -or $RunWarehouse
 $NeedsFrontendHttp = $RunWeb -or $RunTauri -or $RunOffice
-$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunOffice
+$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWarehouse
 $NeedsOnlyOffice = $RunOffice
 $NeedsDocker = $NeedsBackendHttp -or $NeedsOnlyOffice
 $ShouldCleanupE2E = -not $SkipE2ECleanup -and $NeedsDocker
@@ -221,6 +224,11 @@ function Copy-IfMissing {
 }
 
 function Initialize-EnvFiles {
+    if ($RunWarehouse) {
+        Assert-CommandAvailable "python" "Python is required to initialize missing warehouse configuration."
+        Invoke-External "python" @("warehouse/init_local_env.py")
+        return
+    }
     Copy-IfMissing ".env.example" ".env"
     $envFiles = @(
         "database",
@@ -295,7 +303,7 @@ function Set-BackendFunctionalTestRateLimits {
         DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERMITS = "10000"
         DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERIOD_SECONDS = "1"
     } {
-        Invoke-External "docker" @("compose", "up", "-d", "--no-deps", "--force-recreate", "backend")
+        Invoke-External "docker" ($script:ComposeArguments + @("up", "-d", "--no-deps", "--force-recreate", "backend"))
     }
     $script:RateLimitsOverridden = $true
     try {
@@ -314,7 +322,7 @@ function Set-BackendFunctionalTestRateLimits {
 }
 
 function Restore-BackendDefaultRateLimits {
-    Invoke-External "docker" @("compose", "up", "-d", "--no-deps", "--force-recreate", "backend")
+    Invoke-External "docker" ($script:ComposeArguments + @("up", "-d", "--no-deps", "--force-recreate", "backend"))
     Wait-DockerServiceHealthy "backend"
     Invoke-External "docker" @("compose", "restart", "frontend")
     Wait-DockerServiceHealthy "frontend"
@@ -422,7 +430,7 @@ try {
     Write-Host "Selected modules: $($SelectedModules -join ', ')"
     Write-Host "Test run ID: $RunId"
     New-Item -ItemType Directory -Force -Path $ResultRoot | Out-Null
-    @("backend", "integration", "blackbox", "security", "web", "tauri", "office", "webdav", "observability", "resilience", "coverage") |
+    @("backend", "integration", "blackbox", "security", "web", "tauri", "office", "webdav", "observability", "resilience", "warehouse", "coverage") |
         ForEach-Object { New-Item -ItemType Directory -Force -Path (Join-Path $ResultRoot $_) | Out-Null }
 
     if ($RunAll -and ($SkipTauri -or $SkipAndroid -or $SkipOnlyOffice)) {
@@ -432,6 +440,7 @@ try {
     if ($NeedsDocker) {
         Assert-CommandAvailable "docker" "docker was not found on PATH."
     }
+    if ($RunWarehouse) { Assert-CommandAvailable "uv" "uv is required by the warehouse module." }
     if ($RunWebDav -and -not (Get-Command "rclone" -ErrorAction SilentlyContinue)) {
         throw "rclone is required by the webdav module. Install it from https://rclone.org/install/ and ensure it is on PATH."
     }
@@ -449,9 +458,9 @@ try {
     if ($NeedsDocker) { Invoke-Step "Start Docker stack" {
         Invoke-WithEnv @{ TRACING_SAMPLING_PROBABILITY = "1.0" } {
             if ($SkipDockerBuild) {
-                Invoke-External "docker" @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml", "up", "-d")
+                Invoke-External "docker" ($script:ComposeArguments + @("up", "-d"))
             } else {
-                Invoke-External "docker" @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml", "up", "-d", "--build")
+                Invoke-External "docker" ($script:ComposeArguments + @("up", "-d", "--build"))
             }
         }
         $script:StackStarted = $true
@@ -488,11 +497,26 @@ try {
         }
     }
 
+    if ($RunWarehouse) {
+        Invoke-Step "Warehouse unit and isolated integration tests" {
+            Invoke-InDirectory "warehouse" {
+                Invoke-External "uv" @("run", "--locked", "--extra", "test", "pytest", "--junitxml=../test-results/warehouse/junit.xml")
+            }
+        }
+        Invoke-Step "Warehouse live API acceptance" {
+            Wait-DockerServiceHealthy "warehouse-airflow-api" 180
+            Wait-DockerServiceHealthy "warehouse-airflow-scheduler" 180
+            Invoke-WithFunctionalTestRateLimits {
+                Invoke-Pytest -Marker "warehouse" -Report "../test-results/warehouse/live-junit.xml"
+            }
+        }
+    }
+
     if ($RunBlackbox) {
         Invoke-Step "Backend black-box tests" {
             Invoke-WithFunctionalTestRateLimits {
                 Invoke-Pytest `
-                    -Marker "not webdav and not office and not observability and not resilience and not security" `
+                    -Marker "not webdav and not office and not observability and not resilience and not security and not warehouse" `
                     -Report "../test-results/blackbox/junit.xml"
             }
         }
@@ -516,8 +540,8 @@ try {
         Invoke-Step "Web E2E tests" {
             Invoke-WithFunctionalTestRateLimits {
                 Invoke-InDirectory "frontend" {
-                    Invoke-WithEnv @{ E2E_ONLYOFFICE = "0" } {
-                        Invoke-External "node" @("scripts/run-playwright-docker.mjs", "--project=core")
+                    Invoke-WithEnv @{ E2E_ONLYOFFICE = "0"; E2E_WAREHOUSE = $(if ($RunWarehouse) { "1" } else { "0" }) } {
+                        Invoke-External "node" @("scripts/run-playwright-docker.mjs", "--project=core", "--trace=off")
                     }
                 }
             }
@@ -549,7 +573,9 @@ try {
         Invoke-Step "Tauri E2E tests" {
             Invoke-WithFunctionalTestRateLimits {
                 Invoke-InDirectory "frontend" {
-                    Invoke-External "pnpm" @("run", "test:e2e:tauri")
+                    Invoke-WithEnv @{ E2E_WAREHOUSE = $(if ($RunWarehouse) { "1" } else { "0" }) } {
+                        Invoke-External "pnpm" @("run", "test:e2e:tauri")
+                    }
                 }
             }
         }

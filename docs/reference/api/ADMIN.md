@@ -2,6 +2,29 @@
 
 本文定义管理员用户、文件、团队、日志、Grafana、死信和系统统计接口。所有端点均受相应管理员权限约束；通用约定见 [API 总入口](../API.md)。
 
+## 业务数仓 `/api/v1/admin/warehouse`
+
+仅系统 `ROLE_ADMIN` 可访问，团队 OWNER/ADMIN 不具有此权限。普通用户返回 403；数仓禁用、连接失败或超时时返回 HTTP 503，响应 `code=503`、`messageKey=error.warehouseUnavailable`，不返回连接信息或远端错误正文。
+
+| 方法与路径 | 返回 |
+| --- | --- |
+| `GET /overview` | 区间流量指标、最近统计日 DAU/活跃团队及区间内最近容量快照 |
+| `GET /trends` | 每日使用指标与当日实际容量快照；无历史样本的容量为 null |
+| `GET /teams` | 团队容量与区间使用指标，按逻辑容量降序（无采样排后）、团队 ID 升序分页 |
+| `GET /runs` | 最近 50 次加工运行的最终状态、开始/更新时间和稳定错误标识 |
+
+前三项接受 `start`、`end`（`YYYY-MM-DD`），默认最近 30 天，最大为最近 365 天内的闭区间；`scope` 可选 `ALL`、`PERSONAL`、`TEAM`，默认 `ALL`。正整数 `teamId` 仅能与 `TEAM` 一起使用。团队分页参数为 `page`、`size`，默认 1、20，size 最大 100。
+
+趋势和团队查询还接受可选 UUID `generationId`，固定为某次已发布版本，未知版本返回稳定的 404 业务错误。前端使用概览返回的版本，保证多项查询一致。
+
+团队明细包含区间上传数/逻辑上传量、下载请求/写出量和最近统计日 DAU。新建团队已有使用事实但尚未每日采样时仍显示，容量、文件数、成员数与采样日期为 null，不以零冒充已采样结果。
+
+报表 `meta` 包含时区、请求日期、作用域、发布版本、发布时间、采集启动时间 `dataThrough`、最早样本日期、`stale` 和状态。尚未发布时状态为 `UNINITIALIZED`；已发布为 `READY`，超过两小时未发布则 `stale=true`。`dataThrough` 是加工启动时刻，不表示所有并发事务已经提交或全部下载已经结束。
+
+`coverageStart` 是最早真实容量样本的业务日期。所选区间完全位于覆盖范围之外时，概览的 `usage`、`capacity` 返回空对象，趋势中的未采集日期返回 null；覆盖范围内没有合格事件时使用计数为零。缺少容量样本的日期始终保留无数据语义。
+
+容量和运行记录中的 `sampled_at`、`started_at`、`updated_at` 为 UTC epoch 毫秒；meta 时间为 ISO 8601。指标名采用数仓的 snake_case；`active_users`/`active_teams` 是 `active_day` 当天去重值，不是区间每日去重值的相加。详细口径见[业务数仓](../../../warehouse/README.md)。现有 `/api/v1/admin/stats` 的字段与语义保持不变。
+
 ## 十五、管理员 `/api/v1/admin`
 
 > 所有管理员端点需要 `ROLE_ADMIN` 角色，普通用户返回 403。

@@ -20,6 +20,9 @@ import org.springframework.web.bind.annotation.RequestMethod;
 
 import java.io.IOException;
 import java.io.InputStream;
+import com.betterclouddrive.web.warehouse.WarehouseTransferContext;
+import com.betterclouddrive.common.dto.WarehouseEvent.Channel;
+import com.betterclouddrive.common.dto.WarehouseEvent.Mode;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -178,6 +181,7 @@ public class WebDavController {
         if (file.getMd5Hash() != null) response.setHeader("ETag", "\"" + file.getMd5Hash() + "\"");
 
         if (!headOnly) {
+            WarehouseTransferContext.bind(userId, null, file.getId(), Channel.WEBDAV, Mode.FILE);
             try (InputStream in = storageService.downloadObject(file.getStoragePath())) {
                 in.skipNBytes(start);
                 in.transferTo(new java.io.OutputStream() {

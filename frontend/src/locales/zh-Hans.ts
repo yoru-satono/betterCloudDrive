@@ -1,4 +1,29 @@
 export default {
+  warehouse: {
+    coverageStart: '覆盖起始日期', dataThrough: '采集启动时间',
+    folders: '目录数', totalTeams: '团队数', activeShares: '有效分享数', quota: '配置配额', newUsers: '新增账号数', operations: '业务操作数', sharesCanceled: '取消分享数',
+    title: '业务分析', cadence: '使用统计每小时更新 · 容量每日采样 · Asia/Shanghai',
+    refresh: '刷新', retry: '重试', lastDays: '最近 {days} 天', start: '开始日期', end: '结束日期',
+    scope: '空间范围', all: '全部空间', personal: '个人空间', teamSpace: '团队空间',
+    searchTeams: '搜索团队', team: '团队', allTeams: '全部团队', apply: '应用筛选',
+    invalidRange: '请选择最近 365 天内的有效日期范围。',
+    teamSearchFailed: '团队搜索暂不可用。', unavailable: '业务分析暂不可用，已保留上次查询结果。',
+    awaitingFirstRun: '等待首份报表', awaitingFirstRunDetail: '首次数据加工成功后，将在这里展示分析结果。',
+    published: '发布时间', stale: '更新延迟', sampled: '采样时间', noData: '无数据',
+    logicalBytes: '逻辑存储占用', activeUsers: '日活跃用户', activeTeams: '日活跃团队',
+    uploads: '上传提交数', logicalUploadBytes: '逻辑上传量', downloads: '下载请求数',
+    writtenBytes: '服务端写出量', currentBytes: '当前文件', trashBytes: '回收站', versionBytes: '历史版本',
+    storageComposition: '存储构成', files: '文件数', totalUsers: '账号总数', enabledUsers: '启用账号数',
+    usageDetails: '使用明细', instantUploads: '秒传数', sharesCreated: '创建分享数', shareAccesses: '授权成功的分享访问',
+    downloadSucceeded: '服务端传输完成', downloadFailed: '传输失败', downloadUnknown: '传输结果未确认',
+    downloadMeaning: '下载请求包含 Range 与重试。服务端传输完成不代表用户已保存完整文件。',
+    teamDetails: '团队明细', members: '成员数', date: '日期', teamIdentity: '团队 #{id}',
+    previous: '上一页', next: '下一页', runs: '加工运行记录', job: '任务', status: '状态', started: '开始时间', updated: '更新时间',
+    jobs: { hourly: '小时使用统计', snapshot: '每日容量采样', backfill: '历史重算' },
+    statuses: { RUNNING: '运行中', SUCCEEDED: '成功', FAILED: '失败' },
+    trend: '每日趋势', metric: '指标', chartDescription: '每日业务指标，缺失数据以间隔显示。',
+    dailyData: '查看每日数值', value: '数值',
+  },
   file: {
     client: {
       networkConnectionFailedPleaseTryAgainLater: "网络连接失败，请稍后重试",
@@ -1028,6 +1053,8 @@ export default {
     daysAgo: "{count} 天前",
   },
   error: {
+
+    warehouseUnavailable: '业务分析暂不可用',
     chunkUploadInvalid: "上传会话无效，请重新上传",
     chunkMd5Mismatch: "分片校验失败，请重试上传",
     fileMd5Mismatch: "文件校验失败，请重新上传",

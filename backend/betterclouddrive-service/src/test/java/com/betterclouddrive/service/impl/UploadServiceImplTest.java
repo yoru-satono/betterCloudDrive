@@ -54,6 +54,7 @@ class UploadServiceImplTest {
     @Mock private NotificationService notificationService;
     @Mock private TeamPermissionService teamPermissionService;
     @Mock private ThumbnailService thumbnailService;
+    @Mock private com.betterclouddrive.service.WarehouseEventService warehouseEvents;
     @InjectMocks private UploadServiceImpl uploadService;
 
     @BeforeEach

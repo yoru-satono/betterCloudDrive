@@ -1,4 +1,29 @@
 export default {
+  warehouse: {
+    coverageStart: 'Coverage starts', dataThrough: 'Collection started',
+    folders: 'Folders', totalTeams: 'Teams', activeShares: 'Active shares', quota: 'Configured quota', newUsers: 'New accounts', operations: 'Business operations', sharesCanceled: 'Shares canceled',
+    title: 'Business analytics', cadence: 'Hourly usage · Daily capacity samples · Asia/Shanghai',
+    refresh: 'Refresh', retry: 'Retry', lastDays: 'Last {days} days', start: 'From', end: 'To',
+    scope: 'Space', all: 'All spaces', personal: 'Personal spaces', teamSpace: 'Team spaces',
+    searchTeams: 'Search teams', team: 'Team', allTeams: 'All teams', apply: 'Apply',
+    invalidRange: 'Choose a valid date range within the last 365 days.',
+    teamSearchFailed: 'Team search is unavailable.', unavailable: 'Analytics are temporarily unavailable. Existing results are retained.',
+    awaitingFirstRun: 'Waiting for the first report', awaitingFirstRunDetail: 'Reports become available after the first successful processing run.',
+    published: 'Published', stale: 'Update delayed', sampled: 'Sampled', noData: 'No data',
+    logicalBytes: 'Logical storage', activeUsers: 'Daily active users', activeTeams: 'Daily active teams',
+    uploads: 'Committed uploads', logicalUploadBytes: 'Logical upload size', downloads: 'Download attempts',
+    writtenBytes: 'Server-written data', currentBytes: 'Current files', trashBytes: 'Recycle bin', versionBytes: 'Historical versions',
+    storageComposition: 'Storage composition', files: 'Files', totalUsers: 'Accounts', enabledUsers: 'Enabled accounts',
+    usageDetails: 'Usage details', instantUploads: 'Instant uploads', sharesCreated: 'Shares created', shareAccesses: 'Authorized share visits',
+    downloadSucceeded: 'Server transfers completed', downloadFailed: 'Failed transfers', downloadUnknown: 'Unconfirmed transfers',
+    downloadMeaning: 'Download attempts include Range requests and retries. Server completion does not confirm that a user saved the complete file.',
+    teamDetails: 'Team details', members: 'Members', date: 'Date', teamIdentity: 'Team #{id}',
+    previous: 'Previous', next: 'Next', runs: 'Processing history', job: 'Job', status: 'Status', started: 'Started', updated: 'Updated',
+    jobs: { hourly: 'Hourly usage', snapshot: 'Daily capacity', backfill: 'Historical rebuild' },
+    statuses: { RUNNING: 'Running', SUCCEEDED: 'Succeeded', FAILED: 'Failed' },
+    trend: 'Daily trend', metric: 'Metric', chartDescription: 'Daily business metrics; missing data is shown as a gap.',
+    dailyData: 'View daily values', value: 'Value',
+  },
   file: {
     client: {
       networkConnectionFailedPleaseTryAgainLater:
@@ -999,6 +1024,8 @@ export default {
     passwordLength: "At least 6 characters",
   },
   error: {
+
+    warehouseUnavailable: 'Business analytics are temporarily unavailable',
     chunkUploadInvalid: "Upload session is invalid. Please upload again",
     chunkMd5Mismatch: "Chunk verification failed. Retry the upload",
     fileMd5Mismatch: "File verification failed. Please upload again",

@@ -11,7 +11,7 @@ Requires Bash 3.2 or newer.
 Options:
   -m, --module NAME          Module to run; repeatable (default: all)
                             all, backend, integration, blackbox, security, web, tauri,
-                            mobile-unit, mobile-android, office, webdav, observability, resilience
+                            mobile-unit, mobile-android, office, webdav, observability, resilience, warehouse
       --skip-docker-build   Start Compose without rebuilding images
       --skip-tauri          Skip Tauri (not allowed with --module all)
       --skip-android        Skip KMP Android device tests (not allowed with --module all)
@@ -30,7 +30,7 @@ die() {
 
 readonly -a valid_modules=(
   all backend integration blackbox security web tauri
-  mobile-unit mobile-android office webdav observability resilience
+  mobile-unit mobile-android office webdav observability resilience warehouse
 )
 
 contains() {
@@ -129,7 +129,7 @@ module_enabled() {
 needs_backend_http=0
 if module_enabled blackbox || module_enabled security || module_enabled web ||
    module_enabled tauri || module_enabled office || module_enabled webdav ||
-   module_enabled observability || module_enabled resilience; then
+   module_enabled observability || module_enabled resilience || module_enabled warehouse; then
   needs_backend_http=1
 fi
 
@@ -139,7 +139,7 @@ if module_enabled web || module_enabled tauri || module_enabled office; then
 fi
 
 needs_mailpit=0
-if module_enabled blackbox || module_enabled web || module_enabled tauri || module_enabled office; then
+if module_enabled blackbox || module_enabled web || module_enabled tauri || module_enabled office || module_enabled warehouse; then
   needs_mailpit=1
 fi
 
@@ -154,6 +154,8 @@ script_dir=$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd) || exit 2
 repo_root=$(cd -P "$script_dir/.." && pwd) || exit 2
 readonly repo_root
 cd "$repo_root" || exit 2
+compose_args=(-f docker-compose.yml -f docker-compose.diagnostics.yml)
+module_enabled warehouse && compose_args+=(-f docker-compose.warehouse.yml)
 
 run_id=${BCD_TEST_RUN_ID:-bcd_$(date +%Y%m%d_%H%M%S)_$$}
 export BCD_TEST_RUN_ID=$run_id
@@ -169,6 +171,7 @@ mkdir -p \
   "$result_root/webdav" \
   "$result_root/observability" \
   "$result_root/resilience" \
+  "$result_root/warehouse" \
   "$result_root/coverage" || die "failed to create test result directories under $result_root"
 
 if (( needs_docker )); then
@@ -225,6 +228,15 @@ copy_if_missing() {
 
 prepare_env() {
   local env_name
+  if module_enabled warehouse; then
+    command -v uv >/dev/null 2>&1 || die "uv is required by the warehouse module"
+    if command -v python3 >/dev/null 2>&1; then
+      python3 warehouse/init_local_env.py
+    else
+      python warehouse/init_local_env.py
+    fi
+    return $?
+  fi
   copy_if_missing .env.example .env || return $?
   for env_name in database rabbitmq storage security backend frontend observability mail; do
     copy_if_missing "config/env-files/$env_name.env.example" "config/env-files/$env_name.env" || return $?
@@ -234,10 +246,10 @@ prepare_env() {
 start_stack() {
   if (( skip_docker_build )); then
     TRACING_SAMPLING_PROBABILITY=1.0 \
-      docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d || return $?
+      docker compose "${compose_args[@]}" up -d || return $?
   else
     TRACING_SAMPLING_PROBABILITY=1.0 \
-      docker compose -f docker-compose.yml -f docker-compose.diagnostics.yml up -d --build || return $?
+      docker compose "${compose_args[@]}" up -d --build || return $?
   fi
   stack_started=1
 }
@@ -319,9 +331,19 @@ integration_tests() {
     -pl betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service,betterclouddrive-web -am)
 }
 
+warehouse_tests() {
+  (cd warehouse && uv run --locked --extra test pytest --junitxml=../test-results/warehouse/junit.xml)
+}
+
+warehouse_live_tests() {
+  wait_docker_service_healthy warehouse-airflow-api 180 &&
+    wait_docker_service_healthy warehouse-airflow-scheduler 180 &&
+    with_functional_test_rate_limits run_pytest warehouse ../test-results/warehouse/live-junit.xml
+}
+
 blackbox_tests() {
   with_functional_test_rate_limits run_pytest \
-    'not webdav and not office and not observability and not resilience and not security' \
+    'not webdav and not office and not observability and not resilience and not security and not warehouse' \
     ../test-results/blackbox/junit.xml
 }
 
@@ -338,8 +360,10 @@ web_e2e_tests() {
 }
 
 run_web_e2e() {
-  (cd frontend && E2E_ONLYOFFICE=0 \
-    node scripts/run-playwright-docker.mjs --project=core)
+  local warehouse_e2e=0
+  module_enabled warehouse && warehouse_e2e=1
+  (cd frontend && E2E_ONLYOFFICE=0 E2E_WAREHOUSE=$warehouse_e2e \
+    node scripts/run-playwright-docker.mjs --project=core --trace=off)
 }
 
 office_tests() {
@@ -365,7 +389,7 @@ set_functional_test_rate_limits() {
     DRIVE_RATE_LIMIT_UPLOAD_PERIOD_SECONDS=1 \
     DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERMITS=10000 \
     DRIVE_RATE_LIMIT_UPLOAD_CHUNK_PERIOD_SECONDS=1 \
-    docker compose up -d --no-deps --force-recreate backend || return $?
+    docker compose "${compose_args[@]}" up -d --no-deps --force-recreate backend || return $?
   rate_limits_overridden=1
   wait_docker_service_healthy backend || {
     rate_limit_rc=$?
@@ -386,7 +410,7 @@ set_functional_test_rate_limits() {
 
 restore_default_rate_limits() {
   local restore_rc
-  docker compose up -d --no-deps --force-recreate backend || return $?
+  docker compose "${compose_args[@]}" up -d --no-deps --force-recreate backend || return $?
   wait_docker_service_healthy backend &&
     docker compose restart frontend &&
     wait_docker_service_healthy frontend
@@ -412,7 +436,9 @@ tauri_tests() {
 }
 
 run_tauri_e2e() {
-  (cd frontend && pnpm run test:e2e:tauri)
+  local warehouse_e2e=0
+  module_enabled warehouse && warehouse_e2e=1
+  (cd frontend && E2E_WAREHOUSE=$warehouse_e2e pnpm run test:e2e:tauri)
 }
 
 webdav_tests() {
@@ -509,6 +535,10 @@ if module_enabled backend; then
 fi
 if module_enabled integration; then
   run_step "Backend Testcontainers integration tests" integration_tests || exit $?
+fi
+if module_enabled warehouse; then
+  run_step "Warehouse unit and isolated integration tests" warehouse_tests || exit $?
+  run_step "Warehouse live API acceptance" warehouse_live_tests || exit $?
 fi
 if module_enabled blackbox; then
   run_step "Backend black-box tests" blackbox_tests || exit $?

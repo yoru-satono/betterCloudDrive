@@ -1,0 +1,153 @@
+# Optional batch warehouse overlay. Core application health never depends on it.
+x-warehouse-airflow: &warehouse-airflow
+  image: betterclouddrive-warehouse:local
+  build:
+    context: ./warehouse
+  restart: "no"
+  env_file:
+    - ./config/env-files/warehouse.env
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.api_fastapi.auth.managers.simple.simple_auth_manager.SimpleAuthManager
+    AIRFLOW__CORE__PARALLELISM: "1"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://warehouse-airflow-api:8080/execution/
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: warehouse-admin:admin
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /opt/airflow/warehouse-auth/passwords.json
+    WAREHOUSE_DBT_ARTIFACT_ROOT: /opt/airflow/warehouse-artifacts
+  volumes:
+    - ./warehouse/dags:/opt/airflow/dags:ro
+    - warehouse-airflow-logs:/opt/airflow/logs
+    - warehouse-airflow-auth:/opt/airflow/warehouse-auth
+    - warehouse-artifacts:/opt/airflow/warehouse-artifacts
+  networks:
+    - bcd-network
+
+services:
+  backend:
+    env_file:
+      - ./config/env-files/warehouse-reader.env
+
+  clickhouse:
+    container_name: bcd-clickhouse
+    image: clickhouse/clickhouse-server:26.8.41.14
+    restart: "no"
+    env_file:
+      - ./config/env-files/warehouse-database.env
+    ports:
+      - "127.0.0.1:${HOST_WAREHOUSE_CLICKHOUSE_PORT:-8123}:8123"
+    volumes:
+      - warehouse-clickhouse:/var/lib/clickhouse
+    mem_limit: 2g
+    cpus: 2
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - bcd-network
+
+  warehouse-airflow-postgres:
+    container_name: bcd-airflow-postgres
+    image: postgres:18.4-alpine
+    restart: "no"
+    env_file:
+      - ./config/env-files/warehouse-database.env
+    volumes:
+      - warehouse-airflow-postgres:/var/lib/postgresql
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - bcd-network
+
+  warehouse-bootstrap:
+    container_name: bcd-warehouse-bootstrap
+    image: betterclouddrive-warehouse:local
+    build:
+      context: ./warehouse
+    restart: "no"
+    entrypoint: ["/opt/warehouse/.venv/bin/python", "-m", "bcd_warehouse.bootstrap"]
+    env_file:
+      - ./config/env-files/warehouse-bootstrap.env
+    depends_on:
+      backend:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - bcd-network
+
+  warehouse-airflow-init:
+    <<: *warehouse-airflow
+    container_name: bcd-airflow-init
+    command: ["bash", "-c", "airflow db migrate && /opt/warehouse/.venv/bin/python -m bcd_warehouse.airflow_init"]
+    depends_on:
+      warehouse-airflow-postgres:
+        condition: service_healthy
+      warehouse-airflow-permissions:
+        condition: service_completed_successfully
+
+  warehouse-airflow-permissions:
+    container_name: bcd-airflow-permissions
+    image: betterclouddrive-warehouse:local
+    restart: "no"
+    user: "0:0"
+    entrypoint: ["bash", "-c"]
+    command: ["chown 50000:0 /opt/airflow/warehouse-auth /opt/airflow/warehouse-artifacts"]
+    volumes:
+      - warehouse-airflow-auth:/opt/airflow/warehouse-auth
+      - warehouse-artifacts:/opt/airflow/warehouse-artifacts
+
+  warehouse-airflow-api:
+    <<: *warehouse-airflow
+    container_name: bcd-airflow-api
+    command: api-server
+    ports:
+      - "127.0.0.1:${HOST_WAREHOUSE_AIRFLOW_PORT:-8083}:8080"
+    mem_limit: 768m
+    depends_on:
+      warehouse-airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  warehouse-airflow-scheduler:
+    <<: *warehouse-airflow
+    container_name: bcd-airflow-scheduler
+    command: scheduler
+    mem_limit: 2g
+    depends_on:
+      warehouse-airflow-api:
+        condition: service_healthy
+      warehouse-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$${HOSTNAME}\""]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+
+  warehouse-airflow-dag-processor:
+    <<: *warehouse-airflow
+    container_name: bcd-airflow-dag-processor
+    command: dag-processor
+    mem_limit: 768m
+    depends_on:
+      warehouse-airflow-api:
+        condition: service_healthy
+
+volumes:
+  warehouse-clickhouse:
+  warehouse-airflow-postgres:
+  warehouse-airflow-logs:
+  warehouse-airflow-auth:
+  warehouse-artifacts:

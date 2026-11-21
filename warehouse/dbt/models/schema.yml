@@ -1,0 +1,21 @@
+version: 2
+models:
+  - name: dwd_events
+    columns:
+      - name: event_id
+        data_tests: [not_null, unique]
+      - name: schema_version
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1]
+                quote: false
+      - name: outcome
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [STARTED, SUCCEEDED, FAILED]
+  - name: dwd_downloads
+    columns:
+      - name: attempt_id
+        data_tests: [not_null, unique]
