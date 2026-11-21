@@ -199,15 +199,17 @@ public class TraceAuditFilter extends OncePerRequestFilter {
     }
 
     private boolean shouldAudit(HttpServletRequest request) {
-        String path = request.getRequestURI();
+        String path = applicationPath(request);
         return path.startsWith("/api/") || path.startsWith("/webdav");
     }
 
     private boolean shouldCaptureBody(HttpServletRequest request) {
+        // Review notes and repair reasons belong only in the authorized inspection audit tables.
+        if (isInspectionRequest(request)) return false;
         if (!properties.getAudit().isCaptureBody()) {
             return false;
         }
-        String path = request.getRequestURI();
+        String path = applicationPath(request);
         boolean excluded = properties.getAudit().getBodyExcludedPathPrefixes().stream()
                 .anyMatch(path::startsWith);
         if (excluded) {
@@ -224,10 +226,23 @@ public class TraceAuditFilter extends OncePerRequestFilter {
     }
 
     private String requestBody(HttpServletRequest request) {
+        if (isInspectionRequest(request)) return null;
         if (request instanceof ContentCachingRequestWrapper wrapper) {
             return auditSanitizer.sanitizeBody(wrapper.getContentAsByteArray());
         }
         return null;
+    }
+
+    private boolean isInspectionRequest(HttpServletRequest request) {
+        String path = applicationPath(request);
+        return path.equals("/api/v1/admin/storage-inspections")
+                || path.startsWith("/api/v1/admin/storage-inspections/");
+    }
+
+    private String applicationPath(HttpServletRequest request) {
+        // The container's servlet path is decoded and excludes any context prefix.
+        String path = request.getServletPath();
+        return StringUtils.hasText(path) ? path : request.getRequestURI();
     }
 
     private String resolveRequestId(HttpServletRequest request) {

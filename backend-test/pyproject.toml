@@ -16,6 +16,7 @@ dev = ["ruff>=0.6.0"]
 testpaths = ["tests"]
 python_files = "test_*.py"
 markers = [
+    "inspection: storage inspection and transactional quota live acceptance",
     "warehouse: warehouse live API and Airflow acceptance (requires warehouse Compose overlay)",
     "core: fast black-box coverage required on every CI run",
     "webdav: precise WebDAV protocol acceptance tests",

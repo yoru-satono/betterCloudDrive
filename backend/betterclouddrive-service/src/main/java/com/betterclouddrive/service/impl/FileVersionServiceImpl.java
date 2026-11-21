@@ -13,9 +13,10 @@ import com.betterclouddrive.service.FileVersionService;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,16 +34,14 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class FileVersionServiceImpl implements FileVersionService {
 
-    private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
-    private static final String STORAGE_INCR_PREFIX = "storage:incr:";
     private static final String CANNOT_DELETE_ONLY_VERSION = "error.cannotDeleteOnlyVersion";
 
     private final FileVersionRepository fileVersionRepository;
     private final FileRepository fileRepository;
+    private final QuotaAccountingService quotaAccounting;
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final StorageService storageService;
-    private final StringRedisTemplate redisTemplate;
     private final TeamAuditService teamAuditService;
     private final NotificationService notificationService;
 
@@ -61,6 +60,7 @@ public class FileVersionServiceImpl implements FileVersionService {
     @Override
     @Transactional
     public void deleteVersion(Long userId, Long fileId, int versionNumber) {
+        quotaAccounting.lock(Scope.PERSONAL, userId);
         FileEntity file = requirePersonalFileForUpdate(userId, fileId);
         deleteVersionRecord(file, versionNumber);
     }
@@ -68,6 +68,7 @@ public class FileVersionServiceImpl implements FileVersionService {
     @Override
     @Transactional
     public FileEntity restoreVersion(Long userId, Long fileId, int versionNumber) {
+        quotaAccounting.lock(Scope.PERSONAL, userId);
         FileEntity file = requirePersonalFileForUpdate(userId, fileId);
         FileVersionEntity version = requireVersion(file.getId(), versionNumber);
         return restoreFromVersion(file, userId, version);
@@ -88,6 +89,7 @@ public class FileVersionServiceImpl implements FileVersionService {
     @Override
     @Transactional
     public void deleteTeamVersion(Long teamId, Long userId, Long fileId, int versionNumber) {
+        quotaAccounting.lock(Scope.TEAM, teamId);
         FileEntity file = requireTeamFileForUpdate(teamId, fileId);
         deleteVersionRecord(file, versionNumber);
         teamAuditService.record(teamId, userId, "VERSION_DELETE", "FILE", fileId,
@@ -97,6 +99,7 @@ public class FileVersionServiceImpl implements FileVersionService {
     @Override
     @Transactional
     public FileEntity restoreTeamVersion(Long teamId, Long userId, Long fileId, int versionNumber) {
+        quotaAccounting.lock(Scope.TEAM, teamId);
         FileEntity file = requireTeamFileForUpdate(teamId, fileId);
         FileVersionEntity version = requireVersion(file.getId(), versionNumber);
         FileEntity restored = restoreFromVersion(file, userId, version);
@@ -108,6 +111,7 @@ public class FileVersionServiceImpl implements FileVersionService {
     @Override
     @Transactional
     public FileVersionEntity saveTeamEditedVersion(Long teamId, Long userId, Long fileId, byte[] content) {
+        quotaAccounting.lock(Scope.TEAM, teamId);
         FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
         if (file == null || !Objects.equals(file.getTeamId(), teamId) || file.getIsDeleted() || !"file".equals(file.getFileType())) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
@@ -143,7 +147,7 @@ public class FileVersionServiceImpl implements FileVersionService {
         file.setUpdatedAt(LocalDateTime.now());
         fileRepository.save(file);
 
-        redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, content.length);
+        quotaAccounting.change(Scope.TEAM, teamId, content.length);
         notificationService.checkTeamQuota(teamId);
         teamAuditService.record(teamId, userId, "OFFICE_SAVE_VERSION", "FILE", fileId,
                 file.getFileName() + " archived version " + archivedVersionNumber);
@@ -258,65 +262,60 @@ public class FileVersionServiceImpl implements FileVersionService {
                     java.util.Map.of(), "Cannot delete the only historical version of a file");
         }
 
+        incrementStorage(file, -Math.max(0L, toDelete.getFileSize() == null ? 0L : toDelete.getFileSize()));
         storageService.deleteObject(toDelete.getStoragePath());
         fileVersionRepository.deleteById(toDelete.getId());
         file.setVersionCount(Math.max(1, versions.size()));
         fileRepository.save(file);
-        incrementStorage(file, -Math.max(0L, toDelete.getFileSize() == null ? 0L : toDelete.getFileSize()));
     }
 
-    private void checkRestoreQuota(FileEntity file, Long additionalBytesValue) {
-        long additionalBytes = Math.max(0L, additionalBytesValue == null ? 0L : additionalBytesValue);
-        if (additionalBytes == 0) {
-            return;
-        }
-        if (file.getTeamId() != null) {
-            TeamEntity team = teamRepository.findByIdAndDeletedAtIsNull(file.getTeamId())
-                    .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
-            String pendingValue = redisTemplate.opsForValue().get(TEAM_STORAGE_INCR_PREFIX + file.getTeamId());
-            long pending = 0L;
-            if (pendingValue != null) {
-                try {
-                    pending = Long.parseLong(pendingValue);
-                } catch (NumberFormatException ignored) {
-                }
-            }
-            long used = team.getStorageUsed() == null ? 0L : team.getStorageUsed();
-            long quota = team.getStorageQuota() == null ? 0L : team.getStorageQuota();
-            if (used + pending + additionalBytes > quota) {
-                throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
-                        "Team storage quota exceeded. Used: " + (used + pending) + ", Quota: " + quota);
-            }
-            return;
-        }
-        com.betterclouddrive.dal.entity.UserEntity user = userRepository.findById(file.getUserId()).orElse(null);
-        if (user == null) {
-            throw new BusinessException(ApiCode.UNAUTHORIZED);
-        }
-        String pendingValue = redisTemplate.opsForValue().get(STORAGE_INCR_PREFIX + file.getUserId());
-        long pending = 0;
-        if (pendingValue != null) {
-            try {
-                pending = Long.parseLong(pendingValue);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        long used = user.getStorageUsed() == null ? 0L : user.getStorageUsed();
-        long quota = user.getStorageQuota() == null ? 0L : user.getStorageQuota();
-        if (used + pending + additionalBytes > quota) {
-            throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED);
-        }
+    private void checkRestoreQuota(FileEntity file, Long additionalBytes) {
+        quotaAccounting.check(file.getTeamId() == null ? Scope.PERSONAL : Scope.TEAM,
+                file.getTeamId() == null ? file.getUserId() : file.getTeamId(),
+                Math.max(0L, additionalBytes == null ? 0L : additionalBytes));
     }
 
     private void incrementStorage(FileEntity file, long delta) {
-        if (delta == 0) {
-            return;
+        quotaAccounting.change(file.getTeamId() == null ? Scope.PERSONAL : Scope.TEAM,
+                file.getTeamId() == null ? file.getUserId() : file.getTeamId(), delta);
+    }
+
+    @Override
+    @Transactional
+    public int cleanupOldVersions(Long fileId, int maxVersions) {
+        if (maxVersions < 1) throw new IllegalArgumentException("invalid_version_retention");
+        quotaAccounting.lockForFile(fileId);
+        FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
+        if (file == null || Boolean.TRUE.equals(file.getIsDeleted())) return 0;
+        if (file.getTeamId() != null && !isActiveTeamFile(file, file.getTeamId())) return 0;
+        Long parentId = file.getParentId();
+        java.util.Set<Long> seen = new java.util.HashSet<>();
+        while (parentId != null && seen.add(parentId)) {
+            FileEntity parent = fileRepository.findById(parentId).orElse(null);
+            if (parent == null || Boolean.TRUE.equals(parent.getIsDeleted()) || !"folder".equals(parent.getFileType())
+                    || !Objects.equals(parent.getTeamId(), file.getTeamId())
+                    || (file.getTeamId() == null && !Objects.equals(parent.getUserId(), file.getUserId()))) return 0;
+            parentId = parent.getParentId();
         }
-        if (file.getTeamId() != null) {
-            redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + file.getTeamId(), delta);
-            return;
+        if (parentId != null) return 0;
+        List<FileVersionEntity> versions = fileVersionRepository.findTopVersionsByFileId(fileId, PageRequest.of(0, 1000));
+        if (versions.size() <= maxVersions) return 0;
+        long released = 0;
+        var expired = versions.subList(maxVersions, versions.size());
+        for (FileVersionEntity version : expired) {
+            if (version.getFileSize() == null || version.getFileSize() < 0) {
+                throw new BusinessException(409, "error.quotaMetadataInvalid");
+            }
+            released = Math.addExact(released, version.getFileSize());
         }
-        redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + file.getUserId(), delta);
+        incrementStorage(file, -released);
+        for (FileVersionEntity version : expired) {
+            storageService.deleteObject(version.getStoragePath());
+            fileVersionRepository.deleteById(version.getId());
+        }
+        file.setVersionCount(maxVersions);
+        fileRepository.save(file);
+        return expired.size();
     }
 
     private String generateOfficeStoragePath(Long teamId, Long fileId, String fileName) {

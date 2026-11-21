@@ -21,6 +21,8 @@ import com.betterclouddrive.common.dto.WarehouseEvent.Mode;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.storage.ContentDigest;
 import com.betterclouddrive.storage.ObjectNotFoundException;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -45,6 +47,8 @@ public class UploadServiceImpl implements UploadService {
 
     private final UploadSessionRepository uploadSessionRepository;
     private final FileRepository fileRepository;
+    private final QuotaAccountingService quotaAccounting;
+    private final com.betterclouddrive.service.inspection.ActiveObjectPrefixService activeObjects;
     private final UserRepository userRepository;
     private final TeamRepository teamRepository;
     private final StorageService storageService;
@@ -56,8 +60,6 @@ public class UploadServiceImpl implements UploadService {
     private final WarehouseEventService warehouseEvents;
 
     private static final String UPLOAD_BITMAP_PREFIX = "upload:bitmap:";
-    private static final String STORAGE_INCR_PREFIX = "storage:incr:";
-    private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
     private static final int CHUNK_SIZE = 5242880;
     private static final int MAX_FILE_NAME_LENGTH = 255;
     private static final String INVALID_FILE_NAME = "error.invalidFileName";
@@ -74,8 +76,8 @@ public class UploadServiceImpl implements UploadService {
         if (candidate.isPresent()) {
             FileEntity file = fileRepository.save(buildFileEntity(userId, parentId, fileName, fileSize, md5Hash, candidate.get().getStoragePath()));
             scheduleThumbnailAfterCommit(file);
+            quotaAccounting.change(Scope.PERSONAL, userId, fileSize);
             warehouseEvents.uploadCommitted(file, Mode.INSTANT);
-            incrementAfterCommit(STORAGE_INCR_PREFIX + userId, fileSize);
             return UploadInitResult.instant(file.getId());
         }
         return createUploadSession(null, userId, parentId, fileName, fileSize, md5Hash, chunks);
@@ -126,6 +128,7 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public Long completeUpload(String sessionId, Long userId) {
+        quotaAccounting.lock(Scope.PERSONAL, userId);
         UploadSessionEntity session = uploadSessionRepository.findByIdForUpdate(sessionId).orElse(null);
         if (session == null || session.getTeamId() != null || !session.getUserId().equals(userId)) {
             throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
@@ -165,7 +168,7 @@ public class UploadServiceImpl implements UploadService {
         warehouseEvents.uploadCommitted(file, Mode.MULTIPART);
         cleanupAfterCommit(chunkPrefix, session.getTotalChunks(), bitmapKey);
         if (session.getFileSize() != null && session.getFileSize() > 0) {
-            incrementAfterCommit(STORAGE_INCR_PREFIX + userId, session.getFileSize());
+            quotaAccounting.change(Scope.PERSONAL, userId, session.getFileSize());
         }
 
         return file.getId();
@@ -205,7 +208,7 @@ public class UploadServiceImpl implements UploadService {
         if (candidate.isPresent()) {
             FileEntity file = fileRepository.save(buildTeamFileEntity(teamId, userId, parentId, fileName, fileSize, md5Hash, candidate.get().getStoragePath()));
             scheduleThumbnailAfterCommit(file);
-            incrementAfterCommit(TEAM_STORAGE_INCR_PREFIX + teamId, fileSize);
+            quotaAccounting.change(Scope.TEAM, teamId, fileSize);
             notificationService.checkTeamQuota(teamId);
             teamAuditService.record(teamId, userId, "UPLOAD_INSTANT", "FILE", file.getId(), file.getFileName());
             warehouseEvents.uploadCommitted(file, Mode.INSTANT);
@@ -226,8 +229,8 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public void uploadTeamChunk(Long teamId, String sessionId, Long userId, int chunkNumber, byte[] data, String chunkMd5) {
-        UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
         lockTeamMutations(teamId);
+        UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
         if (!Objects.equals(session.getStatus(), 1)) throw new BusinessException(ApiCode.CHUNK_UPLOAD_INVALID);
         teamPermissionService.requireParentWrite(userId, teamId, session.getParentId());
         receiveChunk(session, teamChunkPrefix(teamId, sessionId), chunkNumber, data, chunkMd5);
@@ -260,8 +263,8 @@ public class UploadServiceImpl implements UploadService {
     @Override
     @Transactional
     public Long completeTeamUpload(Long teamId, String sessionId, Long userId) {
-        UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
         lockTeamMutations(teamId);
+        UploadSessionEntity session = getTeamSessionForUpdate(teamId, sessionId, userId);
         teamPermissionService.requireParentWrite(userId, teamId, session.getParentId());
         validateSession(session);
         if (Objects.equals(session.getStatus(), 2)) {
@@ -299,7 +302,7 @@ public class UploadServiceImpl implements UploadService {
 
         cleanupAfterCommit(chunkPrefix, session.getTotalChunks(), bitmapKey);
         if (session.getFileSize() != null && session.getFileSize() > 0) {
-            incrementAfterCommit(TEAM_STORAGE_INCR_PREFIX + teamId, session.getFileSize());
+            quotaAccounting.change(Scope.TEAM, teamId, session.getFileSize());
         }
         notificationService.checkTeamQuota(teamId);
         teamAuditService.record(teamId, userId, "UPLOAD_COMPLETE", "FILE", file.getId(), file.getFileName());
@@ -335,7 +338,7 @@ public class UploadServiceImpl implements UploadService {
         int parts = 0;
         long received = 0;
         MessageDigest digest = newMd5();
-        try {
+        try (var activity = activeObjects.register(prefix)) {
             byte[] buffer = new byte[CHUNK_SIZE];
             int count;
             while ((count = readChunkFully(inputStream, buffer)) > 0) {
@@ -354,7 +357,7 @@ public class UploadServiceImpl implements UploadService {
             warehouseEvents.uploadCommitted(file, Mode.STREAM);
             scheduleThumbnailAfterCommit(file);
             cleanupAfterCommit(prefix, parts, null);
-            if (received > 0) incrementAfterCommit(STORAGE_INCR_PREFIX + userId, received);
+            if (received > 0) quotaAccounting.change(Scope.PERSONAL, userId, received);
             return file.getId();
         } catch (IOException e) {
             int uploaded = parts;
@@ -484,13 +487,7 @@ public class UploadServiceImpl implements UploadService {
         }
     }
 
-    private void incrementAfterCommit(String key, long size) {
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override public void afterCommit() { safeCleanup(() -> redisTemplate.opsForValue().increment(key, size)); }
-            });
-        } else redisTemplate.opsForValue().increment(key, size);
-    }
+
 
     private void cleanupAfterCommit(String prefix, int parts, String bitmapKey) {
         Runnable cleanup = () -> {
@@ -581,46 +578,11 @@ public class UploadServiceImpl implements UploadService {
     }
 
     private void checkStorageQuota(Long userId, Long fileSize) {
-        UserEntity user = userRepository.findById(userId).orElse(null);
-        if (user == null) {
-            throw new BusinessException(ApiCode.UNAUTHORIZED);
-        }
-        String incrStr = redisTemplate.opsForValue().get(STORAGE_INCR_PREFIX + userId);
-        long pendingIncr = 0;
-        if (incrStr != null) {
-            try {
-                pendingIncr = Long.parseLong(incrStr);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        long storageUsed = user.getStorageUsed() != null ? user.getStorageUsed() : 0L;
-        long storageQuota = user.getStorageQuota() != null ? user.getStorageQuota() : 0L;
-        long currentUsed = storageUsed + pendingIncr;
-        if (currentUsed + fileSize > storageQuota) {
-            throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
-                    "Storage quota exceeded. Used: " + currentUsed + ", Quota: " + storageQuota);
-        }
+        quotaAccounting.check(Scope.PERSONAL, userId, fileSize);
     }
 
     private void checkTeamStorageQuota(Long teamId, Long fileSize) {
-        TeamEntity team = teamRepository.findByIdAndDeletedAtIsNull(teamId)
-                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
-        String incrStr = redisTemplate.opsForValue().get(TEAM_STORAGE_INCR_PREFIX + teamId);
-        long pendingIncr = 0;
-        if (incrStr != null) {
-            try {
-                pendingIncr = Long.parseLong(incrStr);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        long storageUsed = team.getStorageUsed() != null ? team.getStorageUsed() : 0L;
-        long storageQuota = team.getStorageQuota() != null ? team.getStorageQuota() : 0L;
-        long currentUsed = storageUsed + pendingIncr;
-        if (currentUsed + fileSize > storageQuota) {
-            notificationService.notifyTeamQuotaExceeded(teamId);
-            throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
-                    "Team storage quota exceeded. Used: " + currentUsed + ", Quota: " + storageQuota);
-        }
+        quotaAccounting.check(Scope.TEAM, teamId, fileSize);
     }
 
     private UploadSessionEntity getTeamSession(Long teamId, String sessionId, Long userId) {
@@ -714,6 +676,7 @@ public class UploadServiceImpl implements UploadService {
     }
 
     private void lockTeamMutations(Long teamId) {
+        quotaAccounting.lock(Scope.TEAM, teamId);
         if (teamRepository.findActiveByIdForUpdate(teamId).isEmpty()) {
             throw new BusinessException(ApiCode.NOT_FOUND, "Team not found");
         }

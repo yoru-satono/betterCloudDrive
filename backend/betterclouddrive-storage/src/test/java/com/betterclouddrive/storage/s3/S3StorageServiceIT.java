@@ -26,6 +26,7 @@ class S3StorageServiceIT {
             .withExposedPorts(8333);
 
     static S3StorageServiceImpl storage;
+    static S3InventoryService inventory;
 
     @BeforeAll
     static void createStorage() {
@@ -38,6 +39,82 @@ class S3StorageServiceIT {
                 properties,
                 new StorageMetrics(new SimpleMeterRegistry(), io.opentelemetry.api.OpenTelemetry.noop()));
         storage.init();
+        inventory = new S3InventoryService(properties,
+                new StorageMetrics(new SimpleMeterRegistry(), io.opentelemetry.api.OpenTelemetry.noop()));
+        inventory.init();
+    }
+
+    @Test
+    void inventoryUsesBoundedPagesAndPreservesExactUnicodeKeys() {
+        var properties = inventoryProperties();
+        var metrics = new StorageMetrics(new SimpleMeterRegistry(), io.opentelemetry.api.OpenTelemetry.noop());
+        var storage = new S3StorageServiceImpl(properties, metrics);
+        storage.init();
+        var inventory = new S3InventoryService(properties, metrics);
+        inventory.init();
+        var keys = java.util.List.of("a file.txt", "b_&.txt", "c%20d.txt", "c d.txt", "d+e.txt", "d%2Be.txt",
+                "nested", "nested/file.txt", "\u6587\u4ef6.txt");
+        try {
+            for (String key : keys) storage.uploadObject(key, bytes("abc"), 3, "text/plain");
+            var found = new java.util.ArrayList<String>();
+            var tokens = new java.util.HashSet<String>();
+            String token = null;
+            for (int index = 0; index < 20; index++) {
+                var page = inventory.list(token, 2);
+                assertThat(page.objects()).hasSizeLessThanOrEqualTo(2);
+                page.objects().forEach(object -> found.add(object.key()));
+                if (page.complete()) break;
+                token = page.nextToken();
+                assertThat(token).isNotBlank();
+                assertThat(tokens.add(token)).isTrue();
+            }
+            // SeaweedFS promotes a file into a directory entry when children are added.
+            // Keep its actual inventory key; the inspector detects an unlisted-but-readable reference as partial coverage.
+            var listedKeys = keys.stream().map(key -> key.equals("nested") ? "nested/" : key).toList();
+            assertThat(found).containsExactlyInAnyOrderElementsOf(listedKeys);
+            assertThat(inventory.stat("nested")).isPresent();
+            assertThat(inventory.stat(keys.getFirst()).orElseThrow().size()).isEqualTo(3);
+            assertThat(inventory.stat("absent")).isEmpty();
+        } finally { keys.forEach(storage::deleteObject); }
+    }
+
+    private S3StorageProperties inventoryProperties() {
+        var properties = new S3StorageProperties();
+        properties.setEndpoint("http://" + SEAWEED.getHost() + ":" + SEAWEED.getMappedPort(8333));
+        properties.setAccessKey("any"); properties.setSecretKey("any");
+        properties.setBucket("bcd-inventory-" + UUID.randomUUID().toString().substring(0, 8));
+        return properties;
+    }
+
+    @Test
+    void emptyInventoryIsCompleteButAMissingBucketIsNotAnEmptyBucket() {
+        var properties = inventoryProperties();
+        var metrics = new StorageMetrics(new SimpleMeterRegistry(), io.opentelemetry.api.OpenTelemetry.noop());
+        var inventory = new S3InventoryService(properties, metrics);
+        inventory.init();
+        assertThatThrownBy(() -> inventory.list(null, 2))
+                .isInstanceOf(com.betterclouddrive.storage.StorageInventoryException.class);
+        assertThatThrownBy(() -> inventory.stat("fixture"))
+                .isInstanceOf(com.betterclouddrive.storage.StorageInventoryException.class);
+        var storage = new S3StorageServiceImpl(properties, metrics);
+        storage.init();
+        var empty = inventory.list(null, 2);
+        assertThat(empty.objects()).isEmpty();
+        assertThat(empty.complete()).isTrue();
+    }
+
+    @Test
+    void inventoryTransportFailureDoesNotMeanObjectMissing() {
+        var unavailable = new S3StorageProperties();
+        unavailable.setEndpoint("http://127.0.0.1:1");
+        unavailable.setAccessKey("fixture"); unavailable.setSecretKey("fixture");
+        var disconnected = new S3InventoryService(unavailable,
+                new StorageMetrics(new SimpleMeterRegistry(), io.opentelemetry.api.OpenTelemetry.noop()));
+        disconnected.init();
+        assertThatThrownBy(() -> disconnected.stat("fixture"))
+                .isInstanceOf(com.betterclouddrive.storage.StorageInventoryException.class);
+        assertThatThrownBy(() -> disconnected.list(null, 10))
+                .isInstanceOf(com.betterclouddrive.storage.StorageInventoryException.class);
     }
 
     @Test

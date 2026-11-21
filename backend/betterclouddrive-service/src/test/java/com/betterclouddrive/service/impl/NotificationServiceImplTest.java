@@ -21,6 +21,8 @@ import com.betterclouddrive.service.TeamEventOutboxService;
 import com.betterclouddrive.service.config.QueueProperties;
 import com.betterclouddrive.service.metrics.TeamQuotaMetrics;
 import com.betterclouddrive.service.queue.TeamNotificationOutboxWriter;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -53,6 +55,7 @@ class NotificationServiceImplTest {
     @Mock private TeamNotificationOutboxWriter teamNotificationOutboxWriter;
     @Mock private QueueProperties queueProperties;
     @Mock private TeamQuotaMetrics teamQuotaMetrics;
+    @Mock private QuotaAccountingRepository quotaAccountingRepository;
     @InjectMocks private NotificationServiceImpl notificationService;
 
     @Test
@@ -224,8 +227,9 @@ class NotificationServiceImplTest {
         TeamMemberEntity admin = TeamMemberEntity.builder().teamId(10L).userId(3L).role("ADMIN").status(1).build();
         TeamMemberEntity viewer = TeamMemberEntity.builder().teamId(10L).userId(4L).role("VIEWER").status(1).build();
         when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(quotaAccountingRepository.find(Scope.TEAM, 10L, false)).thenReturn(Optional.of(
+                new QuotaAccountingRepository.Balance(team.getStorageUsed(), team.getStorageQuota(), 0)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.get("team:storage:incr:10")).thenReturn(null);
         when(valueOperations.setIfAbsent("team:quota:alert:10:80", "1")).thenReturn(true);
         when(teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(10L, 1))
                 .thenReturn(List.of(owner, admin, viewer));
@@ -263,8 +267,9 @@ class NotificationServiceImplTest {
         TeamMemberEntity viewer = TeamMemberEntity.builder().teamId(10L).userId(4L).role("VIEWER").status(1).build();
         when(queueProperties.isEnabled()).thenReturn(true);
         when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(quotaAccountingRepository.find(Scope.TEAM, 10L, false)).thenReturn(Optional.of(
+                new QuotaAccountingRepository.Balance(team.getStorageUsed(), team.getStorageQuota(), 0)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.get("team:storage:incr:10")).thenReturn(null);
         when(valueOperations.setIfAbsent("team:quota:alert:10:90", "1")).thenReturn(true);
         when(teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(10L, 1))
                 .thenReturn(List.of(owner, admin, viewer));
@@ -291,8 +296,9 @@ class NotificationServiceImplTest {
         TeamMemberEntity admin = TeamMemberEntity.builder().teamId(10L).userId(3L).role("ADMIN").status(1).build();
         when(queueProperties.isEnabled()).thenReturn(true);
         when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
+        when(quotaAccountingRepository.find(Scope.TEAM, 10L, false)).thenReturn(Optional.of(
+                new QuotaAccountingRepository.Balance(team.getStorageUsed(), team.getStorageQuota(), 0)));
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.get("team:storage:incr:10")).thenReturn(null);
         when(valueOperations.setIfAbsent("team:quota:alert:10:90", "1")).thenReturn(true);
         when(teamMemberRepository.findByTeamIdAndStatusOrderByCreatedAtAsc(10L, 1))
                 .thenReturn(List.of(owner, admin));

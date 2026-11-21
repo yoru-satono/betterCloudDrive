@@ -44,6 +44,7 @@ const routes = [
     children: [
       { path: '',       name: 'AdminDashboard', component: () => import('@/pages/admin/AdminDashboard.vue') },
       { path: 'analytics', name: 'AdminAnalytics', component: () => import('@/pages/admin/AdminAnalytics.vue') },
+      { path: 'storage-inspections', name: 'AdminStorageInspections', component: () => import('@/pages/admin/AdminStorageInspections.vue') },
       { path: 'users',  name: 'AdminUsers',     component: () => import('@/pages/admin/AdminUsers.vue') },
       { path: 'teams',  name: 'AdminTeams',     component: () => import('@/pages/admin/AdminTeams.vue') },
       { path: 'users/:userId/files', name: 'AdminUserFiles', component: () => import('@/pages/admin/AdminUserFiles.vue') },

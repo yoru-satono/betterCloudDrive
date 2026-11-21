@@ -15,4 +15,5 @@ public interface FileVersionService {
     void deleteTeamVersion(Long teamId, Long userId, Long fileId, int versionNumber);
     FileEntity restoreTeamVersion(Long teamId, Long userId, Long fileId, int versionNumber);
     FileVersionEntity saveTeamEditedVersion(Long teamId, Long userId, Long fileId, byte[] content);
+    int cleanupOldVersions(Long fileId, int maxVersions);
 }

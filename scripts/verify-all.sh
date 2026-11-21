@@ -11,7 +11,7 @@ Requires Bash 3.2 or newer.
 Options:
   -m, --module NAME          Module to run; repeatable (default: all)
                             all, backend, integration, blackbox, security, web, tauri,
-                            mobile-unit, mobile-android, office, webdav, observability, resilience, warehouse
+                            mobile-unit, mobile-android, office, webdav, observability, resilience, warehouse, inspection
       --skip-docker-build   Start Compose without rebuilding images
       --skip-tauri          Skip Tauri (not allowed with --module all)
       --skip-android        Skip KMP Android device tests (not allowed with --module all)
@@ -30,7 +30,7 @@ die() {
 
 readonly -a valid_modules=(
   all backend integration blackbox security web tauri
-  mobile-unit mobile-android office webdav observability resilience warehouse
+  mobile-unit mobile-android office webdav observability resilience warehouse inspection
 )
 
 contains() {
@@ -129,7 +129,7 @@ module_enabled() {
 needs_backend_http=0
 if module_enabled blackbox || module_enabled security || module_enabled web ||
    module_enabled tauri || module_enabled office || module_enabled webdav ||
-   module_enabled observability || module_enabled resilience || module_enabled warehouse; then
+   module_enabled observability || module_enabled resilience || module_enabled warehouse || module_enabled inspection; then
   needs_backend_http=1
 fi
 
@@ -139,7 +139,7 @@ if module_enabled web || module_enabled tauri || module_enabled office; then
 fi
 
 needs_mailpit=0
-if module_enabled blackbox || module_enabled web || module_enabled tauri || module_enabled office || module_enabled warehouse; then
+if module_enabled blackbox || module_enabled web || module_enabled tauri || module_enabled office || module_enabled warehouse || module_enabled inspection; then
   needs_mailpit=1
 fi
 
@@ -172,6 +172,7 @@ mkdir -p \
   "$result_root/observability" \
   "$result_root/resilience" \
   "$result_root/warehouse" \
+  "$result_root/inspection" \
   "$result_root/coverage" || die "failed to create test result directories under $result_root"
 
 if (( needs_docker )); then
@@ -341,9 +342,21 @@ warehouse_live_tests() {
     with_functional_test_rate_limits run_pytest warehouse ../test-results/warehouse/live-junit.xml
 }
 
+inspection_tests() {
+  (cd backend && mvn verify -Pintegration \
+    -Dtest=ActiveObjectPrefixServiceTest,InspectionObservationServiceTest,QuotaAccountingServiceTest,TraceAuditFilterTest,StorageMetricsTest,StorageFailurePrivacyTest \
+    -Dsurefire.failIfNoSpecifiedTests=false \
+    -Dit.test=InspectionWorkerIT,QuotaAccountingIT,S3StorageServiceIT \
+    -Dfailsafe.failIfNoSpecifiedTests=false)
+}
+
+inspection_live_tests() {
+  with_functional_test_rate_limits run_pytest inspection ../test-results/inspection/live-junit.xml
+}
+
 blackbox_tests() {
   with_functional_test_rate_limits run_pytest \
-    'not webdav and not office and not observability and not resilience and not security and not warehouse' \
+    'not webdav and not office and not observability and not resilience and not security and not warehouse and not inspection' \
     ../test-results/blackbox/junit.xml
 }
 
@@ -361,8 +374,10 @@ web_e2e_tests() {
 
 run_web_e2e() {
   local warehouse_e2e=0
+  local inspection_e2e=0
   module_enabled warehouse && warehouse_e2e=1
-  (cd frontend && E2E_ONLYOFFICE=0 E2E_WAREHOUSE=$warehouse_e2e \
+  module_enabled inspection && inspection_e2e=1
+  (cd frontend && E2E_ONLYOFFICE=0 E2E_WAREHOUSE=$warehouse_e2e E2E_INSPECTION=$inspection_e2e \
     node scripts/run-playwright-docker.mjs --project=core --trace=off)
 }
 
@@ -437,8 +452,10 @@ tauri_tests() {
 
 run_tauri_e2e() {
   local warehouse_e2e=0
+  local inspection_e2e=0
   module_enabled warehouse && warehouse_e2e=1
-  (cd frontend && E2E_WAREHOUSE=$warehouse_e2e pnpm run test:e2e:tauri)
+  module_enabled inspection && inspection_e2e=1
+  (cd frontend && E2E_WAREHOUSE=$warehouse_e2e E2E_INSPECTION=$inspection_e2e pnpm run test:e2e:tauri)
 }
 
 webdav_tests() {
@@ -539,6 +556,10 @@ fi
 if module_enabled warehouse; then
   run_step "Warehouse unit and isolated integration tests" warehouse_tests || exit $?
   run_step "Warehouse live API acceptance" warehouse_live_tests || exit $?
+fi
+if module_enabled inspection; then
+  run_step "Inspection unit and isolated integration tests" inspection_tests || exit $?
+  run_step "Inspection live API acceptance" inspection_live_tests || exit $?
 fi
 if module_enabled blackbox; then
   run_step "Backend black-box tests" blackbox_tests || exit $?

@@ -17,6 +17,8 @@ import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.dto.ShareUpdateCommand;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -48,6 +50,7 @@ class ShareServiceImplTest {
     @Mock private com.betterclouddrive.service.WarehouseEventService warehouseEvents;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private ZSetOperations<String, String> zSetOps;
+    @Mock private QuotaAccountingService quotaAccounting;
     @InjectMocks private ShareServiceImpl shareService;
 
     private FileEntity ownedFile(Long id, Long userId) {
@@ -664,9 +667,6 @@ class ShareServiceImplTest {
         when(fileRepository.findById(10L)).thenReturn(Optional.of(source));
         when(fileRepository.findById(20L)).thenReturn(Optional.of(targetFolder));
         when(fileRepository.existsByUserIdAndParentIdAndFileNameAndIsDeletedFalse(2L, 20L, "report.pdf")).thenReturn(false);
-        when(userRepository.findById(2L)).thenReturn(Optional.of(quotaUser(2L, 1024L, 100L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:2")).thenReturn("10");
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity saved = inv.getArgument(0);
             saved.setId(100L);
@@ -680,7 +680,7 @@ class ShareServiceImplTest {
         assertThat(saved.getParentId()).isEqualTo(20L);
         assertThat(saved.getFileName()).isEqualTo("report.pdf");
         assertThat(saved.getStoragePath()).isEqualTo("objects/report");
-        verify(valueOps).increment("storage:incr:2", 256L);
+        verify(quotaAccounting).change(Scope.PERSONAL, 2L, 256L);
         verify(shareLinkRepository).incrementDownloadCount(share.getId());
     }
 
@@ -710,9 +710,6 @@ class ShareServiceImplTest {
                 .thenReturn(List.of(childFolder, childFile));
         when(fileRepository.findByUserIdAndParentIdAndIsDeletedFalseOrderByFileTypeAscFileNameAsc(1L, 11L))
                 .thenReturn(List.of(nestedFile));
-        when(userRepository.findById(2L)).thenReturn(Optional.of(quotaUser(2L, 1024L, 0L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:2")).thenReturn(null);
         final long[] nextId = {100L};
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity saved = inv.getArgument(0);
@@ -733,7 +730,7 @@ class ShareServiceImplTest {
                         tuple("nested.txt", 2L, 101L),
                         tuple("root.txt", 2L, 100L)
                 );
-        verify(valueOps).increment("storage:incr:2", 150L);
+        verify(quotaAccounting).change(Scope.PERSONAL, 2L, 150L);
         verify(shareLinkRepository).incrementDownloadCount(share.getId());
     }
 
@@ -776,6 +773,8 @@ class ShareServiceImplTest {
 
     @Test
     void saveSharedItem_shouldRejectQuotaExceeded() {
+        doThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.STORAGE_QUOTA_EXCEEDED))
+                .when(quotaAccounting).check(Scope.PERSONAL, 2L, 900L);
         ShareLinkEntity share = activeShare("quota", 1L, 10L);
         FileEntity source = ownedFile(10L, 1L);
         source.setFileName("big.bin");
@@ -784,9 +783,6 @@ class ShareServiceImplTest {
         when(shareLinkRepository.findByShareCode("quota")).thenReturn(Optional.of(share));
         when(fileRepository.findById(10L)).thenReturn(Optional.of(source));
         when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(2L, "big.bin")).thenReturn(false);
-        when(userRepository.findById(2L)).thenReturn(Optional.of(quotaUser(2L, 1000L, 200L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:2")).thenReturn(null);
 
         assertThatThrownBy(() -> shareService.saveSharedItem("quota", null, null, 2L, null))
                 .isInstanceOf(BusinessException.class)

@@ -61,7 +61,7 @@ Windows 使用 PowerShell 入口：
 .\scripts\verify-all.ps1 -Module <module>
 ```
 
-可用模块为 `backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience`、`warehouse` 和 `all`。
+可用模块为 `backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience`、`warehouse`、`inspection` 和 `all`。
 
 - 优先运行与改动范围匹配的模块；共同协议、全局配置或发布准备再扩大验证范围。
 - `all` 是完整验收，需要 Docker、Maven/JDK、Python、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。

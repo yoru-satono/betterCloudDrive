@@ -51,9 +51,6 @@ public interface TeamRepository extends JpaRepository<TeamEntity, Long>, JpaSpec
             """)
     Page<TeamEntity> findActiveTeamsForUser(@Param("userId") Long userId, Pageable pageable);
 
-    @Modifying
-    @Query("UPDATE TeamEntity t SET t.storageUsed = t.storageUsed + :delta WHERE t.id = :teamId")
-    int updateStorageUsed(@Param("teamId") Long teamId, @Param("delta") long delta);
 
     @Modifying
     @Query("DELETE FROM TeamEntity t WHERE t.id = :teamId")

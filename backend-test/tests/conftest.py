@@ -70,12 +70,19 @@ def versioned_file(client, auth_headers, uploaded_file, test_user):
     """Attach two deterministic version rows to a real uploaded object."""
     file_id = uploaded_file["fileId"]
     sql = f"""
+    BEGIN;
+    SELECT u.id FROM users u JOIN files f ON f.user_id=u.id WHERE f.id={file_id} AND f.team_id IS NULL FOR UPDATE OF u;
+    WITH added AS (
     INSERT INTO file_versions (file_id, user_id, version_number, file_size, md5_hash, storage_path, created_at)
     SELECT id, {test_user['userId']}, version_number, file_size, md5_hash, storage_path, CURRENT_TIMESTAMP
     FROM files CROSS JOIN (VALUES (1), (2)) AS versions(version_number)
     WHERE id = {file_id}
-    ON CONFLICT (file_id, version_number) DO NOTHING;
+    ON CONFLICT (file_id, version_number) DO NOTHING
+    RETURNING file_size
+    ) UPDATE users SET storage_used=storage_used+(SELECT COALESCE(sum(file_size),0) FROM added),
+        quota_revision=quota_revision+1 WHERE id={test_user['userId']};
     UPDATE files SET version_count = 3 WHERE id = {file_id};
+    COMMIT;
     """
     result = subprocess.run(
         ["docker", "compose", "exec", "-T", "postgres", "psql", "-v", "ON_ERROR_STOP=1",

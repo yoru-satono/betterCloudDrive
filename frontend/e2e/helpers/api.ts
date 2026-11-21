@@ -711,6 +711,25 @@ export async function setUserQuotaBytes(request: APIRequestContext, adminToken: 
   await expect(res, await res.text()).toBeOK()
 }
 
+/** Controlled empty-space fixtures; never changes a non-E2E account or its quota limit. */
+export async function inspectionQuotaFixture(userId: number, reset = false) {
+  if (!Number.isSafeInteger(userId) || userId < 1) throw new Error('Invalid inspection fixture owner')
+  await psql(`UPDATE users SET storage_used=${reset ? 0 : 17},quota_revision=quota_revision+1
+    WHERE id=${userId} AND username LIKE 'e2e\\_%' ESCAPE '\\'
+    AND storage_used=${reset ? 17 : 0}
+    AND NOT EXISTS (SELECT 1 FROM files WHERE user_id=${userId} AND team_id IS NULL);`)
+}
+
+export async function ageInspectionFixture(findingId: string, ownerId: number) {
+  if (!/^[0-9a-f-]{36}$/i.test(findingId) || !Number.isSafeInteger(ownerId) || ownerId < 1) {
+    throw new Error('Invalid inspection evidence fixture')
+  }
+  await psql(`UPDATE storage_inspection_findings SET stable_since=now()-INTERVAL '11 minutes',
+    last_counted_at=now()-INTERVAL '11 minutes' WHERE id='${findingId}' AND scope='PERSONAL'
+    AND owner_id=${ownerId} AND type='QUOTA_DRIFT'
+    AND EXISTS (SELECT 1 FROM users WHERE id=${ownerId} AND username LIKE 'e2e\\_%' ESCAPE '\\');`)
+}
+
 export async function moveToRecycleBin(request: APIRequestContext, token: string, fileIds: number[]) {
   const res = await request.delete(`${backendURL}/api/v1/files`, {
     headers: authHeaders(token),
@@ -750,10 +769,22 @@ export async function createVersionRows(fileId: number, userId: number, versions
     `
   }).join(' UNION ALL ')
   await psql(`
+    BEGIN;
+    SELECT u.id FROM users u JOIN files f ON f.user_id=u.id WHERE f.id=${fileId} AND f.team_id IS NULL FOR UPDATE OF u;
+    SELECT t.id FROM teams t JOIN files f ON f.team_id=t.id WHERE f.id=${fileId} FOR UPDATE OF t;
+    WITH added AS (
     INSERT INTO file_versions (file_id, user_id, version_number, file_size, md5_hash, storage_path, created_at)
     ${values}
-    ON CONFLICT (file_id, version_number) DO NOTHING;
+    ON CONFLICT (file_id, version_number) DO NOTHING RETURNING file_id,file_size
+    ), deltas AS (
+      SELECT f.user_id,f.team_id,sum(a.file_size) AS bytes FROM added a JOIN files f ON f.id=a.file_id GROUP BY f.user_id,f.team_id
+    ), personal AS (
+      UPDATE users u SET storage_used=u.storage_used+d.bytes,quota_revision=u.quota_revision+1
+      FROM deltas d WHERE d.team_id IS NULL AND u.id=d.user_id RETURNING u.id
+    ) UPDATE teams t SET storage_used=t.storage_used+d.bytes,quota_revision=t.quota_revision+1
+      FROM deltas d WHERE t.id=d.team_id;
     UPDATE files SET version_count = (SELECT count(*) FROM file_versions WHERE file_id = ${fileId}) WHERE id = ${fileId};
+    COMMIT;
   `)
 }
 

@@ -54,7 +54,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 3.0
 
 $AllowedModules = [System.Collections.Generic.HashSet[string]]::new(
-    [string[]]@("all", "backend", "integration", "blackbox", "security", "web", "tauri", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience", "warehouse"),
+    [string[]]@("all", "backend", "integration", "blackbox", "security", "web", "tauri", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience", "warehouse", "inspection"),
     [System.StringComparer]::OrdinalIgnoreCase
 )
 $SelectedModules = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -97,11 +97,12 @@ $RunWebDav = $RunAll -or $SelectedModules.Contains("webdav")
 $RunObservability = $RunAll -or $SelectedModules.Contains("observability")
 $RunResilience = $RunAll -or $SelectedModules.Contains("resilience")
 $RunWarehouse = $RunAll -or $SelectedModules.Contains("warehouse")
+$RunInspection = $RunAll -or $SelectedModules.Contains("inspection")
 $script:ComposeArguments = @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml")
 if ($RunWarehouse) { $script:ComposeArguments += @("-f", "docker-compose.warehouse.yml") }
-$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience -or $RunWarehouse
+$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience -or $RunWarehouse -or $RunInspection
 $NeedsFrontendHttp = $RunWeb -or $RunTauri -or $RunOffice
-$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWarehouse
+$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWarehouse -or $RunInspection
 $NeedsOnlyOffice = $RunOffice
 $NeedsDocker = $NeedsBackendHttp -or $NeedsOnlyOffice
 $ShouldCleanupE2E = -not $SkipE2ECleanup -and $NeedsDocker
@@ -430,7 +431,7 @@ try {
     Write-Host "Selected modules: $($SelectedModules -join ', ')"
     Write-Host "Test run ID: $RunId"
     New-Item -ItemType Directory -Force -Path $ResultRoot | Out-Null
-    @("backend", "integration", "blackbox", "security", "web", "tauri", "office", "webdav", "observability", "resilience", "warehouse", "coverage") |
+    @("backend", "integration", "blackbox", "security", "web", "tauri", "office", "webdav", "observability", "resilience", "warehouse", "inspection", "coverage") |
         ForEach-Object { New-Item -ItemType Directory -Force -Path (Join-Path $ResultRoot $_) | Out-Null }
 
     if ($RunAll -and ($SkipTauri -or $SkipAndroid -or $SkipOnlyOffice)) {
@@ -512,11 +513,28 @@ try {
         }
     }
 
+    if ($RunInspection) {
+        Invoke-Step "Inspection unit and isolated integration tests" {
+            Invoke-InDirectory "backend" {
+                Invoke-External "mvn" @("verify", "-Pintegration",
+                    "-Dtest=ActiveObjectPrefixServiceTest,InspectionObservationServiceTest,QuotaAccountingServiceTest,TraceAuditFilterTest,StorageMetricsTest,StorageFailurePrivacyTest",
+                    "-Dsurefire.failIfNoSpecifiedTests=false",
+                    "-Dit.test=InspectionWorkerIT,QuotaAccountingIT,S3StorageServiceIT",
+                    "-Dfailsafe.failIfNoSpecifiedTests=false")
+            }
+        }
+        Invoke-Step "Inspection live API acceptance" {
+            Invoke-WithFunctionalTestRateLimits {
+                Invoke-Pytest -Marker "inspection" -Report "../test-results/inspection/live-junit.xml"
+            }
+        }
+    }
+
     if ($RunBlackbox) {
         Invoke-Step "Backend black-box tests" {
             Invoke-WithFunctionalTestRateLimits {
                 Invoke-Pytest `
-                    -Marker "not webdav and not office and not observability and not resilience and not security and not warehouse" `
+                    -Marker "not webdav and not office and not observability and not resilience and not security and not warehouse and not inspection" `
                     -Report "../test-results/blackbox/junit.xml"
             }
         }
@@ -540,7 +558,7 @@ try {
         Invoke-Step "Web E2E tests" {
             Invoke-WithFunctionalTestRateLimits {
                 Invoke-InDirectory "frontend" {
-                    Invoke-WithEnv @{ E2E_ONLYOFFICE = "0"; E2E_WAREHOUSE = $(if ($RunWarehouse) { "1" } else { "0" }) } {
+                    Invoke-WithEnv @{ E2E_ONLYOFFICE = "0"; E2E_WAREHOUSE = $(if ($RunWarehouse) { "1" } else { "0" }); E2E_INSPECTION = $(if ($RunInspection) { "1" } else { "0" }) } {
                         Invoke-External "node" @("scripts/run-playwright-docker.mjs", "--project=core", "--trace=off")
                     }
                 }
@@ -573,7 +591,7 @@ try {
         Invoke-Step "Tauri E2E tests" {
             Invoke-WithFunctionalTestRateLimits {
                 Invoke-InDirectory "frontend" {
-                    Invoke-WithEnv @{ E2E_WAREHOUSE = $(if ($RunWarehouse) { "1" } else { "0" }) } {
+                    Invoke-WithEnv @{ E2E_WAREHOUSE = $(if ($RunWarehouse) { "1" } else { "0" }); E2E_INSPECTION = $(if ($RunInspection) { "1" } else { "0" }) } {
                         Invoke-External "pnpm" @("run", "test:e2e:tauri")
                     }
                 }

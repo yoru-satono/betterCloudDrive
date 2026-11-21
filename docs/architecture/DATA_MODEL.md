@@ -1,5 +1,7 @@
 # 数据模型
 
+容量事务计账由 V3 引入：`users/teams.quota_revision` 与业务元数据同事务更新，`quota_accounting_state` 阻止未完成切换的写入，`quota_legacy_transfers` 记录 Redis 旧增量的准确一次应用/确认。V4 增加 `storage_inspection_*` 的运行、引用/对象/容量/任务/层级证据暂存、差异与审核，以及 `storage_quota_repair_previews`、`storage_quota_repairs`。这些是派生诊断数据，源文件及对象保持独立；保留期限与恢复顺序见[存储巡检](../operations/STORAGE_INSPECTIONS.md)。
+
 本文面向后端开发者、数据库维护者和备份设计者，描述核心实体关系、个人/团队作用域和数据生命周期。字段、约束与索引的最终事实来源是 Flyway migration、JPA Entity 和 Repository；本文只解释稳定结构，不复制完整 DDL。
 
 ## 存储分工

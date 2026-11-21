@@ -11,8 +11,9 @@ import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UploadSessionRepository;
 import com.betterclouddrive.service.TeamPurgeService;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -24,19 +25,19 @@ import java.util.List;
 public class TeamPurgeServiceImpl implements TeamPurgeService {
 
     private static final int UPLOAD_STATUS_ACTIVE = 1;
-    private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
 
     private final TeamRepository teamRepository;
+    private final QuotaAccountingService quotaAccounting;
     private final FileRepository fileRepository;
     private final FileVersionRepository fileVersionRepository;
     private final FolderZipDownloadCacheRepository folderZipDownloadCacheRepository;
     private final UploadSessionRepository uploadSessionRepository;
     private final StorageService storageService;
-    private final StringRedisTemplate redisTemplate;
 
     @Override
     @Transactional
     public void purgeTeam(Long teamId) {
+        quotaAccounting.lock(Scope.TEAM, teamId);
         List<FileEntity> files = fileRepository.findByTeamId(teamId);
         List<Long> fileIds = files.stream().map(FileEntity::getId).toList();
         List<FileVersionEntity> versions = fileIds.isEmpty()
@@ -68,7 +69,6 @@ public class TeamPurgeServiceImpl implements TeamPurgeService {
         }
 
         teamRepository.deleteExistingById(teamId);
-        redisTemplate.delete(TEAM_STORAGE_INCR_PREFIX + teamId);
     }
 
     private void deleteObjectIfPresent(String objectKey) {

@@ -10,6 +10,8 @@ import com.betterclouddrive.dal.repository.FolderZipDownloadCacheRepository;
 import com.betterclouddrive.dal.repository.TeamRepository;
 import com.betterclouddrive.dal.repository.UploadSessionRepository;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +36,7 @@ class TeamPurgeServiceImplTest {
     @Mock private StorageService storageService;
     @Mock private StringRedisTemplate redisTemplate;
 
+    @Mock private QuotaAccountingService quotaAccounting;
     @InjectMocks private TeamPurgeServiceImpl service;
 
     @Test
@@ -87,7 +90,6 @@ class TeamPurgeServiceImplTest {
         verify(storageService).deleteParts("uploads/teams/10/active-upload/chunks", 2);
         verify(storageService, never()).deleteParts("uploads/teams/10/completed-upload/chunks", 2);
         verify(teamRepository).deleteExistingById(10L);
-        verify(redisTemplate).delete("team:storage:incr:10");
     }
 
     @Test
@@ -98,7 +100,6 @@ class TeamPurgeServiceImplTest {
         service.purgeTeam(10L);
 
         verify(teamRepository).deleteExistingById(10L);
-        verify(redisTemplate).delete("team:storage:incr:10");
         verify(storageService, never()).deleteObject(org.mockito.ArgumentMatchers.anyString());
     }
 }

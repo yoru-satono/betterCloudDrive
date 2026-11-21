@@ -308,3 +308,24 @@ Authorization: Bearer <accessToken>  (需要 ROLE_ADMIN)
 ```
 
 ---
+
+### 15.13 存储巡检
+
+以下路径统一位于 `/api/v1/admin/storage-inspections`，全部要求 `ROLE_ADMIN`。个人用户和团队管理员身份不能获得系统巡检权限。
+
+| 方法 | 相对路径 | 说明 |
+|---|---|---|
+| GET | `/overview` | 开关、计账就绪、下次计划、最近运行/完整运行、差异计数 |
+| GET / POST | `/runs` | 分页历史 / 手动创建全量运行；已有活动运行返回 409 |
+| GET | `/runs/{id}` | 当前阶段、计数、覆盖标志和稳定错误码 |
+| POST | `/runs/{id}/cancel` | 请求取消，在工作边界生效 |
+| GET | `/findings` | `type`、`status`、`reviewStatus`、`scope`、`ownerId` 筛选及分页 |
+| GET | `/findings/{id}` | 差异、对象键、审核和修复记录 |
+| POST | `/findings/{id}/rechecks` | 单项当前状态复核，不替代完整清单 |
+| POST | `/findings/{id}/reviews` | `{ "action": "NOTE", "reason": "处置说明" }`；另支持 `ACKNOWLEDGE`、`IGNORE` |
+| POST | `/findings/{id}/repair-preview` | 生成容量修复预览，有效期 10 分钟，绑定当前管理员 |
+| POST | `/quota-repairs` | `{ "previewId": "UUID", "idempotencyKey": "UUID", "reason": "修复理由" }` |
+
+分页为 `page=1&size=20`，size 1～100，page 1～100000；指定 ownerId 必须同时指定 `scope=PERSONAL|TEAM`。列表不返回对象键。技术状态为 `SUSPECTED|CONFIRMED|RESOLVED`，处置状态为 `OPEN|ACKNOWLEDGED|IGNORED`。reason 为去除首尾空白后的 1～500 字符。运行 ID、差异 ID 和预览 ID 均为 UUID。
+
+无效参数返回 400，不存在返回 404，运行冲突、预览过期/改变、容量锁繁忙、不可修复或孤儿复核所需完整清单缺失返回 409，巡检关闭或离线计账切换尚未完成返回 503。预览和提交均从当前元数据重算；同 idempotencyKey 只允许重放同一预览、操作者和原因。仅修复已确认的容量用量差异，配额上限保持原值；不会自动删除对象或修改文件元数据。运行状态、迁移要求和证据窗口见[存储巡检运维](../../operations/STORAGE_INSPECTIONS.md)。

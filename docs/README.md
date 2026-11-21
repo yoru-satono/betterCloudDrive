@@ -13,6 +13,7 @@
 | 查询 HTTP 接口、配置或本地化协议 | [参考资料](reference/README.md) |
 | 部署、备份、观察或排障 | [运维手册](operations/README.md) |
 | 启动业务数仓、查询统计口径或补数 | [业务数仓](../warehouse/README.md) |
+| 巡检容量、对象引用或升级容量计账 | [存储巡检](operations/STORAGE_INSPECTIONS.md) |
 | 了解关键选择的原因 | [架构决策记录](decisions/README.md) |
 | 查看尚未完成的工作 | [后续计划](ROADMAP.md) |
 

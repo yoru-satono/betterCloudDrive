@@ -24,6 +24,19 @@ import com.betterclouddrive.common.message.MessageKeys;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.betterclouddrive.common.exception.InspectionException.class)
+    public org.springframework.http.ResponseEntity<ApiResponse<Void>> handleInspection(
+            com.betterclouddrive.common.exception.InspectionException error) {
+        return org.springframework.http.ResponseEntity.status(error.getStatus())
+                .body(ApiResponse.error(error.getStatus(), error.getMessageKey()));
+    }
+
+    @ExceptionHandler(com.betterclouddrive.common.exception.QuotaUnavailableException.class)
+    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
+    public ApiResponse<Void> handleQuotaUnavailable() {
+        return ApiResponse.error(503, "error.quotaAccountingUnavailable");
+    }
+
     @ExceptionHandler(com.betterclouddrive.common.exception.WarehouseUnavailableException.class)
     @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     public ApiResponse<Void> handleWarehouseUnavailable() {

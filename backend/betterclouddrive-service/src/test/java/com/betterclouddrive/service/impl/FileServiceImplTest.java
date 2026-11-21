@@ -17,6 +17,8 @@ import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.dto.TeamEffectivePermission;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,6 +69,7 @@ class FileServiceImplTest {
     @Mock
     private ValueOperations<String, String> valueOps;
 
+    @Mock private QuotaAccountingService quotaAccounting;
     @InjectMocks
     private FileServiceImpl fileService;
 
@@ -421,10 +424,6 @@ class FileServiceImplTest {
         when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(1L, "Docs copy"))
                 .thenReturn(false);
         when(fileRepository.findAll(any(Specification.class))).thenReturn(List.of(child), List.of(child));
-        when(userRepository.findById(1L))
-                .thenReturn(Optional.of(UserEntity.builder().id(1L).storageQuota(1024L).storageUsed(100L).build()));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity file = inv.getArgument(0);
             file.setId(saved.isEmpty() ? 100L : 101L);
@@ -441,7 +440,7 @@ class FileServiceImplTest {
         assertThat(saved.get(1).getFileName()).isEqualTo("a.txt");
         assertThat(saved.get(1).getParentId()).isEqualTo(100L);
         assertThat(saved.get(1).getStoragePath()).isEqualTo("objects/a.txt");
-        verify(valueOps).increment("storage:incr:1", 64L);
+        verify(quotaAccounting).change(Scope.PERSONAL, 1L, 64L);
     }
 
     @Test
@@ -478,16 +477,14 @@ class FileServiceImplTest {
 
     @Test
     void copyFileTo_shouldRejectWhenQuotaExceeded() {
+        doThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.STORAGE_QUOTA_EXCEEDED))
+                .when(quotaAccounting).check(Scope.PERSONAL, 1L, 64L);
         FileEntity source = FileEntity.builder()
                 .id(1L).userId(1L).fileName("big.bin")
                 .fileType("file").fileSize(64L).isDeleted(false).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(source));
         when(fileRepository.existsByUserIdAndParentIdIsNullAndFileNameAndIsDeletedFalse(1L, "big-copy.bin"))
                 .thenReturn(false);
-        when(userRepository.findById(1L))
-                .thenReturn(Optional.of(UserEntity.builder().id(1L).storageQuota(120L).storageUsed(100L).build()));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
 
         assertThatThrownBy(() -> fileService.copyFileTo(1L, 1L, null, "big-copy.bin"))
                 .isInstanceOf(BusinessException.class)
@@ -624,11 +621,10 @@ class FileServiceImplTest {
                 .isDeleted(false).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
         when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
         fileService.deleteFiles(100L, List.of(1L));
 
-        verify(valueOps).increment("storage:incr:100", -2048L);
+        verify(quotaAccounting).change(Scope.PERSONAL, 100L, -2048L);
     }
 
     @Test
@@ -638,12 +634,11 @@ class FileServiceImplTest {
                 .isDeleted(false).build();
         when(fileRepository.findById(1L)).thenReturn(Optional.of(file));
         when(fileRepository.save(any(FileEntity.class))).thenReturn(file);
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
         fileService.deleteTeamFiles(10L, 2L, List.of(1L));
 
         assertThat(file.getIsDeleted()).isTrue();
-        verify(valueOps).increment("team:storage:incr:10", -2048L);
+        verify(quotaAccounting).change(Scope.TEAM, 10L, -2048L);
         verify(teamPermissionService).requireDelete(2L, 10L, 1L);
     }
 
@@ -691,17 +686,13 @@ class FileServiceImplTest {
         when(fileRepository.findAll(any(Specification.class)))
                 .thenReturn(List.of(child), List.of(), List.of(child), List.of());
         when(fileVersionRepository.findByFileIdOrderByVersionNumberDesc(2L)).thenReturn(List.of());
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(
-                TeamEntity.builder().id(10L).storageUsed(10L).storageQuota(1000L).build()));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("team:storage:incr:10")).thenReturn(null);
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         fileService.restoreTeamFile(10L, 2L, 1L);
 
         assertThat(folder.getIsDeleted()).isFalse();
         assertThat(child.getIsDeleted()).isFalse();
-        verify(valueOps).increment("team:storage:incr:10", 64L);
+        verify(quotaAccounting).change(Scope.TEAM, 10L, 64L);
         verify(teamAuditService).record(10L, 2L, "FILE_RESTORE", "FILE", 1L, "docs");
     }
 

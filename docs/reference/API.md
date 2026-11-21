@@ -135,7 +135,7 @@ POST /api/v1/auth/refresh
 - 每个用户注册时分配默认存储配额 **10GB**（`storageQuota` 字段）
 - 上传文件前系统检查 `storageUsed + 文件大小 ≤ storageQuota`，超限返回 **419001**
 - 文件删除时自动扣减已用空间
-- 存储用量通过 Redis 增量同步到 PostgreSQL（每 60 秒）
+- 个人和团队的用量与文件、版本元数据在 PostgreSQL 同一业务事务中更新，不再通过 Redis 周期同步；已有数据库需先完成[旧增量计账离线切换](../operations/STORAGE_INSPECTIONS.md#从旧-redis-增量计账升级)，切换未完成时相关容量写入返回 HTTP 503。
 - 管理员可通过 `PATCH /api/v1/admin/users/{userId}/quota` 修改任意用户的配额
 
 ### 7.6 缩略图

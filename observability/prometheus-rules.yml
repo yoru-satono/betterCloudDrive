@@ -234,3 +234,42 @@ groups:
         annotations:
           summary: A transfer result could not be captured
           description: Inspect source database health; affected started transfers remain unconfirmed.
+
+  - name: better-cloud-drive-storage-inspections
+    interval: 30s
+    rules:
+      - alert: BetterCloudDriveStorageInspectionDelayed
+        expr: bcd_storage_inspection_enabled == 1 and bcd_storage_quota_accounting_ready == 1 and (time() - bcd_storage_inspection_last_complete_timestamp > 172800)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Storage inspection coverage is stale
+          description: No complete storage inspection has been recorded within 48 hours.
+
+      - alert: BetterCloudDriveStorageInspectionFailed
+        expr: sum without (status) (increase(bcd_storage_inspection_runs_total{kind="FULL",status=~"FAILED|PARTIAL"}[10m])) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: A full storage inspection did not complete
+          description: A recent inspection failed or produced partial coverage; the previous complete report remains available.
+
+      - alert: BetterCloudDriveStorageInspectionFindings
+        expr: bcd_storage_inspection_actionable_findings > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Confirmed storage discrepancies require review
+          description: Confirmed content or metadata errors remain open and have not been ignored by an administrator.
+
+      - alert: BetterCloudDriveQuotaAccountingNotReady
+        expr: bcd_storage_quota_accounting_ready == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Capacity accounting cutover is incomplete
+          description: Capacity-changing operations remain gated; complete or recover the explicit offline accounting cutover.

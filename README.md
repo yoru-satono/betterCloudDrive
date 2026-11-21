@@ -8,7 +8,7 @@
 |---|------|
 | **后端** | Spring Boot 4.1.0 + JDK 25 + Spring Data JPA |
 | **数据库** | PostgreSQL 18.4 + Flyway 迁移 |
-| **缓存** | Redis 8.8.1（限流、上传进度、配额同步、Token 黑名单） |
+| **缓存** | Redis 8.8.1（限流、上传进度、活动上传保护、Token 黑名单） |
 | **消息队列** | RabbitMQ 4（团队通知、后台任务、死信队列） |
 | **存储** | SeaweedFS（S3 兼容对象存储） |
 | **邮件** | Mailpit（开发环境邮件模拟） |
@@ -33,9 +33,10 @@
 - **团队空间**：团队文件、成员/邀请、角色权限、团队分享/标签/收藏、版本恢复、审计日志、管理员配额运维
 - **分区导航**：个人网盘与团队空间使用独立首页和导航，通过应用级工作空间切换器双向切换；通知、资料和传输队列为公共功能
 - **注册验证码 & 密码重置**：Mailpit 模拟邮件
-- **存储配额**：默认 10GB/用户，管理员可调整
+- **存储配额**：默认 10GB/用户，管理员可调整；容量与业务元数据在 PostgreSQL 同事务计账
 - **管理员面板**：用户管理/配额调整/日志中心/系统统计
 - **业务数仓**：管理员容量日报、活跃用户/团队、上传下载与分享趋势；[独立部署与统计口径](warehouse/README.md)
+- **存储巡检**：容量、元数据与对象一致性检查，支持差异复核及带预览和审计的用量修复；[运行与升级](docs/operations/STORAGE_INSPECTIONS.md)
 - **响应式 UI**：Web 端支持桌面与移动布局；KMP 移动端在 Android 应用壳提供手机与平板布局，共享业务层面向后续 iOS 应用复用
 
 ## 项目结构
@@ -77,7 +78,7 @@ docker compose up -d --build
 
 完整健康检查和首次注册步骤仍以 [Docker Compose 快速启动](docs/getting-started/QUICKSTART.md)为准。
 
-基础网盘不依赖业务数仓；ClickHouse、dbt 和 Airflow 仅在叠加数仓配置时部署。不部署数仓的环境可设置 `WAREHOUSE_CAPTURE_ENABLED=false` 停止采集业务分析事件；关闭期间的历史行为不会补采。
+基础网盘和存储巡检不依赖业务数仓；ClickHouse、dbt 和 Airflow 仅在叠加数仓配置时部署。不部署数仓的环境可设置 `WAREHOUSE_CAPTURE_ENABLED=false` 停止采集业务分析事件；关闭期间的历史行为不会补采。已有数据库升级到事务容量计账前，必须按[存储巡检运维](docs/operations/STORAGE_INSPECTIONS.md#从旧-redis-增量计账升级)停止旧写入者并执行离线切换，不能直接回退镜像或跳过 gate。
 
 默认访问地址：
 
@@ -161,6 +162,7 @@ Web、Tauri 与 KMP 移动端支持“跟随系统、浅色、深色”三种主
 
 ## 文档
 
+管理员可通过“存储巡检”核对容量、对象引用与后台任务，执行带预览和审计的用量修复；无需新增部署服务。已有数据库升级步骤见[存储巡检运维](docs/operations/STORAGE_INSPECTIONS.md)。
 
 - [统一文档入口](docs/README.md)
 - [入门指南](docs/getting-started/README.md)

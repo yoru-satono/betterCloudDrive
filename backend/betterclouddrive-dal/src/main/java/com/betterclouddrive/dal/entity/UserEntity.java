@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "users")
 public class UserEntity {
 

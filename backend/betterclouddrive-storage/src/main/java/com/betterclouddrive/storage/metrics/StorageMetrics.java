@@ -171,6 +171,7 @@ public class StorageMetrics {
     }
 
     public enum Operation {
+        LIST("list"),
         PUT("put"),
         GET("get"),
         DELETE("delete"),

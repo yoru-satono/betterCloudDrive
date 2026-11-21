@@ -19,6 +19,10 @@ class StorageMetricsTest {
         var metrics = new StorageMetrics(registry, OpenTelemetry.noop());
 
         assertThat(metrics.observe(StorageMetrics.Operation.PUT, () -> "stored")).isEqualTo("stored");
+        assertThat(metrics.observe(StorageMetrics.Operation.LIST, () -> 3)).isEqualTo(3);
+        assertThatThrownBy(() -> metrics.observe(StorageMetrics.Operation.LIST, () -> {
+            throw new IOException("inventory unavailable");
+        })).isInstanceOf(IOException.class);
         assertThatThrownBy(() -> metrics.observeDownload(() -> {
             throw new IOException("storage unavailable");
         })).isInstanceOf(IOException.class);
@@ -55,7 +59,12 @@ class StorageMetricsTest {
         assertThat(registry.find("bcd.storage.bytes").tag("direction", "upload").counter().count()).isEqualTo(12);
         assertThat(registry.find("bcd.storage.bytes").tag("direction", "download").counter().count()).isEqualTo(5);
 
-        assertThat(registry.find("bcd.storage.operations").counters()).hasSize(10);
+        assertThat(counter(registry, "list", "success")).isEqualTo(1);
+        assertThat(counter(registry, "list", "failure")).isEqualTo(1);
+        assertThat(registry.find("bcd.storage.operations").counters()).hasSize(12);
+        assertThat(registry.find("bcd.storage.operations").counters().stream()
+                .map(counter -> counter.getId().getTag("operation")).distinct())
+                .containsExactlyInAnyOrder("put", "get", "delete", "head", "copy", "list");
         assertThat(registry.find("bcd.storage.bytes").counters()).hasSize(2);
     }
 

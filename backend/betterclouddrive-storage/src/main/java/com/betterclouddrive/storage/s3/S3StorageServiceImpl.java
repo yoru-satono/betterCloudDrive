@@ -41,7 +41,7 @@ public class S3StorageServiceImpl implements StorageService {
                 client.makeBucket(MakeBucketArgs.builder().bucket(props.getBucket()).build());
             }
         } catch (Exception e) {
-            log.error("Failed to initialize storage bucket", e);
+            log.error("Failed to initialize storage bucket", safeFailure("initialize", e));
         }
     }
 
@@ -58,8 +58,9 @@ public class S3StorageServiceImpl implements StorageService {
             metrics.recordBytes(StorageMetrics.Direction.UPLOAD, size);
             return objectKey;
         } catch (Exception e) {
-            log.error("Failed to upload object: {}", objectKey, e);
-            throw new RuntimeException("Storage upload failed: " + objectKey, e);
+            var failure = safeFailure("upload", e);
+            log.error("Storage upload failed", failure);
+            throw failure;
         }
     }
 
@@ -74,10 +75,11 @@ public class S3StorageServiceImpl implements StorageService {
         } catch (Exception e) {
             if (e instanceof ErrorResponseException error
                     && ("NoSuchKey".equals(error.errorResponse().code()) || "NoSuchObject".equals(error.errorResponse().code()))) {
-                throw new ObjectNotFoundException(e);
+                throw new ObjectNotFoundException(safeFailure("download", e));
             }
-            log.error("Failed to download object: {}", objectKey, e);
-            throw new RuntimeException("Storage download failed: " + objectKey, e);
+            var failure = safeFailure("download", e);
+            log.error("Storage download failed", failure);
+            throw failure;
         }
     }
 
@@ -92,8 +94,9 @@ public class S3StorageServiceImpl implements StorageService {
                             .length(length)
                             .build()));
         } catch (Exception e) {
-            log.error("Failed to download object range: {} offset={} length={}", objectKey, offset, length, e);
-            throw new RuntimeException("Storage range download failed: " + objectKey, e);
+            var failure = safeFailure("range-download", e);
+            log.error("Storage range download failed", failure);
+            throw failure;
         }
     }
 
@@ -106,7 +109,7 @@ public class S3StorageServiceImpl implements StorageService {
                             .object(objectKey)
                             .build()));
         } catch (Exception e) {
-            log.warn("Failed to delete object: {}", objectKey, e);
+            log.warn("Storage delete failed", safeFailure("delete", e));
         }
     }
 
@@ -123,8 +126,9 @@ public class S3StorageServiceImpl implements StorageService {
             metrics.recordBytes(StorageMetrics.Direction.UPLOAD, size);
             return partKey;
         } catch (Exception e) {
-            log.error("Failed to upload part {} for prefix {}", partNumber, prefix, e);
-            throw new RuntimeException("Part upload failed", e);
+            var failure = safeFailure("part-upload", e);
+            log.error("Storage part upload failed", failure);
+            throw failure;
         }
     }
 
@@ -133,8 +137,9 @@ public class S3StorageServiceImpl implements StorageService {
         try {
             return uploadComposedObject(finalObjectKey, sourcePrefix, totalParts);
         } catch (Exception e) {
-            log.error("Failed to compose parts into: {}", finalObjectKey, e);
-            throw new RuntimeException("Composition failed", e);
+            var failure = safeFailure("compose", e);
+            log.error("Storage composition failed", failure);
+            throw failure;
         }
     }
 
@@ -172,7 +177,7 @@ public class S3StorageServiceImpl implements StorageService {
                                     .object(partKey)
                                     .build()));
                 } catch (Exception e) {
-                    throw new RuntimeException("Failed to read upload part: " + partKey, e);
+                    throw safeFailure("part-read", e);
                 }
             }
         };
@@ -210,8 +215,9 @@ public class S3StorageServiceImpl implements StorageService {
                             .source(SourceObject.builder().bucket(props.getBucket()).object(sourceKey).build())
                             .build()));
         } catch (Exception e) {
-            log.error("Failed to copy object: {} -> {}", sourceKey, destKey, e);
-            throw new RuntimeException("Storage copy failed", e);
+            var failure = safeFailure("copy", e);
+            log.error("Storage copy failed", failure);
+            throw failure;
         }
     }
 
@@ -221,8 +227,24 @@ public class S3StorageServiceImpl implements StorageService {
             return metrics.observe(StorageMetrics.Operation.HEAD, () -> client.statObject(StatObjectArgs.builder()
                     .bucket(props.getBucket()).object(objectKey).build()).size());
         } catch (Exception e) {
-            log.warn("Failed to get object size: {}", objectKey, e);
+            log.warn("Storage size lookup failed", safeFailure("size", e));
             return -1;
         }
+    }
+    /** SDK errors embed signed HTTP headers; retain failure category and stack locations only. */
+    static RuntimeException safeFailure(String operation, Exception error) {
+        if (error instanceof SanitizedFailure safe) return safe;
+        Throwable root = error;
+        for (int depth = 0; depth < 16 && root.getCause() != null && root.getCause() != root; depth++) root = root.getCause();
+        if (root instanceof InterruptedException) Thread.currentThread().interrupt();
+        String code = root instanceof ErrorResponseException remote ? remote.errorResponse().code() : "unavailable";
+        if (code == null || !code.matches("[A-Za-z][A-Za-z0-9_]{0,63}")) code = "unavailable";
+        var safe = new SanitizedFailure("Storage " + operation + " failed; type=" + root.getClass().getSimpleName() + "; code=" + code);
+        safe.setStackTrace(error.getStackTrace());
+        return safe;
+    }
+
+    private static final class SanitizedFailure extends RuntimeException {
+        private SanitizedFailure(String message) { super(message); }
     }
 }

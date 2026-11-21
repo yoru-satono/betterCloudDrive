@@ -212,6 +212,33 @@ class TraceAuditFilterTest {
                 eq(1), anyInt(), anyString(), anyString(), eq(200), isNull());
     }
 
+    @Test
+    void shouldNeverCaptureInspectionBodiesEvenWhenCaptureIsEnabled() throws Exception {
+        ObservabilityProperties properties = new ObservabilityProperties();
+        properties.getAudit().setCaptureBody(true);
+        properties.getAudit().setBodyExcludedPathPrefixes(java.util.List.of());
+        var filter = new TraceAuditFilter(properties, new AuditSanitizer(properties),
+                operationLogService, null, clientIpResolver());
+        for (String suffix : java.util.List.of("/runs", "/findings/1/reviews", "/quota-repairs", "/encoded")) {
+            reset(operationLogService);
+            var request = new MockHttpServletRequest("POST", "/api/v1/admin/storage-inspections" + suffix);
+            if (suffix.equals("/encoded")) {
+                request.setRequestURI("/drive/api/v1/admin/%73torage-inspections/findings/1/reviews");
+                request.setContextPath("/drive");
+                request.setServletPath("/api/v1/admin/storage-inspections/findings/1/reviews");
+            }
+            request.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            request.setContent("{\"reason\":\"private-inspection-note\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> req.getInputStream().readAllBytes());
+            var detail = ArgumentCaptor.forClass(String.class);
+            verify(operationLogService).logRequestAudit(isNull(), anyString(), anyString(), isNull(),
+                    detail.capture(), any(), isNull(), eq(1), anyInt(), anyString(), anyString(), eq(200), isNull());
+            var event = new ObjectMapper().readTree(detail.getValue());
+            assertThat(event.get("request_body").isNull()).isTrue();
+            assertThat(detail.getValue()).doesNotContain("private-inspection-note");
+        }
+    }
+
     private ClientIpResolver clientIpResolver() {
         return new ClientIpResolver(new ClientIpProperties());
     }

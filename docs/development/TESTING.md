@@ -39,13 +39,17 @@ Linux/macOS 也可以使用 Bash 3.2 或更高版本：
 bash scripts/verify-all.sh
 ```
 
-`all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability、resilience 和 warehouse。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。KMP 移动端验证使用 `mobile-unit` 和 `mobile-android`。
+`all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability、resilience、warehouse 和 inspection。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。KMP 移动端验证使用 `mobile-unit` 和 `mobile-android`。
+
+`inspection` 复用基础栈，不需要数仓容器；运行巡检、容量事务、旧 Redis 增量切换和对象存储的单元/隔离集成测试，再执行管理员真实 API 验收。已有数据库必须先按[存储巡检运维](../operations/STORAGE_INSPECTIONS.md)完成离线计账切换，验证脚本不会自动宣布旧写入者已停止。运行 `./scripts/verify-all.ps1 -Module inspection` 或 `bash scripts/verify-all.sh --module inspection`。普通 `blackbox` 排除 `inspection` 标记；安全路由拒绝用例同时属于 `security`。
+
+组合选择 `inspection,web` 或 `inspection,tauri` 时设置 `E2E_INSPECTION=1`，启用共享巡检页面的浏览器或原生桌面验收。报告位于 `test-results/inspection/`，后端隔离测试报告仍在各 Maven 模块 `target/` 下。真实 API 用例只修改本次用户的容量及差异证据，用可控时间戳覆盖 HTTP 修复链路；两次观测的真实间隔规则由注入时钟的集成测试验证。
 
 `warehouse` 使用独立 ClickHouse、dbt 和 Airflow，包含 Python 单元、隔离 PostgreSQL/ClickHouse 集成和真实网盘 API → Airflow → 管理报表验收，并叠加 `docker-compose.warehouse.yml`。首次配置生成独立随机密钥，已有配置不会覆盖；统计口径、补数与资源要求见[业务数仓](../../warehouse/README.md)。纯数据层可运行 `cd warehouse && uv run --locked --extra test pytest`。普通 `blackbox` 模块不包含标记为 `warehouse` 的专属验收。
 
 同时选择 `warehouse,web` 或 `warehouse,tauri`（Bash 重复 `--module`）时，入口自动设置 `E2E_WAREHOUSE=1`，启用对应客户端的业务分析验收；基础 Web/Tauri 验证跳过这项可选数仓场景。独立执行该场景时需先启动数仓并成功发布报表，再显式设置 `E2E_WAREHOUSE=1`。Tauri 可用 `pnpm run test:e2e:tauri -- --spec ./e2e-tauri/tauri-warehouse.wdio.ts` 单独执行原生窗口冒烟。
 
-统一 Web 验收关闭 Playwright trace，避免认证请求的令牌和请求正文进入报告；页面截图和结果报告仍按既有配置生成。API pytest 在异常和捕获报告生成前遮盖 Bearer/JWT、敏感字段和 token/ticket 查询值，保留断言位置与错误码；HTTPX 的实时传输日志也过滤这些值。不要通过打印原始认证响应排障。内存有限的本机可设置 `VITEST_MAX_WORKERS=2` 控制 Vitest 并发。
+统一 Web 验收关闭 Playwright trace，避免认证请求的令牌和请求正文进入报告；页面截图和结果报告仍按既有配置生成。API pytest 在异常和捕获报告生成前遮盖 Bearer/JWT、敏感字段和 token/ticket 查询值，保留断言位置与错误码；HTTPX 的实时传输日志也过滤这些值。不要通过打印原始认证响应排障。直接插入历史版本的测试数据必须在 owner 锁和同一事务中增加所属个人/团队用量，不能制造没有同步计账的普通业务样本。内存有限的本机可设置 `VITEST_MAX_WORKERS=2` 控制 Vitest 并发。
 
 两个入口会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。PowerShell 入口在 Windows 使用 `.venv/Scripts/pytest.exe` 和 `gradlew.bat`，在 Linux 使用 `.venv/bin/pytest` 和 Bash Gradle wrapper；缺少虚拟环境时两端都依次回退到 `uv` 与系统 Python。Web、OnlyOffice 和 Tauri E2E runner 会加载根 `.env`、`config/env-files/database.env` 与 `config/env-files/backend.env`，将与 Compose 一致的数据库端口、凭据和 OnlyOffice JWT 传给测试子进程；配置不一致时只报告键名，不输出密钥。`all` 是完整验收，不能再配合跳过 Tauri、KMP Android 或 OnlyOffice 的参数。
 
@@ -76,7 +80,7 @@ bash scripts/verify-all.sh --module observability --keep-going
 |------|------|------|
 | Java 单元 | `cd backend && mvn test` | 全部 Maven 模块单元测试与 Java JaCoCo 报告 |
 | DAL/S3/RabbitMQ 集成 | `cd backend && mvn verify -Pintegration -DskipUnitTests -pl betterclouddrive-dal,betterclouddrive-storage,betterclouddrive-service -am` | Testcontainers 真实依赖 |
-| API 黑盒 | `cd backend-test && uv run pytest -m "not security and not webdav and not office and not observability and not resilience and not warehouse"` | 核心 HTTP 验收 |
+| API 黑盒 | `cd backend-test && uv run pytest -m "not security and not webdav and not office and not observability and not resilience and not warehouse and not inspection"` | 核心 HTTP 验收 |
 | 安全 | `cd backend-test && uv run pytest -m security` | token、ticket、IDOR 与输入边界 |
 | Web 单元 | `cd frontend && pnpm run test` | i18n 检查 + Vitest |
 | Web 单元与报告 | `cd frontend && pnpm run test:coverage` | V8 coverage |

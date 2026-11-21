@@ -1,5 +1,8 @@
 package com.betterclouddrive.service.impl;
 
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
+
 import com.betterclouddrive.common.exception.BusinessException;
 import com.betterclouddrive.common.dto.UploadInitResult;
 import com.betterclouddrive.dal.entity.*;
@@ -35,6 +38,8 @@ class UploadIntegrityTest {
     @Mock TeamPermissionService permissions;
     @Mock ThumbnailService thumbnails;
     @Mock com.betterclouddrive.service.WarehouseEventService warehouseEvents;
+    @Mock private QuotaAccountingService quotaAccounting;
+    @Mock private com.betterclouddrive.service.inspection.ActiveObjectPrefixService activeObjects;
     @InjectMocks UploadServiceImpl service;
 
     @AfterEach void clearTransactions() {
@@ -109,7 +114,7 @@ class UploadIntegrityTest {
         verify(storage).deleteObject(anyString());
         verify(storage, never()).deleteParts(anyString(), anyInt());
         verify(redis, never()).delete(anyString());
-        verify(bits, never()).increment(anyString(), anyLong());
+        verify(quotaAccounting, never()).change(any(), anyLong(), anyLong());
         verifyNoInteractions(thumbnails, audit);
     }
 
@@ -126,7 +131,7 @@ class UploadIntegrityTest {
         verify(redis, never()).delete(anyString());
         var callbacks = TransactionSynchronizationManager.getSynchronizations();
         callbacks.forEach(callback -> callback.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
-        verify(bits, never()).increment(anyString(), anyLong());
+        verify(quotaAccounting).change(team ? Scope.TEAM : Scope.PERSONAL, team ? 10L : 1L, 5L);
         verify(storage).deleteObject(anyString());
         verify(storage, never()).deleteParts(anyString(), anyInt());
     }
@@ -151,8 +156,6 @@ class UploadIntegrityTest {
     @Test void rejectsInvalidInitShapeAndNormalizesDigest() {
         assertCode(() -> service.initUpload(1L, null, "hello", 5L, null), 400);
         assertCode(() -> service.initUpload(1L, null, "hello", -1L, MD5), 400);
-        when(users.findById(1L)).thenReturn(Optional.of(UserEntity.builder().storageQuota(100L).storageUsed(0L).build()));
-        when(redis.opsForValue()).thenReturn(bits);
         when(sessions.save(any())).thenAnswer(inv -> inv.getArgument(0));
         assertThat(service.initUpload(1L, null, "hello", 5L, MD5.toUpperCase(Locale.ROOT)).mode()).isEqualTo(UploadInitResult.Mode.MULTIPART);
         var capture = ArgumentCaptor.forClass(UploadSessionEntity.class);
@@ -161,12 +164,10 @@ class UploadIntegrityTest {
     }
 
     @ParameterizedTest @ValueSource(booleans = {false, true})
-    void initializationHitCreatesOnlyAFileAndDefersQuotaUntilCommit(boolean team) {
-        when(redis.opsForValue()).thenReturn(bits);
+    void initializationHitRecordsQuotaInsideBusinessTransaction(boolean team) {
         if (team) {
             when(teams.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(TeamEntity.builder().id(10L).build()));
-            when(teams.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(TeamEntity.builder().storageQuota(100L).storageUsed(0L).build()));
-        } else when(users.findById(1L)).thenReturn(Optional.of(UserEntity.builder().storageQuota(100L).storageUsed(0L).build()));
+        }
         var source = FileEntity.builder().storagePath("verified").build();
         when(files.findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc(MD5, 5L)).thenReturn(List.of(source));
         when(storage.inspectObject("verified")).thenReturn(new ContentDigest(5, MD5));
@@ -175,10 +176,13 @@ class UploadIntegrityTest {
         var result = team ? service.initTeamUpload(10L, 1L, null, "copy", 5L, MD5) : service.initUpload(1L, null, "copy", 5L, MD5);
         assertThat(result.mode()).isEqualTo(UploadInitResult.Mode.INSTANT);
         assertThat(result.fileId()).isEqualTo(99L);
+        verify(warehouseEvents).uploadCommitted(argThat(file -> file.getId().equals(99L)
+                && java.util.Objects.equals(file.getTeamId(), team ? 10L : null)),
+                eq(com.betterclouddrive.common.dto.WarehouseEvent.Mode.INSTANT));
         verifyNoInteractions(sessions);
-        verify(bits, never()).increment(anyString(), anyLong());
+        verify(quotaAccounting).change(team ? Scope.TEAM : Scope.PERSONAL, team ? 10L : 1L, 5L);
         TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
-        verify(bits).increment(team ? "team:storage:incr:10" : "storage:incr:1", 5L);
+        verify(quotaAccounting, times(1)).change(team ? Scope.TEAM : Scope.PERSONAL, team ? 10L : 1L, 5L);
         if (team) verify(audit).record(10L, 1L, "UPLOAD_INSTANT", "FILE", 99L, "copy");
     }
 
@@ -186,9 +190,7 @@ class UploadIntegrityTest {
     void initializationDerivesBoundaryChunkCountsWithoutQuotaSideEffects(boolean team) {
         if (team) {
             when(teams.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(TeamEntity.builder().id(10L).build()));
-            when(teams.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(TeamEntity.builder().storageQuota(Long.MAX_VALUE).storageUsed(0L).build()));
-        } else when(users.findById(1L)).thenReturn(Optional.of(UserEntity.builder().storageQuota(Long.MAX_VALUE).storageUsed(0L).build()));
-        when(redis.opsForValue()).thenReturn(bits);
+        }
         for (long size : new long[] {0, 1, 5242880, 5242881}) {
             var result = team ? service.initTeamUpload(10L, 1L, null, "file", size, MD5) : service.initUpload(1L, null, "file", size, MD5);
             assertThat(result.totalChunks()).isEqualTo((int) ((size + 5242879) / 5242880));
@@ -196,16 +198,16 @@ class UploadIntegrityTest {
         }
         verifyNoInteractions(storage, thumbnails, notifications, audit);
         verify(files, never()).save(any());
-        verify(bits, never()).increment(anyString(), anyLong());
+        verify(quotaAccounting, never()).change(any(), anyLong(), anyLong());
     }
 
     @ParameterizedTest @ValueSource(booleans = {false, true})
     void quotaDenialPrecedesCandidateLookup(boolean team) {
-        when(redis.opsForValue()).thenReturn(bits);
+        doThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.STORAGE_QUOTA_EXCEEDED))
+                .when(quotaAccounting).check(team ? Scope.TEAM : Scope.PERSONAL, team ? 10L : 1L, 5L);
         if (team) {
             when(teams.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(TeamEntity.builder().id(10L).build()));
-            when(teams.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(TeamEntity.builder().storageQuota(4L).storageUsed(0L).build()));
-        } else when(users.findById(1L)).thenReturn(Optional.of(UserEntity.builder().storageQuota(4L).storageUsed(0L).build()));
+        }
         assertCode(() -> { if (team) service.initTeamUpload(10L, 1L, null, "file", 5L, MD5); else service.initUpload(1L, null, "file", 5L, MD5); }, 419001);
         verifyNoInteractions(storage, sessions);
         verify(files, never()).findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc(anyString(), anyLong());
@@ -230,11 +232,9 @@ class UploadIntegrityTest {
 
     @ParameterizedTest @ValueSource(booleans = {false, true})
     void instantChecksEveryCandidateAndPropagatesStorageOutage(boolean team) {
-        when(redis.opsForValue()).thenReturn(bits);
         if (team) {
             when(teams.findActiveByIdForUpdate(10L)).thenReturn(Optional.of(TeamEntity.builder().id(10L).build()));
-            when(teams.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(TeamEntity.builder().storageQuota(100L).storageUsed(0L).build()));
-        } else when(users.findById(1L)).thenReturn(Optional.of(UserEntity.builder().storageQuota(100L).storageUsed(0L).build()));
+        }
         var absent = FileEntity.builder().storagePath("absent").build();
         var corrupt = FileEntity.builder().storagePath("corrupt").build();
         var wrongSize = FileEntity.builder().storagePath("wrong-size").build();
@@ -250,7 +250,7 @@ class UploadIntegrityTest {
         when(storage.inspectObject("corrupt")).thenThrow(new IllegalStateException());
         assertCode(instant, 500001);
         verify(files, never()).save(any());
-        verify(bits, never()).increment(anyString(), anyLong());
+        verify(quotaAccounting, never()).change(any(), anyLong(), anyLong());
     }
 
     @ParameterizedTest @ValueSource(booleans = {false, true})
@@ -262,12 +262,10 @@ class UploadIntegrityTest {
         assertCode(() -> complete(team), 419017);
         verify(files, never()).save(any());
         verify(storage, never()).deleteParts(anyString(), anyInt());
-        verify(bits, never()).increment(anyString(), anyLong());
+        verify(quotaAccounting, never()).change(any(), anyLong(), anyLong());
     }
 
     @Test void shortStreamReadsStillFormOneCompletePart() {
-        when(users.findById(1L)).thenReturn(Optional.of(UserEntity.builder().storageQuota(100L).storageUsed(0L).build()));
-        when(redis.opsForValue()).thenReturn(bits);
         when(storage.composeParts(anyString(), anyString(), eq(1))).thenReturn(new ContentDigest(5, MD5));
         when(files.save(any())).thenAnswer(inv -> { FileEntity file = inv.getArgument(0); file.setId(1L); return file; });
         var input = new ByteArrayInputStream("hello".getBytes()) {
@@ -291,13 +289,11 @@ class UploadIntegrityTest {
     }
 
     @Test void streamChecksSuppliedDigestAndDeclaredLengthBeforeComposition() {
-        when(users.findById(1L)).thenReturn(Optional.of(UserEntity.builder().storageQuota(100L).storageUsed(0L).build()));
-        when(redis.opsForValue()).thenReturn(bits);
         assertCode(() -> service.streamUpload(1L, null, "hello", 5L, new ByteArrayInputStream("world".getBytes()), MD5), 419016);
         assertCode(() -> service.streamUpload(1L, null, "hello", 6L, new ByteArrayInputStream("hello".getBytes()), MD5), 419017);
         assertCode(() -> service.streamUpload(1L, null, "hello", 4L, new ByteArrayInputStream("hello".getBytes()), MD5), 419017);
         verify(storage, never()).composeParts(anyString(), anyString(), anyInt());
         verify(files, never()).save(any());
-        verify(bits, never()).increment(anyString(), anyLong());
+        verify(quotaAccounting, never()).change(any(), anyLong(), anyLong());
     }
 }

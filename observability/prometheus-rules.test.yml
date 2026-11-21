@@ -4,6 +4,69 @@ rule_files:
 evaluation_interval: 1m
 
 tests:
+  - name: storage inspection coverage and confirmed findings
+    interval: 1m
+    input_series:
+      - series: bcd_storage_inspection_enabled
+        values: '1x20'
+      - series: bcd_storage_quota_accounting_ready
+        values: '1x20'
+      - series: bcd_storage_inspection_last_complete_timestamp
+        values: '-200000x20'
+      - series: bcd_storage_inspection_actionable_findings
+        values: '2x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: BetterCloudDriveStorageInspectionDelayed
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: Storage inspection coverage is stale
+              description: No complete storage inspection has been recorded within 48 hours.
+      - eval_time: 6m
+        alertname: BetterCloudDriveStorageInspectionFindings
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: Confirmed storage discrepancies require review
+              description: Confirmed content or metadata errors remain open and have not been ignored by an administrator.
+
+  - name: partial inspection and incomplete cutover
+    interval: 1m
+    input_series:
+      - series: 'bcd_storage_inspection_runs_total{kind="FULL",status="PARTIAL"}'
+        values: '0+1x20'
+      - series: bcd_storage_quota_accounting_ready
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: BetterCloudDriveStorageInspectionFailed
+        exp_alerts:
+          - exp_labels: { severity: warning, kind: FULL }
+            exp_annotations:
+              summary: A full storage inspection did not complete
+              description: A recent inspection failed or produced partial coverage; the previous complete report remains available.
+      - eval_time: 16m
+        alertname: BetterCloudDriveQuotaAccountingNotReady
+        exp_alerts:
+          - exp_labels: { severity: warning }
+            exp_annotations:
+              summary: Capacity accounting cutover is incomplete
+              description: Capacity-changing operations remain gated; complete or recover the explicit offline accounting cutover.
+
+  - name: disabled scheduled inspection does not produce a stale alert
+    interval: 1m
+    input_series:
+      - series: bcd_storage_inspection_enabled
+        values: '0x20'
+      - series: bcd_storage_quota_accounting_ready
+        values: '1x20'
+      - series: bcd_storage_inspection_last_complete_timestamp
+        values: '-200000x20'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: BetterCloudDriveStorageInspectionDelayed
+        exp_alerts: []
   - name: disabled warehouse does not alert
     interval: 1m
     input_series:

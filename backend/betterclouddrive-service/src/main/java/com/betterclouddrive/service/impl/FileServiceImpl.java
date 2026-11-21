@@ -15,13 +15,14 @@ import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.storage.StorageService;
 import jakarta.persistence.criteria.Predicate;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -38,16 +39,14 @@ import java.util.LinkedHashSet;
 public class FileServiceImpl implements FileService {
 
     private final FileRepository fileRepository;
+    private final QuotaAccountingService quotaAccounting;
     private final UserRepository userRepository;
-    private final StringRedisTemplate redisTemplate;
     private final StorageService storageService;
     private final FileVersionRepository fileVersionRepository;
     private final TeamAuditService teamAuditService;
     private final TeamPermissionService teamPermissionService;
     private final TeamRepository teamRepository;
 
-    private static final String STORAGE_INCR_PREFIX = "storage:incr:";
-    private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
     private static final String DEFAULT_FILE_SORT = "fileName";
     private static final int MAX_FILE_NAME_LENGTH = 255;
     private static final String COPY_SUFFIX = " (copy)";
@@ -193,7 +192,7 @@ public class FileServiceImpl implements FileService {
             softDeleteTree(root, deletedAt);
         }
         if (releasedBytes > 0) {
-            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, -releasedBytes);
+            quotaAccounting.change(Scope.PERSONAL, userId, -releasedBytes);
         }
     }
 
@@ -216,7 +215,7 @@ public class FileServiceImpl implements FileService {
         file.setParentId(targetParentId);
         restoreDeletedTree(file, file.getDeletedAt());
         if (restoredBytes > 0) {
-            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, restoredBytes);
+            quotaAccounting.change(Scope.PERSONAL, userId, restoredBytes);
         }
     }
 
@@ -231,6 +230,7 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void permanentDelete(Long userId, Long fileId) {
+        lockPersonalMutations(userId);
         FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
         if (file == null || file.getTeamId() != null || !file.getUserId().equals(userId) || !isRecycleRoot(file)) {
             throw new BusinessException(ApiCode.FILE_NOT_FOUND);
@@ -241,12 +241,14 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void emptyRecycleBin(Long userId) {
+        lockPersonalMutations(userId);
         listDeletedFiles(null, userId).stream().filter(this::isRecycleRoot).forEach(this::deleteTree);
     }
 
     @Override
     @Transactional
     public void purgeExpiredRecycleRoot(Long fileId) {
+        quotaAccounting.lockForFile(fileId);
         FileEntity file = fileRepository.findByIdForUpdate(fileId).orElse(null);
         if (file == null || !file.getIsDeleted()) {
             return;
@@ -280,10 +282,12 @@ public class FileServiceImpl implements FileService {
     @Override
     @Transactional
     public void adminDeleteFile(Long fileId) {
+        quotaAccounting.lockForFile(fileId);
         FileEntity file = adminGetFile(fileId);
-        file.setIsDeleted(true);
-        file.setDeletedAt(LocalDateTime.now());
-        fileRepository.save(file);
+        long released = activeTreeStoredBytes(file);
+        softDeleteTree(file, LocalDateTime.now());
+        if (released > 0) quotaAccounting.change(file.getTeamId() == null ? Scope.PERSONAL : Scope.TEAM,
+                file.getTeamId() == null ? file.getUserId() : file.getTeamId(), -released);
     }
 
     @Override
@@ -423,7 +427,7 @@ public class FileServiceImpl implements FileService {
             teamAuditService.record(teamId, actorUserId, "FILE_DELETE", "FILE", root.getId(), root.getFileName());
         }
         if (releasedBytes > 0) {
-            redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, -releasedBytes);
+            quotaAccounting.change(Scope.TEAM, teamId, -releasedBytes);
         }
     }
 
@@ -448,7 +452,7 @@ public class FileServiceImpl implements FileService {
         file.setParentId(targetParentId);
         restoreDeletedTree(file, file.getDeletedAt());
         if (restoredBytes > 0) {
-            redisTemplate.opsForValue().increment(TEAM_STORAGE_INCR_PREFIX + teamId, restoredBytes);
+            quotaAccounting.change(Scope.TEAM, teamId, restoredBytes);
         }
         teamAuditService.record(teamId, actorUserId, "FILE_RESTORE", "FILE", fileId, file.getFileName());
     }
@@ -540,7 +544,7 @@ public class FileServiceImpl implements FileService {
 
         FileEntity copied = copyTree(source, userId, targetParentId, targetFileName);
         if (totalSize > 0) {
-            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, totalSize);
+            quotaAccounting.change(Scope.PERSONAL, userId, totalSize);
         }
         return copied;
     }
@@ -587,43 +591,11 @@ public class FileServiceImpl implements FileService {
     }
 
     private void checkStorageQuota(Long userId, long additionalBytes) {
-        UserEntity user = userRepository.findById(userId).orElse(null);
-        if (user == null) {
-            throw new BusinessException(ApiCode.UNAUTHORIZED);
-        }
-        String incrStr = redisTemplate.opsForValue().get(STORAGE_INCR_PREFIX + userId);
-        long pendingIncr = 0L;
-        if (incrStr != null) {
-            try {
-                pendingIncr = Long.parseLong(incrStr);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        long storageUsed = user.getStorageUsed() != null ? user.getStorageUsed() : 0L;
-        long storageQuota = user.getStorageQuota() != null ? user.getStorageQuota() : 0L;
-        if (storageUsed + pendingIncr + additionalBytes > storageQuota) {
-            throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
-                    "Storage quota exceeded. Used: " + (storageUsed + pendingIncr) + ", Quota: " + storageQuota);
-        }
+        quotaAccounting.check(Scope.PERSONAL, userId, additionalBytes);
     }
 
     private void checkTeamStorageQuota(Long teamId, long additionalBytes) {
-        com.betterclouddrive.dal.entity.TeamEntity team = teamRepository.findByIdAndDeletedAtIsNull(teamId)
-                .orElseThrow(() -> new BusinessException(ApiCode.NOT_FOUND, "Team not found"));
-        String increment = redisTemplate.opsForValue().get(TEAM_STORAGE_INCR_PREFIX + teamId);
-        long pending = 0L;
-        if (increment != null) {
-            try {
-                pending = Long.parseLong(increment);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        long used = team.getStorageUsed() == null ? 0L : team.getStorageUsed();
-        long quota = team.getStorageQuota() == null ? 0L : team.getStorageQuota();
-        if (used + pending + additionalBytes > quota) {
-            throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
-                    "Team storage quota exceeded. Used: " + (used + pending) + ", Quota: " + quota);
-        }
+        quotaAccounting.check(Scope.TEAM, teamId, additionalBytes);
     }
 
     private FileEntity validateTargetParent(Long userId, Long targetParentId) {
@@ -674,6 +646,7 @@ public class FileServiceImpl implements FileService {
     }
 
     private void lockPersonalMutations(Long userId) {
+        quotaAccounting.lock(Scope.PERSONAL, userId);
         if (userRepository.findByIdForUpdate(userId).isEmpty()) {
             throw new BusinessException(ApiCode.UNAUTHORIZED);
         }
@@ -793,6 +766,7 @@ public class FileServiceImpl implements FileService {
     }
 
     private void lockTeamMutations(Long teamId) {
+        quotaAccounting.lock(Scope.TEAM, teamId);
         if (teamRepository.findActiveByIdForUpdate(teamId).isEmpty()) {
             throw new BusinessException(ApiCode.NOT_FOUND, "Team not found");
         }

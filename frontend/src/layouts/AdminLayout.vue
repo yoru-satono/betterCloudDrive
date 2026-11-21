@@ -20,6 +20,7 @@ onMounted(() => { if (!auth.isAdmin) router.push('/files') })
     <nav class="admin-layout__nav">
       <RouterLink to="/admin" exact-active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.overview') }}</RouterLink>
       <RouterLink to="/admin/analytics" active-class="admin-nav--active" class="admin-nav-link">{{ t('warehouse.title') }}</RouterLink>
+      <RouterLink to="/admin/storage-inspections" active-class="admin-nav--active" class="admin-nav-link">{{ t('inspection.title') }}</RouterLink>
       <RouterLink to="/admin/users" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.users') }}</RouterLink>
       <RouterLink to="/admin/teams" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.teams') }}</RouterLink>
       <RouterLink to="/admin/logs" active-class="admin-nav--active" class="admin-nav-link">{{ t('admin.logs') }}</RouterLink>

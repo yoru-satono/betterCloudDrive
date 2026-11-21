@@ -17,6 +17,8 @@ import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.service.TeamPermissionService;
 import com.betterclouddrive.service.dto.ShareUpdateCommand;
 import jakarta.persistence.criteria.Predicate;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -43,6 +45,7 @@ public class ShareServiceImpl implements ShareService {
 
     private final ShareLinkRepository shareLinkRepository;
     private final FileRepository fileRepository;
+    private final QuotaAccountingService quotaAccounting;
     private final UserRepository userRepository;
     private final SharePasswordCryptoService sharePasswordCryptoService;
     private final TeamAuditService teamAuditService;
@@ -53,7 +56,6 @@ public class ShareServiceImpl implements ShareService {
     private static final int SHARE_CODE_LENGTH = 8;
     private static final int MIN_SHARE_PASSWORD_LENGTH = 4;
     private static final int MAX_SHARE_PASSWORD_LENGTH = 16;
-    private static final String STORAGE_INCR_PREFIX = "storage:incr:";
     private final SecureRandom random = new SecureRandom();
 
     @Override
@@ -352,6 +354,7 @@ public class ShareServiceImpl implements ShareService {
     @Override
     @Transactional
     public FileEntity saveSharedItem(String shareCode, Long fileId, Long targetParentId, Long userId, String password) {
+        quotaAccounting.lock(Scope.PERSONAL, userId);
         ShareLinkEntity share = validateShareAccess(shareCode, password, true);
         FileEntity sharedRoot = fileRepository.findById(share.getFileId()).orElse(null);
         if (!isActiveInFileSpace(sharedRoot)) {
@@ -373,12 +376,12 @@ public class ShareServiceImpl implements ShareService {
         long totalSize = calculateTreeFileSize(source);
         checkStorageQuota(userId, totalSize);
 
-        FileEntity savedRoot = copyTree(source, userId, targetParentId);
-        if (totalSize > 0) {
-            redisTemplate.opsForValue().increment(STORAGE_INCR_PREFIX + userId, totalSize);
+        CopiedTree copied = copyTree(source, userId, targetParentId);
+        if (copied.bytes() > 0) {
+            quotaAccounting.change(Scope.PERSONAL, userId, copied.bytes());
         }
         shareLinkRepository.incrementDownloadCount(share.getId());
-        return savedRoot;
+        return copied.file();
     }
 
     private ShareLinkEntity validateShareAccess(String shareCode, String password, boolean recordVisit) {
@@ -530,29 +533,13 @@ public class ShareServiceImpl implements ShareService {
     }
 
     private void checkStorageQuota(Long userId, long totalSize) {
-        UserEntity user = userRepository.findById(userId).orElse(null);
-        if (user == null) {
-            throw new BusinessException(ApiCode.UNAUTHORIZED);
-        }
-        String incrStr = redisTemplate.opsForValue().get(STORAGE_INCR_PREFIX + userId);
-        long pendingIncr = 0L;
-        if (incrStr != null) {
-            try {
-                pendingIncr = Long.parseLong(incrStr);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-
-        long storageUsed = user.getStorageUsed() != null ? user.getStorageUsed() : 0L;
-        long storageQuota = user.getStorageQuota() != null ? user.getStorageQuota() : 0L;
-        long currentUsed = storageUsed + pendingIncr;
-        if (currentUsed + totalSize > storageQuota) {
-            throw new BusinessException(ApiCode.STORAGE_QUOTA_EXCEEDED,
-                    "Storage quota exceeded. Used: " + currentUsed + ", Quota: " + storageQuota);
-        }
+        quotaAccounting.check(Scope.PERSONAL, userId, totalSize);
     }
 
-    private FileEntity copyTree(FileEntity source, Long targetUserId, Long targetParentId) {
+    private record CopiedTree(FileEntity file, long bytes) {}
+
+    private CopiedTree copyTree(FileEntity source, Long targetUserId, Long targetParentId) {
+        if (source.getFileSize() == null || source.getFileSize() < 0) throw new BusinessException(409, "error.quotaMetadataInvalid");
         LocalDateTime now = LocalDateTime.now();
         FileEntity copy = FileEntity.builder()
                 .userId(targetUserId)
@@ -569,13 +556,13 @@ public class ShareServiceImpl implements ShareService {
                 .updatedAt(now)
                 .build();
         FileEntity saved = fileRepository.save(copy);
-
+        long copiedBytes = "file".equals(source.getFileType()) ? source.getFileSize() : 0;
         if ("folder".equals(source.getFileType())) {
             for (FileEntity child : activeChildren(source)) {
-                copyTree(child, targetUserId, saved.getId());
+                copiedBytes = Math.addExact(copiedBytes, copyTree(child, targetUserId, saved.getId()).bytes());
             }
         }
-        return saved;
+        return new CopiedTree(saved, copiedBytes);
     }
 
     private List<FileEntity> activeChildren(FileEntity source) {

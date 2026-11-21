@@ -17,6 +17,8 @@ import com.betterclouddrive.service.ThumbnailService;
 import com.betterclouddrive.storage.StorageService;
 import com.betterclouddrive.storage.ContentDigest;
 import java.util.List;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +57,8 @@ class UploadServiceImplTest {
     @Mock private TeamPermissionService teamPermissionService;
     @Mock private ThumbnailService thumbnailService;
     @Mock private com.betterclouddrive.service.WarehouseEventService warehouseEvents;
+    @Mock private QuotaAccountingService quotaAccounting;
+    @Mock private com.betterclouddrive.service.inspection.ActiveObjectPrefixService activeObjects;
     @InjectMocks private UploadServiceImpl uploadService;
 
     @BeforeEach
@@ -88,9 +92,8 @@ class UploadServiceImplTest {
 
     @Test
     void initUpload_shouldThrowWhenQuotaExceeded() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(1024L, 1000L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
+        doThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.STORAGE_QUOTA_EXCEEDED))
+                .when(quotaAccounting).check(Scope.PERSONAL, 1L, 100L);
 
         assertThatThrownBy(() -> uploadService.initUpload(1L, null, "big.bin", 100L, MD5))
                 .isInstanceOf(BusinessException.class)
@@ -98,10 +101,9 @@ class UploadServiceImplTest {
     }
 
     @Test
-    void initUpload_shouldThrowWhenQuotaExceededWithPendingIncr() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(1024L, 500L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn("600");
+    void initUpload_shouldNotCreateSessionWhenAccountingRejects() {
+        doThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.STORAGE_QUOTA_EXCEEDED))
+                .when(quotaAccounting).check(Scope.PERSONAL, 1L, 100L);
 
         assertThatThrownBy(() -> uploadService.initUpload(1L, null, "big.bin", 100L, MD5))
                 .isInstanceOf(BusinessException.class)
@@ -110,9 +112,6 @@ class UploadServiceImplTest {
 
     @Test
     void initUpload_shouldSucceedWhenQuotaSufficient() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
         when(uploadSessionRepository.save(any(UploadSessionEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
@@ -134,9 +133,6 @@ class UploadServiceImplTest {
 
     @Test
     void initUpload_shouldAllowZeroByteFilesWithoutChunks() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
         when(uploadSessionRepository.save(any(UploadSessionEntity.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
 
@@ -160,9 +156,6 @@ class UploadServiceImplTest {
     @Test
     void initTeamUpload_shouldUseTeamQuotaAndPersistTeamId() {
         TeamEntity team = TeamEntity.builder().id(10L).storageQuota(1024L).storageUsed(0L).build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("team:storage:incr:10")).thenReturn(null);
         when(uploadSessionRepository.save(any(UploadSessionEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UploadInitResult result = uploadService.initTeamUpload(10L, 2L, null, "team.bin", 100L, MD5);
@@ -178,8 +171,6 @@ class UploadServiceImplTest {
     @Test
     void initTeamUpload_shouldNormalizeNameAndRejectSiblingConflict() {
         TeamEntity team = TeamEntity.builder().id(10L).storageQuota(1024L).storageUsed(0L).build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
         when(uploadSessionRepository.save(any(UploadSessionEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UploadInitResult result = uploadService.initTeamUpload(10L, 2L, null, "  team.bin  ", 100L, MD5);
@@ -394,7 +385,7 @@ class UploadServiceImplTest {
         verify(fileRepository).save(captor.capture());
         assertThat(captor.getValue().getTeamId()).isEqualTo(10L);
         verify(storageService).composeParts(anyString(), eq("uploads/teams/10/team-session/chunks"), eq(1));
-        verify(valueOps).increment("team:storage:incr:10", 128L);
+        verify(quotaAccounting).change(Scope.TEAM, 10L, 128L);
         verify(teamAuditService).record(eq(10L), eq(2L), eq("UPLOAD_COMPLETE"), eq("FILE"), eq(50L), eq("team.txt"));
     }
 
@@ -464,9 +455,6 @@ class UploadServiceImplTest {
     void instantTeamUpload_shouldCreateTeamFileAndWriteAuditLog() {
         TeamEntity team = TeamEntity.builder().id(10L).storageQuota(1024L).storageUsed(0L).build();
         FileEntity existing = FileEntity.builder().id(3L).storagePath("objects/existing").build();
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(team));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("team:storage:incr:10")).thenReturn(null);
         when(fileRepository.findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc(eq(MD5), anyLong())).thenReturn(List.of(existing));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity file = inv.getArgument(0);
@@ -478,7 +466,7 @@ class UploadServiceImplTest {
         Long fileId = uploadService.initTeamUpload(10L, 2L, null, "copy.txt", 64L, MD5).fileId();
 
         assertThat(fileId).isEqualTo(51L);
-        verify(valueOps).increment("team:storage:incr:10", 64L);
+        verify(quotaAccounting).change(Scope.TEAM, 10L, 64L);
         verify(teamAuditService).record(10L, 2L, "UPLOAD_INSTANT", "FILE", 51L, "copy.txt");
     }
 
@@ -501,9 +489,8 @@ class UploadServiceImplTest {
 
     @Test
     void instantUpload_shouldThrowWhenQuotaExceeded() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(100L, 90L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
+        doThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.STORAGE_QUOTA_EXCEEDED))
+                .when(quotaAccounting).check(Scope.PERSONAL, 1L, 20L);
 
         assertThatThrownBy(() -> uploadService.initUpload(1L, null, "f", 20L, MD5).fileId())
                 .isInstanceOf(BusinessException.class)
@@ -512,9 +499,6 @@ class UploadServiceImplTest {
 
     @Test
     void instantUpload_shouldReturnExistingFileId() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
         FileEntity existing = FileEntity.builder().id(5L).storagePath("path/to/obj").build();
         when(fileRepository.findByMd5HashIgnoreCaseAndFileSizeAndIsDeletedFalseOrderByIdDesc(eq(MD5), anyLong())).thenReturn(List.of(existing));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
@@ -527,7 +511,7 @@ class UploadServiceImplTest {
         Long fileId = uploadService.initUpload(1L, null, "copy.txt", 100L, MD5).fileId();
 
         assertThat(fileId).isEqualTo(10L);
-        verify(valueOps).increment("storage:incr:1", 100L);
+        verify(quotaAccounting).change(Scope.PERSONAL, 1L, 100L);
     }
 
     // ── streamUpload ──────────────────────────────────────────────────────────
@@ -540,9 +524,6 @@ class UploadServiceImplTest {
         InputStream stream = new ByteArrayInputStream(data);
 
         when(fileRepository.findById(10L)).thenReturn(Optional.of(folder(10L, 1L, null)));
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity f = inv.getArgument(0);
             f.setId(42L);
@@ -558,7 +539,7 @@ class UploadServiceImplTest {
         // parts composed into final object
         verify(storageService).composeParts(anyString(), anyString(), eq(3));
         // storage counter incremented
-        verify(valueOps).increment(eq("storage:incr:1"), eq((long) dataSize));
+        verify(quotaAccounting).change(Scope.PERSONAL, 1L, dataSize);
     }
 
     @Test
@@ -566,9 +547,6 @@ class UploadServiceImplTest {
         byte[] data = "hello world".getBytes();
         InputStream stream = new ByteArrayInputStream(data);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity f = inv.getArgument(0);
             f.setId(7L);
@@ -589,9 +567,6 @@ class UploadServiceImplTest {
         byte[] data = "test".getBytes();
         InputStream stream = new ByteArrayInputStream(data);
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(10737418240L, 0L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> {
             FileEntity f = inv.getArgument(0);
             f.setId(8L);
@@ -608,9 +583,8 @@ class UploadServiceImplTest {
 
     @Test
     void streamUpload_shouldThrowWhenQuotaExceeded() {
-        when(userRepository.findById(1L)).thenReturn(Optional.of(quotaUser(100L, 90L)));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.get("storage:incr:1")).thenReturn(null);
+        doThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.STORAGE_QUOTA_EXCEEDED))
+                .when(quotaAccounting).check(Scope.PERSONAL, 1L, 20L);
 
         InputStream stream = new ByteArrayInputStream(new byte[20]);
         assertThatThrownBy(() -> uploadService.streamUpload(1L, null, "f.bin", 20L, stream, null))

@@ -1,5 +1,7 @@
 # Better Cloud Drive 配置与部署文档
 
+存储巡检使用 `drive.inspection.*` 配置，默认每日 02:15（Asia/Shanghai）、分页 1000、稳定窗口 10 分钟、对象保护 24 小时、单次上限 2 小时。完整配置、源时间时区和计账切换 gate 见[存储巡检](../operations/STORAGE_INSPECTIONS.md#配置与资源边界)。已有数据库升级需要显式离线迁移，不应通过环境开关跳过。
+
 ## 适用范围
 
 本文档说明 Better Cloud Drive 的配置文件位置、环境变量含义，以及 Docker Compose 和生产环境拆分部署的配置约束。生产上线顺序、升级回滚、备份和密钥轮换分别见[运维手册](../operations/README.md)。

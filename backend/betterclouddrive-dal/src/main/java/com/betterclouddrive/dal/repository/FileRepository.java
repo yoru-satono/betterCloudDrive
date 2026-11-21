@@ -17,6 +17,9 @@ import java.util.Optional;
 
 public interface FileRepository extends JpaRepository<FileEntity, Long>, JpaSpecificationExecutor<FileEntity> {
 
+    @Query("SELECT f.id FROM FileEntity f WHERE f.id > :after AND f.versionCount > :limit AND f.isDeleted = false ORDER BY f.id")
+    List<Long> findVersionCleanupCandidates(@Param("after") long after, @Param("limit") int limit, Pageable page);
+
     @Query("""
             SELECT f FROM FileEntity f
             WHERE f.userId = :userId AND f.teamId IS NULL AND f.parentId = :parentId AND f.isDeleted = false

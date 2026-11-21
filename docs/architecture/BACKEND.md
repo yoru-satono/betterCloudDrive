@@ -68,7 +68,7 @@ HTTP / WebDAV
 
 `betterclouddrive-scheduler` 包含两类工作：
 
-- 周期维护：回收站、过期分享、上传会话、旧版本、团队清理、分区维护、配额与访问计数同步。
+- 周期维护：回收站、过期分享、上传会话、旧版本、团队清理、分区维护、存储巡检与访问计数同步。容量与业务元数据由 Service 在 PostgreSQL 同事务更新，不再通过定时任务同步 Redis 增量。
 - 持久任务 Worker：团队审计导出、文件夹压缩、缩略图、OnlyOffice 保存、任务结果清理和 Outbox 发布。
 
 RabbitMQ 当前有通知、团队任务和死信相关队列。生产者使用持久消息与 publisher confirm；消费达到最大投递次数后进入死信处理，并在 `dead_letter_records` 中形成可查询、可审计的控制记录。

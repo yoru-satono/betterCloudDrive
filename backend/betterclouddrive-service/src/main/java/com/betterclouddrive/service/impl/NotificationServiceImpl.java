@@ -22,6 +22,8 @@ import com.betterclouddrive.service.config.QueueProperties;
 import com.betterclouddrive.service.metrics.TeamQuotaMetrics;
 import com.betterclouddrive.service.queue.TeamNotificationOutboxWriter;
 import jakarta.persistence.criteria.Predicate;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -51,7 +53,6 @@ public class NotificationServiceImpl implements NotificationService {
 
     private static final int ACTIVE = 1;
     private static final String QUOTA_ALERT_PREFIX = "team:quota:alert:";
-    private static final String TEAM_STORAGE_INCR_PREFIX = "team:storage:incr:";
     private static final List<String> PREFERENCE_TYPES = List.of(
             "TEAM_INVITE",
             "TEAM_INVITE_ACCEPT",
@@ -72,6 +73,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationPreferenceRepository notificationPreferenceRepository;
     private final TeamRepository teamRepository;
+    private final QuotaAccountingRepository quotaAccountingRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
@@ -252,14 +254,9 @@ public class NotificationServiceImpl implements NotificationService {
         if (team == null || team.getStorageQuota() == null || team.getStorageQuota() <= 0) {
             return;
         }
-        long used = team.getStorageUsed() != null ? team.getStorageUsed() : 0L;
-        String pending = redisTemplate.opsForValue().get(TEAM_STORAGE_INCR_PREFIX + teamId);
-        if (pending != null) {
-            try {
-                used += Long.parseLong(pending);
-            } catch (NumberFormatException ignored) {
-            }
-        }
+        var balance = quotaAccountingRepository.find(Scope.TEAM, teamId, false).orElse(null);
+        if (balance == null) return;
+        long used = balance.used();
         int ratio = (int) Math.floor(used * 100.0 / team.getStorageQuota());
         int threshold = ratio >= 100 ? 100 : ratio >= 90 ? 90 : ratio >= 80 ? 80 : 0;
         teamQuotaMetrics.recordUsage(team.getId(), used, team.getStorageQuota(), threshold);

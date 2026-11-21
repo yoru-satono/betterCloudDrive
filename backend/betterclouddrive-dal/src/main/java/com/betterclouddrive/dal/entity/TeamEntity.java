@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "teams")
 public class TeamEntity {
 

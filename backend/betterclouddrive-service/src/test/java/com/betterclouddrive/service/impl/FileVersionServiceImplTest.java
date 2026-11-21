@@ -16,6 +16,8 @@ import com.betterclouddrive.dal.entity.TeamEntity;
 import com.betterclouddrive.service.NotificationService;
 import com.betterclouddrive.service.TeamAuditService;
 import com.betterclouddrive.storage.StorageService;
+import com.betterclouddrive.service.quota.QuotaAccountingService;
+import com.betterclouddrive.dal.repository.QuotaAccountingRepository.Scope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +44,7 @@ class FileVersionServiceImplTest {
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private TeamAuditService teamAuditService;
     @Mock private NotificationService notificationService;
+    @Mock private QuotaAccountingService quotaAccounting;
     @InjectMocks private FileVersionServiceImpl fileVersionService;
 
     @BeforeEach
@@ -170,7 +173,6 @@ class FileVersionServiceImplTest {
         when(fileVersionRepository.findMaxVersionNumberByFileId(1L)).thenReturn(0);
         when(fileVersionRepository.save(any(FileVersionEntity.class))).thenAnswer(inv -> inv.getArgument(0));
         when(fileRepository.save(any(FileEntity.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
 
         FileVersionEntity archived = fileVersionService.saveTeamEditedVersion(10L, 2L, 1L, "new-content".getBytes());
 
@@ -181,7 +183,7 @@ class FileVersionServiceImplTest {
         assertThat(file.getMd5Hash()).isEqualTo("e92c4f27d783ac09065352d0e0f7cb8b");
         assertThat(file.getVersionCount()).isEqualTo(2);
         verify(storageService).uploadObject(startsWith("teams/10/office/1/"), any(), eq(11L), anyString());
-        verify(valueOps).increment("team:storage:incr:10", 11L);
+        verify(quotaAccounting).change(Scope.TEAM, 10L, 11L);
         verify(teamAuditService).record(eq(10L), eq(2L), eq("OFFICE_SAVE_VERSION"), eq("FILE"), eq(1L),
                 contains("archived version 1"));
     }
@@ -245,7 +247,7 @@ class FileVersionServiceImplTest {
                 eq(10L),
                 eq("application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
         verify(teamAuditService).record(10L, 2L, "VERSION_RESTORE", "FILE", 1L, "version 1");
-        verify(valueOps).increment("team:storage:incr:10", 10L);
+        verify(quotaAccounting).change(Scope.TEAM, 10L, 10L);
     }
 
     @Test
@@ -264,13 +266,12 @@ class FileVersionServiceImplTest {
 
     @Test
     void restoreTeamVersion_shouldRejectWhenTeamQuotaWouldBeExceeded() {
+        doThrow(new BusinessException(com.betterclouddrive.common.constant.ApiCode.STORAGE_QUOTA_EXCEEDED))
+                .when(quotaAccounting).check(Scope.TEAM, 10L, 10L);
         FileEntity file = teamFile(1L, 2L, 10L);
         FileVersionEntity selected = version(1, "teams/10/v1.docx");
         when(fileRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(file));
         when(fileVersionRepository.findByFileIdAndVersionNumber(1L, 1)).thenReturn(Optional.of(selected));
-        when(teamRepository.findByIdAndDeletedAtIsNull(10L)).thenReturn(Optional.of(
-                TeamEntity.builder().id(10L).storageUsed(95L).storageQuota(100L).build()));
-        when(valueOps.get("team:storage:incr:10")).thenReturn(null);
 
         assertThatThrownBy(() -> fileVersionService.restoreTeamVersion(10L, 2L, 1L, 1))
                 .isInstanceOf(BusinessException.class)

@@ -21,14 +21,21 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _seed_team_versions(file_id, user_id):
     sql = f"""
+    BEGIN;
+    SELECT t.id FROM teams t JOIN files f ON f.team_id=t.id WHERE f.id={file_id} FOR UPDATE OF t;
+    WITH added AS (
     INSERT INTO file_versions
         (file_id, user_id, version_number, file_size, md5_hash, storage_path, created_at)
     SELECT id, {user_id}, version_number, file_size, md5_hash, storage_path,
            CURRENT_TIMESTAMP - (version_number * INTERVAL '1 minute')
     FROM files CROSS JOIN (VALUES (1), (2)) AS versions(version_number)
     WHERE id = {file_id}
-    ON CONFLICT (file_id, version_number) DO NOTHING;
+    ON CONFLICT (file_id, version_number) DO NOTHING
+    RETURNING file_id,file_size
+    ) UPDATE teams SET storage_used=storage_used+(SELECT COALESCE(sum(file_size),0) FROM added),
+        quota_revision=quota_revision+1 WHERE id=(SELECT team_id FROM files WHERE id={file_id});
     UPDATE files SET version_count = 3 WHERE id = {file_id};
+    COMMIT;
     """
     result = subprocess.run(
         [
