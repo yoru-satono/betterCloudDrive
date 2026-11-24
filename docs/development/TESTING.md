@@ -78,6 +78,8 @@ bash scripts/verify-all.sh --module observability --keep-going
 
 M4 Windows 独立环境验收从仓库根目录运行 `uv run --no-project --python 3.12.13 desktop/m4_check.py`，使用新的解释器、uv 缓存、环境、网页输出和 Profile，默认端口 5198/9230。它另需已运行的回环后端和 OnlyOffice，不属于 `qt` 或 `all` 的自动服务启动范围。前四轮后台，第五轮短暂显示窗口，不操作鼠标键盘；执行五轮个人/团队传输 MD5、预览、设置/会话和资源释放检查，任何必需检查或清理失败返回非零。2026-11-24 本机独立环境五轮及 Python 96 项、桌面 Vitest 34 项、类型检查/独立构建通过；这不代表干净 Windows 系统、发行包或 Linux/macOS 已验收。环境、逐轮指标和清理边界见 [Qt 桌面开发](../../desktop/README.md)。
 
+M5 从仓库根目录运行 `uv run --no-project --python 3.12.13 desktop/m5_check.py`，需要已运行的回环后端，不需要 OnlyOffice，默认 5199/9231。使用独立环境验证新 Profile、Vue 设置持久化、Qt 上传/目录下载正常关闭后暂停与手动恢复、账号/服务器隔离、MD5、原生状态隐私及损坏 SQLite 启动失败。`--prepare-trial` 另行准备刻意保留的环境和空 Profile，不创建账号或打开窗口；`--launch-trial <id>` 默认无 CDP，`--cleanup-trial <id>` 在标记不符或 Profile 占用时拒绝删除。自动验收与人工试用分别放行，不把入口准备成功计为人工观察通过，命令及清理例外见 [Qt 桌面开发](../../desktop/README.md)。
+
 ## 独立命令
 
 | 验证 | 命令 | 说明 |
