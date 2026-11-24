@@ -1,0 +1,18 @@
+[project]
+name = "bcd-qt-desktop-poc"
+version = "0.1.0"
+description = "Isolated Windows Qt WebEngine migration validation"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "PySide6==6.12.0",
+  "httpx[socks]==0.28.1",
+  "psutil==7.2.2",
+]
+
+[dependency-groups]
+dev = ["pytest==9.2.0", "pyinstaller==6.22.3", "websocket-client==1.9.0", "imageio-ffmpeg==0.6.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb=short"
+pythonpath = ["."]
