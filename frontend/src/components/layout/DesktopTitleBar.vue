@@ -60,11 +60,15 @@ function closeConnectionSettings() {
   showConnectionSettings.value = false
 }
 
-function saveConnectionSettings() {
-  setStoredApiBaseUrl(apiBaseUrl.value)
-  setStoredWebBaseUrl(webBaseUrl.value)
-  closeConnectionSettings()
-  toast.success(__t('desktop.desktoptitlebar.connectionSettingsSaved'))
+async function saveConnectionSettings() {
+  try {
+    await setStoredApiBaseUrl(apiBaseUrl.value)
+    setStoredWebBaseUrl(webBaseUrl.value)
+    closeConnectionSettings()
+    toast.success(__t('desktop.desktoptitlebar.connectionSettingsSaved'))
+  } catch {
+    toast.error(__t('desktop.desktopsettings.failedToSaveSettings'))
+  }
 }
 
 function onDocumentPointerDown(event: PointerEvent) {

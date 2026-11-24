@@ -1,0 +1,14 @@
+[project]
+name = "betterclouddrive-desktop"
+version = "0.1.0"
+description = "BetterCloudDrive Qt desktop client"
+requires-python = ">=3.12,<3.13"
+dependencies = ["PySide6==6.12.0", "httpx[socks]==0.28.1"]
+
+[dependency-groups]
+dev = ["pytest==9.2.0", "websocket-client==1.9.0", "imageio-ffmpeg==0.6.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--tb=short"
