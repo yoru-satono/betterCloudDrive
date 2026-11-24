@@ -76,7 +76,7 @@ def test_m4_process_ownership_checks_creation_time_and_ignores_reused_pids():
     assert surviving_owned(owned,current) == [20]
 
 
-@pytest.mark.skipif(__import__('os').name != 'nt', reason='Windows process handles')
+@pytest.mark.windows_only
 def test_m4_exited_process_is_not_reported_alive_while_popen_keeps_its_handle():
     import subprocess, sys
     from process_metrics import sample_processes, sample_tree

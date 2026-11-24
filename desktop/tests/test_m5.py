@@ -126,6 +126,7 @@ def test_corrupt_sqlite_fails_without_replacing_bytes(tmp_path):
     assert database.read_bytes() == original
 
 
+@pytest.mark.windows_only
 def test_prepare_trial_retains_empty_profile_without_starting_live_accounts(trial,monkeypatch):
     root, _ = trial
     (root/'work/profile/.bcd-qt-desktop').unlink(); (root/'work/profile').rmdir()
@@ -144,6 +145,7 @@ def test_prepare_trial_retains_empty_profile_without_starting_live_accounts(tria
     assert not (root/'work/pytest').exists()
 
 
+@pytest.mark.windows_only
 def test_m5_required_execution_or_cleanup_failure_returns_nonzero(trial,monkeypatch):
     root,_ = trial
     run=object.__new__(m5.M5Bootstrap)

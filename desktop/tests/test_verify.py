@@ -149,3 +149,31 @@ def test_process_tree_rejects_older_children_of_reused_parent_ids():
     values={pid:{'created':created} for pid,created in ((10,200),(20,100),(30,210),(40,220),(50,230))}
     assert set(select_tree(parents,values,10)) == {10,40,50}
     assert not select_tree({20:10},values,10)
+
+
+def test_posix_environment_uses_posix_tools_and_never_windows_system_paths():
+    from m4_support import clean_environment
+    env=clean_environment({'PATH':'foreign','PYTHONPATH':'foreign','SystemRoot':r'C:\Windows',
+                           'LD_LIBRARY_PATH':'foreign','DYLD_LIBRARY_PATH':'foreign'},['/opt/tools'],platform_name='posix')
+    assert env['PATH'].startswith('/opt/tools:') and '/usr/bin' in env['PATH']
+    assert 'Windows' not in env['PATH'] and 'PYTHONPATH' not in env
+    assert not any(k in env for k in ('LD_LIBRARY_PATH','DYLD_LIBRARY_PATH'))
+
+
+def test_portable_sampler_tracks_real_children_and_excludes_exited_handles():
+    import subprocess, sys
+    from process_metrics import sample_tree, sample_processes
+    child=subprocess.Popen([sys.executable,'-c',"print('ready',flush=True);input()"],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True)
+    try:
+        assert child.stdout.readline().strip()=='ready'
+        assert child.pid in sample_tree(os.getpid())
+    finally: child.communicate('\n',timeout=10)
+    assert child.pid not in sample_processes([child.pid])
+
+
+def test_internal_worker_and_build_cannot_take_over_a_retained_trial(workspace):
+    root,web=owned_build(workspace)
+    (root/'trial.json').write_text('{"kind":"m5-trial"}')
+    with pytest.raises(M4Error,match='NOT_A_QT_VERIFICATION_RUN'): verify.Verification(existing_root=root)
+    with pytest.raises(M4Error,match='TRIAL_OUTPUT_IS_RETAINED'): build.owned_output(web)
+    assert (root/'work').exists()

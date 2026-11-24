@@ -63,12 +63,17 @@ def remove_owned(root, target):
         target.unlink()
 
 
-def clean_environment(source, tool_dirs):
-    blocked = ('PYTHON', 'QT', 'QML', 'FFMPEG', 'UV_')
-    excluded = {'PATH', 'VIRTUAL_ENV', 'CONDA_PREFIX', 'CONDA_DEFAULT_ENV', '__PYVENV_LAUNCHER__'}
+def clean_environment(source, tool_dirs, platform_name=None):
+    blocked = ('PYTHON', 'QT', 'QML', 'FFMPEG', 'UV_', 'DYLD_')
+    excluded = {'PATH', 'VIRTUAL_ENV', 'CONDA_PREFIX', 'CONDA_DEFAULT_ENV', '__PYVENV_LAUNCHER__', 'LD_LIBRARY_PATH'}
     env = {k: v for k, v in source.items() if k.upper() not in excluded and not k.upper().startswith(blocked)}
-    system = Path(source.get('SystemRoot', r'C:\Windows'))
-    env['PATH'] = os.pathsep.join(dict.fromkeys(str(p) for p in [*tool_dirs, system / 'System32', system, system / 'System32/Wbem']))
+    kind = platform_name or os.name
+    if kind == 'nt':
+        system = Path(source.get('SystemRoot', r'C:\Windows'))
+        directories = [system / 'System32', system, system / 'System32/Wbem']
+    else:
+        directories = ['/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin']
+    env['PATH'] = (';' if kind == 'nt' else ':').join(dict.fromkeys(str(p) for p in [*tool_dirs, *directories]))
     env.update(PYTHONUTF8='1', QT_MEDIA_BACKEND='ffmpeg', UV_PYTHON_INSTALL_BIN='0')
     return env
 

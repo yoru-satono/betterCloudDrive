@@ -16,6 +16,7 @@ def owned_output(value):
     run = next((parent for parent in target.parents if parent.parent == runs), None)
     require(run is not None, 'BUILD_OUTPUT_NOT_OWNED')
     run = owned_root(run)
+    require(not (run / 'trial.json').exists(), 'TRIAL_OUTPUT_IS_RETAINED')
     require(target != run / 'work' and target.is_relative_to(run / 'work'), 'BUILD_OUTPUT_NOT_IN_WORK')
     for item in (target, *target.parents):
         if item == run: break

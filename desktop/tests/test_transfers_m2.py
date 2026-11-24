@@ -367,10 +367,8 @@ def test_retry_bandwidth_hook_runs_only_once_per_network_attempt():
     assert len(charges) == count == 3 and waits == [1, 2]
 
 
+@pytest.mark.windows_only
 def test_windows_locked_part_is_retained_and_resume_succeeds_after_unlock(system, tmp_path):
-    import os
-    if os.name != 'nt':
-        pytest.skip('Windows file-lock semantics')
     import msvcrt
     engine, _ = system
     original_spawn = engine._spawn

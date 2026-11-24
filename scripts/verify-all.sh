@@ -10,10 +10,9 @@ Requires Bash 3.2 or newer.
 
 Options:
   -m, --module NAME          Module to run; repeatable (default: all)
-                            all, backend, integration, blackbox, security, web, tauri, qt,
+                            all, backend, integration, blackbox, security, web, qt,
                             mobile-unit, mobile-android, office, webdav, observability, resilience, warehouse, inspection
       --skip-docker-build   Start Compose without rebuilding images
-      --skip-tauri          Skip Tauri (not allowed with --module all)
       --skip-android        Skip KMP Android device tests (not allowed with --module all)
       --skip-onlyoffice     Skip OnlyOffice (not allowed with --module all)
       --skip-e2e-cleanup    Do not remove this run's E2E data
@@ -29,7 +28,7 @@ die() {
 }
 
 readonly -a valid_modules=(
-  all backend integration blackbox security web tauri qt
+  all backend integration blackbox security web qt
   mobile-unit mobile-android office webdav observability resilience warehouse inspection
 )
 
@@ -53,7 +52,6 @@ has_module() {
 
 selected_modules=()
 skip_docker_build=0
-skip_tauri=0
 skip_android=0
 skip_onlyoffice=0
 skip_e2e_cleanup=0
@@ -72,10 +70,6 @@ while (( $# > 0 )); do
       ;;
     --skip-docker-build)
       skip_docker_build=1
-      shift
-      ;;
-    --skip-tauri)
-      skip_tauri=1
       shift
       ;;
     --skip-android)
@@ -111,16 +105,14 @@ done
 
 (( ${#selected_modules[@]} > 0 )) || selected_modules=(all)
 
-if has_module all && (( skip_tauri || skip_android || skip_onlyoffice )); then
-  die "module 'all' is a complete acceptance run; skip flags for Tauri, KMP Android, and OnlyOffice are not allowed"
+if has_module all && (( skip_android || skip_onlyoffice )); then
+  die "module 'all' is a complete acceptance run; skip flags for KMP Android, and OnlyOffice are not allowed"
 fi
 
 module_enabled() {
   local module=$1
   has_module all || has_module "$module" || return 1
   case "$module" in
-    tauri) (( ! skip_tauri )) ;;
-    qt) has_module qt ;;
     mobile-android) (( ! skip_android )) ;;
     office) (( ! skip_onlyoffice )) ;;
     *) return 0 ;;
@@ -129,18 +121,18 @@ module_enabled() {
 
 needs_backend_http=0
 if module_enabled blackbox || module_enabled security || module_enabled web ||
-   module_enabled tauri || module_enabled office || module_enabled webdav ||
+   module_enabled office || module_enabled webdav ||
    module_enabled observability || module_enabled resilience || module_enabled warehouse || module_enabled inspection; then
   needs_backend_http=1
 fi
 
 needs_frontend_http=0
-if module_enabled web || module_enabled tauri || module_enabled office; then
+if module_enabled web || module_enabled office; then
   needs_frontend_http=1
 fi
 
 needs_mailpit=0
-if module_enabled blackbox || module_enabled web || module_enabled tauri || module_enabled office || module_enabled warehouse || module_enabled inspection; then
+if module_enabled blackbox || module_enabled web || module_enabled office || module_enabled warehouse || module_enabled inspection; then
   needs_mailpit=1
 fi
 
@@ -167,7 +159,6 @@ mkdir -p \
   "$result_root/blackbox" \
   "$result_root/security" \
   "$result_root/web" \
-  "$result_root/tauri" \
   "$result_root/office" \
   "$result_root/webdav" \
   "$result_root/observability" \
@@ -392,14 +383,6 @@ office_tests() {
     node scripts/run-playwright-docker.mjs --project=office)
 }
 
-tauri_build() {
-  (cd frontend && pnpm run tauri:e2e:build)
-}
-
-tauri_unit_tests() {
-  (cd frontend/src-tauri && cargo test --locked)
-}
-
 set_functional_test_rate_limits() {
   local rate_limit_rc
   DRIVE_RATE_LIMIT_DEFAULT_PERMITS=10000 \
@@ -450,18 +433,6 @@ with_functional_test_rate_limits() {
   restore_default_rate_limits || restore_rc=$?
   (( command_rc == 0 )) || return "$command_rc"
   return "$restore_rc"
-}
-
-tauri_tests() {
-  with_functional_test_rate_limits run_tauri_e2e
-}
-
-run_tauri_e2e() {
-  local warehouse_e2e=0
-  local inspection_e2e=0
-  module_enabled warehouse && warehouse_e2e=1
-  module_enabled inspection && inspection_e2e=1
-  (cd frontend && E2E_WAREHOUSE=$warehouse_e2e E2E_INSPECTION=$inspection_e2e pnpm run test:e2e:tauri)
 }
 
 webdav_tests() {
@@ -584,11 +555,6 @@ if module_enabled office; then
 fi
 if module_enabled qt; then
   run_step "Qt desktop tests and frontend build" qt_tests || exit $?
-fi
-if module_enabled tauri; then
-  run_step "Tauri Rust unit tests" tauri_unit_tests || exit $?
-  run_step "Tauri E2E build" tauri_build || exit $?
-  run_step "Tauri E2E tests" tauri_tests || exit $?
 fi
 if module_enabled webdav; then
   run_step "WebDAV protocol and rclone acceptance" webdav_tests || exit $?

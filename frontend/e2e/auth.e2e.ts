@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures/test'
-import { clearMailpit, getLatestVerificationCode } from './helpers/api'
+import crypto from 'node:crypto'
+import { auditE2eAccount, clearMailpit, getLatestVerificationCode } from './helpers/api'
 
 test('redirects unauthenticated users to login', async ({ browser }) => {
   const context = await browser.newContext({ locale: 'zh-Hans', storageState: { cookies: [], origins: [] } })
@@ -13,7 +14,10 @@ test('redirects unauthenticated users to login', async ({ browser }) => {
 })
 
 test('registers with email code and logs in through the UI', async ({ page, request, e2eUser }) => {
-  const username = `e2e_ui_${Date.now().toString(36).slice(-8)}`
+  const run = process.env.BCD_TEST_RUN_ID
+  const username = run && /^[a-f0-9]{10}$/.test(run)
+    ? `e2e_${run}_${crypto.randomBytes(3).toString('hex').slice(0, 5)}`
+    : `e2e_ui_${Date.now().toString(36).slice(-8)}`
   const email = `${username}@test.local`
   await clearMailpit(request)
 
@@ -28,7 +32,10 @@ test('registers with email code and logs in through the UI', async ({ page, requ
   await page.getByLabel('邮箱验证码').fill(code)
   await page.getByLabel('密码', { exact: true }).fill(e2eUser.password)
   await page.getByLabel('确认密码').fill(e2eUser.password)
+  const registered = page.waitForResponse(response => response.url().endsWith('/api/v1/auth/register') && response.request().method() === 'POST')
   await page.getByRole('button', { name: '注册' }).click()
+  const registration = await (await registered).json()
+  if (registration.code === 200) auditE2eAccount(registration.data.userId, username, email)
 
   await expect(page).toHaveURL(/\/login$/)
 

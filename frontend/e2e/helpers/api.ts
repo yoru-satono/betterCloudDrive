@@ -99,12 +99,18 @@ const postgresPassword = process.env.POSTGRES_PASSWORD || 'change_me_in_producti
 const postgresDatabase = process.env.POSTGRES_DB || 'better_cloud_drive'
 
 export function uniqueName(prefix: string) {
-  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`
+  const run = process.env.BCD_TEST_RUN_ID?.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20)
+  return `${prefix}_${run ? run + '_' : ''}${Date.now()}_${Math.random().toString(16).slice(2, 8)}`
+}
+
+export function auditE2eAccount(userId: number, username: string, email: string) {
+  const audit = process.env.BCD_E2E_ACCOUNT_AUDIT
+  if (audit) fs.appendFileSync(audit, JSON.stringify({ userId, username, email }) + '\n')
 }
 
 export async function createUser(request: APIRequestContext, email?: string): Promise<E2EUser> {
   const username = uniqueName('e2e')
-  const password = 'TestPass123!'
+  const password = process.env.BCD_E2E_TEST_PASSWORD || 'TestPass123!'
   const userEmail = email ?? `${username}@test.local`
 
   await clearMailpit(request)
@@ -120,6 +126,7 @@ export async function createUser(request: APIRequestContext, email?: string): Pr
   await expect(register, await register.text()).toBeOK()
   const registerBody = await register.json()
   expect(registerBody.code).toBe(200)
+  auditE2eAccount(registerBody.data.userId, username, userEmail)
 
   const loginBody = await loginByUsername(request, username, password)
 
@@ -789,6 +796,7 @@ export async function createVersionRows(fileId: number, userId: number, versions
 }
 
 export async function clearMailpit(request: APIRequestContext) {
+  if (process.env.BCD_E2E_ACCOUNT_AUDIT) return // Scoped runs filter mail by recipient instead of deleting shared mail.
   await request.delete(`${mailpitURL}/api/v1/messages`).catch(() => null)
 }
 

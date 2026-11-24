@@ -127,30 +127,20 @@ class Bootstrap:
         return int(failed)
 
     def run_live(self, config, worker=None):
-        sys.path.insert(0, str(ROOT / 'tests'))
-        from process_metrics import sample_tree, sample_processes, terminate_owned
-        from m4_support import process_fingerprints, surviving_owned
-        process = subprocess.Popen([str(self.python), str(worker or ROOT / 'tests/m4_live.py')], cwd=ROOT, env=self.env,
+        # Monitor imports the dev-only process library in the prepared venv,
+        # never in this stdlib bootstrap interpreter.
+        process = subprocess.Popen([str(self.python), str(ROOT / 'tests/monitor_worker.py'),
+                                    str(worker or ROOT / 'tests/m4_live.py')], cwd=ROOT, env=self.env,
                                    stdin=subprocess.PIPE, text=True, encoding='utf-8',
-                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
-        owned = {}
+                                   **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
         try:
             process.stdin.write(json.dumps(config)+'\n'); process.stdin.close()
-            deadline = time.monotonic() + 900
-            while process.poll() is None:
-                owned.update(process_fingerprints(sample_tree(process.pid)))
-                require(time.monotonic() < deadline, 'LIVE_RUN_TIMEOUT')
-                time.sleep(.2)
-            return process.returncode
+            return process.wait(timeout=1200)
         finally:
             if process.poll() is None:
-                process.send_signal(signal.CTRL_BREAK_EVENT)
+                process.send_signal(signal.CTRL_BREAK_EVENT if os.name == 'nt' else signal.SIGINT)
                 try: process.wait(timeout=30)
-                except subprocess.TimeoutExpired: terminate_owned(owned)
-            remaining = surviving_owned(owned, sample_processes(owned))
-            if remaining:
-                terminate_owned({pid: owned[pid] for pid in remaining})
-                raise M4Error('LIVE_CHILD_PROCESS_RETAINED')
+                except subprocess.TimeoutExpired: process.kill(); process.wait(timeout=10)
 
 
 def main():

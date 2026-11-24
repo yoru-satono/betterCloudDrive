@@ -13,9 +13,6 @@ modules. Defaults to all.
 .PARAMETER SkipDockerBuild
 Starts Compose without rebuilding images.
 
-.PARAMETER SkipTauri
-Skips Tauri. Not allowed with the all module.
-
 .PARAMETER SkipAndroid
 Skips KMP Android device tests. Not allowed with the all module.
 
@@ -41,7 +38,6 @@ Continues with later verification steps after a failure.
 param(
     [string[]]$Module = @("all"),
     [switch]$SkipDockerBuild,
-    [switch]$SkipTauri,
     [switch]$SkipAndroid,
     [switch]$SkipOnlyOffice,
     [switch]$SkipE2ECleanup,
@@ -54,7 +50,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 3.0
 
 $AllowedModules = [System.Collections.Generic.HashSet[string]]::new(
-    [string[]]@("all", "backend", "integration", "blackbox", "security", "web", "tauri", "qt", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience", "warehouse", "inspection"),
+    [string[]]@("all", "backend", "integration", "blackbox", "security", "web", "qt", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience", "warehouse", "inspection"),
     [System.StringComparer]::OrdinalIgnoreCase
 )
 $SelectedModules = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -89,8 +85,7 @@ $RunIntegration = $RunAll -or $SelectedModules.Contains("integration")
 $RunBlackbox = $RunAll -or $SelectedModules.Contains("blackbox")
 $RunSecurity = $RunAll -or $SelectedModules.Contains("security")
 $RunWeb = $RunAll -or $SelectedModules.Contains("web")
-$RunTauri = ($RunAll -or $SelectedModules.Contains("tauri")) -and -not $SkipTauri
-$RunQt = $SelectedModules.Contains("qt")
+$RunQt = $RunAll -or $SelectedModules.Contains("qt")
 $RunMobileUnit = $RunAll -or $SelectedModules.Contains("mobile-unit")
 $RunMobileAndroid = ($RunAll -or $SelectedModules.Contains("mobile-android")) -and -not $SkipAndroid
 $RunOffice = ($RunAll -or $SelectedModules.Contains("office")) -and -not $SkipOnlyOffice
@@ -101,9 +96,9 @@ $RunWarehouse = $RunAll -or $SelectedModules.Contains("warehouse")
 $RunInspection = $RunAll -or $SelectedModules.Contains("inspection")
 $script:ComposeArguments = @("compose", "-f", "docker-compose.yml", "-f", "docker-compose.diagnostics.yml")
 if ($RunWarehouse) { $script:ComposeArguments += @("-f", "docker-compose.warehouse.yml") }
-$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience -or $RunWarehouse -or $RunInspection
-$NeedsFrontendHttp = $RunWeb -or $RunTauri -or $RunOffice
-$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunTauri -or $RunOffice -or $RunWarehouse -or $RunInspection
+$NeedsBackendHttp = $RunBlackbox -or $RunSecurity -or $RunWeb -or $RunOffice -or $RunWebDav -or $RunObservability -or $RunResilience -or $RunWarehouse -or $RunInspection
+$NeedsFrontendHttp = $RunWeb -or $RunOffice
+$NeedsMailpit = $RunBlackbox -or $RunWeb -or $RunOffice -or $RunWarehouse -or $RunInspection
 $NeedsOnlyOffice = $RunOffice
 $NeedsDocker = $NeedsBackendHttp -or $NeedsOnlyOffice
 $ShouldCleanupE2E = -not $SkipE2ECleanup -and $NeedsDocker
@@ -432,11 +427,11 @@ try {
     Write-Host "Selected modules: $($SelectedModules -join ', ')"
     Write-Host "Test run ID: $RunId"
     New-Item -ItemType Directory -Force -Path $ResultRoot | Out-Null
-    @("backend", "integration", "blackbox", "security", "web", "tauri", "office", "webdav", "observability", "resilience", "warehouse", "inspection", "coverage") |
+    @("backend", "integration", "blackbox", "security", "web", "office", "webdav", "observability", "resilience", "warehouse", "inspection", "coverage") |
         ForEach-Object { New-Item -ItemType Directory -Force -Path (Join-Path $ResultRoot $_) | Out-Null }
 
-    if ($RunAll -and ($SkipTauri -or $SkipAndroid -or $SkipOnlyOffice)) {
-        throw "Module 'all' is a complete acceptance run; SkipTauri, SkipAndroid (KMP), and SkipOnlyOffice are not allowed."
+    if ($RunAll -and ($SkipAndroid -or $SkipOnlyOffice)) {
+        throw "Module 'all' is a complete acceptance run; SkipAndroid (KMP), and SkipOnlyOffice are not allowed."
     }
 
     if ($NeedsDocker) {
@@ -582,29 +577,6 @@ try {
             Assert-CommandAvailable "uv" "uv is required by the qt module."
             Invoke-InDirectory "desktop" {
                 Invoke-External "uv" @("--no-config", "run", "--no-project", "--python", "3.12.13", "verify.py")
-            }
-        }
-    }
-
-    if ($RunTauri) {
-        Invoke-Step "Tauri Rust unit tests" {
-            Invoke-InDirectory "frontend/src-tauri" {
-                Invoke-External "cargo" @("test", "--locked")
-            }
-        }
-        Invoke-Step "Tauri E2E build" {
-            Invoke-InDirectory "frontend" {
-                Invoke-External "pnpm" @("run", "tauri:e2e:build")
-            }
-        }
-
-        Invoke-Step "Tauri E2E tests" {
-            Invoke-WithFunctionalTestRateLimits {
-                Invoke-InDirectory "frontend" {
-                    Invoke-WithEnv @{ E2E_WAREHOUSE = $(if ($RunWarehouse) { "1" } else { "0" }); E2E_INSPECTION = $(if ($RunInspection) { "1" } else { "0" }) } {
-                        Invoke-External "pnpm" @("run", "test:e2e:tauri")
-                    }
-                }
             }
         }
     }

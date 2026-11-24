@@ -1,18 +1,6 @@
-"""Read-only Windows process-tree CPU and working-set sampling for acceptance."""
-import ctypes as c
-from ctypes import wintypes as w
+"""Cross-platform acceptance process sampling; never targets unrelated processes."""
 import os
-
-
-class Entry(c.Structure):
-    _fields_ = [('size', w.DWORD), ('usage', w.DWORD), ('pid', w.DWORD), ('heap', c.c_size_t),
-                ('module', w.DWORD), ('threads', w.DWORD), ('parent', w.DWORD),
-                ('priority', w.LONG), ('flags', w.DWORD), ('exe', w.WCHAR * 260)]
-
-
-class Memory(c.Structure):
-    _fields_ = [('size', w.DWORD), ('faults', w.DWORD)] + [(name, c.c_size_t) for name in
-        ('peakWorking', 'working', 'peakPaged', 'paged', 'peakNonpaged', 'nonpaged', 'pagefile', 'peakPagefile')]
+import psutil
 
 
 def select_tree(parents, values, root):
@@ -29,45 +17,31 @@ def select_tree(parents, values, root):
 
 
 def sample_processes(pids=None, root=None):
-    kernel, psapi = c.WinDLL('kernel32', use_last_error=True), c.WinDLL('psapi')
-    kernel.CreateToolhelp32Snapshot.restype = w.HANDLE
-    kernel.OpenProcess.restype = w.HANDLE
-    kernel.CloseHandle.argtypes = [w.HANDLE]
-    kernel.Process32FirstW.argtypes = kernel.Process32NextW.argtypes = [w.HANDLE, c.POINTER(Entry)]
-    kernel.GetProcessTimes.argtypes = [w.HANDLE] + [c.POINTER(w.FILETIME)] * 4
-    psapi.GetProcessMemoryInfo.argtypes = [w.HANDLE, c.POINTER(Memory), w.DWORD]
-    handle = kernel.CreateToolhelp32Snapshot(2, 0)
-    parents = {}
-    try:
-        entry = Entry(); entry.size = c.sizeof(entry)
-        more = kernel.Process32FirstW(handle, c.byref(entry))
-        while more:
-            parents[entry.pid] = entry.parent
-            more = kernel.Process32NextW(handle, c.byref(entry))
-    finally:
-        kernel.CloseHandle(handle)
-    # A Popen handle can keep an exited Windows process object queryable.
-    # Only count IDs present in the current process snapshot as still alive.
     root = root or os.getpid()
-    members = set(pids).intersection(parents) if pids is not None else {root}.intersection(parents)
+    parents, metadata = {}, {}
+    for process in psutil.process_iter(['pid', 'ppid', 'create_time', 'status'], ad_value=None):
+        info = process.info
+        if info['status'] in (psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD) or info['create_time'] is None:
+            continue
+        parents[process.pid] = info['ppid']
+        metadata[process.pid] = {'created': info['create_time']}
     if pids is None:
-        while True:
-            expanded = members | {pid for pid, parent in parents.items() if parent in members}
-            if expanded == members: break
-            members = expanded
+        selected = select_tree(parents, metadata, root)
+    else:
+        selected = {pid:metadata[pid] for pid in pids if pid in metadata}
     values = {}
-    for pid in members:
-        process = kernel.OpenProcess(0x410, False, pid)
-        if not process: continue
+    for pid, expected in selected.items():
         try:
-            times = [w.FILETIME() for _ in range(4)]
-            memory = Memory(); memory.size = c.sizeof(memory)
-            if kernel.GetProcessTimes(process, *[c.byref(t) for t in times]) and psapi.GetProcessMemoryInfo(process, c.byref(memory), memory.size):
-                values[pid] = {'cpu': sum((t.dwHighDateTime << 32) + t.dwLowDateTime for t in times[2:]) / 1e7,
-                               'rss': memory.working, 'created': (times[0].dwHighDateTime << 32) + times[0].dwLowDateTime}
-        finally:
-            kernel.CloseHandle(process)
-    return values if pids is not None else select_tree(parents, values, root)
+            process = psutil.Process(pid)
+            if process.create_time() != expected['created'] or not process.is_running(): continue
+            if process.status() in (psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD): continue
+            cpu = process.cpu_times()
+            values[pid] = {'created': expected['created'], 'cpu': cpu.user+cpu.system, 'rss': process.memory_info().rss}
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
+            continue
+        except psutil.AccessDenied:
+            raise RuntimeError('OWNED_PROCESS_UNREADABLE') from None
+    return values
 
 
 def sample_tree(root=None):
@@ -75,18 +49,12 @@ def sample_tree(root=None):
 
 
 def terminate_owned(owned):
-    """Last-resort test cleanup; verify creation time again on the open handle."""
-    kernel = c.WinDLL('kernel32', use_last_error=True)
-    kernel.OpenProcess.restype = w.HANDLE
-    kernel.GetProcessTimes.argtypes = [w.HANDLE] + [c.POINTER(w.FILETIME)] * 4
-    kernel.TerminateProcess.argtypes = [w.HANDLE, w.UINT]
-    kernel.CloseHandle.argtypes = [w.HANDLE]
     for pid, created in owned.items():
-        handle = kernel.OpenProcess(0x1001, False, pid)
-        if not handle: continue
         try:
-            times = [w.FILETIME() for _ in range(4)]
-            if kernel.GetProcessTimes(handle, *[c.byref(t) for t in times]) and ((times[0].dwHighDateTime << 32) + times[0].dwLowDateTime) == created:
-                kernel.TerminateProcess(handle, 1)
-        finally:
-            kernel.CloseHandle(handle)
+            process = psutil.Process(pid)
+            if process.create_time() == created and process.is_running():
+                process.kill()  # psutil also checks PID reuse before termination.
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
+            continue
+        except psutil.AccessDenied:
+            raise RuntimeError('OWNED_PROCESS_TERMINATION_DENIED') from None

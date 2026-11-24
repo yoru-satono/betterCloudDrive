@@ -1,5 +1,6 @@
 """Shared, headless Qt development checks. Never starts Docker or a live client."""
 import hashlib
+import argparse
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 
 from m4_support import M4Error, clean_environment, owned_root, remove_owned, require
 
@@ -31,22 +33,28 @@ def web_fingerprint(directory):
 
 
 class Verification:
-    def __init__(self):
-        require(os.name == 'nt', 'VERIFY_WINDOWS_DEVELOPMENT_ONLY')
+    def __init__(self, existing_root=None):
         require(platform.python_version() == '3.12.13', 'VERIFY_REQUIRES_PYTHON_3_12_13')
         names = ('uv', 'node', 'pnpm.cmd' if os.name == 'nt' else 'pnpm')
         found = {name: shutil.which(name) for name in names}
         require(all(found.values()), 'MISSING_UV_NODE_OR_PNPM')
         self.uv, self.pnpm = found['uv'], found[names[-1]]
-        self.id = secrets.token_hex(5)
+        self.id = Path(existing_root).name if existing_root else secrets.token_hex(5)
         self.out = ROOT.parent / 'test-results/desktop' / self.id
-        self.out.mkdir(parents=True)
-        (self.out / '.m4-run').write_text(self.id, encoding='utf-8')
+        if existing_root:
+            require(Path(existing_root).resolve() == self.out.resolve(), 'WORKER_RUN_OUTSIDE_WORKSPACE')
+        if not existing_root:
+            self.out.mkdir(parents=True)
+            (self.out / '.m4-run').write_text(self.id, encoding='utf-8')
+            (self.out / '.qt-verification').write_text(self.id, encoding='utf-8')
         owned_root(self.out)
-        self.work = self.out / 'work'; self.work.mkdir()
-        temporary = self.work / 'tmp'; temporary.mkdir()
+        purpose = self.out / '.qt-verification'
+        require(purpose.is_file() and not purpose.is_symlink() and purpose.read_text(encoding='utf-8') == self.id,
+                'NOT_A_QT_VERIFICATION_RUN')
+        self.work = self.out / 'work'; self.work.mkdir(exist_ok=bool(existing_root))
+        temporary = self.work / 'tmp'; temporary.mkdir(exist_ok=bool(existing_root))
         self.env = clean_environment(os.environ, [Path(path).parent for path in found.values()])
-        self.env.update(TEMP=str(temporary), TMP=str(temporary), QT_QPA_PLATFORM='offscreen',
+        self.env.update(TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary), QT_QPA_PLATFORM='offscreen',
                         UV_PROJECT_ENVIRONMENT=str(ROOT / '.venv'), UV_CACHE_DIR=str(self.work / 'uv-cache'))
         self.python = ROOT / ('.venv/Scripts/python.exe' if os.name == 'nt' else '.venv/bin/python')
         self.checks = []
@@ -59,7 +67,7 @@ class Verification:
         from m4_support import process_fingerprints, surviving_owned
         process = subprocess.Popen([str(v) for v in command], cwd=cwd, env=self.env, text=True, encoding='utf-8',
                                    errors='replace', stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                   creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                                   **({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == 'nt' else {'start_new_session': True}))
         owned = {}
         try:
             while True:
@@ -101,7 +109,13 @@ class Verification:
             self.command('locked-development-dependencies', [self.uv, '--no-config', 'sync', '--locked', '--dev',
                          '--project', ROOT, '--python', sys.executable])
             self.command('python-regression', [self.python, '-m', 'pytest', '-q', '--basetemp', self.work / 'pytest',
-                         '-o', 'cache_dir=' + str(self.work / 'pytest-cache')])
+                         '-o', 'cache_dir=' + str(self.work / 'pytest-cache'), '--junitxml', self.work / 'junit.xml'])
+            junit = self.work / 'junit.xml'
+            if junit.exists():
+                skipped = [node for node in ET.parse(junit).iter('skipped')]
+                require(all(node.get('message', '').startswith('PLATFORM_NOT_APPLICABLE:') for node in skipped), 'APPLICABLE_TEST_SKIPPED')
+                self.checks.append({'name': 'platform-applicability', 'status': 'passed',
+                                    'notApplicable': [node.get('message') for node in skipped]})
             frontend = ROOT.parent / 'frontend'
             self.command('desktop-types', [self.pnpm, 'exec', 'vue-tsc', '--noEmit', '-p', '../desktop/tsconfig.json'], frontend)
             self.command('desktop-vitest', [self.pnpm, 'exec', 'vitest', 'run', '--config', '../desktop/vitest.config.mjs'], frontend)
@@ -133,8 +147,29 @@ class Verification:
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--worker', help=argparse.SUPPRESS)
+    args = parser.parse_args()
     try:
-        return Verification().run()
+        if args.worker:
+            return Verification(existing_root=owned_root(args.worker)).run()
+        # Keep the bootstrap stdlib-only. psutil is imported only in the locked
+        # project interpreter after development dependencies are available.
+        run = Verification()
+        try:
+            print('Preparing locked verification environment', flush=True)
+            prepared = subprocess.run([run.uv, '--no-config', 'sync', '--locked', '--dev', '--project', str(ROOT),
+                                      '--python', sys.executable], cwd=ROOT, env=run.env,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600)
+            require(prepared.returncode == 0, 'VERIFY_ENVIRONMENT_PREPARATION_FAILED')
+            process = subprocess.run([str(run.python), str(ROOT / 'verify.py'), '--worker', str(run.out)], cwd=ROOT, env=run.env)
+            return process.returncode
+        finally:
+            if not (run.out / 'results.json').exists():
+                try: remove_owned(run.out, run.work); cleanup = 'passed'
+                except Exception: cleanup = 'failed'
+                (run.out / 'results.json').write_text(json.dumps({'runId': run.id, 'status': 'failed',
+                    'code': 'VERIFICATION_WORKER_NOT_COMPLETED', 'cleanup': cleanup}), encoding='utf-8')
     except M4Error as error:
         print(str(error), file=sys.stderr)
         return 1
