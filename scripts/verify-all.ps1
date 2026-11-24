@@ -581,13 +581,7 @@ try {
         Invoke-Step "Qt desktop tests and frontend build" {
             Assert-CommandAvailable "uv" "uv is required by the qt module."
             Invoke-InDirectory "desktop" {
-                Invoke-External "uv" @("sync", "--locked", "--dev")
-                Invoke-External "uv" @("run", "--locked", "pytest", "-q")
-                Invoke-External "uv" @("run", "--locked", "python", "build.py")
-            }
-            Invoke-InDirectory "frontend" {
-                Invoke-External "pnpm" @("exec", "vue-tsc", "--noEmit", "-p", "../desktop/tsconfig.json")
-                Invoke-External "pnpm" @("exec", "vitest", "run", "--config", "../desktop/vitest.config.mjs")
+                Invoke-External "uv" @("--no-config", "run", "--no-project", "--python", "3.12.13", "verify.py")
             }
         }
     }

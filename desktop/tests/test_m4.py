@@ -79,10 +79,11 @@ def test_m4_process_ownership_checks_creation_time_and_ignores_reused_pids():
 @pytest.mark.skipif(__import__('os').name != 'nt', reason='Windows process handles')
 def test_m4_exited_process_is_not_reported_alive_while_popen_keeps_its_handle():
     import subprocess, sys
-    from process_metrics import sample_processes
+    from process_metrics import sample_processes, sample_tree
     process = subprocess.Popen([sys.executable, '-c', 'pass'], creationflags=subprocess.CREATE_NO_WINDOW)
     process.wait(timeout=10)
     assert process.pid not in sample_processes([process.pid])
+    assert not sample_tree(process.pid)
 
 
 def test_acceptance_launcher_uses_requested_interpreter_resources_and_environment(tmp_path, monkeypatch):

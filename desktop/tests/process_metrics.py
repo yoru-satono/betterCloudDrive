@@ -15,6 +15,19 @@ class Memory(c.Structure):
         ('peakWorking', 'working', 'peakPaged', 'paged', 'peakNonpaged', 'nonpaged', 'pagefile', 'peakPagefile')]
 
 
+def select_tree(parents, values, root):
+    """Windows retains parent IDs after exit; a reused ID is not ancestry."""
+    if root not in parents or root not in values: return {}
+    members = {root}
+    while True:
+        expanded = members | {pid for pid, parent in parents.items()
+                              if parent in members and pid in values
+                              and values[pid]['created'] >= values[parent]['created']}
+        if expanded == members: break
+        members = expanded
+    return {pid: values[pid] for pid in members}
+
+
 def sample_processes(pids=None, root=None):
     kernel, psapi = c.WinDLL('kernel32', use_last_error=True), c.WinDLL('psapi')
     kernel.CreateToolhelp32Snapshot.restype = w.HANDLE
@@ -35,7 +48,8 @@ def sample_processes(pids=None, root=None):
         kernel.CloseHandle(handle)
     # A Popen handle can keep an exited Windows process object queryable.
     # Only count IDs present in the current process snapshot as still alive.
-    members = set(pids).intersection(parents) if pids is not None else {root or os.getpid()}
+    root = root or os.getpid()
+    members = set(pids).intersection(parents) if pids is not None else {root}.intersection(parents)
     if pids is None:
         while True:
             expanded = members | {pid for pid, parent in parents.items() if parent in members}
@@ -53,7 +67,7 @@ def sample_processes(pids=None, root=None):
                                'rss': memory.working, 'created': (times[0].dwHighDateTime << 32) + times[0].dwLowDateTime}
         finally:
             kernel.CloseHandle(process)
-    return values
+    return values if pids is not None else select_tree(parents, values, root)
 
 
 def sample_tree(root=None):

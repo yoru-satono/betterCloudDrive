@@ -330,11 +330,7 @@ backend_tests() {
 
 qt_tests() {
   command -v uv >/dev/null 2>&1 || die "uv is required by the qt module"
-  (cd desktop && uv sync --locked --dev &&
-    uv run --locked pytest -q &&
-    uv run --locked python build.py) &&
-    (cd frontend && pnpm exec vue-tsc --noEmit -p ../desktop/tsconfig.json &&
-      pnpm exec vitest run --config ../desktop/vitest.config.mjs)
+  (cd desktop && uv --no-config run --no-project --python 3.12.13 verify.py)
 }
 
 integration_tests() {
