@@ -70,6 +70,32 @@ class M3(Validation):
             self.api.call('POST', f'/teams/{self.team}/members', self.owner, json={'username': self.viewer['username'], 'role': 'VIEWER'})
         return {'authorizedHead': True, 'exactRangeAnd416': True, 'one401Refresh': True, 'revokedTeamPermission': True, 'oldIdentityDenied': True}
 
+
+    def short_videos(self):
+        import imageio_ffmpeg
+        store = "document.querySelector('#app').__vue_app__.config.globalProperties.$pinia._s.get('preview')"
+        results = []
+        for extension in ('mp4', 'webm'):
+            path = self.out / ('short.' + extension)
+            codecs = ['-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-movflags', '+faststart'] if extension == 'mp4' else ['-c:v', 'libvpx-vp9', '-deadline', 'realtime', '-cpu-used', '8', '-c:a', 'libopus']
+            subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-y', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30',
+                '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=mono', '-t', '6', '-threads', '4', '-pix_fmt', 'yuv420p',
+                *codecs, str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            file = self.api.upload(self.owner, f'shared_{self.id}.' + extension, path.read_bytes())
+            # Await the native open acknowledgement before observing the
+            # reused window, so an old frame count cannot pass a new format.
+            self.page.evaluate(store + '.openPreview(' + json.dumps(file) + ')')
+            def playing():
+                data = self.page.invoke('desktop:diagnostics')
+                if len(data['players']) != 1: return None
+                player = data['players'][0]
+                return player if player['frames'] >= 30 and player['state'] == 'PlayingState' and player['position'] >= 500 and player['firstFrameSeconds'] is not None else None
+            player = wait_for(playing, 30, interval=.2)
+            need(player['size'] == [1280,720] and player['error'] == 'NoError', 'NATIVE_VIDEO_INVALID')
+            results.append({'format': extension, 'actualFrames': player['frames'], 'size': player['size'], 'firstFrameSeconds': player['firstFrameSeconds']})
+        return {'offscreenActualFrames': True, 'shortSamples': results, 'audioTrack': 'silent; decoding also covered by isolated media regression'}
+
+
     def playback(self):
         import imageio_ffmpeg
         from validate import digest
@@ -183,11 +209,12 @@ class M3(Validation):
     def run(self):
         failed = False
         operations = [('isolated-backend-fixtures', self.setup)]
-        if self.suite == 'functional':
+        if self.suite in ('functional', 'shared'):
             operations += [('seed', self.seed), ('real-media-authorization-and-ranges', self.media_access), ('real-vue-launch', self.launch), ('login-reload', self.login),
                 ('image-text-preview', self.preview), ('html-xml-plain-text', self.plain_text), ('pdf-preview', self.pdf),
                 ('onlyoffice-edit-save', self.office), ('onlyoffice-readonly', self.readonly_office),
                 ('bridge-security', self.security), ('logout-and-native-session', self.logout_and_switch), ('application-exit', self.close_app)]
+            if self.suite == 'shared': operations.insert(-3, ('short-native-mp4-webm', self.short_videos))
         elif self.suite == 'interaction':
             operations += [('seed', self.seed), ('visible-launch', self.interaction_launch), ('login', self.login),
                 ('native-player-interaction', self.interaction), ('application-exit', self.close_app)]
@@ -225,6 +252,8 @@ class M3(Validation):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--api-base', default='http://127.0.0.1:8080/api/v1')
-    parser.add_argument('--suite', choices=['functional', 'access', 'playback', 'interaction'], required=True)
+    parser.add_argument('--suite', choices=['functional', 'shared', 'access', 'playback', 'interaction'], required=True)
+    parser.add_argument('--web-root', type=Path)
     args = parser.parse_args()
-    sys.exit(M3(args.api_base, args.suite).run())
+    run = M3(args.api_base, args.suite); run.web_root = args.web_root
+    sys.exit(run.run())

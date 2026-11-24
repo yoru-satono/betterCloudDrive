@@ -15,6 +15,20 @@ import httpx
 from network import DesktopError as PocError, envelope
 
 
+AUDIT_ROOT = Path(__file__).resolve().parents[2] / 'test-results/desktop'
+
+
+def audit_account(run_id, user_id, username, email):
+    if not re.fullmatch('[a-f0-9]{10}', run_id) or not username.startswith('e2e_qtd_' + run_id + '_'):
+        raise PocError('ACCOUNT_AUDIT_SCOPE_DENIED')
+    root = AUDIT_ROOT / run_id
+    target = root / 'account-audit.jsonl'
+    if (not root.is_dir() or root.resolve() != root.absolute() or target.is_symlink() or target.is_junction()):
+        raise PocError('ACCOUNT_AUDIT_PATH_DENIED')
+    with target.open('a', encoding='utf-8') as stream:
+        stream.write(json.dumps({'userId': user_id, 'username': username, 'email': email}) + '\n')
+
+
 def wait_for(predicate, timeout=60, interval=0.1):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -78,8 +92,9 @@ class Api:
                         return code.group(0)
             return None
         code = wait_for(find_code, 20)
-        self.call("POST", "/auth/register", json={"username": name, "password": password, "email": email,
+        registered = self.call("POST", "/auth/register", json={"username": name, "password": password, "email": email,
                   "verificationCode": code, "preferredLocale": "en-US"})
+        audit_account(self.run_id, registered["userId"], name, email)
         user = {**self.call("POST", "/auth/login", json={"username": name, "password": password}),
                 "username": name, "password": password}
         me = self.call("GET", "/auth/me", user)

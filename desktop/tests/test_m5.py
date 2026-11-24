@@ -18,8 +18,10 @@ def trial(tmp_path, monkeypatch):
     for name in ('env/Scripts/python.exe','web/index.html','profile/.bcd-qt-desktop'):
         path = work/name; path.parent.mkdir(parents=True, exist_ok=True); path.touch()
     (work/'tmp').mkdir()
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0)); trial_port = probe.getsockname()[1]
     manifest = {'kind':'m5-trial','runId':root.name,'repository':str(repository),'state':'ready',
-                'runtimeDigest':'snapshot','apiBase':'http://127.0.0.1:8080/api/v1','port':5199}
+                'runtimeDigest':'snapshot','apiBase':'http://127.0.0.1:8080/api/v1','port':trial_port}
     (root/'trial.json').write_text(json.dumps(manifest))
     monkeypatch.setattr(m5,'runtime_digest',lambda:'snapshot')
     return root, manifest
@@ -40,7 +42,7 @@ def test_trial_manifest_must_match_prepared_environment(trial,key,value):
 
 
 def test_trial_launch_uses_owned_environment_uv_and_no_cdp(trial,monkeypatch):
-    root, _ = trial; captured = {}
+    root, manifest = trial; captured = {}
     monkeypatch.setattr(m5.shutil,'which',lambda _:r'C:\tools\uv.exe')
     monkeypatch.setenv('QTWEBENGINE_REMOTE_DEBUGGING','127.0.0.1:9999')
     monkeypatch.setenv('PYTHONPATH','foreign')
@@ -53,6 +55,7 @@ def test_trial_launch_uses_owned_environment_uv_and_no_cdp(trial,monkeypatch):
     assert 'PYTHONPATH' not in env and env['UV_PROJECT_ENVIRONMENT'] == str(root/'work/env')
     assert command[command.index('--profile')+1] == str(root/'work/profile')
     assert command[command.index('--web-root')+1] == str(root/'work/web')
+    assert command[command.index('--port')+1] == str(manifest['port'])
 
 
 def test_trial_launch_rejects_changed_runtime_or_missing_resources(trial,monkeypatch):

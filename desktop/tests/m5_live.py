@@ -101,12 +101,13 @@ def live(config, root):
                 if label == 'secondary':
                     self.out = root / 'work/second-runtime'; self.out.mkdir()
                 self.launch()
+                self.security()
                 need(not self.page.invoke('desktop:diagnostics')['authenticated'] and not self.queue(), 'NEW_PROFILE_NOT_EMPTY')
                 need(self.page.invoke('get_desktop_settings') == DEFAULTS, 'NEW_PROFILE_SETTINGS_NOT_DEFAULT')
                 need(not self.page.evaluate("localStorage.getItem('accessToken')||localStorage.getItem('refreshToken')"), 'NEW_PROFILE_HAS_TOKEN')
                 self.close_app()
             self.out = self.original_out
-            return {'twoIndependentProfiles': True, 'loginPage': True, 'defaultSettings': True, 'emptyQueueAndIdentity': True}
+            return {'twoIndependentProfiles': True, 'loginPage': True, 'defaultSettings': True, 'emptyQueueAndIdentity': True, 'runtimeBootstrapAndSubframeIsolation': True}
 
         def settings_restart(self):
             self.launch(); self.login_as(self.owner)

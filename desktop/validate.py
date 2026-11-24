@@ -273,6 +273,8 @@ class Validation(PreviewChecks):
 
     def security(self):
         need(self.page.evaluate("typeof window.qt==='undefined'"), "QT_EXPOSED_IN_MAIN_WORLD")
+        need(self.page.evaluate("window.__BCD_RUNTIME__?.kind==='qt' && Object.isFrozen(window.__BCD_RUNTIME__) && Object.keys(window.__BCD_RUNTIME__).sort().join(',')==='apiBaseUrl,kind,webBaseUrl'"), 'PUBLIC_RUNTIME_CONFIGURATION_INVALID')
+        need(self.page.evaluate("(() => {const frame=document.createElement('iframe');document.body.append(frame);const isolated=typeof frame.contentWindow.__BCD_RUNTIME__==='undefined' && typeof frame.contentWindow.qt==='undefined';frame.remove();return isolated})()"), 'RUNTIME_EXPOSED_IN_SUBFRAME')
         try:
             self.page.invoke("download_desktop_file", {})
         except RuntimeError:
@@ -281,7 +283,7 @@ class Validation(PreviewChecks):
             raise DesktopError("LEGACY_COMMAND_ENABLED")
         self.page.evaluate("location.href='https://example.invalid/';true")
         need(self.page.evaluate("location.origin===" + json.dumps(f"http://127.0.0.1:{self.port}")), "EXTERNAL_NAVIGATION_ALLOWED")
-        return {"isolatedWorld": True, "unknownCommandDenied": True, "externalNavigationDenied": True}
+        return {"isolatedWorld": True, "unknownCommandDenied": True, "externalNavigationDenied": True, "publicStartupOnly": True, "subframeIsolated": True}
 
     def logout_and_switch(self):
         auth = "document.querySelector('#app').__vue_app__.config.globalProperties.$pinia._s.get('auth')"

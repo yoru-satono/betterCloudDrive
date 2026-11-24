@@ -13,7 +13,7 @@ from m4_support import M4Error
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
     desktop = tmp_path/'repo/desktop'; desktop.mkdir(parents=True)
-    (desktop/'web-dist').mkdir(); (desktop/'web-dist/index.html').write_text('daily assets')
+    (desktop.parent/'frontend/dist').mkdir(parents=True); (desktop.parent/'frontend/dist/index.html').write_text('daily assets')
     monkeypatch.setattr(build, 'ROOT', desktop)
     monkeypatch.setattr(verify, 'ROOT', desktop)
     monkeypatch.setattr(verify.shutil, 'which', lambda name: str(tmp_path/'tools'/name))
@@ -41,11 +41,11 @@ def test_default_build_retains_existing_command_and_custom_build_passes_owned_ta
 @pytest.mark.parametrize('target', ['outside','daily','work','escape','work-via-parent'])
 def test_custom_build_rejects_unowned_or_unsafe_targets_without_spawning(workspace,monkeypatch,target):
     root,web=owned_build(workspace)
-    choices={'outside':workspace.parent/'other','daily':workspace/'web-dist', 'work':root/'work',
+    choices={'outside':workspace.parent/'other','daily':workspace.parent/'frontend/dist', 'work':root/'work',
              'escape':root/'work/../report', 'work-via-parent':root/'work/web/..'}
     monkeypatch.setattr(build.subprocess,'run',lambda *_a,**_k:pytest.fail('unsafe output must not build'))
     assert build.main(['--out-dir',str(choices[target])]) == 1
-    assert (workspace/'web-dist/index.html').read_text() == 'daily assets'
+    assert (workspace.parent/'frontend/dist/index.html').read_text() == 'daily assets'
 
 
 def test_custom_build_rejects_wrong_marker_and_external_junction(workspace):
@@ -92,12 +92,12 @@ def mock_commands(run, fail=None):
 
 
 def test_verification_success_uses_isolated_build_and_cleans_work(workspace):
-    before=verify.web_fingerprint(workspace/'web-dist')
+    before=verify.web_fingerprint(workspace.parent/'frontend/dist')
     run=verify.Verification(); commands=mock_commands(run)
     assert run.run() == 0
     report=json.loads((run.out/'results.json').read_text())
     assert report['status'] == 'passed' and not run.work.exists()
-    assert before == verify.web_fingerprint(workspace/'web-dist')
+    assert before == verify.web_fingerprint(workspace.parent/'frontend/dist')
     build_args=next(args for name,args in commands if name=='isolated-web-build')
     assert build_args[-2:] == ['--out-dir',run.work/'web']
     pytest_args=next(args for name,args in commands if name=='python-regression')
@@ -127,7 +127,7 @@ def test_changed_daily_assets_are_a_failure_even_if_checks_pass(workspace):
     previous=run.command
     def change(name,args,cwd=None):
         previous(name,args,cwd)
-        if name=='isolated-web-build': (workspace/'web-dist/index.html').write_text('unexpected change')
+        if name=='isolated-web-build': (workspace.parent/'frontend/dist/index.html').write_text('unexpected change')
     run.command=change
     assert run.run()==1 and not run.work.exists()
     report=json.loads((run.out/'results.json').read_text())

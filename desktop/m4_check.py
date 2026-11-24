@@ -84,8 +84,7 @@ class Bootstrap:
         self.command('python-regression', [self.python, '-m', 'pytest', '-q', '--basetemp', self.work / 'pytest'], env=tests_env)
         self.command('desktop-types', [self.tools['pnpm.cmd'], 'exec', 'vue-tsc', '--noEmit', '-p', '../desktop/tsconfig.json'], cwd=frontend)
         self.command('desktop-vitest', [self.tools['pnpm.cmd'], 'exec', 'vitest', 'run', '--config', '../desktop/vitest.config.mjs'], cwd=frontend)
-        self.command('isolated-web-build', [self.tools['pnpm.cmd'], 'exec', 'vite', 'build', '--config', '../desktop/vite.config.mjs',
-                     '--outDir', self.work / 'web', '--emptyOutDir'], cwd=frontend, env={**self.env, 'BCD_DESKTOP_API_BASE': self.base})
+        self.command('isolated-web-build', [self.python, ROOT / 'build.py', '--out-dir', self.work / 'web'])
 
     def run(self):
         failed = False

@@ -105,7 +105,7 @@ class Verification:
     def run(self):
         failed, before = False, None
         try:
-            before = web_fingerprint(ROOT / 'web-dist')
+            before = web_fingerprint(ROOT.parent / 'frontend/dist')
             self.command('locked-development-dependencies', [self.uv, '--no-config', 'sync', '--locked', '--dev',
                          '--project', ROOT, '--python', sys.executable])
             self.command('python-regression', [self.python, '-m', 'pytest', '-q', '--basetemp', self.work / 'pytest',
@@ -119,6 +119,9 @@ class Verification:
             frontend = ROOT.parent / 'frontend'
             self.command('desktop-types', [self.pnpm, 'exec', 'vue-tsc', '--noEmit', '-p', '../desktop/tsconfig.json'], frontend)
             self.command('desktop-vitest', [self.pnpm, 'exec', 'vitest', 'run', '--config', '../desktop/vitest.config.mjs'], frontend)
+            self.command('shared-web-vitest', [self.pnpm, 'exec', 'vitest', 'run', 'src/platform/__tests__',
+                         'src/api/__tests__/client.test.ts', 'src/stores/__tests__/auth.test.ts',
+                         'src/stores/__tests__/preview.test.ts'], frontend)
             self.command('isolated-web-build', [self.python, ROOT / 'build.py', '--out-dir', self.work / 'web'])
         except (Exception, KeyboardInterrupt) as error:
             failed = True
@@ -126,7 +129,7 @@ class Verification:
                                 'code': str(error) if isinstance(error, M4Error) else type(error).__name__})
         finally:
             try:
-                require(before == web_fingerprint(ROOT / 'web-dist'), 'DAILY_WEB_CHANGED')
+                require(before == web_fingerprint(ROOT.parent / 'frontend/dist'), 'DAILY_WEB_CHANGED')
                 self.checks.append({'name': 'daily-web-preserved', 'status': 'passed', 'fingerprint': before})
             except Exception as error:
                 failed = True
