@@ -9,6 +9,7 @@
 - [Web 开发](WEB.md)：Vue 目录、数据流、API client、本地化、主题和 Playwright。
 - [Tauri 开发](TAURI.md)：Rust command、文件系统、传输恢复、构建和桌面 E2E。
 - [Qt 桌面开发](../../desktop/README.md)：Windows 11 x64、uv 启动、独立 Vue 构建、传输与原生媒体验收。
+- [Qt 功能矩阵与开发验收](QT_DESKTOP_ACCEPTANCE.md)：M1–M6 证据、当前放行范围、人工待验收、试用保留和清理例外。
 - [Qt 桌面迁移前验证](QT_DESKTOP_VALIDATION.md)：独立 Windows 原型、关键链路、打包实测和迁移阻塞项。
 - [KMP 移动端开发](KMP.md)：Compose Multiplatform、Ktor、Store/Repository、跨平台边界、地址和验证矩阵。
 - [测试策略](TESTING.md)：测试分层、完整脚本、最低验证矩阵、数据清理和报告。

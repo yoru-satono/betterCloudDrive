@@ -1,5 +1,7 @@
 # Windows Qt 桌面迁移前验证
 
+历史原型报告，仅描述 2026-11-21 的验证范围。当前客户端使用 Qt Multimedia 独立播放器；开发操作见 [Qt 桌面开发](../../desktop/README.md)，当前状态见[功能矩阵与正式模块验收](QT_DESKTOP_ACCEPTANCE.md)。以下原型阻塞项与打包结果不作为当前版本的放行结论。
+
 验证日期：2026-11-21。项目基线：`e153f07`。范围为独立 PySide6 + Qt WebEngine 原型；当前正式桌面客户端仍为 Tauri。本轮不执行 Linux 验证。
 
 ## 结论

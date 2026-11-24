@@ -1,6 +1,8 @@
 # BetterCloudDrive
 
-全栈云盘系统，支持 Web、Tauri 桌面端、Kotlin Multiplatform 移动端和 WebDAV 访问。
+全栈云盘系统，提供 Web、Qt 桌面开发版本、保留的 Tauri 桌面实现、Kotlin Multiplatform 移动端和 WebDAV 访问。
+
+Qt 当前交付范围为 Windows 11 x64、uv 开发启动，见 [Qt 桌面开发](desktop/README.md)及[功能矩阵与验收记录](docs/development/QT_DESKTOP_ACCEPTANCE.md)。本机开发验收通过不代表安装包、干净 Windows、人工长期试用或完整 Linux/macOS 已验收。
 
 ## 技术栈
 
@@ -15,7 +17,8 @@
 | **可观测性** | Actuator/Micrometer + Prometheus + Alertmanager + Loki + Grafana Alloy + Grafana |
 | **业务数仓（可选）** | ClickHouse 26.8.41.14 + dbt Core 1.12.7 + Airflow 3.4.0 + Python 3.12 |
 | **Web 前端** | Vue 3.5.40 + Vite 8.1.5 + Pinia 4.0.2 + Vue Router 5.2.0 |
-| **桌面端** | Tauri 2.11.4 + Rust 1.88.0 |
+| **Qt 桌面（Windows 开发版）** | PySide6/Qt 6.12.0 + Python 3.12.13 + uv |
+| **Tauri 桌面（保留实现）** | Tauri 2.11.4 + Rust 1.88.0 |
 | **KMP 移动端** | Kotlin 2.4.10 + Compose Multiplatform 1.11.1 + Ktor 3.5.1 + Room 2.8.4；Android 应用壳，iOS 共享源码目标 |
 | **测试** | JUnit 5 + Mockito（后端）、pytest + httpx（黑盒）、Vitest + Playwright（前端） |
 | **部署** | Docker Compose 一键编排 |
@@ -52,6 +55,7 @@ betterCloudDrive/
 │   ├── betterclouddrive-scheduler/  # 定时任务
 │   └── betterclouddrive-start/      # 启动入口 + Flyway 迁移
 ├── frontend/                # Vue 3 Web 前端与 Tauri 桌面壳
+├── desktop/                 # Qt Windows 开发客户端、独立 Vue 适配与验收
 ├── mobile/                  # 活跃的 Kotlin Multiplatform 移动端
 ├── backend-test/            # Python 黑盒 API 测试
 ├── observability/           # Prometheus/Loki/Alloy/Alertmanager/Grafana 配置
@@ -119,7 +123,7 @@ Grafana 通过 Nginx `auth_request` 接入 BetterCloudDrive 管理员身份。�
 
 ### 方式二：本地开发启动
 
-按后端、Web、Tauri 或 KMP 移动端组合本地环境的完整说明见[开发环境准备](docs/getting-started/DEVELOPMENT_SETUP.md)和[专项开发指南](docs/development/README.md)。下面仅保留最短 Web 联调入口。
+按后端、Web、Qt、Tauri 或 KMP 移动端组合本地环境的完整说明见[开发环境准备](docs/getting-started/DEVELOPMENT_SETUP.md)和[专项开发指南](docs/development/README.md)。Qt 按[独立分步命令](desktop/README.md#环境与分步启动)启动；下面仅保留最短 Web 联调入口。
 
 启动依赖和后端：
 

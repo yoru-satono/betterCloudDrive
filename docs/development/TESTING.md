@@ -13,6 +13,7 @@ Java 与 Web 生成覆盖率报告，用于辅助发现未验证实现；KMP 移
 | Python API 黑盒 | 真实 HTTP 契约和跨模块业务链路 | Compose 后端栈 |
 | Security/WebDAV/Observability/Resilience 专项 | 安全边界、协议、运维与故障恢复 | Compose 及专项工具 |
 | Web Playwright | 真实浏览器、权限、上传下载和 OnlyOffice | Compose 完整栈 |
+| Qt 开发回归 | Python/桌面适配、媒体解码、类型检查及隔离构建 | Windows 11 x64、uv、Node/pnpm；不需要后端 |
 | Tauri E2E | 真实桌面窗口和原生传输桥接 | Rust、平台 driver、后端栈 |
 | KMP Android instrumentation | Compose UI、导航、设备 I/O 和端到端场景 | SDK、adb、设备、后端栈 |
 | KMP iOS 共享源码编译 | iOS source set、依赖和公开 API 的编译边界 | Kotlin/Native 工具链；应用壳测试后续补充 |
@@ -41,7 +42,11 @@ bash scripts/verify-all.sh
 
 `all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability、resilience、warehouse 和 inspection。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。KMP 移动端验证使用 `mobile-unit` 和 `mobile-android`。
 
-`qt` 为显式选择的 Windows Qt 开发验证入口，暂不并入 `all`。运行 `./scripts/verify-all.ps1 -Module qt` 或 `bash scripts/verify-all.sh --module qt`，执行锁定依赖安装、Python 状态机与真实媒体解码测试、桌面专用 Vitest（连接确认/失败、会话并发及迟到响应、标题栏保存）、桌面 Vue 构建及类型检查；该模块不启动 Docker，也不读取或生成后端 env 文件。需要已有前端 pnpm 依赖和可用 Qt 图形/音频运行环境。真实 API、Vue 窗口和 OnlyOffice 验收另见 [Qt 桌面开发](../../desktop/README.md)，运行前须确保 Linux 虚拟机未与本机 Docker 同时运行。M1 可用 `uv run --locked python m1_check.py --offscreen` 在独立 Profile/端口验证真实 Qt 会话；原生对话框、焦点和闪烁必须另做可见窗口交互验收，不能由该结果替代。 M2 的文件级调度、重试、目录依赖、限速、路径与磁盘故障纳入同一 `qt` 自动回归；真实进程强制结束、后端响应丢失、代理认证及设置页面重启验收另执行 `cd desktop && uv run --locked python m2_check.py`（需要已运行的测试后端和 OpenSSL，测试不修改系统代理/证书配置）。
+`qt` 为显式选择的 Windows Qt 开发验证入口，暂不并入 `all`。PowerShell `./scripts/verify-all.ps1 -Module qt` 和 Windows Git Bash `bash scripts/verify-all.sh --module qt` 共同调用 `desktop/verify.py`。它通过 uv 锁定同步开发依赖、运行 Python 状态机及真实 MP4/WebM 解码/跳转、桌面 Vitest、类型检查和隔离网页构建。需要已有 Node/pnpm 前端依赖；不启动 Docker，不读取或生成后端 env，不做真实后端或原生交互验收。
+
+验证用 Python 3.12.13 标准库启动，为每轮生成标记匹配的独立目录。TEMP/TMP、pytest 夹具/缓存、uv 缓存和构建输出放在该轮 `work` 内；子进程清除继承的 Python/Qt/媒体路径覆盖，不改变父环境。结束核对所属子进程退出及日常 `desktop/web-dist` 的内容/时间戳指纹，然后清理该轮资源；非敏感报告保留在 `test-results/desktop/<id>/results.json`。任一必需步骤、资源核对或清理失败返回非零。`build.py` 默认日常输出不变，可选 `--out-dir` 仅供受控运行目录使用，不接受未标记目录、运行目录根、越界或符号链接/目录联接路径。
+
+真实 API、Vue、强制结束恢复、代理认证、OnlyOffice、原生选择/窗口手势及媒体性能另按 [Qt 桌面开发](../../desktop/README.md)选择专项；功能与历史证据见[Qt 验收矩阵](QT_DESKTOP_ACCEPTANCE.md)。运行本机 Docker 前须确认 Linux 虚拟机停止。后台 `offscreen`、单元测试和入口准备不能代替人工交互、M5 观察、干净系统或发行验收。
 
 `inspection` 复用基础栈，不需要数仓容器；运行巡检、容量事务、旧 Redis 增量切换和对象存储的单元/隔离集成测试，再执行管理员真实 API 验收。已有数据库必须先按[存储巡检运维](../operations/STORAGE_INSPECTIONS.md)完成离线计账切换，验证脚本不会自动宣布旧写入者已停止。运行 `./scripts/verify-all.ps1 -Module inspection` 或 `bash scripts/verify-all.sh --module inspection`。普通 `blackbox` 排除 `inspection` 标记；安全路由拒绝用例同时属于 `security`。
 
