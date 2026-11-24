@@ -96,12 +96,13 @@ def test_acceptance_launcher_uses_requested_interpreter_resources_and_environmen
     def popen(command, **kwargs): captured.update(command=command, **kwargs); return object()
     class Page:
         def __init__(self, *args, **kwargs): pass
-        def wait(self,*args): pass
+        def wait(self,*args): captured['ready'] = args[0]
         def invoke(self,*args): pass
         def evaluate(self,*args): pass
     monkeypatch.setattr('validate.subprocess.Popen', popen)
     monkeypatch.setattr('validate.Cdp', Page)
-    run.launch()
+    run.launch(expect_login=False, ready_expression='authenticatedEmptyList')
     assert captured['command'][0] == str(run.python_executable)
     assert captured['command'][-2:] == ['--web-root', str(run.web_root)]
     assert captured['env']['CUSTOM'] == 'isolated' and captured['env']['QT_QPA_PLATFORM'] == 'offscreen'
+    assert captured['ready'] == 'authenticatedEmptyList'

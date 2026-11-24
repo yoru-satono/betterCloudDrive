@@ -191,7 +191,7 @@ class Validation(PreviewChecks):
                           json={"username": self.viewer["username"], "role": "VIEWER"})
         return {"revocationStopsResume": True, "finalFileNotPublished": True}
 
-    def launch(self, expect_login=True):
+    def launch(self, expect_login=True, ready_expression=None):
         # Never attach to another client's debug port or close its page later.
         if self.port == self.debug_port:
             raise DesktopError("TEST_PORTS_MUST_DIFFER")
@@ -212,8 +212,8 @@ class Validation(PreviewChecks):
         self.process = subprocess.Popen(command,
             cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.page = Cdp(self.debug_port, expected_origin=f"http://127.0.0.1:{self.port}")
-        self.page.wait("!!document.querySelector('.login-page__form input')" if expect_login else
-                       "location.hash.includes('/files') && !!document.querySelector('[data-testid^=file-card]')", 30)
+        self.page.wait(ready_expression or ("!!document.querySelector('.login-page__form input')" if expect_login else
+                       "location.hash.includes('/files') && !!document.querySelector('[data-testid^=file-card]')"), 30)
         self.page.invoke("get_desktop_settings")
         self.page.evaluate("window.__desktopEvents=0;window.addEventListener('bcd:event',()=>window.__desktopEvents++)")
         return {"vue": True, "bridge": True}

@@ -126,11 +126,11 @@ class Bootstrap:
             print('report', self.out / 'results.json', flush=True)
         return int(failed)
 
-    def run_live(self, config):
+    def run_live(self, config, worker=None):
         sys.path.insert(0, str(ROOT / 'tests'))
         from process_metrics import sample_tree, sample_processes, terminate_owned
         from m4_support import process_fingerprints, surviving_owned
-        process = subprocess.Popen([str(self.python), str(ROOT / 'tests/m4_live.py')], cwd=ROOT, env=self.env,
+        process = subprocess.Popen([str(self.python), str(worker or ROOT / 'tests/m4_live.py')], cwd=ROOT, env=self.env,
                                    stdin=subprocess.PIPE, text=True, encoding='utf-8',
                                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
         owned = {}

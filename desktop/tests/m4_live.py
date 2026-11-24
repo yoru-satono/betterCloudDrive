@@ -36,7 +36,7 @@ def probe(root):
     (root / 'environment.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
 
 
-def live(config, root):
+def validation_type(config, root):
     from validate import Validation, digest, need
     from m3_check import M3
     from live_support import Api, wait_for, expired_token, env_values
@@ -60,9 +60,9 @@ def live(config, root):
             self.sample_lock = threading.Lock()
             self.round_number, self.rss_peak = 0, 0
 
-        def launch(self, expect_login=True):
+        def launch(self, expect_login=True, ready_expression=None):
             start = time.monotonic()
-            result = super().launch(expect_login)
+            result = super().launch(expect_login, ready_expression=ready_expression)
             self.sampler_stop = threading.Event()
             def sample():
                 while not self.sampler_stop.is_set():
@@ -368,7 +368,11 @@ def live(config, root):
                 (self.report_root / 'live.json').write_text(text, encoding='utf-8')
             return int(failed)
 
-    return M4Validation().run()
+    return M4Validation
+
+
+def live(config, root):
+    return validation_type(config, root)().run()
 
 
 def main():
