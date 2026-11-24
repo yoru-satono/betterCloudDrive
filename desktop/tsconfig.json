@@ -1,20 +1,4 @@
 {
   "extends": "../frontend/tsconfig.app.json",
-  "compilerOptions": {
-    "baseUrl": ".",
-    "types": ["../frontend/node_modules/vite/client"],
-    "tsBuildInfoFile": "../frontend/node_modules/.tmp/desktop.tsbuildinfo",
-    "paths": {
-      "@/config/runtime": ["web/runtime.ts"],
-      "@/api/client": ["web/client.ts"],
-      "@/stores/auth": ["web/auth.ts"],
-      "@/stores/preview": ["web/preview.ts"],
-      "@/components/file/OnlyOfficeEditor.vue": ["web/components/OnlyOfficeEditor.vue"],
-      "@/platform/desktop": ["web/bridge.ts"],
-      "@/*": ["../frontend/src/*"],
-      "spark-md5": ["../frontend/node_modules/@types/spark-md5"],
-      "*": ["../frontend/node_modules/*"]
-    }
-  },
-  "include": ["web/**/*.ts", "web/**/*.vue", "../frontend/src/**/*.vue", "../frontend/src/**/*.ts"]
+  "compilerOptions": { "types": ["../frontend/node_modules/vite/client"] }
 }

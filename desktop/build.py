@@ -1,4 +1,4 @@
-"""Build the existing Vue application with desktop-only entrypoints."""
+"""Build the shared Vue application used by Web and Qt."""
 import os
 import argparse
 import subprocess
@@ -29,7 +29,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out-dir', type=Path, help='Optional output inside a marker-owned verification run/work directory')
     args = parser.parse_args(argv)
-    command = ['pnpm.cmd' if os.name == 'nt' else 'pnpm', 'exec', 'vite', 'build', '--config', str(ROOT / 'vite.config.mjs')]
+    command = ['pnpm.cmd' if os.name == 'nt' else 'pnpm', 'run', 'build']
     try:
         if args.out_dir:
             command += ['--outDir', str(owned_output(args.out_dir)), '--emptyOutDir']

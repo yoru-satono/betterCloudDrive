@@ -6,14 +6,14 @@ const bridge = vi.hoisted(() => ({
   listen: vi.fn(() => Promise.resolve(() => {})),
   configureConnection: vi.fn(), isConnectionConfirmed: vi.fn(() => true),
 }))
-vi.mock('../../web/bridge', () => bridge)
+vi.mock('@/platform/desktop', () => bridge)
 vi.mock('../../../frontend/src/stores/upload', () => ({ useUploadStore: () => ({ queue: [] }) }))
 vi.mock('../../../frontend/src/stores/transfer', () => ({ useTransferStore: () => ({ applyQueue: vi.fn() }) }))
-import api, { refreshAccessToken } from '../../web/client'
-import { invalidateIdentity } from '../../web/identity'
-import { synchronizeSession, clearSession } from '../../web/session'
-import { getApiBaseUrl, setStoredApiBaseUrl } from '../../web/runtime'
-import { useAuthStore } from '../../web/auth'
+import api, { refreshAccessToken } from '@/api/client'
+import { invalidateIdentity } from '@/platform/identity'
+import { synchronizeSession, clearSession } from '@/platform/session'
+import { getApiBaseUrl, setStoredApiBaseUrl } from '@/config/runtime'
+import { useAuthStore } from '@/stores/auth'
 const deferred = <T = any>() => { let resolve!: (v: T) => void, reject!: (e: Error) => void; const promise = new Promise<T>((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 const tick = async () => { for (let i = 0; i < 8; i++) await Promise.resolve() }
 const tokens = (prefix = 'synthetic') => {

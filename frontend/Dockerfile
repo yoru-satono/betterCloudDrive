@@ -2,12 +2,8 @@ FROM node:24.18.0-alpine AS builder
 WORKDIR /app
 ARG VITE_API_BASE_URL=
 ARG VITE_WEB_BASE_URL=
-ARG VITE_DESKTOP_API_BASE_URL=http://127.0.0.1:8080/api/v1
-ARG VITE_DESKTOP_WEB_BASE_URL=http://127.0.0.1:3000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_WEB_BASE_URL=$VITE_WEB_BASE_URL
-ENV VITE_DESKTOP_API_BASE_URL=$VITE_DESKTOP_API_BASE_URL
-ENV VITE_DESKTOP_WEB_BASE_URL=$VITE_DESKTOP_WEB_BASE_URL
 RUN corepack enable && corepack prepare pnpm@11.16.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile

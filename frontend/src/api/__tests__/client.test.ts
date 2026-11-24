@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { invalidateIdentity } from '@/platform/identity'
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { toast } from 'vue-sonner'
 import api, { ensureFreshAccessToken, refreshAccessToken } from '@/api/client'
@@ -19,6 +20,8 @@ vi.mock('vue-sonner', () => ({
   },
 }))
 
+vi.mock('@/platform/desktop', () => ({ waitForConnection: async () => {}, isConnectionConfirmed: () => true, rawInvoke: async () => {} }))
+
 const adapter = vi.fn()
 const axiosPost = vi.spyOn(axios, 'post')
 const toastError = toast.error as Mock
@@ -29,6 +32,7 @@ beforeEach(() => {
   toastError.mockReset()
   api.defaults.adapter = adapter
   localStorage.clear()
+  delete window.__BCD_RUNTIME__
   isDesktopRuntime.mockReturnValue(false)
   window.history.replaceState({}, '', '/')
 })
@@ -87,7 +91,7 @@ describe('api client', () => {
 
     const res = await api.get('/files')
 
-    expect(axiosPost).toHaveBeenCalledWith('/api/v1/auth/refresh', { refreshToken: 'old-refresh' })
+    expect(axiosPost).toHaveBeenCalledWith('/api/v1/auth/refresh', { refreshToken: 'old-refresh' }, { timeout: 30000 })
     expect(localStorage.getItem('accessToken')).toBe('new-access')
     expect(localStorage.getItem('refreshToken')).toBe('new-refresh')
     expect(res.data.data).toEqual({ ok: true })
@@ -130,7 +134,7 @@ describe('api client', () => {
   it('refreshes when token validation returns a plain HTTP 401', async () => {
     localStorage.setItem('accessToken', 'expired-access')
     localStorage.setItem('refreshToken', 'old-refresh')
-    adapter.mockImplementation(apiHttpError(401))
+    adapter.mockImplementationOnce(apiHttpError(401)).mockImplementationOnce(apiResponse({ code: 200, data: { id: 7 } }))
     axiosPost.mockResolvedValue({
       data: {
         code: 200,
@@ -141,7 +145,7 @@ describe('api client', () => {
 
     await expect(ensureFreshAccessToken()).resolves.toBe('new-access')
 
-    expect(axiosPost).toHaveBeenCalledWith('/api/v1/auth/refresh', { refreshToken: 'old-refresh' })
+    expect(axiosPost).toHaveBeenCalledWith('/api/v1/auth/refresh', { refreshToken: 'old-refresh' }, { timeout: 30000 })
     expect(localStorage.getItem('accessToken')).toBe('new-access')
     expect(localStorage.getItem('refreshToken')).toBe('new-refresh')
     expect(toastError).not.toHaveBeenCalled()
@@ -149,6 +153,7 @@ describe('api client', () => {
 
   it('uses the hash login route when a desktop refresh token is missing', async () => {
     isDesktopRuntime.mockReturnValue(true)
+    window.__BCD_RUNTIME__ = { kind: 'qt', apiBaseUrl: '/api/v1', webBaseUrl: 'http://localhost' }
 
     await expect(refreshAccessToken()).rejects.toBeTruthy()
 
@@ -159,6 +164,7 @@ describe('api client', () => {
 
   it('returns a revoked desktop session to login without an auth toast', async () => {
     isDesktopRuntime.mockReturnValue(true)
+    window.__BCD_RUNTIME__ = { kind: 'qt', apiBaseUrl: '/api/v1', webBaseUrl: 'http://localhost' }
     localStorage.setItem('accessToken', 'revoked-access')
     localStorage.setItem('refreshToken', 'refresh')
     adapter.mockImplementation(apiResponse({ code: 401002, messageKey: 'error.tokenBlacklisted', messageParams: {} }))
@@ -170,4 +176,29 @@ describe('api client', () => {
     expect(localStorage.getItem('refreshToken')).toBeNull()
     expect(toastError).not.toHaveBeenCalled()
   })
+  it('rejects a late Web refresh without restoring the old login', async () => {
+    let finish!: (value: any) => void
+    localStorage.setItem('refreshToken', 'old-refresh')
+    axiosPost.mockReturnValueOnce(new Promise(resolve => { finish = resolve }) as never)
+    const refreshing = refreshAccessToken()
+    const rejected = expect(refreshing).rejects.toThrow('SESSION_CHANGED')
+    await vi.waitFor(() => expect(axiosPost).toHaveBeenCalledTimes(1))
+    invalidateIdentity('logout')
+    localStorage.setItem('accessToken', 'next-access')
+    localStorage.setItem('refreshToken', 'next-refresh')
+    finish({ data: { code: 200, data: { accessToken: 'old-access', refreshToken: 'old-refreshed' } } })
+    await rejected
+    expect(localStorage.getItem('accessToken')).toBe('next-access')
+    expect(localStorage.getItem('refreshToken')).toBe('next-refresh')
+  })
+  it('never refreshes more than once when the retried request is still unauthorized', async () => {
+    localStorage.setItem('refreshToken', 'old-refresh')
+    adapter.mockImplementation(apiHttpError(401))
+    axiosPost.mockResolvedValue({ data: { code: 200, data: { accessToken: 'new-access', refreshToken: 'new-refresh' } } })
+    await expect(api.get('/files')).rejects.toBeTruthy()
+    expect(axiosPost).toHaveBeenCalledTimes(1)
+    expect(adapter).toHaveBeenCalledTimes(2)
+    expect(localStorage.getItem('accessToken')).toBeNull()
+  })
+
 })

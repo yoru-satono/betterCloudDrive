@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { setLocale } from '../../../frontend/src/i18n'
-import { queueMessages, transferMessage } from '../../web/errors'
+import { queueMessages, transferMessage } from '@/platform/transferErrors'
 it('explains uncertain results and retained progress in both desktop languages', async () => {
   await setLocale('en-US')
   expect(transferMessage('RESULT_UNCERTAIN')).toContain('Check the server files')

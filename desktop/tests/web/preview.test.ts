@@ -3,9 +3,9 @@ import { createPinia, setActivePinia } from 'pinia'
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), personal: vi.fn(), team: vi.fn(), invoke: vi.fn() }))
 vi.mock('@/api/download', () => ({ previewFile: mocks.preview }))
 vi.mock('@/api/office', () => ({ getOfficeConfig: mocks.personal, getTeamOfficeConfig: mocks.team }))
-vi.mock('../../web/bridge', () => ({ invoke: mocks.invoke }))
-import { usePreviewStore } from '../../web/preview'
-import { invalidateIdentity } from '../../web/identity'
+vi.mock('@/platform/desktop', () => ({ invoke: mocks.invoke }))
+import { usePreviewStore } from '@/stores/preview'
+import { invalidateIdentity } from '@/platform/identity'
 const deferred = () => { let resolve!: (value: any) => void, reject!: (e: Error) => void; const promise = new Promise<any>((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 const file = (id = 1, mimeType = 'image/png', fileName = 'sample.png') => ({ id, mimeType, fileName } as any)
 let store: ReturnType<typeof usePreviewStore>

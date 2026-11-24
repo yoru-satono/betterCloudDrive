@@ -19,27 +19,11 @@ function parseEnvFile(filePath: string) {
   )
 }
 
-function loadModuleEnv(workspaceRoot: string) {
-  const files = [
-    'config/env-files/database.env',
-    'config/env-files/storage.env',
-    'config/env-files/security.env',
-    'config/env-files/backend.env',
-    'config/env-files/frontend.env',
-    'config/env-files/observability.env',
-    'config/env-files/mail.env',
-  ]
-
-  return files.reduce<Record<string, string>>((acc, file) => {
-    return { ...acc, ...parseEnvFile(path.join(workspaceRoot, file)) }
-  }, {})
-}
-
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const workspaceRoot = fileURLToPath(new URL('..', import.meta.url))
   const env = {
-    ...loadModuleEnv(workspaceRoot),
-    ...loadEnv(mode, workspaceRoot, ''),
+    ...(command === 'serve' ? parseEnvFile(path.join(workspaceRoot, 'config/env-files/frontend.env')) : {}),
+    ...loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), 'VITE_'),
     ...process.env,
   }
   const devBackendProxyBase = env.VITE_DEV_BACKEND_PROXY_BASE || 'http://localhost:8080'

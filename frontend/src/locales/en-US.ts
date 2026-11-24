@@ -1,4 +1,26 @@
 export default {
+  desktopTransfer: {
+    errors: {
+    resultUncertain: "The operation result is uncertain. Check the server files, then cancel this task and start again. Continuing could create duplicates.",
+    networkRetryExhausted: "Network retries exhausted. Progress is retained; resume after the connection recovers.",
+    uploadSessionUnavailable: "The upload session is unavailable. Cancel this task and select the source again.",
+    diskFull: "The destination disk is full. Free space before resuming.",
+    stateWriteFailed: "Local task state could not be saved. Transfers stopped. Check application-data disk space and permissions, then restart the client.",
+    settingsSaveFailed: "Settings were not saved. Check application-data disk space and permissions, then retry.",
+    http407: "Proxy authentication failed. Check the proxy username and password.",
+    invalidTarget: "The destination contains a symbolic link or junction. Choose a regular directory.",
+    targetExists: "The destination already exists and was not overwritten. Choose another name or location.",
+    sourceChanged: "The source file changed. Select the source again to start a new upload.",
+    remoteChanged: "The remote file changed. No download was published; start a new download.",
+    permissionDenied: "The server denied access. Check space or file permissions before resuming.",
+    invalidRange: "The server returned an invalid byte range. The download stopped.",
+    downloadChecksumMismatch: "Download verification failed. No final file was published.",
+    fileUnavailable: "The file or directory is unavailable. Check permissions and close other programs before resuming.",
+    parentNotReady: "The parent directory is not ready. Resume from the parent directory.",
+    remoteCancelFailed: "The local task was canceled, but remote upload-session cleanup failed.",
+    cancelCleanupFailed: "The task stopped, but temporary-file cleanup failed. Close other programs, then clear finished tasks.",
+    },
+  },
   inspection: {
     "title": "Storage inspections",
     "eyebrow": "STORAGE RELIABILITY",
@@ -282,6 +304,7 @@ export default {
       selected: "Selected",
     },
     onlyofficeeditor: {
+      retry: "Retry",
       onlyofficeFailedToLoad: "OnlyOffice failed to load",
     },
   },

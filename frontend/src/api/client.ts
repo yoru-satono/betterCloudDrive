@@ -1,160 +1,113 @@
-import { i18n as __i18n } from '@/i18n'
-const __t = __i18n.global.t
-import axios, { AxiosError } from 'axios'
+import axios, { AxiosError, CanceledError } from 'axios'
 import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { toast } from 'vue-sonner'
-import { getApiBaseUrl, isDesktopRuntime } from '@/config/runtime'
-import { resolveMessage } from '@/i18n'
+import { i18n, resolveMessage } from '@/i18n'
+import { getApiBaseUrl } from '@/config/runtime'
+import { identityRevision, invalidateIdentity } from '@/platform/identity'
+import { rawInvoke, waitForConnection, isConnectionConfirmed } from '@/platform/desktop'
+import { isQtRuntime, redirectToLogin } from '@/platform/environment'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {
     suppressToast?: boolean
     _retry?: boolean
+    _identityRevision?: number
   }
 }
-
-interface ApiEnvelope {
+interface Envelope {
   code: number
   messageKey: string
   messageParams?: Record<string, string | number | boolean | null>
   data?: unknown
 }
-
-const api = axios.create({
-  baseURL: getApiBaseUrl(),
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' }
-})
-
-api.interceptors.request.use((config) => {
+const current = (revision: number) => {
+  if (revision !== identityRevision()) throw new CanceledError('SESSION_CHANGED')
+}
+const expire = () => {
+  invalidateIdentity('expired')
+  if (isQtRuntime()) void rawInvoke('session:clear').catch(() => undefined)
+  redirectToLogin()
+}
+const api = axios.create({ timeout: 30000, headers: { 'Content-Type': 'application/json' } })
+api.interceptors.request.use(config => {
+  const revision = config._identityRevision ?? identityRevision()
+  config._identityRevision = revision
+  current(revision)
+  if (!isConnectionConfirmed()) throw new CanceledError('CONNECTION_NOT_CONFIRMED')
   config.baseURL = getApiBaseUrl()
   const token = localStorage.getItem('accessToken')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  else delete config.headers.Authorization
   return config
-})
+}, error => { throw error }, { synchronous: true })
 
-let isRefreshing = false
-let failedQueue: Array<{ resolve: (v: string) => void; reject: (e: unknown) => void }> = []
-
-const processQueue = (error: unknown, token: string | null) => {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) reject(error)
-    else resolve(token!)
-  })
-  failedQueue = []
-}
-
-const isApiEnvelope = (data: unknown): data is ApiEnvelope => {
-  return !!data && typeof data === 'object' && 'code' in data && 'messageKey' in data
-}
-
-const shouldSkipEnvelopeCheck = (res: AxiosResponse) => {
-  const responseType = res.config.responseType
-  return responseType === 'blob' || responseType === 'arraybuffer'
-}
-
-const redirectToLogin = () => {
-  localStorage.removeItem('accessToken')
-  localStorage.removeItem('refreshToken')
-  if (isDesktopRuntime()) window.location.hash = '#/login'
-  else window.location.href = '/login'
-}
-
-export async function refreshAccessToken() {
-  if (isRefreshing) {
-    return new Promise<string>((resolve, reject) => {
-      failedQueue.push({ resolve, reject })
-    })
-  }
-
+let refreshing: { revision: number; promise: Promise<string> } | undefined
+export function refreshAccessToken(): Promise<string> {
+  const revision = identityRevision()
+  if (refreshing?.revision === revision) return refreshing.promise
+  const base = getApiBaseUrl()
   const refreshToken = localStorage.getItem('refreshToken')
-  if (!refreshToken) {
-    redirectToLogin()
-    throw new Error(__t('file.client.missingRefreshToken'))
-  }
-
-  isRefreshing = true
-  try {
-    const { data } = await axios.post<ApiEnvelope & { data?: { accessToken: string; refreshToken: string } }>(
-      `${getApiBaseUrl()}/auth/refresh`,
-      { refreshToken }
-    )
-    if (data.code !== 200 || !data.data) throw new Error(resolveMessage(data.messageKey, data.messageParams))
-    const { accessToken, refreshToken: newRefresh } = data.data
-    localStorage.setItem('accessToken', accessToken)
-    localStorage.setItem('refreshToken', newRefresh)
-    processQueue(null, accessToken)
-    return accessToken
-  } catch (e) {
-    processQueue(e, null)
-    redirectToLogin()
-    throw e
-  } finally {
-    isRefreshing = false
-  }
+  const entry = { revision, promise: undefined as unknown as Promise<string> }
+  entry.promise = (async () => {
+    try {
+      await waitForConnection()
+      current(revision)
+      if (!refreshToken) throw new Error(i18n.global.t('file.client.missingRefreshToken'))
+      const { data } = await axios.post<Envelope & { data?: { accessToken: string; refreshToken: string } }>(
+        base + '/auth/refresh', { refreshToken }, { timeout: 30000 })
+      current(revision)
+      if (base !== getApiBaseUrl() || refreshToken !== localStorage.getItem('refreshToken')) throw new CanceledError('SESSION_CHANGED')
+      if (data.code !== 200 || !data.data?.accessToken || !data.data.refreshToken) throw new Error(resolveMessage(data.messageKey, data.messageParams))
+      localStorage.setItem('accessToken', data.data.accessToken)
+      localStorage.setItem('refreshToken', data.data.refreshToken)
+      return data.data.accessToken
+    } catch (error) {
+      current(revision)
+      expire()
+      throw error
+    } finally {
+      if (refreshing === entry) refreshing = undefined
+    }
+  })()
+  refreshing = entry
+  return entry.promise
 }
 
-export async function ensureFreshAccessToken() {
-  const token = localStorage.getItem('accessToken')
-  if (!token) return undefined
-  try {
-    await api.get('/auth/me', { suppressToast: true })
-  } catch (error) {
-    if (isRefreshableUnauthorized(error)) return refreshAccessToken()
-    throw error
+async function handleError(error: AxiosError<Envelope>) {
+  const request = error.config
+  if (request?._identityRevision !== undefined) current(request._identityRevision)
+  if (axios.isCancel(error)) throw error
+  const code = error.response?.data?.code
+  const refreshable = code === 401001 || (error.response?.status === 401 && code === undefined)
+  if (refreshable && request && !request._retry) {
+    request._retry = true
+    await refreshAccessToken()
+    current(request._identityRevision!)
+    return api(request)
   }
+  if (code === 401 || code === 401002 || refreshable) expire()
+  else if (error.response?.status !== 401 && !request?.suppressToast) {
+    const envelope = error.response?.data
+    toast.error(envelope?.messageKey ? resolveMessage(envelope.messageKey, envelope.messageParams) : i18n.global.t('file.client.networkConnectionFailedPleaseTryAgainLater'))
+  }
+  throw error
+}
+api.interceptors.response.use((response: AxiosResponse<Envelope>) => {
+  current(response.config._identityRevision!)
+  if (!['blob', 'arraybuffer'].includes(response.config.responseType || '') && response.data && typeof response.data === 'object' && 'code' in response.data && response.data.code !== 200) {
+    return handleError(new AxiosError(resolveMessage(response.data.messageKey, response.data.messageParams), undefined, response.config as InternalAxiosRequestConfig, response.request, response))
+  }
+  return response
+}, handleError)
+export async function ensureFreshAccessToken() {
+  if (!localStorage.getItem('accessToken')) return undefined
+  const revision = identityRevision()
+  await api.get('/auth/me', { suppressToast: true })
+  current(revision)
   return localStorage.getItem('accessToken') || undefined
 }
-
-const isRefreshableUnauthorized = (error: unknown) => {
-  const axiosError = error as AxiosError<ApiEnvelope>
-  return axiosError.response?.status === 401 || axiosError.response?.data?.code === 401001
+// Revoke only the captured old identity, without touching the next login.
+export async function revokeRemote(base: string, token: string | null) {
+  if (token) await axios.post(base + '/auth/logout', undefined, { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 })
 }
-
-const handleApiError = async (error: AxiosError<ApiEnvelope>) => {
-  const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean } | undefined
-  const code = error.response?.data?.code
-
-  if (code === 401001 && originalRequest && !originalRequest._retry) {
-    if (isRefreshing) {
-      return new Promise<string>((resolve, reject) => {
-        failedQueue.push({ resolve, reject })
-      }).then((token) => {
-        originalRequest.headers.Authorization = `Bearer ${token}`
-        return api(originalRequest)
-      })
-    }
-
-    originalRequest._retry = true
-    try {
-      const accessToken = await refreshAccessToken()
-      originalRequest.headers.Authorization = `Bearer ${accessToken}`
-      return api(originalRequest)
-    } catch (e) {
-      return Promise.reject(e)
-    }
-  }
-
-  if (code === 401 || code === 401002) {
-    redirectToLogin()
-    return Promise.reject(error)
-  }
-
-  const envelope = error.response?.data
-  const msg = envelope ? resolveMessage(envelope.messageKey, envelope.messageParams) : __t('file.client.networkConnectionFailedPleaseTryAgainLater')
-  if (error.response?.status !== 401 && !error.config?.suppressToast) toast.error(msg)
-  return Promise.reject(error)
-}
-
-api.interceptors.response.use(
-  (res) => {
-    if (!shouldSkipEnvelopeCheck(res) && isApiEnvelope(res.data) && res.data.code !== 200) {
-      const error = new AxiosError(resolveMessage(res.data.messageKey, res.data.messageParams), undefined, res.config, res.request, res)
-      return handleApiError(error)
-    }
-    return res
-  },
-  (error: AxiosError<ApiEnvelope>) => handleApiError(error)
-)
-
 export default api

@@ -1,9 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 const mock = vi.hoisted(() => ({ load: vi.fn() }))
-vi.mock('../../web/officeScript', () => ({ loadOfficeScript: mock.load }))
-import Editor from '../../web/components/OnlyOfficeEditor.vue'
-import { invalidateIdentity } from '../../web/identity'
+vi.mock('@/platform/officeScript', () => ({ loadOfficeScript: mock.load }))
+import Editor from '@/components/file/OnlyOfficeEditor.vue'
+import { invalidateIdentity } from '@/platform/identity'
 const config = { documentServerUrl: 'https://office.example', editable: true, config: { document: { key: 'fixture' } } }
 const deferred = () => { let resolve!: (v: any) => void; const promise = new Promise<any>(a => { resolve = a }); return { promise, resolve } }
 beforeEach(() => mock.load.mockReset())

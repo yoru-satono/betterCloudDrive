@@ -1,4 +1,26 @@
 export default {
+  desktopTransfer: {
+    errors: {
+    resultUncertain: "操作结果待确认。请先核对服务端文件，再取消此任务并重新发起；直接继续可能产生重复对象。",
+    networkRetryExhausted: "网络连接失败，有限重试已用尽；断点已保留，可在网络恢复后继续。",
+    uploadSessionUnavailable: "上传会话已失效，无法继续原断点；请取消此任务并重新选择源文件。",
+    diskFull: "磁盘空间不足。释放目标磁盘空间后可继续。",
+    stateWriteFailed: "本地任务状态无法保存，传输已停止。请检查应用数据目录的空间和权限，然后重启客户端。",
+    settingsSaveFailed: "设置未保存，请检查应用数据目录的空间和权限后重试。",
+    http407: "代理认证失败，请检查代理用户名和密码。",
+    invalidTarget: "目标路径包含符号链接或目录联接，请选择普通目录。",
+    targetExists: "目标已存在，未覆盖已有文件。请选择其他位置或名称。",
+    sourceChanged: "源文件已变化，无法继续原上传；请重新选择源文件。",
+    remoteChanged: "远端文件已变化，未发布下载结果；请重新发起下载。",
+    permissionDenied: "服务器拒绝访问，请确认空间或文件权限后再继续。",
+    invalidRange: "服务器返回的断点范围不正确，下载已停止。",
+    downloadChecksumMismatch: "下载校验失败，未发布最终文件。",
+    fileUnavailable: "文件或目录无法访问，可能被占用或没有权限；处理后可继续。",
+    parentNotReady: "上级目录创建失败或尚未就绪，请从上级目录恢复。",
+    remoteCancelFailed: "本地任务已取消，但服务端上传会话清理失败。",
+    cancelCleanupFailed: "任务已停止，但临时分片清理失败；请解除占用后清理已结束任务。",
+    },
+  },
   inspection: {
     "title": "存储巡检",
     "eyebrow": "存储可靠性",
@@ -278,6 +300,7 @@ export default {
       selected: "已选",
     },
     onlyofficeeditor: {
+      retry: "重试",
       onlyofficeFailedToLoad: "OnlyOffice 加载失败",
     },
   },

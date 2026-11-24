@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import { loadOfficeScript } from '../../web/officeScript'
+import { loadOfficeScript } from '@/platform/officeScript'
 it('deduplicates script requests and removes failed tags so retry can succeed', async () => {
   const base = 'https://office.example', first = loadOfficeScript(base), second = loadOfficeScript(base)
   expect(first).toBe(second)

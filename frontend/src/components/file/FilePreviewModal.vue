@@ -85,6 +85,7 @@ async function restoreTeamVersion(versionNumber: number) {
       <div v-else-if="preview.error" class="preview-box__error">{{ preview.error }}</div>
       <OnlyOfficeEditor v-else-if="preview.officeMode" :office-config="preview.officeConfig" />
       <img v-else-if="preview.target?.mimeType?.startsWith('image/')" :src="preview.url" :alt="preview.target.fileName" />
+      <video v-else-if="preview.target?.mimeType?.startsWith('video/')" :src="preview.url" controls preload="metadata" />
       <iframe v-else-if="preview.target?.mimeType === 'application/pdf' || preview.target?.mimeType?.startsWith('text/')" :src="preview.url" />
       <div v-else class="preview-box__error">{{ __t('file.filepreview.thisTypeDoesNotCurrentlySupportInlinePreview') }}</div>
     </div>
@@ -145,7 +146,7 @@ async function restoreTeamVersion(versionNumber: number) {
   height: 100%;
   align-items: stretch;
 }
-.preview-box img {
+.preview-box img, .preview-box video {
   display: block;
   max-width: 100%;
   max-height: 64vh;

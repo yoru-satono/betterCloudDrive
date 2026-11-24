@@ -1,5 +1,5 @@
 import { assertIdentity, identityRevision } from './identity'
-import { queueMessages, transferMessage } from './errors'
+import { queueMessages, transferMessage } from './transferErrors'
 type Payload = Record<string, unknown>
 type Listener = (event: { payload: any }) => void
 const pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>()
@@ -72,13 +72,3 @@ export async function listen<T>(name: string, listener: (event: { payload: T }) 
   listeners.set(name, group)
   return () => { group.delete(listener); if (!group.size) listeners.delete(name) }
 }
-export function getCurrentWindow() {
-  return {
-    minimize: () => invoke('window:minimize'),
-    toggleMaximize: () => invoke('window:maximize'),
-    close: () => invoke('window:close'),
-    startDragging: () => invoke('window:drag'),
-  }
-}
-export const setTheme = (theme: string | null) => invoke('app:theme', { theme })
-export type DesktopWindow = ReturnType<typeof getCurrentWindow>

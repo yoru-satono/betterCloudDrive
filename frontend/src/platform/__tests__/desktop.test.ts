@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import { getCurrentWindow, invoke, listen, setTheme } from '../desktop'
+import { getCurrentWindow, invoke, listen, setTheme, initializeDesktop, waitForConnection } from '../desktop'
 import { isDesktopRuntime } from '@/config/runtime'
 
 it('keeps browser code out of the native bridge', async () => {
@@ -7,6 +7,8 @@ it('keeps browser code out of the native bridge', async () => {
   window.addEventListener('bcd:request', request)
   try {
     expect(isDesktopRuntime()).toBe(false)
+    await initializeDesktop('/api/v1')
+    await waitForConnection()
     await expect(invoke('get_transfer_queue')).rejects.toThrow('DESKTOP_UNAVAILABLE')
     await expect(listen('transfer:queue-updated', () => {})).rejects.toThrow('DESKTOP_UNAVAILABLE')
     await expect(getCurrentWindow().close()).rejects.toThrow('DESKTOP_UNAVAILABLE')

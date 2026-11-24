@@ -433,7 +433,18 @@ class Bridge(QObject):
             self.deliver(identity, None, str(error) if isinstance(error, PocError) else "INVALID_COMMAND")
 
 
-def inject_channel(page):
+def inject_channel(page, origin, api_base, web_base):
+    # Public startup defaults only. Native authorization stays in the isolated channel.
+    config = json.dumps({'kind': 'qt', 'apiBaseUrl': api_base, 'webBaseUrl': web_base})
+    bootstrap = QWebEngineScript()
+    bootstrap.setName("bcd-runtime")
+    bootstrap.setSourceCode("if (window === window.top && location.origin === " + json.dumps(origin)
+                            + ") Object.defineProperty(window, '__BCD_RUNTIME__', {value:Object.freeze("
+                            + config + "),writable:false,configurable:false});")
+    bootstrap.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+    bootstrap.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+    bootstrap.setRunsOnSubFrames(False)
+    page.scripts().insert(bootstrap)
     resource = QFile(":/qtwebchannel/qwebchannel.js")
     if not resource.open(QIODevice.OpenModeFlag.ReadOnly):
         raise PocError("WEBCHANNEL_RESOURCE_MISSING")
@@ -465,13 +476,17 @@ class StartupError(Exception):
 
 
 def prepare_host(args, root):
-    web = args.web_root or root / "web-dist"
+    web = args.web_root or root.parent / "frontend" / "dist"
     if not (web / "index.html").is_file():
         raise StartupError("Desktop pages are missing. Run uv run python build.py in desktop first.")
     try:
         api_url(args.api_base)
+        web_base = urlsplit(getattr(args, 'web_base', 'http://127.0.0.1:3000'))
+        if (web_base.scheme not in ('http', 'https') or not web_base.hostname
+                or web_base.username or web_base.password or web_base.query or web_base.fragment):
+            raise PocError('INVALID_WEB_BASE')
     except PocError:
-        raise StartupError("The API address is invalid. Use an HTTP(S) address ending in /api/v1.") from None
+        raise StartupError("The API or Web address is invalid. Use HTTP(S); the API path must end in /api/v1.") from None
     if not 1 <= args.port <= 65535 or (args.debug_port is not None and not 1 <= args.debug_port <= 65535):
         raise StartupError("The desktop and debug ports must be between 1 and 65535.")
     profile = (args.profile or Path(os.environ.get("LOCALAPPDATA", str(Path.home() / ".local/share"))) / "BetterCloudDriveQt").resolve()
@@ -517,7 +532,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--profile", type=Path, help="Independent Qt profile; defaults to the user application data directory")
     parser.add_argument("--web-root", type=Path)
-    parser.add_argument("--api-base", default="http://127.0.0.1:8080/api/v1")
+    parser.add_argument("--api-base", default=os.environ.get("BCD_DESKTOP_API_BASE", "http://127.0.0.1:8080/api/v1"))
+    parser.add_argument("--web-base", default=os.environ.get("BCD_DESKTOP_WEB_BASE", "http://127.0.0.1:3000"))
     parser.add_argument("--port", type=int, default=5184)
     parser.add_argument("--debug-port", type=int, help="Opt-in loopback CDP for local validation only")
     args = parser.parse_args()
@@ -566,7 +582,7 @@ def main():
         channel = QWebChannel(page)
         channel.registerObject("bridge", bridge)
         page.setWebChannel(channel, QWebEngineScript.ScriptWorldId.ApplicationWorld)
-        inject_channel(page)
+        inject_channel(page, origin, args.api_base, args.web_base)
         view.setUrl(QUrl(origin + "/"))
         window.show()
         return app.exec()

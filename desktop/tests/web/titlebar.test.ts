@@ -5,9 +5,9 @@ const settings = vi.hoisted(() => ({
   getApiBaseUrl: () => 'https://old.example/api/v1', getWebBaseUrl: () => 'https://web.example',
   setStoredApiBaseUrl: vi.fn(), setStoredWebBaseUrl: vi.fn(),
 }))
-vi.mock('../../web/runtime', () => settings)
-vi.mock('../../web/auth', () => ({ useAuthStore: () => ({ user: null }) }))
-vi.mock('../../web/bridge', () => ({ getCurrentWindow: () => ({}) }))
+vi.mock('@/config/runtime', () => settings)
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: null }) }))
+vi.mock('@/platform/desktop', () => ({ getCurrentWindow: () => ({}) }))
 import DesktopTitleBar from '../../../frontend/src/components/layout/DesktopTitleBar.vue'
 it.each(['success', 'failure'])('keeps settings open until native save %s and preserves failed input', async outcome => {
   let resolve!: () => void, reject!: (error: Error) => void

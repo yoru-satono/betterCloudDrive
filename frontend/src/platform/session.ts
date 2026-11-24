@@ -1,6 +1,7 @@
-import { invoke, rawInvoke, listen } from './bridge'
-import { getApiBaseUrl } from './runtime'
-import { refreshAccessToken } from './client'
+import { isQtRuntime, redirectToLogin } from './environment'
+import { invoke, rawInvoke, listen } from './desktop'
+import { getApiBaseUrl } from '@/config/runtime'
+import { refreshAccessToken } from '@/api/client'
 import { assertIdentity, identityRevision, invalidateIdentity } from './identity'
 
 let synced: { revision: number; token: string; base: string } | undefined
@@ -8,6 +9,7 @@ let pending: { key: string; promise: Promise<void> } | undefined
 let refresh: { revision: number; promise: Promise<void> } | undefined
 window.addEventListener('bcd:identity-invalidated', () => { synced = undefined; pending = undefined })
 export function synchronizeSession(): Promise<void> {
+  if (!isQtRuntime()) return Promise.resolve()
   const revision = identityRevision()
   const token = localStorage.getItem('accessToken') || ''
   const base = getApiBaseUrl()
@@ -36,9 +38,9 @@ export function synchronizeSession(): Promise<void> {
 }
 export function clearSession(reason = 'logout') {
   invalidateIdentity(reason)
-  return rawInvoke('session:clear')
+  return isQtRuntime() ? rawInvoke('session:clear') : Promise.resolve()
 }
-void listen('session:refresh-required', () => {
+if (isQtRuntime()) void listen('session:refresh-required', () => {
   const revision = identityRevision()
   if (refresh?.revision === revision) return
   const entry = { revision, promise: undefined as unknown as Promise<void> }
@@ -50,7 +52,7 @@ void listen('session:refresh-required', () => {
   })().catch(async () => {
     if (revision === identityRevision()) {
       const clearing = clearSession('sync-failed')
-      window.location.hash = '#/login'
+      redirectToLogin()
       await clearing.catch(() => undefined)
     }
   }).finally(() => { if (refresh === entry) refresh = undefined })

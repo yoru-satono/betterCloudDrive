@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { configureConnection, invoke } from '../../web/bridge'
+import { configureConnection, invoke } from '@/platform/qt'
 
 it('recovers a failed native connection gate and keeps revocation/window controls available', async () => {
   window.dispatchEvent(new Event('bcd:ready'))
@@ -51,7 +51,7 @@ it('does not dispatch an identity command invalidated while waiting for connecti
   } finally { window.removeEventListener('bcd:request', capture) }
 })
 it('drops a transfer response delivered after logout', async () => {
-  const { invalidateIdentity } = await import('../../web/identity')
+  const { invalidateIdentity } = await import('@/platform/identity')
   const requests: any[] = []
   const capture = ((event: CustomEvent<string>) => requests.push(JSON.parse(event.detail))) as EventListener
   window.addEventListener('bcd:request', capture)

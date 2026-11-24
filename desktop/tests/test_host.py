@@ -285,3 +285,42 @@ def test_synchronous_session_clear_revokes_players_after_generation_changes(syst
         bridge.workers.shutdown(wait=True)
         bridge.gateway.close()
         window.close()
+
+
+def test_runtime_defaults_are_public_main_frame_only_and_channel_stays_isolated(qt):
+    from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineScript
+    from app import inject_channel
+    page = QWebEnginePage()
+    inject_channel(page, 'http://127.0.0.1:5194', 'https://api.example/api/v1', 'https://web.example')
+    runtimes = page.scripts().find('bcd-runtime')
+    channels = page.scripts().find('bcd-private-channel')
+    assert len(runtimes) == len(channels) == 1
+    runtime, channel = runtimes[0], channels[0]
+    assert runtime.worldId() == QWebEngineScript.ScriptWorldId.MainWorld
+    assert channel.worldId() == QWebEngineScript.ScriptWorldId.ApplicationWorld
+    assert not runtime.runsOnSubFrames() and not channel.runsOnSubFrames()
+    assert runtime.injectionPoint() == QWebEngineScript.InjectionPoint.DocumentCreation
+    source = runtime.sourceCode()
+    assert 'window === window.top' in source and 'location.origin === "http://127.0.0.1:5194"' in source
+    assert 'https://api.example/api/v1' in source and 'https://web.example' in source
+    assert 'QWebChannel' not in source and 'token' not in source.lower()
+    assert 'QWebChannel' in channel.sourceCode()
+
+
+def test_default_host_uses_shared_frontend_artifact(tmp_path, qt):
+    from types import SimpleNamespace
+    from app import prepare_host
+    root = tmp_path / 'desktop'; root.mkdir()
+    web = tmp_path / 'frontend/dist'; web.mkdir(parents=True)
+    (web / 'index.html').write_text('shared fixture')
+    args = SimpleNamespace(web_root=None, profile=tmp_path/'profile', api_base='http://127.0.0.1:8080/api/v1',
+                           web_base='https://web.example', port=0, debug_port=None)
+    from app import StartupError
+    with pytest.raises(StartupError, match='ports'):
+        prepare_host(args, root)
+    import socket
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0)); args.port = probe.getsockname()[1]
+    profile, lock, server = prepare_host(args, root)
+    try: assert server.root == web.resolve()
+    finally: server.server_close(); lock.unlock()
