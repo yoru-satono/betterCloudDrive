@@ -54,7 +54,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 3.0
 
 $AllowedModules = [System.Collections.Generic.HashSet[string]]::new(
-    [string[]]@("all", "backend", "integration", "blackbox", "security", "web", "tauri", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience", "warehouse", "inspection"),
+    [string[]]@("all", "backend", "integration", "blackbox", "security", "web", "tauri", "qt", "mobile-unit", "mobile-android", "office", "webdav", "observability", "resilience", "warehouse", "inspection"),
     [System.StringComparer]::OrdinalIgnoreCase
 )
 $SelectedModules = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
@@ -90,6 +90,7 @@ $RunBlackbox = $RunAll -or $SelectedModules.Contains("blackbox")
 $RunSecurity = $RunAll -or $SelectedModules.Contains("security")
 $RunWeb = $RunAll -or $SelectedModules.Contains("web")
 $RunTauri = ($RunAll -or $SelectedModules.Contains("tauri")) -and -not $SkipTauri
+$RunQt = $SelectedModules.Contains("qt")
 $RunMobileUnit = $RunAll -or $SelectedModules.Contains("mobile-unit")
 $RunMobileAndroid = ($RunAll -or $SelectedModules.Contains("mobile-android")) -and -not $SkipAndroid
 $RunOffice = ($RunAll -or $SelectedModules.Contains("office")) -and -not $SkipOnlyOffice
@@ -452,9 +453,9 @@ try {
         Assert-CommandAvailable "bash" "bash is required by KMP modules on non-Windows hosts."
     }
 
-    Invoke-Step "Prepare env files" {
+    if (-not ($RunQt -and $SelectedModules.Count -eq 1)) { Invoke-Step "Prepare env files" {
         Initialize-EnvFiles
-    }
+    } }
 
     if ($NeedsDocker) { Invoke-Step "Start Docker stack" {
         Invoke-WithEnv @{ TRACING_SAMPLING_PROBABILITY = "1.0" } {
@@ -572,6 +573,21 @@ try {
                 Invoke-WithEnv @{ E2E_ONLYOFFICE = "1" } {
                     Invoke-External "node" @("scripts/run-playwright-docker.mjs", "--project=office")
                 }
+            }
+        }
+    }
+
+    if ($RunQt) {
+        Invoke-Step "Qt desktop tests and frontend build" {
+            Assert-CommandAvailable "uv" "uv is required by the qt module."
+            Invoke-InDirectory "desktop" {
+                Invoke-External "uv" @("sync", "--locked", "--dev")
+                Invoke-External "uv" @("run", "--locked", "pytest", "-q")
+                Invoke-External "uv" @("run", "--locked", "python", "build.py")
+            }
+            Invoke-InDirectory "frontend" {
+                Invoke-External "pnpm" @("exec", "vue-tsc", "--noEmit", "-p", "../desktop/tsconfig.json")
+                Invoke-External "pnpm" @("exec", "vitest", "run", "--config", "../desktop/vitest.config.mjs")
             }
         }
     }

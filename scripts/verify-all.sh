@@ -10,7 +10,7 @@ Requires Bash 3.2 or newer.
 
 Options:
   -m, --module NAME          Module to run; repeatable (default: all)
-                            all, backend, integration, blackbox, security, web, tauri,
+                            all, backend, integration, blackbox, security, web, tauri, qt,
                             mobile-unit, mobile-android, office, webdav, observability, resilience, warehouse, inspection
       --skip-docker-build   Start Compose without rebuilding images
       --skip-tauri          Skip Tauri (not allowed with --module all)
@@ -29,7 +29,7 @@ die() {
 }
 
 readonly -a valid_modules=(
-  all backend integration blackbox security web tauri
+  all backend integration blackbox security web tauri qt
   mobile-unit mobile-android office webdav observability resilience warehouse inspection
 )
 
@@ -120,6 +120,7 @@ module_enabled() {
   has_module all || has_module "$module" || return 1
   case "$module" in
     tauri) (( ! skip_tauri )) ;;
+    qt) has_module qt ;;
     mobile-android) (( ! skip_android )) ;;
     office) (( ! skip_onlyoffice )) ;;
     *) return 0 ;;
@@ -325,6 +326,15 @@ run_pytest() {
 
 backend_tests() {
   (cd backend && mvn test -Dsurefire.reportNameSuffix=backend)
+}
+
+qt_tests() {
+  command -v uv >/dev/null 2>&1 || die "uv is required by the qt module"
+  (cd desktop && uv sync --locked --dev &&
+    uv run --locked pytest -q &&
+    uv run --locked python build.py) &&
+    (cd frontend && pnpm exec vue-tsc --noEmit -p ../desktop/tsconfig.json &&
+      pnpm exec vitest run --config ../desktop/vitest.config.mjs)
 }
 
 integration_tests() {
@@ -542,7 +552,9 @@ selected_display=${selected_display//,/, }
 printf 'Selected modules: %s\n' "$selected_display"
 printf 'Test run ID: %s\n' "$run_id"
 
-run_step "Prepare env files" prepare_env || exit $?
+if ! { has_module qt && (( ${#selected_modules[@]} == 1 )); }; then
+  run_step "Prepare env files" prepare_env || exit $?
+fi
 if (( needs_docker )); then
   run_step "Start Docker stack" start_stack || exit $?
   run_step "Wait for services" wait_services || exit $?
@@ -573,6 +585,9 @@ if module_enabled web; then
 fi
 if module_enabled office; then
   run_step "OnlyOffice E2E tests" office_tests || exit $?
+fi
+if module_enabled qt; then
+  run_step "Qt desktop tests and frontend build" qt_tests || exit $?
 fi
 if module_enabled tauri; then
   run_step "Tauri Rust unit tests" tauri_unit_tests || exit $?

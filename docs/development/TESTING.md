@@ -41,6 +41,8 @@ bash scripts/verify-all.sh
 
 `all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability、resilience、warehouse 和 inspection。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。KMP 移动端验证使用 `mobile-unit` 和 `mobile-android`。
 
+`qt` 为显式选择的 Windows Qt 开发验证入口，暂不并入 `all`。运行 `./scripts/verify-all.ps1 -Module qt` 或 `bash scripts/verify-all.sh --module qt`，执行锁定依赖安装、Python 状态机与真实媒体解码测试、桌面专用 Vitest（连接确认/失败、会话并发及迟到响应、标题栏保存）、桌面 Vue 构建及类型检查；该模块不启动 Docker，也不读取或生成后端 env 文件。需要已有前端 pnpm 依赖和可用 Qt 图形/音频运行环境。真实 API、Vue 窗口和 OnlyOffice 验收另见 [Qt 桌面开发](../../desktop/README.md)，运行前须确保 Linux 虚拟机未与本机 Docker 同时运行。M1 可用 `uv run --locked python m1_check.py --offscreen` 在独立 Profile/端口验证真实 Qt 会话；原生对话框、焦点和闪烁必须另做可见窗口交互验收，不能由该结果替代。 M2 的文件级调度、重试、目录依赖、限速、路径与磁盘故障纳入同一 `qt` 自动回归；真实进程强制结束、后端响应丢失、代理认证及设置页面重启验收另执行 `cd desktop && uv run --locked python m2_check.py`（需要已运行的测试后端和 OpenSSL，测试不修改系统代理/证书配置）。
+
 `inspection` 复用基础栈，不需要数仓容器；运行巡检、容量事务、旧 Redis 增量切换和对象存储的单元/隔离集成测试，再执行管理员真实 API 验收。已有数据库必须先按[存储巡检运维](../operations/STORAGE_INSPECTIONS.md)完成离线计账切换，验证脚本不会自动宣布旧写入者已停止。运行 `./scripts/verify-all.ps1 -Module inspection` 或 `bash scripts/verify-all.sh --module inspection`。普通 `blackbox` 排除 `inspection` 标记；安全路由拒绝用例同时属于 `security`。
 
 组合选择 `inspection,web` 或 `inspection,tauri` 时设置 `E2E_INSPECTION=1`，启用共享巡检页面的浏览器或原生桌面验收。报告位于 `test-results/inspection/`，后端隔离测试报告仍在各 Maven 模块 `target/` 下。真实 API 用例只修改本次用户的容量及差异证据，用可控时间戳覆盖 HTTP 修复链路；两次观测的真实间隔规则由注入时钟的集成测试验证。
