@@ -33,7 +33,8 @@ def digest(path):
 
 
 class Validation(PreviewChecks):
-    def __init__(self, base, office, native_only=False, port=5194, debug_port=9226, offscreen=False):
+    def __init__(self, base, office, native_only=False, port=5194, debug_port=9226, offscreen=False,
+                 python_executable=None, web_root=None, process_env=None):
         self.id = secrets.token_hex(5)
         self.out = ROOT.parent / "test-results/desktop" / self.id
         self.out.mkdir(parents=True)
@@ -41,6 +42,7 @@ class Validation(PreviewChecks):
         self.office_enabled = office
         self.native_only = native_only
         self.port, self.debug_port, self.offscreen = port, debug_port, offscreen
+        self.python_executable, self.web_root, self.process_env = python_executable, web_root, process_env
         self.engine = None
         self.process = self.page = None
         self.checks, self.metrics, self.secrets = [], {}, []
@@ -199,11 +201,15 @@ class Validation(PreviewChecks):
                     probe.bind(("127.0.0.1", port))
                 except OSError:
                     raise DesktopError("TEST_PORT_UNAVAILABLE") from None
-        env = {**os.environ, "PYTHONUTF8": "1", "QT_MEDIA_BACKEND": "ffmpeg"}
+        env = {**(getattr(self, 'process_env', None) or os.environ), "PYTHONUTF8": "1", "QT_MEDIA_BACKEND": "ffmpeg"}
         if self.offscreen:
             env.update(QT_QPA_PLATFORM="offscreen", QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu")
-        self.process = subprocess.Popen([sys.executable, str(ROOT / "app.py"), "--profile", str(self.out / "profile"),
-            "--api-base", self.api.base, "--port", str(self.port), "--debug-port", str(self.debug_port)],
+        command = [str(getattr(self, 'python_executable', None) or sys.executable), str(ROOT / "app.py"),
+            "--profile", str(self.out / "profile"), "--api-base", self.api.base,
+            "--port", str(self.port), "--debug-port", str(self.debug_port)]
+        if getattr(self, 'web_root', None):
+            command += ['--web-root', str(self.web_root)]
+        self.process = subprocess.Popen(command,
             cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.page = Cdp(self.debug_port, expected_origin=f"http://127.0.0.1:{self.port}")
         self.page.wait("!!document.querySelector('.login-page__form input')" if expect_login else
@@ -389,7 +395,10 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5194)
     parser.add_argument("--debug-port", type=int, default=9226)
     parser.add_argument("--offscreen", action="store_true", help="Run the real Qt page without a visible desktop window; does not replace native interaction acceptance")
+    parser.add_argument("--python-executable", help="Optional interpreter for the isolated application subprocess")
+    parser.add_argument("--web-root", type=Path, help="Optional prebuilt desktop web resources for the application subprocess")
     args = parser.parse_args()
     if args.native_only and args.office:
         parser.error("--native-only cannot be combined with --office")
-    sys.exit(Validation(args.api_base, args.office, args.native_only, args.port, args.debug_port, args.offscreen).run())
+    sys.exit(Validation(args.api_base, args.office, args.native_only, args.port, args.debug_port, args.offscreen,
+                        python_executable=args.python_executable, web_root=args.web_root).run())
