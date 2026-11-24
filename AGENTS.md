@@ -19,7 +19,7 @@ BetterCloudDrive 是同时提供个人空间和团队空间的云盘系统，包
 - `backend/`：Spring Boot/Maven 模块化单体，负责认证、权限、元数据、传输、分享、版本、通知和异步任务。
 - `backend-test/`：基于 pytest/httpx 的真实 API 黑盒及 security、WebDAV、OnlyOffice、observability、resilience 专项验收。
 - `frontend/`：Vue Web 前端及共享页面，统一使用 pnpm；共享页面只依赖中性桌面接口。
-- `desktop/`：PySide6 + Qt WebEngine 桌面客户端、独立 Vue 构建、原生传输和播放器。
+- `desktop/`：PySide6 + Qt WebEngine 桌面客户端、原生传输和播放器；加载 frontend 的共享构建产物。
 - `mobile/`：Kotlin Multiplatform 移动端。`shared` 承载共享业务与 Compose UI，`androidApp` 是当前 Android 应用壳；iOS 当前保持共享源码元数据可编译。
 - `observability/`：Prometheus、Loki、Alloy、Alertmanager 和 Grafana 配置。
 - `config/env-files/`：Compose 服务环境变量模板与本地配置。

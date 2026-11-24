@@ -1,8 +1,8 @@
 # Qt 桌面客户端
 
-当前交付目标为 **Windows 11 x64 开发运行版本，通过 uv 启动**。复用现有 Vue 页面，PySide6 承接窗口、原生传输和独立播放器。后端、Web 和 KMP 移动端保持既有协议与行为；共享页面通过中性桌面接口接入原生能力，标题栏等待异步配置保存。
+当前交付目标为 **Windows 11 x64 开发运行版本，通过 uv 启动**。复用现有 Vue 页面，PySide6 承接窗口、原生传输和独立播放器。Web 与 Qt 共用 `frontend/dist`，认证、HTTP、预览和 OnlyOffice 各保留一份实现；原生能力由平台接口按需加载。后端和 KMP 移动端接口不变，标题栏等待异步配置保存。
 
-**2026-11-24：Windows 开发交付与 Tauri 退役收尾完成。** 功能覆盖、130 项 Python/34 项桌面前端回归及两个统一入口的证据见[开发验收及功能矩阵](../docs/development/QT_DESKTOP_ACCEPTANCE.md)。本机独立环境和自动验收通过，人工试用观察、干净 Windows 系统、安装分发及完整 Linux/macOS 尚未验收；迁移前原型的打包结果不代表当前客户端已分发。
+**2026-11-24：Windows 开发交付与 Tauri 退役收尾完成。** 功能覆盖、133 项 Python/36 项桌面适配回归、220 项 Web 回归及两个统一入口的证据见[开发验收及功能矩阵](../docs/development/QT_DESKTOP_ACCEPTANCE.md)。本机独立环境和自动验收通过，人工试用观察、干净 Windows 系统、安装分发及完整 Linux/macOS 尚未验收；迁移前原型的打包结果不代表当前客户端已分发。
 
 ## 环境与分步启动
 
@@ -13,15 +13,17 @@
 ```powershell
 cd frontend
 pnpm install --frozen-lockfile
+pnpm run build
 cd ../desktop
 uv sync --locked
-uv run --locked python build.py
 uv run --locked python app.py
 ```
 
-日常网页输出为 `desktop/web-dist/`，启动时读取该目录。日常客户端运行时不要重建它正在使用的网页；下面的统一验证使用独立输出，不覆盖该目录。默认应用来源 `http://127.0.0.1:5184`，后端 `http://127.0.0.1:8080/api/v1`，Web 分享地址 `http://127.0.0.1:3000`。脚本不自动启动后端或 Docker。
+Web 与 Qt 共用的日常网页输出为 `frontend/dist/`，启动时读取该目录。日常客户端运行时不要重建它正在使用的网页；下面的统一验证使用独立输出，不覆盖该目录。默认应用来源 `http://127.0.0.1:5184`，后端 `http://127.0.0.1:8080/api/v1`，Web 分享地址 `http://127.0.0.1:3000`。脚本不自动启动后端或 Docker。
 
-构建时可用 `BCD_DESKTOP_API_BASE`、`BCD_DESKTOP_WEB_BASE` 指定初始地址；登录前也可在标题栏配置 API 和分享地址。API 仅接受 HTTP(S)、无嵌入凭据/查询/片段且路径以 `/api/v1` 结尾。保存等待原生确认，成功才关闭设置框；失败保留输入。切服先暂停任务并清除身份，不恢复旧服务器令牌。
+启动时可用 `--api-base`、`--web-base` 指定初始地址，未提供参数时读取 `BCD_DESKTOP_API_BASE`、`BCD_DESKTOP_WEB_BASE`，再回退到上述回环默认值；已保存的连接设置优先；登录前也可在标题栏配置 API 和分享地址。API 仅接受 HTTP(S)、无嵌入凭据/查询/片段且路径以 `/api/v1` 结尾。保存等待原生确认，成功才关闭设置框；失败保留输入。切服先暂停任务并清除身份，不恢复旧服务器令牌。
+
+普通 Web 保留已保存地址、`VITE_API_BASE_URL`/`VITE_WEB_BASE_URL` 及同源默认值的规则。Qt 忽略 Web 构建默认地址，避免同一份产物带入部署服务器配置。已有当前版本的 `frontend/dist` 时可直接启动，不需要再次构建。`build.py` 是 `pnpm run build` 的薄包装，可在桌面目录使用；不再存在桌面入口别名。
 
 ## Profile 与启动参数
 
@@ -33,8 +35,9 @@ uv run --locked python app.py
 | --- | --- |
 | `--profile <目录>` | 指定空目录或已标记的本程序目录；同一 Profile 有排他锁 |
 | `--port <端口>` | 修改默认 5184；占用时报错，不关闭其他客户端 |
-| `--api-base <地址>` | 指定原生初始地址；网页保存的连接配置在启动时同步原生层 |
-| `--web-root <目录>` | 指定预先构建的桌面资源；默认 `web-dist` |
+| `--api-base <地址>` | 指定 API 初始地址；已保存的连接配置优先并同步原生层 |
+| `--web-base <地址>` | 指定分享 Web 初始地址；已保存的连接配置优先 |
+| `--web-root <目录>` | 指定预先构建的共享资源；默认仓库 `frontend/dist` |
 | `--debug-port <端口>` | 显式开启回环 CDP，仅供开发验收；普通启动不开启 |
 
 桥接使用隔离 world、可信主页面和命令白名单，外部网页及 OnlyOffice/PDF 子帧没有原生命令权限。页面重载、渲染进程结束、退出和关闭窗口均由原生层暂停任务并清除内存身份。
@@ -59,7 +62,7 @@ uv run --locked python app.py
 bash scripts/verify-all.sh --module qt
 ```
 
-两个入口共同调用跨平台的 `verify.py`，锁定同步开发依赖、执行 Python 状态机/真实媒体解码回归、桌面 Vitest、类型检查及网页构建。单独选择 `qt` 时不启动 Docker、不读取或生成后端配置，也不运行真实后端或原生交互；`all` 已纳入 `qt`，也可单独选择。
+两个入口共同调用跨平台的 `verify.py`，锁定同步开发依赖、执行 Python 状态机/真实媒体解码回归、桌面适配及公共 Web Vitest、类型检查及共享网页构建。单独选择 `qt` 时不启动 Docker、不读取或生成后端配置，也不运行真实后端或原生交互；`all` 已纳入 `qt`，也可单独选择。
 
 标准库引导先同步开发依赖，再在项目解释器中执行通用工作进程；进程归属使用仅开发依赖 psutil。每轮生成带归属标记的 `test-results/desktop/<id>/work`，收纳 TEMP/TMP、pytest 夹具、缓存及构建输出。子进程清除继承的 Python/Qt/媒体路径覆盖，父环境不变；结束核对所属子进程、日常网页指纹并清理本轮资源，报告保留为同目录 `results.json`；平台专属用例单列“不适用”，适用测试意外跳过和缺少系统依赖均失败。Linux/macOS 通用入口已适配，本轮未在这些系统实测，不宣布完整客户端支持。必需步骤、资源核对或清理失败均返回非零。
 
@@ -67,13 +70,14 @@ bash scripts/verify-all.sh --module qt
 
 ## 真实后端与交互验收
 
-按修改范围选择专项；它们不会自动启动后端、修改限流或覆盖 env。启动 Docker 前确认 Linux 虚拟机未运行，结束恢复服务原状态。不要在现有客户端使用网页时重建同一份资源。
+按修改范围选择专项；它们不会自动启动后端、修改限流或覆盖 env。批量 Web/Office 账号验收沿用统一验证脚本的功能测试限流：DEFAULT、AUTH、UPLOAD、UPLOAD_CHUNK 四类临时设为 10000 次/1 秒，运行者必须在 finally 路径恢复原值和服务状态；默认认证 30 次/60 秒不适合此批量账号场景。启动 Docker 前确认 Linux 虚拟机未运行，结束恢复服务原状态。不要在现有客户端使用网页时重建同一份资源。
 
 | 入口（在 `desktop` 下通过 `uv run --locked python` 执行） | 范围 |
 | --- | --- |
 | `validate.py --native-only` / `validate.py --office` | 原生传输基础；后者包含 Vue、预览及真实 Office 保存，需要可见窗口 |
 | `m1_check.py --offscreen` | 后台 Qt/Vue 会话、连接确认、刷新、切服和退出 |
 | `m2_check.py` | 后台强制结束恢复、故障/代理/权限、真实设置保存；HTTPS 代理夹具需 OpenSSL（Windows 可用 Git 自带版本） |
+| `tests/web_cutover.py --office` | 同一份产物的 Web 9 项、Qt M1、预览/Office 和短 MP4/WebM；需后端、OnlyOffice 及预先准备的功能测试限流 |
 | `m3_check.py --suite functional` / `--suite access` | 后台预览及媒体授权边界 |
 | `m3_check.py --suite playback` / `--suite interaction` | 可见播放性能或人工控件检查，需空闲桌面 |
 | `native_check.py --m1` / `--pickers-only` / `--window-only` | 原生对话框或窗口手势人工验收，不能由后台测试替代 |

@@ -42,9 +42,9 @@ bash scripts/verify-all.sh
 
 `all` 选择 backend、integration、blackbox、security、web、qt、KMP 移动端、office、webdav、observability、resilience、warehouse 和 inspection。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、rclone、Android SDK、adb 和可用设备。KMP 移动端验证使用 `mobile-unit` 和 `mobile-android`。
 
-`qt` 为跨平台桌面开发验证入口，已并入 `all`，仍可单独执行。PowerShell `./scripts/verify-all.ps1 -Module qt` 和 Bash `bash scripts/verify-all.sh --module qt` 共同调用 `desktop/verify.py`。它通过 uv 锁定同步开发依赖、运行 Python 状态机及真实 MP4/WebM 解码/跳转、桌面 Vitest、类型检查和隔离网页构建。需要已有 Node/pnpm 前端依赖；不启动 Docker，不读取或生成后端 env，不做真实后端或原生交互验收。
+`qt` 为跨平台桌面开发验证入口，已并入 `all`，仍可单独执行。PowerShell `./scripts/verify-all.ps1 -Module qt` 和 Bash `bash scripts/verify-all.sh --module qt` 共同调用 `desktop/verify.py`。它通过 uv 锁定同步开发依赖、运行 Python 状态机及真实 MP4/WebM 解码/跳转、桌面适配 Vitest、公共 Web 会话/平台/预览 Vitest、类型检查和隔离网页构建。需要已有 Node/pnpm 前端依赖；不启动 Docker，不读取或生成后端 env，不做真实后端或原生交互验收。
 
-验证用 Python 3.12.13 标准库启动，先锁定同步开发依赖，再用项目解释器运行工作进程；psutil 7.2.2 仅用于开发期进程归属与指标。入口按系统选择工具路径、临时目录及进程启动方式，为每轮生成标记匹配的独立目录。TEMP/TMP、pytest 夹具/缓存、uv 缓存和构建输出放在该轮 `work` 内；子进程清除继承的 Python/Qt/媒体路径覆盖，不改变父环境。结束核对所属子进程退出及日常 `desktop/web-dist` 的内容/时间戳指纹，然后清理该轮资源；非敏感报告保留在 `test-results/desktop/<id>/results.json`。平台专属检查单列“不适用”，与通过分开；适用测试意外跳过、缺少图形/音频运行库、必需步骤、资源核对或清理失败均返回非零。Windows 已实测，Linux/macOS 尚未在本轮实测。`build.py` 默认日常输出不变，可选 `--out-dir` 仅供受控运行目录使用，不接受未标记目录、运行目录根、越界或符号链接/目录联接路径。
+验证用 Python 3.12.13 标准库启动，先锁定同步开发依赖，再用项目解释器运行工作进程；psutil 7.2.2 仅用于开发期进程归属与指标。入口按系统选择工具路径、临时目录及进程启动方式，为每轮生成标记匹配的独立目录。TEMP/TMP、pytest 夹具/缓存、uv 缓存和构建输出放在该轮 `work` 内；子进程清除继承的 Python/Qt/媒体路径覆盖，不改变父环境。结束核对所属子进程退出及日常 `frontend/dist` 的内容/时间戳指纹，然后清理该轮资源；非敏感报告保留在 `test-results/desktop/<id>/results.json`。平台专属检查单列“不适用”，与通过分开；适用测试意外跳过、缺少图形/音频运行库、必需步骤、资源核对或清理失败均返回非零。Windows 已实测，Linux/macOS 尚未在本轮实测。`build.py` 默认输出为 Web 与 Qt 共用的 `frontend/dist`，可选 `--out-dir` 仅供受控运行目录使用，不接受未标记目录、运行目录根、越界或符号链接/目录联接路径。
 
 真实 API、Vue、强制结束恢复、代理认证、OnlyOffice、原生选择/窗口手势及媒体性能另按 [Qt 桌面开发](../../desktop/README.md)选择专项；功能与历史证据见[Qt 验收矩阵](QT_DESKTOP_ACCEPTANCE.md)。运行本机 Docker 前须确认 Linux 虚拟机停止。后台 `offscreen`、单元测试和入口准备不能代替人工交互、M5 观察、干净系统或发行验收。
 

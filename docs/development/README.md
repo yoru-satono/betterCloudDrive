@@ -7,7 +7,7 @@
 - [开发工作流](WORKFLOW.md)：事实来源、作用域、跨模块实现顺序、验证和完成定义。
 - [后端开发](BACKEND.md)：七个 Maven 模块、运行、数据库、事务、调试和验证。
 - [Web 开发](WEB.md)：Vue 目录、数据流、API client、本地化、主题和 Playwright。
-- [Qt 桌面开发](../../desktop/README.md)：Windows 11 x64、uv 启动、独立 Vue 构建、传输与原生媒体验收。
+- [Qt 桌面开发](../../desktop/README.md)：Windows 11 x64、uv 启动、Web/Qt 共享 Vue 产物、传输与原生媒体验收。
 - [Qt 功能矩阵与开发验收](QT_DESKTOP_ACCEPTANCE.md)：M1–M6 证据、当前放行范围、人工待验收、试用保留和清理例外。
 - [Qt 桌面迁移前验证](QT_DESKTOP_VALIDATION.md)：独立 Windows 原型、关键链路、打包实测和迁移阻塞项。
 - [KMP 移动端开发](KMP.md)：Compose Multiplatform、Ktor、Store/Repository、跨平台边界、地址和验证矩阵。

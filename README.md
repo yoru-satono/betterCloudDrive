@@ -54,7 +54,7 @@ betterCloudDrive/
 │   ├── betterclouddrive-scheduler/  # 定时任务
 │   └── betterclouddrive-start/      # 启动入口 + Flyway 迁移
 ├── frontend/                # Vue 3 Web 前端与共享桌面页面
-├── desktop/                 # Qt Windows 开发客户端、独立 Vue 适配与验收
+├── desktop/                 # Qt Windows 开发客户端、原生能力与验收
 ├── mobile/                  # 活跃的 Kotlin Multiplatform 移动端
 ├── backend-test/            # Python 黑盒 API 测试
 ├── observability/           # Prometheus/Loki/Alloy/Alertmanager/Grafana 配置
@@ -95,7 +95,7 @@ docker compose up -d --build
 
 部署细节见 [OnlyOffice 部署与排障](docs/operations/ONLYOFFICE_DEPLOYMENT.md) 和 [数据备份与恢复](docs/operations/BACKUP_RESTORE.md)。
 
-前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Qt 构建默认地址可用 `BCD_DESKTOP_API_BASE`、`BCD_DESKTOP_WEB_BASE` 覆盖。KMP Android Debug 在官方模拟器中默认连接 `http://10.0.2.2:8080`，用户也可以在登录页设置自己的服务器地址。
+前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Qt 启动默认地址可用 `BCD_DESKTOP_API_BASE`、`BCD_DESKTOP_WEB_BASE` 覆盖。KMP Android Debug 在官方模拟器中默认连接 `http://10.0.2.2:8080`，用户也可以在登录页设置自己的服务器地址。
 
 ## 可观测性
 

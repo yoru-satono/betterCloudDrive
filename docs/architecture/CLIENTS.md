@@ -36,14 +36,14 @@ Page / Component
 
 ## Qt 桌面端
 
-Qt 通过 `desktop/` 的独立构建复用 Vue 页面、Router、Store 和 API wrapper。共享模块只依赖 `@/platform/desktop`：普通 Web 实现拒绝原生调用，Qt 构建映射到私有 QWebChannel 桥接。运行时、认证和预览适配由桌面构建入口替换，不维护旧客户端兼容层。
+Web 与 Qt 加载同一份 `frontend/dist`，共享入口、认证 Store、HTTP client、预览 Store 和 OnlyOffice 组件。初始化先确定平台，再创建 Router/Store；Web 使用 history、Qt 使用 hash。`@/platform/desktop` 在 Qt 中按需加载隔离 QWebChannel 传输，Web 原生调用明确拒绝。
 
 | 边界 | 职责 |
 | --- | --- |
 | `desktop/app.py` | 窗口、原生选择、可信来源/白名单、隔离 world、会话生命周期 |
 | `desktop/engine.py`、`transport.py`、`network.py` | 文件级调度、身份隔离、有限重试、Range/MD5、SQLite 设置及暂停恢复 |
 | `desktop/media.py` | 独立 Qt Multimedia 播放器、可撤销授权网关及连接清理 |
-| `desktop/web/` | 网页身份同步、迟到响应保护、平台接口、预览及 OnlyOffice 生命周期 |
+| `frontend/src/platform/` 及共享 Store/组件 | 平台接口、身份版本与原生同步、公共认证/HTTP/预览及 OnlyOffice 生命周期 |
 
 业务权限和约束仍由后端决定。Python 承接桌面平台能力，页面和共同业务协议留在 TypeScript。当前已实测 Windows 开发版本；通用验证入口可跨平台运行，完整 Linux/macOS 客户端仍待各自验收。
 

@@ -39,6 +39,6 @@ Qt also forwards the selection to the native application theme.
 
 ## Desktop boundary
 
-The browser build uses `src/platform/desktop.ts`, which rejects native operations. The Qt build aliases the same interface to `desktop/web/bridge.ts` and supplies its own runtime/session adapters. Do not import native framework SDKs into shared pages. Commands, transfer DTOs and events remain unchanged.
+Web and Qt load the same `dist/` output and share authentication, HTTP, preview and OnlyOffice implementations. `src/platform/desktop.ts` lazily loads the Qt transport only when the native host provides startup configuration. Browser native operations reject without registering bridge listeners. Qt keeps its channel in an isolated world; commands, transfer DTOs and events remain unchanged.
 
 The old Rust shell, Tauri SDK/CLI and WebDriver tooling have been removed. Current desktop installation, startup, verification and trial commands are maintained in [desktop/README.md](../desktop/README.md). Browser development continues to use pnpm and Vite; it does not expose native commands.

@@ -485,7 +485,7 @@ pnpm run build
 | `VITE_WEB_BASE_URL` | Web 构建时 Web 根地址 |
 | `VITE_DEV_BACKEND_PROXY_BASE` | Vite dev server 的 `/api`、`/webdav` 代理目标 |
 
-Qt 构建另从宿主机环境读取 `BCD_DESKTOP_API_BASE`（默认 `http://127.0.0.1:8080/api/v1`）与 `BCD_DESKTOP_WEB_BASE`（默认 `http://127.0.0.1:3000`），不从此 Compose env 文件加载。
+Qt 启动另从宿主机环境读取 `BCD_DESKTOP_API_BASE`（默认 `http://127.0.0.1:8080/api/v1`）与 `BCD_DESKTOP_WEB_BASE`（默认 `http://127.0.0.1:3000`），不从此 Compose env 文件加载。
 
 KMP Android Debug 在官方模拟器中默认使用 `http://10.0.2.2:8080`，登录页可保存其他规范化服务器地址；Release 只接受 HTTPS。设备测试的 ADB serial 通过 `scripts/verify-all.ps1 -AndroidSerial` 或 `scripts/verify-all.sh --android-serial` 显式传入，不属于 `frontend.env`。
 
@@ -494,14 +494,14 @@ Web 前端地址解析顺序：
 | 场景 | API 地址优先级 |
 |------|----------------|
 | Web | localStorage 自定义值 > `VITE_API_BASE_URL` > `/api/v1` |
-| Qt | localStorage 自定义值 > 桌面构建注入的 `BCD_DESKTOP_API_BASE` > 默认回环地址 |
+| Qt | localStorage 自定义值 > 启动参数 `--api-base` > 启动环境 `BCD_DESKTOP_API_BASE` > 默认回环地址 |
 
 分享链接 Web 根地址解析顺序：
 
 | 场景 | Web 地址优先级 |
 |------|----------------|
 | Web | localStorage 自定义值 > `VITE_WEB_BASE_URL` > `window.location.origin` |
-| Qt | localStorage 自定义值 > 桌面构建注入的 `BCD_DESKTOP_WEB_BASE` > 默认回环地址 |
+| Qt | localStorage 自定义值 > 启动参数 `--web-base` > 启动环境 `BCD_DESKTOP_WEB_BASE` > 默认回环地址 |
 
 ### `mail.env`
 
@@ -743,4 +743,4 @@ docker compose exec redis redis-cli ping
 
 未登录访问 `/api/v1/grafana/auth` 和 `/grafana/` 返回 401 是正常结果，说明代理链路和鉴权接口可达。
 
-Qt 的 `BCD_DESKTOP_API_BASE`、`BCD_DESKTOP_WEB_BASE` 在桌面构建进程环境中设置，由独立构建注入网页默认值；不由 Compose 的前端服务 env 文件自动传给宿主机桌面进程。
+Qt 的 `BCD_DESKTOP_API_BASE`、`BCD_DESKTOP_WEB_BASE` 在桌面启动进程环境中设置，由 Qt 向可信主页面注入公开默认值；Web 和 Qt 使用同一份构建产物；不由 Compose 的前端服务 env 文件自动传给宿主机桌面进程。
