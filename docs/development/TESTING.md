@@ -76,6 +76,8 @@ bash scripts/verify-all.sh --module mobile-android --android-serial emulator-555
 bash scripts/verify-all.sh --module observability --keep-going
 ```
 
+M4 Windows 独立环境验收从仓库根目录运行 `uv run --no-project --python 3.12.13 desktop/m4_check.py`，使用新的解释器、uv 缓存、环境、网页输出和 Profile，默认端口 5198/9230。它另需已运行的回环后端和 OnlyOffice，不属于 `qt` 或 `all` 的自动服务启动范围。前四轮后台，第五轮短暂显示窗口，不操作鼠标键盘；执行五轮个人/团队传输 MD5、预览、设置/会话和资源释放检查，任何必需检查或清理失败返回非零。2026-11-24 本机独立环境五轮及 Python 96 项、桌面 Vitest 34 项、类型检查/独立构建通过；这不代表干净 Windows 系统、发行包或 Linux/macOS 已验收。环境、逐轮指标和清理边界见 [Qt 桌面开发](../../desktop/README.md)。
+
 ## 独立命令
 
 | 验证 | 命令 | 说明 |
