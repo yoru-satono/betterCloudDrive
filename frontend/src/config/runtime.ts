@@ -2,13 +2,7 @@ const API_BASE_URL_STORAGE_KEY = 'bcd.apiBaseUrl'
 const WEB_BASE_URL_STORAGE_KEY = 'bcd.webBaseUrl'
 
 const WEB_API_BASE_URL = '/api/v1'
-const DESKTOP_API_BASE_URL = import.meta.env.VITE_DESKTOP_API_BASE_URL || 'http://127.0.0.1:8080/api/v1'
-const DESKTOP_WEB_BASE_URL = import.meta.env.VITE_DESKTOP_WEB_BASE_URL || 'http://127.0.0.1:3000'
 
-type RuntimeWindow = Window & {
-  __TAURI__?: unknown
-  __TAURI_INTERNALS__?: unknown
-}
 
 const storageGet = (key: string) => {
   try {
@@ -27,11 +21,7 @@ const storageSet = (key: string, value: string) => {
   }
 }
 
-export const isDesktopRuntime = () => {
-  const env = import.meta.env as Record<string, string | undefined>
-  const win = window as RuntimeWindow
-  return !!env.TAURI_PLATFORM || !!win.__TAURI__ || !!win.__TAURI_INTERNALS__
-}
+export const isDesktopRuntime = () => false
 
 export const normalizeBaseUrl = (value: string) => value.trim().replace(/\/+$/, '')
 
@@ -42,7 +32,7 @@ export const getApiBaseUrl = () => {
   const env = import.meta.env.VITE_API_BASE_URL
   if (env) return normalizeBaseUrl(env)
 
-  return isDesktopRuntime() ? DESKTOP_API_BASE_URL : WEB_API_BASE_URL
+  return WEB_API_BASE_URL
 }
 
 export const setStoredApiBaseUrl = (value: string) => {
@@ -56,7 +46,7 @@ export const getWebBaseUrl = () => {
   const env = import.meta.env.VITE_WEB_BASE_URL
   if (env) return normalizeBaseUrl(env)
 
-  return isDesktopRuntime() ? DESKTOP_WEB_BASE_URL : window.location.origin
+  return window.location.origin
 }
 
 export const setStoredWebBaseUrl = (value: string) => {

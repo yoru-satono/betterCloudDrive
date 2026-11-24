@@ -411,8 +411,8 @@ export default {
       readingSettings: "Reading settings...",
       builtInClientUploadsAndDownloadsUseTheseSettings:
         "Built-in client uploads and downloads use these settings.",
-      settingsOnlyTakeEffectInTauriClient:
-        "Settings only take effect in Tauri client.",
+      settingsOnlyTakeEffectInDesktopClient:
+        "Settings only take effect in desktop client.",
       transmission: "transmission",
       leaveBlankOr0ToIndicateNoSpeedLimitIn:
         "Leave blank or 0 to indicate no speed limit, in MB/s.",

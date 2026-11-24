@@ -1,9 +1,7 @@
 allowBuilds:
-  edgedriver: true
+  edgedriver: set this to true or false
   esbuild: true
-  geckodriver: true
+  geckodriver: set this to true or false
   vue-demi: true
 minimumReleaseAgeExclude:
   - '@lucide/vue@1.27.0'
-overrides:
-  '@wdio/native-utils': 2.5.0

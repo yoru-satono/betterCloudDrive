@@ -13,7 +13,7 @@ import {
   startQueuedDesktopFolderDownload,
 } from '@/api/desktopDownload'
 import type { FileEntity } from '@/types/file'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/platform/desktop'
 
 vi.mock('@/api/files', () => ({
   listFiles: vi.fn(),
@@ -29,7 +29,7 @@ vi.mock('@/config/runtime', () => ({
   isDesktopRuntime: () => true,
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('@/platform/desktop', () => ({
   invoke: vi.fn(),
 }))
 
@@ -156,7 +156,7 @@ describe('desktop downloads', () => {
     })
   })
 
-  it('refreshes and retries direct desktop downloads when Tauri reports expired auth', async () => {
+  it('refreshes and retries direct desktop downloads when desktop reports expired auth', async () => {
     ensureFreshAccessTokenMock.mockResolvedValue('expired-token')
     refreshAccessTokenMock.mockResolvedValue('retried-token')
     invokeMock

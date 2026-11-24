@@ -116,7 +116,7 @@ function validateSettings() {
       <OButton variant="primary" :loading="saving" :disabled="loading || !isDesktop" @click="saveSettings">{{ __t('commonUi.desktopsettings.save') }}</OButton>
     </div>
 
-    <div v-if="!isDesktop" class="settings-empty">{{ __t('desktop.desktopsettings.settingsOnlyTakeEffectInTauriClient') }}</div>
+    <div v-if="!isDesktop" class="settings-empty">{{ __t('desktop.desktopsettings.settingsOnlyTakeEffectInDesktopClient') }}</div>
 
     <template v-else>
       <section class="settings-section">

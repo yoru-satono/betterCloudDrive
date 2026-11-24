@@ -402,7 +402,7 @@ export default {
       readingSettings: "正在读取设置...",
       builtInClientUploadsAndDownloadsUseTheseSettings:
         "客户端内置上传和下载会使用这些设置。",
-      settingsOnlyTakeEffectInTauriClient: "设置仅在 Tauri 客户端中生效。",
+      settingsOnlyTakeEffectInDesktopClient: "设置仅在桌面客户端中生效。",
       transmission: "传输",
       leaveBlankOr0ToIndicateNoSpeedLimitIn:
         "留空或 0 表示不限速，单位为 MB/s。",

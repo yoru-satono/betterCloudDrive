@@ -1,8 +1,8 @@
 import { i18n as __i18n } from '@/i18n'
 const __t = __i18n.global.t
 import { resolveMessage } from '@/i18n'
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { invoke } from '@/platform/desktop'
+import { listen, type UnlistenFn } from '@/platform/desktop'
 import { getApiBaseUrl, isDesktopRuntime } from '@/config/runtime'
 import {
   readResumableDirectories,

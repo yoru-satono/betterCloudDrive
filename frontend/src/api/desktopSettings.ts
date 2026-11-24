@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/platform/desktop'
 import { isDesktopRuntime } from '@/config/runtime'
 
 export type ProxyMode = 'system' | 'manual' | 'disabled'

@@ -65,7 +65,7 @@ describe('transfer store', () => {
     expect(store.isOpen).toBe(true)
   })
 
-  it('maps node controls to Tauri commands', async () => {
+  it('maps node controls to desktop commands', async () => {
     const store = useTransferStore()
 
     await store.pauseNode('node-1')
@@ -77,7 +77,7 @@ describe('transfer store', () => {
     expect(cancelTransferNode).toHaveBeenCalledWith('node-1')
   })
 
-  it('clears finished transfers through Tauri persistence', async () => {
+  it('clears finished transfers through desktop persistence', async () => {
     const store = useTransferStore()
 
     await store.clearDone()

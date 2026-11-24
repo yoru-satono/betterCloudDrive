@@ -139,7 +139,7 @@ describe('upload store', () => {
     await flushAsync()
   })
 
-  it('uses desktop upload concurrency settings when running in Tauri', async () => {
+  it('uses desktop upload concurrency settings when running in desktop', async () => {
     isDesktopSettingsRuntime.mockReturnValue(true)
     getDesktopSettings.mockResolvedValue({ maxConcurrentUploads: 2 })
     const gates = Array.from({ length: 4 }, () => deferred<{ data: { data: { fileId: number; mode: 'INSTANT' } } }>())

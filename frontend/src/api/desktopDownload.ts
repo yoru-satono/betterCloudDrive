@@ -2,7 +2,7 @@ import * as filesApi from './files'
 import { ensureFreshAccessToken, refreshAccessToken } from './client'
 import { getApiBaseUrl, isDesktopRuntime } from '@/config/runtime'
 import type { FileEntity } from '@/types/file'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/platform/desktop'
 
 const PAGE_SIZE = 100
 

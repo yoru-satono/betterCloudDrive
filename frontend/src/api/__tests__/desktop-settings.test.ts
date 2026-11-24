@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/platform/desktop'
 import {
   bytesToMbps,
   chooseDefaultDownloadDirectory,
@@ -13,7 +13,7 @@ vi.mock('@/config/runtime', () => ({
   isDesktopRuntime: () => true,
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('@/platform/desktop', () => ({
   invoke: vi.fn(),
 }))
 
@@ -24,7 +24,7 @@ describe('desktop settings api', () => {
     invokeMock.mockReset()
   })
 
-  it('loads and saves settings through Tauri commands', async () => {
+  it('loads and saves settings through desktop commands', async () => {
     invokeMock.mockResolvedValueOnce(DEFAULT_DESKTOP_SETTINGS)
 
     await expect(getDesktopSettings()).resolves.toEqual(DEFAULT_DESKTOP_SETTINGS)

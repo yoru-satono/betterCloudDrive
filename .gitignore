@@ -94,17 +94,11 @@ frontend/e2e/.auth/
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
-.wdio-cache/
-**/.wdio-cache/
 
-# Rust / Tauri
-frontend/src-tauri/target/
+# Native build output
 **/*.rs.bk
 
-# Tauri package outputs
-frontend/src-tauri/target/release/bundle/
-frontend/src-tauri/target/release/nsis/
-frontend/src-tauri/target/release/wix/
+# Native package outputs
 *.msi
 *.exe
 *.dmg

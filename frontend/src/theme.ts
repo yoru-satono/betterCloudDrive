@@ -32,7 +32,7 @@ let initialized = false
 async function syncDesktopTheme(nextMode: ThemeMode) {
   if (!isDesktopRuntime()) return
   try {
-    const { setTheme } = await import('@tauri-apps/api/app')
+    const { setTheme } = await import('@/platform/desktop')
     await setTheme(nextMode === 'system' ? null : nextMode)
   } catch (error) {
     console.warn('Unable to synchronize the desktop theme.', error)

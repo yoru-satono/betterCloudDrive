@@ -81,4 +81,4 @@ export function getCurrentWindow() {
   }
 }
 export const setTheme = (theme: string | null) => invoke('app:theme', { theme })
-export type Window = ReturnType<typeof getCurrentWindow>
+export type DesktopWindow = ReturnType<typeof getCurrentWindow>

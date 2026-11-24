@@ -13,7 +13,7 @@ vi.mock('@/config/runtime', () => ({
   setStoredWebBaseUrl: vi.fn(),
 }))
 
-vi.mock('@tauri-apps/api/window', () => ({
+vi.mock('@/platform/desktop', () => ({
   getCurrentWindow: () => ({
     minimize: vi.fn(),
     toggleMaximize: vi.fn(),
@@ -54,7 +54,7 @@ describe('App desktop shell', () => {
     })
   }
 
-  it('renders a custom titlebar in Tauri runtime', async () => {
+  it('renders a custom titlebar in desktop runtime', async () => {
     isDesktopRuntime.mockReturnValue(true)
     const App = (await import('@/App.vue')).default
 

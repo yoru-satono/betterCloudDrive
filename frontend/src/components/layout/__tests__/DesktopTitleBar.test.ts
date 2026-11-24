@@ -30,7 +30,7 @@ const saveDesktopSettings = vi.hoisted(() => vi.fn())
 const chooseDefaultDownloadDirectory = vi.hoisted(() => vi.fn())
 let pinia: ReturnType<typeof createPinia>
 
-vi.mock('@tauri-apps/api/window', () => ({
+vi.mock('@/platform/desktop', () => ({
   getCurrentWindow: () => ({
     minimize,
     toggleMaximize,
@@ -100,7 +100,7 @@ describe('DesktopTitleBar', () => {
     })
   }
 
-  it('calls Tauri window controls from its buttons', async () => {
+  it('calls desktop window controls from its buttons', async () => {
     const wrapper = mountTitleBar()
 
     await wrapper.get('button[aria-label="最小化"]').trigger('click')
@@ -112,10 +112,10 @@ describe('DesktopTitleBar', () => {
     expect(close).toHaveBeenCalledTimes(1)
   })
 
-  it('marks the titlebar as a Tauri drag region', () => {
+  it('marks the titlebar as a desktop drag region', () => {
     const wrapper = mountTitleBar()
 
-    expect(wrapper.get('[data-testid="desktop-titlebar"]').attributes('data-tauri-drag-region')).toBe('')
+    expect(wrapper.get('[data-testid="desktop-titlebar"]').attributes('data-desktop-drag-region')).toBe('')
   })
 
   it('starts window dragging from the title area', async () => {

@@ -10,10 +10,7 @@
       "@/stores/auth": ["web/auth.ts"],
       "@/stores/preview": ["web/preview.ts"],
       "@/components/file/OnlyOfficeEditor.vue": ["web/components/OnlyOfficeEditor.vue"],
-      "@tauri-apps/api/core": ["web/bridge.ts"],
-      "@tauri-apps/api/event": ["web/bridge.ts"],
-      "@tauri-apps/api/window": ["web/bridge.ts"],
-      "@tauri-apps/api/app": ["web/bridge.ts"],
+      "@/platform/desktop": ["web/bridge.ts"],
       "@/*": ["../frontend/src/*"],
       "spark-md5": ["../frontend/node_modules/@types/spark-md5"],
       "*": ["../frontend/node_modules/*"]

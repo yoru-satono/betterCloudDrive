@@ -20,7 +20,7 @@ export default defineConfig({
   ],
   resolve: { dedupe: ['vue', 'pinia', 'vue-router', 'vue-sonner', 'vue-i18n', 'axios'], alias: [
     { find: '@/components/file/OnlyOfficeEditor.vue', replacement: path.join(here, 'web/components/OnlyOfficeEditor.vue') },
-    { find: /^@tauri-apps\/api\/(core|event|window|app)$/, replacement: path.join(here, 'web/bridge.ts') },
+    { find: '@/platform/desktop', replacement: path.join(here, 'web/bridge.ts') },
     ...[['@/config/runtime', 'runtime'], ['@/api/client', 'client'], ['@/stores/auth', 'auth'], ['@/stores/preview', 'preview']]
       .map(([find, name]) => ({ find, replacement: path.join(here, 'web/' + name + '.ts') })),
     { find: '@', replacement: path.join(frontend, 'src') },
@@ -28,7 +28,6 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_API_BASE_URL': JSON.stringify(process.env.BCD_DESKTOP_API_BASE || 'http://127.0.0.1:8080/api/v1'),
     'import.meta.env.VITE_WEB_BASE_URL': JSON.stringify(process.env.BCD_DESKTOP_WEB_BASE || 'http://127.0.0.1:3000'),
-    'import.meta.env.VITE_TAURI_E2E': JSON.stringify('0'),
   },
   build: { outDir: path.join(here, 'web-dist'), emptyOutDir: true, target: 'es2022' },
 })

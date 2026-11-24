@@ -86,7 +86,7 @@ describe('downloadFile', () => {
     expect(getFileNameFromDisposition(undefined, 'fallback.csv')).toBe('fallback.csv')
   })
 
-  it('uses the desktop file save flow in Tauri runtime', async () => {
+  it('uses the desktop file save flow in desktop runtime', async () => {
     isDesktopDownloadRuntime.mockReturnValue(true)
     startQueuedDesktopFileDownload.mockResolvedValue(true)
 
@@ -109,7 +109,7 @@ describe('downloadFile', () => {
     click.mockRestore()
   })
 
-  it('uses the desktop recursive folder flow in Tauri runtime', async () => {
+  it('uses the desktop recursive folder flow in desktop runtime', async () => {
     isDesktopDownloadRuntime.mockReturnValue(true)
     startQueuedDesktopFolderDownload.mockResolvedValue(true)
 

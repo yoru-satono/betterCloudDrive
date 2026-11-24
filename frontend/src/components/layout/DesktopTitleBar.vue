@@ -2,7 +2,7 @@
 import { i18n as __i18n } from '@/i18n'
 const __t = __i18n.global.t
 
-import { getCurrentWindow, type Window as TauriWindow } from '@tauri-apps/api/window'
+import { getCurrentWindow, type DesktopWindow } from '@/platform/desktop'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import { Settings, Minus, Square, X } from '@lucide/vue'
 import OButton from '@/components/base/OButton.vue'
@@ -28,7 +28,7 @@ const settingsButton = ref<HTMLButtonElement | null>(null)
 const isLoggedIn = computed(() => !!auth.user || !!localStorage.getItem('accessToken'))
 const settingsLabel = computed(() => isLoggedIn.value ? __t('desktop.desktoptitlebar.clientSettings') : __t('desktop.desktoptitlebar.connectionSettings'))
 
-function getDesktopWindow(): TauriWindow {
+function getDesktopWindow(): DesktopWindow {
   return getCurrentWindow()
 }
 
@@ -109,8 +109,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <header class="desktop-titlebar" data-testid="desktop-titlebar" data-tauri-drag-region>
-    <div class="desktop-titlebar__brand" data-tauri-drag-region @pointerdown="startWindowDrag">
+  <header class="desktop-titlebar" data-testid="desktop-titlebar" data-desktop-drag-region>
+    <div class="desktop-titlebar__brand" data-desktop-drag-region @pointerdown="startWindowDrag">
       <span class="desktop-titlebar__mark" aria-hidden="true">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
