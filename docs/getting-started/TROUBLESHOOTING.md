@@ -44,7 +44,7 @@ docker compose up -d --force-recreate
 
 | 调用方 | 访问宿主机后端的地址 |
 |--------|----------------------|
-| 宿主机浏览器、Tauri | `http://127.0.0.1:8080` 或 `localhost` |
+| 宿主机浏览器、Qt | `http://127.0.0.1:8080` 或 `localhost` |
 | Docker Desktop 容器 | `http://host.docker.internal:8080` |
 | Compose 服务之间 | `http://backend:8080` 等服务名 |
 | Android 官方模拟器 | `http://10.0.2.2:8080` |
@@ -81,9 +81,9 @@ Android 出现 cleartext HTTP 拒绝时，确认使用的是 debug 构建和项�
 - JVM 测试不要求设备；设备测试使用 `connectedDebugAndroidTest`。
 - KMP 移动端验收不生成覆盖率报告，也不使用代码行数或行覆盖率作为质量指标。
 
-## Tauri 启动或 E2E 失败
+## Qt 启动或验收失败
 
-先确认 `cargo --version`、平台编译依赖和 WebView2/WebKitGTK。普通 `pnpm run tauri:dev` 不需要桌面 E2E driver；运行 E2E 时，Windows 还需要匹配的 WebView2/EdgeDriver，Linux 需要图形显示或 `xvfb-run`。详细要求见 [Tauri 开发指南](../development/TAURI.md)。
+检查 uv、Node/pnpm、锁定依赖、网页资源、独立端口及 Profile 锁。普通启动默认关闭 CDP；真实后端专项需要已运行的服务。缺少 Qt 系统运行库时应明确失败，不跳过为通过。详见 [Qt 桌面开发](../../desktop/README.md)。
 
 ## OnlyOffice 无法加载或保存
 

@@ -14,11 +14,12 @@
 
 ## 项目定位
 
-BetterCloudDrive 是同时提供个人空间和团队空间的云盘系统，包含统一后端、Web、Tauri 桌面端、Kotlin Multiplatform 移动端、WebDAV 和完整观测栈。
+BetterCloudDrive 是同时提供个人空间和团队空间的云盘系统，包含统一后端、Web、Qt 桌面端、Kotlin Multiplatform 移动端、WebDAV 和完整观测栈。
 
 - `backend/`：Spring Boot/Maven 模块化单体，负责认证、权限、元数据、传输、分享、版本、通知和异步任务。
 - `backend-test/`：基于 pytest/httpx 的真实 API 黑盒及 security、WebDAV、OnlyOffice、observability、resilience 专项验收。
-- `frontend/`：Vue Web 前端与 Tauri 桌面壳，统一使用 pnpm；原生能力位于 `frontend/src-tauri/`。
+- `frontend/`：Vue Web 前端及共享页面，统一使用 pnpm；共享页面只依赖中性桌面接口。
+- `desktop/`：PySide6 + Qt WebEngine 桌面客户端、独立 Vue 构建、原生传输和播放器。
 - `mobile/`：Kotlin Multiplatform 移动端。`shared` 承载共享业务与 Compose UI，`androidApp` 是当前 Android 应用壳；iOS 当前保持共享源码元数据可编译。
 - `observability/`：Prometheus、Loki、Alloy、Alertmanager 和 Grafana 配置。
 - `config/env-files/`：Compose 服务环境变量模板与本地配置。
@@ -29,10 +30,10 @@ BetterCloudDrive 是同时提供个人空间和团队空间的云盘系统，包
 ## 架构与实现原则
 
 - 优先修复根因，不通过放宽断言、吞掉异常、无条件等待或扩大重试掩盖问题。
-- 保持模块边界。协议变化应同步检查后端、Web、Tauri 和 KMP 移动端的 DTO、错误语义、权限与调用方。
+- 保持模块边界。协议变化应同步检查后端、Web、Qt 和 KMP 移动端的 DTO、错误语义、权限与调用方。
 - 后端业务约束与事务放在 Service，Controller 负责 HTTP 协议，Repository 只负责持久化，Storage 只封装对象存储。
 - 数据库结构变化使用新的 Flyway migration；不要修改已发布的 migration。
-- Web 与 Tauri 共用的页面、Store 和协议逻辑留在 TypeScript；Rust command 只处理桌面平台能力。
+- Web 与 Qt 共用的页面、Store 和协议逻辑留在 TypeScript；Python 原生层只处理桌面平台能力。
 - KMP 的 `commonMain` 不得直接依赖 Android API。平台能力放入对应 source set，并通过窄接口或必要的 `expect`/`actual` 暴露。
 - 客户端按钮与路由守卫不能替代后端授权；权限拒绝必须保留明确的刷新和恢复路径。
 - Token、ticket、密码、Cookie、验证码、请求正文和 SAF URI 等敏感信息不得写入源码、日志、测试报告或提交。
@@ -42,8 +43,7 @@ BetterCloudDrive 是同时提供个人空间和团队空间的云盘系统，包
 ## 依赖与构建约定
 
 - 后端使用仓库 Maven 配置和对应模块命令。
-- Web/Tauri 使用 pnpm，不使用 npm 或 yarn 生成额外锁文件。
-- Rust 依赖验证使用 `cargo test --locked`。
+- Web/Qt 使用 pnpm，不使用 npm 或 yarn 生成额外锁文件。
 - KMP 使用 `mobile/gradlew` 或 `mobile/gradlew.bat`，不要使用系统 Gradle 替代 wrapper。
 - 修改依赖或工具链版本时，以构建文件和锁文件为准，并同步更新相关文档基线。
 
@@ -61,10 +61,10 @@ Windows 使用 PowerShell 入口：
 .\scripts\verify-all.ps1 -Module <module>
 ```
 
-可用模块为 `backend`、`integration`、`blackbox`、`security`、`web`、`tauri`、`qt`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience`、`warehouse`、`inspection` 和 `all`。`qt` 为显式选择的 Windows Qt 开发验证入口，暂不并入 `all`，不启动 Docker；真实 Qt 后端验收另按 `desktop/README.md` 执行。
+可用模块为 `backend`、`integration`、`blackbox`、`security`、`web`、`qt`、`mobile-unit`、`mobile-android`、`office`、`webdav`、`observability`、`resilience`、`warehouse`、`inspection` 和 `all`。`qt` 为通用桌面开发验证入口，已并入 `all`；单独选择时不启动 Docker，真实 Qt 后端验收另按 `desktop/README.md` 执行。
 
 - 优先运行与改动范围匹配的模块；共同协议、全局配置或发布准备再扩大验证范围。
-- `all` 是完整验收，需要 Docker、Maven/JDK、Python、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。
+- `all` 是完整验收，需要 Docker、Maven/JDK、Python、Node/pnpm、rclone、Android SDK、adb 和可用设备。
 - `scripts/verify-all.sh` 最低兼容 Bash 3.2，不得使用 Bash 4 才支持的关联数组等语法。
 - 修改验证流程时同步维护 `scripts/verify-all.sh`、`scripts/verify-all.ps1` 和 `docs/development/TESTING.md` 的模块含义。
 - 修改 Bash 验证脚本至少运行 `bash -n`、帮助、错误参数检查和一个实际模块路径。
@@ -83,7 +83,7 @@ bash scripts/verify-all.sh --module mobile-android --android-serial <device-id>
 - 后端 Java：运行相关 Maven 单元测试；Repository、存储、队列或事务变化再运行 `integration`。
 - API、安全和跨模块契约：运行相关后端测试，并按影响增加 `blackbox` 或 `security`。
 - Vue/Pinia：运行相关 Vitest；路由、认证、传输或真实用户流程再运行 Web Playwright。
-- Tauri Rust 或原生桥：运行 `cargo test --locked`；窗口和端到端流程再运行 `tauri`。
+- Qt 原生层或桥接：运行 `qt`；窗口、身份或真实传输变化再运行桌面专项验收。
 - `mobile/shared`：至少运行 `mobile-unit`；涉及 Keystore、SAF、通知或平台调度时增加 `mobile-android`。
 - `mobile/androidApp`、Manifest、网络安全配置或 R8：运行 Android 设备测试和 Release 构建。
 - Android 设备相关变化：分别在 API 28 和 API 34 验证，以覆盖 WorkManager 与 UIDT；设备和 AVD 细节从 `AGENTS.local.md` 读取。

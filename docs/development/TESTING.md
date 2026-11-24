@@ -8,13 +8,13 @@ Java 与 Web 生成覆盖率报告，用于辅助发现未验证实现；KMP 移
 
 | 层 | 主要目标 | 是否需要外部环境 |
 |----|----------|------------------|
-| Java/TypeScript/Rust/KMP 主机单元 | 纯逻辑、状态机、协议封装和错误分支 | 通常不需要 |
+| Java/TypeScript/Python/KMP 主机单元 | 纯逻辑、状态机、协议封装和错误分支 | 通常不需要 |
 | Testcontainers 集成 | PostgreSQL Repository、SeaweedFS、RabbitMQ 与 trace 传播 | Docker |
 | Python API 黑盒 | 真实 HTTP 契约和跨模块业务链路 | Compose 后端栈 |
 | Security/WebDAV/Observability/Resilience 专项 | 安全边界、协议、运维与故障恢复 | Compose 及专项工具 |
 | Web Playwright | 真实浏览器、权限、上传下载和 OnlyOffice | Compose 完整栈 |
-| Qt 开发回归 | Python/桌面适配、媒体解码、类型检查及隔离构建 | Windows 11 x64、uv、Node/pnpm；不需要后端 |
-| Tauri E2E | 真实桌面窗口和原生传输桥接 | Rust、平台 driver、后端栈 |
+| Qt 开发回归 | Python/桌面适配、媒体解码、类型检查及隔离构建 | 受 Qt 支持的系统运行库、uv、Node/pnpm；Windows 已实测，不需要后端 |
+| Qt 真实专项 | Qt/Vue 会话、持久传输、预览及原生交互 | 后端栈；交互需空闲桌面 |
 | KMP Android instrumentation | Compose UI、导航、设备 I/O 和端到端场景 | SDK、adb、设备、后端栈 |
 | KMP iOS 共享源码编译 | iOS source set、依赖和公开 API 的编译边界 | Kotlin/Native 工具链；应用壳测试后续补充 |
 
@@ -40,25 +40,25 @@ Linux/macOS 也可以使用 Bash 3.2 或更高版本：
 bash scripts/verify-all.sh
 ```
 
-`all` 选择 backend、integration、blackbox、security、web、tauri、KMP 移动端、office、webdav、observability、resilience、warehouse 和 inspection。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、Rust、rclone、Android SDK、adb 和可用设备。KMP 移动端验证使用 `mobile-unit` 和 `mobile-android`。
+`all` 选择 backend、integration、blackbox、security、web、qt、KMP 移动端、office、webdav、observability、resilience、warehouse 和 inspection。完整运行需要 Docker、Maven/JDK、Python/uv、Node/pnpm、rclone、Android SDK、adb 和可用设备。KMP 移动端验证使用 `mobile-unit` 和 `mobile-android`。
 
-`qt` 为显式选择的 Windows Qt 开发验证入口，暂不并入 `all`。PowerShell `./scripts/verify-all.ps1 -Module qt` 和 Windows Git Bash `bash scripts/verify-all.sh --module qt` 共同调用 `desktop/verify.py`。它通过 uv 锁定同步开发依赖、运行 Python 状态机及真实 MP4/WebM 解码/跳转、桌面 Vitest、类型检查和隔离网页构建。需要已有 Node/pnpm 前端依赖；不启动 Docker，不读取或生成后端 env，不做真实后端或原生交互验收。
+`qt` 为跨平台桌面开发验证入口，已并入 `all`，仍可单独执行。PowerShell `./scripts/verify-all.ps1 -Module qt` 和 Bash `bash scripts/verify-all.sh --module qt` 共同调用 `desktop/verify.py`。它通过 uv 锁定同步开发依赖、运行 Python 状态机及真实 MP4/WebM 解码/跳转、桌面 Vitest、类型检查和隔离网页构建。需要已有 Node/pnpm 前端依赖；不启动 Docker，不读取或生成后端 env，不做真实后端或原生交互验收。
 
-验证用 Python 3.12.13 标准库启动，为每轮生成标记匹配的独立目录。TEMP/TMP、pytest 夹具/缓存、uv 缓存和构建输出放在该轮 `work` 内；子进程清除继承的 Python/Qt/媒体路径覆盖，不改变父环境。结束核对所属子进程退出及日常 `desktop/web-dist` 的内容/时间戳指纹，然后清理该轮资源；非敏感报告保留在 `test-results/desktop/<id>/results.json`。任一必需步骤、资源核对或清理失败返回非零。`build.py` 默认日常输出不变，可选 `--out-dir` 仅供受控运行目录使用，不接受未标记目录、运行目录根、越界或符号链接/目录联接路径。
+验证用 Python 3.12.13 标准库启动，先锁定同步开发依赖，再用项目解释器运行工作进程；psutil 7.2.2 仅用于开发期进程归属与指标。入口按系统选择工具路径、临时目录及进程启动方式，为每轮生成标记匹配的独立目录。TEMP/TMP、pytest 夹具/缓存、uv 缓存和构建输出放在该轮 `work` 内；子进程清除继承的 Python/Qt/媒体路径覆盖，不改变父环境。结束核对所属子进程退出及日常 `desktop/web-dist` 的内容/时间戳指纹，然后清理该轮资源；非敏感报告保留在 `test-results/desktop/<id>/results.json`。平台专属检查单列“不适用”，与通过分开；适用测试意外跳过、缺少图形/音频运行库、必需步骤、资源核对或清理失败均返回非零。Windows 已实测，Linux/macOS 尚未在本轮实测。`build.py` 默认日常输出不变，可选 `--out-dir` 仅供受控运行目录使用，不接受未标记目录、运行目录根、越界或符号链接/目录联接路径。
 
 真实 API、Vue、强制结束恢复、代理认证、OnlyOffice、原生选择/窗口手势及媒体性能另按 [Qt 桌面开发](../../desktop/README.md)选择专项；功能与历史证据见[Qt 验收矩阵](QT_DESKTOP_ACCEPTANCE.md)。运行本机 Docker 前须确认 Linux 虚拟机停止。后台 `offscreen`、单元测试和入口准备不能代替人工交互、M5 观察、干净系统或发行验收。
 
 `inspection` 复用基础栈，不需要数仓容器；运行巡检、容量事务、旧 Redis 增量切换和对象存储的单元/隔离集成测试，再执行管理员真实 API 验收。已有数据库必须先按[存储巡检运维](../operations/STORAGE_INSPECTIONS.md)完成离线计账切换，验证脚本不会自动宣布旧写入者已停止。运行 `./scripts/verify-all.ps1 -Module inspection` 或 `bash scripts/verify-all.sh --module inspection`。普通 `blackbox` 排除 `inspection` 标记；安全路由拒绝用例同时属于 `security`。
 
-组合选择 `inspection,web` 或 `inspection,tauri` 时设置 `E2E_INSPECTION=1`，启用共享巡检页面的浏览器或原生桌面验收。报告位于 `test-results/inspection/`，后端隔离测试报告仍在各 Maven 模块 `target/` 下。真实 API 用例只修改本次用户的容量及差异证据，用可控时间戳覆盖 HTTP 修复链路；两次观测的真实间隔规则由注入时钟的集成测试验证。
+组合选择 `inspection,web` 时设置 `E2E_INSPECTION=1`，启用共享巡检页面的浏览器验收。报告位于 `test-results/inspection/`，后端隔离测试报告仍在各 Maven 模块 `target/` 下。真实 API 用例只修改本次用户的容量及差异证据，用可控时间戳覆盖 HTTP 修复链路；两次观测的真实间隔规则由注入时钟的集成测试验证。
 
 `warehouse` 使用独立 ClickHouse、dbt 和 Airflow，包含 Python 单元、隔离 PostgreSQL/ClickHouse 集成和真实网盘 API → Airflow → 管理报表验收，并叠加 `docker-compose.warehouse.yml`。首次配置生成独立随机密钥，已有配置不会覆盖；统计口径、补数与资源要求见[业务数仓](../../warehouse/README.md)。纯数据层可运行 `cd warehouse && uv run --locked --extra test pytest`。普通 `blackbox` 模块不包含标记为 `warehouse` 的专属验收。
 
-同时选择 `warehouse,web` 或 `warehouse,tauri`（Bash 重复 `--module`）时，入口自动设置 `E2E_WAREHOUSE=1`，启用对应客户端的业务分析验收；基础 Web/Tauri 验证跳过这项可选数仓场景。独立执行该场景时需先启动数仓并成功发布报表，再显式设置 `E2E_WAREHOUSE=1`。Tauri 可用 `pnpm run test:e2e:tauri -- --spec ./e2e-tauri/tauri-warehouse.wdio.ts` 单独执行原生窗口冒烟。
+同时选择 `warehouse,web`（Bash 重复 `--module`）时，入口设置 `E2E_WAREHOUSE=1` 验证 Web 业务分析。Qt 的通用 `qt` 模块只覆盖开发回归；真实业务专项另按桌面说明执行，不再保留旧 WebDriver 测试入口。
 
 统一 Web 验收关闭 Playwright trace，避免认证请求的令牌和请求正文进入报告；页面截图和结果报告仍按既有配置生成。API pytest 在异常和捕获报告生成前遮盖 Bearer/JWT、敏感字段和 token/ticket 查询值，保留断言位置与错误码；HTTPX 的实时传输日志也过滤这些值。不要通过打印原始认证响应排障。直接插入历史版本的测试数据必须在 owner 锁和同一事务中增加所属个人/团队用量，不能制造没有同步计账的普通业务样本。内存有限的本机可设置 `VITEST_MAX_WORKERS=2` 控制 Vitest 并发。
 
-两个入口会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。PowerShell 入口在 Windows 使用 `.venv/Scripts/pytest.exe` 和 `gradlew.bat`，在 Linux 使用 `.venv/bin/pytest` 和 Bash Gradle wrapper；缺少虚拟环境时两端都依次回退到 `uv` 与系统 Python。Web、OnlyOffice 和 Tauri E2E runner 会加载根 `.env`、`config/env-files/database.env` 与 `config/env-files/backend.env`，将与 Compose 一致的数据库端口、凭据和 OnlyOffice JWT 传给测试子进程；配置不一致时只报告键名，不输出密钥。`all` 是完整验收，不能再配合跳过 Tauri、KMP Android 或 OnlyOffice 的参数。
+两个入口会复制缺失的本地 env 模板但不覆盖已有配置，按需启动 Compose，等待服务健康，记录各阶段结果，并默认清理本次 E2E 数据。PowerShell 入口在 Windows 使用 `.venv/Scripts/pytest.exe` 和 `gradlew.bat`，在 Linux 使用 `.venv/bin/pytest` 和 Bash Gradle wrapper；缺少虚拟环境时两端都依次回退到 `uv` 与系统 Python。Web 和 OnlyOffice E2E runner 会加载根 `.env`、`config/env-files/database.env` 与 `config/env-files/backend.env`，将与 Compose 一致的数据库端口、凭据和 OnlyOffice JWT 传给测试子进程；配置不一致时只报告键名，不输出密钥。`all` 是完整验收，不能配合跳过 KMP Android 或 OnlyOffice 的参数；Qt 无跳过参数。
 
 常用子集：
 
@@ -96,8 +96,7 @@ M5 从仓库根目录运行 `uv run --no-project --python 3.12.13 desktop/m5_che
 | Web 单元 | `cd frontend && pnpm run test` | i18n 检查 + Vitest |
 | Web 单元与报告 | `cd frontend && pnpm run test:coverage` | V8 coverage |
 | Web E2E | `cd frontend && pnpm run test:e2e:docker` | 启动/复用 Docker 测试环境 |
-| Tauri Rust | `cd frontend/src-tauri && cargo test --locked` | 传输、设置和路径逻辑 |
-| Tauri 桌面 | `cd frontend && pnpm run tauri:e2e:build && pnpm run test:e2e:tauri` | 真实桌面窗口 |
+| Qt 桌面 | `./scripts/verify-all.ps1 -Module qt` 或 `bash scripts/verify-all.sh --module qt` | 无窗口开发回归；真实专项见桌面说明 |
 | KMP 移动端主机 | `cd mobile && sh ./gradlew :shared:testAndroidHostTest` | 认证、并发刷新、语义错误与传输状态机 |
 | KMP Android 设备 | `cd mobile && ANDROID_SERIAL=<device-id> sh ./gradlew :androidApp:connectedDebugAndroidTest` | 产品导航、Keystore、平台调度和设备 I/O |
 | KMP Android Release | `cd mobile && sh ./gradlew :androidApp:assembleRelease` | Release、R8 与 lint vital |
@@ -144,7 +143,7 @@ KMP 团队成员与文件权限改动必须覆盖稳定成员分页、Owner/Admi
 
 KMP 团队邀请与通知改动必须覆盖邀请稳定分页、同邮箱待处理邀请刷新、过期重发、旧 token 失效、取消与相同终态幂等、账号邮箱匹配及 OWNER/ADMIN 角色矩阵。设备测试应分别验证深链冷启动和 `onNewIntent`、未登录登录/注册续接、换账号与换服务器清理、成员/邀请标签、全局铃铛和 `99+` 徽标。通知测试需使用可控前后台生命周期证明后台不保留 SSE，重连每次申请新 ticket 并按 1/2/5/10/30 秒退避；全部 14 类稳定消息键、未知键回退、分页筛选、已读失败不阻塞合法导航和链接白名单都要覆盖。日志扫描必须包含邀请 URL token 与 SSE ticket 查询参数。
 
-KMP 团队收藏与标签改动必须覆盖团队切换和个人/团队隔离、收藏与标签文件三页稳定分页、300 ms 搜索防抖、收藏状态按需读取、标签名称和颜色规范化、OWNER/ADMIN 管理矩阵、目标文件有效读写权限和原子替换失败回滚。Compose 设备测试需覆盖团队工作区“整理”入口、手机页面、宽屏标签双栏、Editor/Viewer 隐藏标签管理入口，以及有 `canWrite` 时的文件标签编辑。网络契约测试必须断言团队文件标签使用一次 `PUT /teams/{teamId}/files/{fileId}/tags`，Web/Tauri 不得通过逐条解绑和绑定模拟替换。
+KMP 团队收藏与标签改动必须覆盖团队切换和个人/团队隔离、收藏与标签文件三页稳定分页、300 ms 搜索防抖、收藏状态按需读取、标签名称和颜色规范化、OWNER/ADMIN 管理矩阵、目标文件有效读写权限和原子替换失败回滚。Compose 设备测试需覆盖团队工作区“整理”入口、手机页面、宽屏标签双栏、Editor/Viewer 隐藏标签管理入口，以及有 `canWrite` 时的文件标签编辑。网络契约测试必须断言团队文件标签使用一次 `PUT /teams/{teamId}/files/{fileId}/tags`，Web/Qt 不得通过逐条解绑和绑定模拟替换。
 
 Windows 上 KMP 移动端使用 `mobile/gradlew.bat`。完整专项命令优先通过验证脚本运行，因为脚本还会设置运行 ID、报告位置、服务健康和数据清理。
 
@@ -162,10 +161,10 @@ Windows 上 KMP 移动端使用 `mobile/gradlew.bat`。完整专项命令优先�
 | Outbox、RabbitMQ、DLQ、恢复 | Service/Scheduler 单元 + integration + resilience |
 | Vue component/composable/store | 相关 Vitest + `pnpm run build` |
 | Web 路由、认证、团队权限、传输 | Web 单元 +相关 Playwright |
-| Tauri Rust command/路径/恢复 | `cargo test --locked` + Tauri E2E |
+| Qt 原生桥/路径/恢复 | `qt` 回归 + 对应真实 Qt 后端专项 |
 | `mobile/shared` 会话或传输状态机 | `:shared:testAndroidHostTest`；涉及 Keystore、SAF 或调度再加 KMP Android 设备测试 |
 | `mobile/androidApp`、Manifest 或 R8 | KMP Android 设备测试 + `:androidApp:assembleRelease` |
-| API 或本地化共同协议 | 后端测试 + Web、Tauri、KMP 移动端受影响契约/场景 |
+| API 或本地化共同协议 | 后端测试 + Web、Qt、KMP 移动端受影响契约/场景 |
 | Compose/生产代理/观测配置 | 配置渲染/健康检查 + observability；故障路径加 resilience |
 | OnlyOffice 回调或编辑 | 后端单元 + office E2E + 保存失败/重试场景 |
 

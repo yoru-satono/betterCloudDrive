@@ -143,7 +143,7 @@ POST /api/v1/auth/refresh
 - 图片文件上传完成后会创建 `THUMBNAIL` 后台任务，worker 生成 JPEG 缩略图，并把对象存储路径写入 `thumbnailPath`。
 - 当前先支持可由后端 ImageIO 解码的图片格式；解码失败会保留 `thumbnailPath = null`，客户端按无缩略图处理，团队缩略图失败任务可在团队任务中心重试。
 - 个人文件通过 `GET /api/v1/files/{fileId}/thumbnail` 获取缩略图；团队文件通过 `GET /api/v1/teams/{teamId}/files/{fileId}/thumbnail` 获取。
-- Web/Tauri 列表在 `thumbnailPath` 为空时显示默认文件图标，刷新后若 `thumbnailPath` 已生成则显示缩略图。
+- Web/Qt 列表在 `thumbnailPath` 为空时显示默认文件图标，刷新后若 `thumbnailPath` 已生成则显示缩略图。
 - 文件从回收站永久删除或过期清理时，会同步清理缩略图对象。
 
 ### 7.7 操作日志

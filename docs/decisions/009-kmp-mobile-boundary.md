@@ -1,5 +1,7 @@
 # ADR-009：KMP 移动端共享业务与界面边界
 
+> 历史桌面说明：文中 Tauri 部分记录当时决策，客户端现已迁移为 Qt；当前边界见 [Qt 桌面开发](../../desktop/README.md)。原决策正文保留追溯。
+
 - 状态：已接受
 - 日期：2026-09-12
 - 取代：[ADR-006](006-client-boundaries.md) 中 Android-only 的实现边界

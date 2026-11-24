@@ -1,6 +1,6 @@
 # 业务数仓
 
-面向系统管理员的网盘使用与逻辑容量分析，不读取文件正文。包含业务事件采集、ClickHouse、dbt 模型、Airflow DAG 和 Web/Tauri 共用管理页面，入口为 `/admin/analytics`。
+面向系统管理员的网盘使用与逻辑容量分析，不读取文件正文。包含业务事件采集、ClickHouse、dbt 模型、Airflow DAG 和 Web/Qt 共用管理页面，入口为 `/admin/analytics`。
 
 ## 本地运行
 
@@ -105,7 +105,7 @@ bash scripts/verify-all.sh --module warehouse
 
 该模块包含 Python 单元、隔离 PostgreSQL/ClickHouse 集成和真实 Airflow/网盘 API 验收。仅运行独立数据层检查：`cd warehouse` 后执行 `uv run --locked --extra test pytest`。
 
-客户端验收组合为 PowerShell `-Module warehouse,web` 和 `-Module warehouse,tauri`，Bash 使用重复的 `--module` 参数。入口自动启用业务分析页面测试；单独运行页面测试时需设置 `E2E_WAREHOUSE=1`，并确保已有成功发布的报表。
+客户端验收组合为 PowerShell `-Module warehouse,web` 和 `-Module warehouse,qt`，Bash 使用重复的 `--module` 参数。入口自动启用业务分析页面测试；单独运行页面测试时需设置 `E2E_WAREHOUSE=1`，并确保已有成功发布的报表。
 
 隔离测试使用专有运行 ID、随机凭据和临时容器，只移除该测试创建的容器，不连接开发数据库。完整应用验收沿用统一入口的运行 ID 和范围受限清理。
 
@@ -117,7 +117,7 @@ bash scripts/verify-all.sh --module warehouse
 | API 黑盒 / 安全 / WebDAV | 156 / 21 / 4 项通过 |
 | Web 单元 | 201 项通过 |
 | Web 浏览器 | 31 项通用流程通过；业务分析专项通过，覆盖中英文、明暗主题及 1440/768/390 像素宽度 |
-| Tauri | Release 构建及原生业务分析专项通过 |
+| Qt | 复用共享管理页面；本轮未重跑原生业务分析专项 |
 | 数仓 | 25 项单元与隔离集成、12 项真实 API/Airflow 验收通过 |
 | 验证入口与配置 | PowerShell 与 Bash 实际模块运行通过；语法、帮助、错误参数及 Compose 渲染检查通过 |
 

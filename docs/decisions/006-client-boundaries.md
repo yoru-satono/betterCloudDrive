@@ -1,5 +1,7 @@
 # ADR-006：Web/Tauri 复用界面，Android 独立实现
 
+> 历史桌面说明：文中 Tauri 部分记录当时决策，客户端现已迁移为 Qt；当前边界见 [Qt 桌面开发](../../desktop/README.md)。原决策正文保留追溯。
+
 - 状态：已取代（由 [ADR-009](009-kmp-mobile-boundary.md) 取代）
 - 日期：2026-08-20（对既有实现的追认记录）
 - 适用范围：Web、Tauri、Android、共同 REST 协议和平台能力
@@ -37,6 +39,6 @@ Android 使用独立的 Compose/ViewModel/Repository/Retrofit 实现，以适应
 本记录描述 2026-08-20 的 Android-only 边界。移动端迁移为 KMP 后，当前实现与验证入口以 [ADR-009](009-kmp-mobile-boundary.md) 为准。
 
 - 能力矩阵和调用层：[客户端架构](../architecture/CLIENTS.md)
-- 专项开发：[Web](../development/WEB.md)、[Tauri](../development/TAURI.md)、[Android](../development/KMP.md)
+- 专项开发：[Web](../development/WEB.md)、[Tauri](../archive/TAURI_DESKTOP.md)、[Android](../development/KMP.md)
 - 协议参考：[API 总入口](../reference/API.md)、[本地化协议](../reference/LOCALIZATION.md)
 - 验证：共享 Web 单元/E2E、Tauri 原生命令/E2E、Android Repository/ViewModel/instrumentation 场景

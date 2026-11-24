@@ -1,6 +1,6 @@
 # 容量与对象一致性巡检
 
-巡检是网盘后端自带的管理员能力，复用 PostgreSQL、Redis 和现有 S3 SDK，不需要业务数仓或新增部署服务。Web 和 Tauri 共享 `/admin/storage-inspections` 页面。所有 HTTP 接口均要求 `ROLE_ADMIN`，入口见[管理员 API](../reference/api/ADMIN.md)。
+巡检是网盘后端自带的管理员能力，复用 PostgreSQL、Redis 和现有 S3 SDK，不需要业务数仓或新增部署服务。Web 和 Qt 共享 `/admin/storage-inspections` 页面。所有 HTTP 接口均要求 `ROLE_ADMIN`，入口见[管理员 API](../reference/api/ADMIN.md)。
 
 ## 范围与口径
 
@@ -94,7 +94,7 @@ SeaweedFS 4.40 的同名对象与目录碰撞可能使清单返回 `key/` 而引
 
 Prometheus 规则覆盖长期无完整结果、近期失败/部分运行、未忽略的已确认 ERROR 差异和计账 gate 长期关闭，详见[观测运维](OBSERVABILITY.md)。先查看当前运行的 `errorKey` 与覆盖标志，再检查对象存储和数据库健康；不能通过忽略差异消除基础设施故障。
 
-验收入口和真实测试的数据清理约束见[测试策略](../development/TESTING.md)。后端隔离测试覆盖事务回滚、并发容量、迁移中断/变值、租约 fencing/恢复、对象分页、缺失/大小/层级/任务差异、稳定观测、取消、超时和原子修复；真实 API 与 Web/Tauri 验收补足权限和用户操作链路。没有读取正文的巡检不能证明内容哈希、文件可打开或副本物理健康。
+验收入口和真实测试的数据清理约束见[测试策略](../development/TESTING.md)。后端隔离测试覆盖事务回滚、并发容量、迁移中断/变值、租约 fencing/恢复、对象分页、缺失/大小/层级/任务差异、稳定观测、取消、超时和原子修复；真实 API 与 Web/Qt 验收补足权限和用户操作链路。没有读取正文的巡检不能证明内容哈希、文件可打开或副本物理健康。
 
 ### 本机验收样本（2026-11-21）
 

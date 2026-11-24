@@ -9,7 +9,7 @@
 | 第一次启动项目 | [入门指南](getting-started/README.md) |
 | 快速了解当前功能和技术栈 | [项目 README](../README.md) |
 | 理解组件、数据和关键链路 | [架构文档](architecture/README.md) |
-| 修改后端、Web、Qt、Tauri 或 KMP 移动端 | [开发指南](development/README.md) |
+| 修改后端、Web、Qt 或 KMP 移动端 | [开发指南](development/README.md) |
 | 启动 Windows Qt 开发客户端 | [Qt 桌面开发](../desktop/README.md)与[功能矩阵](development/QT_DESKTOP_ACCEPTANCE.md) |
 | 查询 HTTP 接口、配置或本地化协议 | [参考资料](reference/README.md) |
 | 部署、备份、观察或排障 | [运维手册](operations/README.md) |
@@ -39,14 +39,14 @@
 
 ### 开发
 
-[development](development/README.md) 负责开发工作流、各端目录、修改路径、调试和最低验证，包含[统一工作流](development/WORKFLOW.md)、后端、Web、Tauri、[KMP 移动端](development/KMP.md)专项指南和[测试策略](development/TESTING.md)。
+[development](development/README.md) 负责开发工作流、各端目录、修改路径、调试和最低验证，包含[统一工作流](development/WORKFLOW.md)、后端、Web、Qt、[KMP 移动端](development/KMP.md)专项指南和[测试策略](development/TESTING.md)。
 
 ### 参考
 
 - [API 总入口](reference/API.md)：通用约定、错误码以及按认证、文件、分享、团队、通知、OnlyOffice 和管理员划分的业务域索引。
 - [配置参考](reference/CONFIGURATION.md)：Compose、环境变量、反向代理、Redis、RabbitMQ、安全和配置检查。
 - [测试策略](development/TESTING.md)：测试分层、模块命令、最低验证、Testcontainers、专项验收和报告。
-- [本地化协议](reference/LOCALIZATION.md)：后端语义 key 与 Web、Tauri、KMP 移动端文案约定。
+- [本地化协议](reference/LOCALIZATION.md)：后端语义 key 与 Web、Qt、KMP 移动端文案约定。
 
 ### 运维
 
@@ -75,8 +75,7 @@
 |------|------|
 | 后端 | Spring Boot 4.1.0、JDK 25、MinIO SDK 9.0.3、JJWT 0.13.0 |
 | Web | Node.js 24.18.0、pnpm 11.16.0、Vue 3.5.40、Vue Router 5.2.0、Pinia 4.0.2、Vite 8.1.5、TypeScript 6.0.3 |
-| Qt 桌面（Windows 开发版） | PySide6/Qt 6.12.0、Python 3.12.13、uv；分发及其他平台待验收 |
-| Tauri 桌面（保留实现） | Tauri 2.11.4、Rust 1.88.0 |
+| Qt 桌面（Windows 已验收） | PySide6/Qt 6.12.0、Python 3.12.13、uv；分发及其他平台待验收 |
 | KMP 移动端 | Kotlin 2.4.10、Compose Multiplatform 1.11.1、Android Gradle Plugin 9.1.1、Gradle 9.3.1、Ktor 3.5.1、Room 2.8.4；Android `compileSdk/targetSdk` 37 |
 | 核心服务 | PostgreSQL 18.4、Redis 8.8.1、RabbitMQ 4.3.4、SeaweedFS 4.40、OnlyOffice 9.3.0.1 |
 | 可观测性 | Grafana 13.1.1、Prometheus 3.13.1、Blackbox Exporter 0.28.0、Loki 3.6.13、Alloy 1.18.0、Alertmanager 0.33.1 |

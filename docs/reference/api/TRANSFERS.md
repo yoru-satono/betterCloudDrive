@@ -131,7 +131,7 @@ Authorization: Bearer <accessToken>
 - `totalChunks`
 - `chunkSize`
 
-恢复时先调用 `GET /api/v1/upload/{sessionId}/status`，只补传 `missingChunks` 中的分片，全部分片完成后再调用 `complete`。合法会话恢复时不再次初始化；`complete` 响应丢失时仍用原会话幂等恢复。会话失效后才重新调用统一 `/init`，并处理 `INSTANT` 和 `MULTIPART` 两种结果。当前 Web 和 Tauri 客户端均按 24 小时窗口保存可续传上传记录。
+恢复时先调用 `GET /api/v1/upload/{sessionId}/status`，只补传 `missingChunks` 中的分片，全部分片完成后再调用 `complete`。合法会话恢复时不再次初始化；`complete` 响应丢失时仍用原会话幂等恢复。会话失效后，Web 可重新调用统一 `/init`，并处理 `INSTANT` 和 `MULTIPART` 两种结果，Web 可续传记录保留 24 小时。Qt 持久保存任务，恢复时核对原会话；会话失效明确报错，不静默创建新会话，需用户重新发起。
 
 ---
 
@@ -156,7 +156,7 @@ Authorization: Bearer <accessToken>
 
 `messageKey` 是稳定语义键，`messageParams` 是客户端本地化插值参数。后端不返回旧 `message` 字段，也不会把异常诊断文本序列化给客户端。业务代码和自动化测试应优先使用 `code`、对象 `type/status` 或稳定 key 判断状态，不得按中文翻译分支。完整约定见 [客户端本地化与语义文案协议](../LOCALIZATION.md)。
 
-未知或内部异常返回 `error.internal`；Web/Tauri 与 KMP 移动端使用各自本地资源显示通用提示，生产 UI 不直接展示未知 key。
+未知或内部异常返回 `error.internal`；Web/Qt 与 KMP 移动端使用各自本地资源显示通用提示，生产 UI 不直接展示未知 key。
 
 `complete` 支持幂等重试：同一 `sessionId` 第一次成功后会记录产物文件 ID，后续重复调用返回同一个 `fileId`，不会重复合并对象、重复创建文件或重复累计存储配额。
 
@@ -222,7 +222,7 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-> 该接口仅支持普通文件。对文件夹调用会返回 `404001`，文件夹应使用 ZIP ticket 或由 Tauri 客户端直接递归下载。
+> 该接口仅支持普通文件。对文件夹调用会返回 `404001`，文件夹应使用 ZIP ticket 或由 Qt 客户端直接递归下载。
 
 ---
 
@@ -239,7 +239,7 @@ Authorization: Bearer <accessToken>   // 可选：使用 Bearer 或 ticket 二�
 |------|------|:--:|------|
 | ticket | String | 否 | 由 `POST /api/v1/download/{fileId}/ticket` 生成的临时下载凭证 |
 
-以附件形式下载。浏览器端通常先创建 ticket，再使用返回的 URL 触发下载；Tauri 客户端可直接携带 `Authorization: Bearer <accessToken>` 下载。
+以附件形式下载。浏览器端通常先创建 ticket，再使用返回的 URL 触发下载；Qt 客户端可直接携带 `Authorization: Bearer <accessToken>` 下载。
 
 **Response:** 二进制流，`Content-Type` 为文件实际 MIME 类型，`Content-Disposition: attachment`。
 
@@ -302,7 +302,7 @@ Authorization: Bearer <accessToken>   // 可选：使用 Bearer 或 ticket 二�
 | 最大文件数 | 1000 |
 | 最大总大小 | 1GB |
 
-Tauri 客户端的文件夹下载不走 ZIP 打包接口，而是递归列出文件夹内容并逐个文件下载到用户选择的本地目录。
+Qt 客户端的文件夹下载不走 ZIP 打包接口，而是递归列出文件夹内容并逐个文件下载到用户选择的本地目录。
 
 ---
 

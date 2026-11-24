@@ -4,12 +4,12 @@
 
 ## 系统定位
 
-BetterCloudDrive 是一个同时提供个人空间和团队空间的云盘系统。用户通过 Web、Tauri 桌面端、KMP 移动端或 WebDAV 访问统一后端；后端负责身份认证、元数据与权限、对象传输、分享、版本、通知、后台任务和管理能力。
+BetterCloudDrive 是一个同时提供个人空间和团队空间的云盘系统。用户通过 Web、Qt 桌面端、KMP 移动端或 WebDAV 访问统一后端；后端负责身份认证、元数据与权限、对象传输、分享、版本、通知、后台任务和管理能力。
 
 ```mermaid
 flowchart LR
     Web[Web / Vue] --> HTTP[HTTP API]
-    Desktop[Tauri + Vue] --> HTTP
+    Desktop[Qt + Vue] --> HTTP
     Desktop --> Native[本地传输命令]
     Mobile[KMP Mobile / Compose] --> HTTP
     WebDAV[WebDAV 客户端] --> DAV[WebDAV 入口]
@@ -65,7 +65,7 @@ RabbitMQ 是投递通道，不是任务事实来源。相关设计原因参阅[R
 
 ## 部署形态
 
-- 本地开发可只启动基础设施，再分别运行后端、Web、Tauri 或 KMP 移动端。
+- 本地开发可只启动基础设施，再分别运行后端、Web、Qt 或 KMP 移动端。
 - 默认 Compose 启动完整应用、基础设施和观测栈，便于集成验证。
 - 生产覆盖文件收紧基础设施端口暴露，并调整前后端入口；它不会改变模块边界或业务数据归属。
 

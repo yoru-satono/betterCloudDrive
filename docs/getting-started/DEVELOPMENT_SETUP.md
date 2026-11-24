@@ -10,7 +10,7 @@
 | 后端 | JDK、Maven | JDK 25；Maven 使用项目 POM |
 | Python 黑盒测试 | Python、推荐 `uv` | Python 3.12+ |
 | Web | Node.js、pnpm | Node.js 24.18.0、pnpm 11.16.0 |
-| Tauri | Web 工具、Rust、平台依赖 | Rust 1.88.0，由 `rust-toolchain.toml` 固定 |
+| Qt | Node/pnpm、uv、系统运行库 | Python 3.12.13、PySide6/Qt 6.12.0，由锁文件固定 |
 | KMP 移动端 | Android Studio/SDK、JDK；iOS 完整构建另需 macOS/Xcode | Kotlin 2.4.10、SDK 37、Gradle wrapper 9.3.1、构建 JVM 17 |
 | 完整验收 | 上述工具、rclone、adb 和可用 Android 设备 | 由验证脚本预检；iOS 当前只编译共享源码元数据 |
 
@@ -60,17 +60,10 @@ pnpm run dev
 
 访问 `http://localhost:5173`。Vite 将 `/api` 和 `/webdav` 代理到 `VITE_DEV_BACKEND_PROXY_BASE`，默认是 `http://localhost:8080`。
 
-### Tauri 桌面端
+### Qt 桌面端
 
-完成 Web 和平台 Rust 依赖安装后：
+按 [Qt 分步安装与启动](../../desktop/README.md)执行前端锁定安装、uv 依赖同步、网页构建和应用启动。桌面代码位于 `desktop/`，Web 源码位于 `frontend/`。不再需要 Rust、旧桌面 CLI 或 WebDriver；Python/Qt 由 uv 管理，目标系统仍需满足 Qt 的系统运行库要求。Windows 已完成本机开发验收，其他平台完整客户端另行验收。
 
-```bash
-cd frontend
-pnpm install
-pnpm run tauri:dev
-```
-
-桌面端默认连接 `http://127.0.0.1:8080/api/v1`，登录页可覆盖 API 和 Web 分享地址。具体平台依赖与调试方法见 [Tauri 开发指南](../development/TAURI.md)。
 
 ### KMP 移动端
 
@@ -94,7 +87,7 @@ Windows 使用 `gradlew.bat`。详细结构和测试见 [KMP 移动端开发指�
 | Repository/数据库行为 | Docker 引擎 + Testcontainers 集成测试 |
 | REST/安全/队列端到端 | Compose 后端栈 + Python 验收 |
 | Vue 页面/Store/API wrapper | 本机或 Compose 后端 + Vite |
-| Tauri 原生传输 | 后端 + Tauri dev；目录/下载功能还需本地文件系统权限 |
+| Qt 原生传输 | 后端 + Qt dev；目录/下载功能还需本地文件系统权限 |
 | KMP Repository/Store/共享 UI | 共享主机测试；真实传输、平台服务或 Compose 场景再连接 Android 设备 |
 | OnlyOffice | 后端、前端、Document Server，并确认浏览器与容器双向地址 |
 

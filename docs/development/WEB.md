@@ -1,6 +1,6 @@
 # Web 开发指南
 
-本文面向修改 Vue Web 客户端的开发者。Web 与 Tauri 复用同一应用；原生桌面边界另见 [Tauri 开发指南](TAURI.md)。
+本文面向修改 Vue Web 客户端的开发者。Web 与 Qt 复用同一应用；原生桌面边界另见 [Qt 开发指南](../../desktop/README.md)。
 
 ## 目录与数据流
 
@@ -72,7 +72,7 @@ pnpm run build
 pnpm run test:e2e:docker
 ```
 
-完整脚本中的 `web` 模块会运行 Web 单元测试/JavaScript 覆盖率和 core E2E；`office` 单独验证 OnlyOffice。测试数据必须使用运行前缀并接受脚本清理。修改共同 API 时还要运行 KMP 移动端和 Tauri 的受影响测试。
+完整脚本中的 `web` 模块会运行 Web 单元测试/JavaScript 覆盖率和 core E2E；`office` 单独验证 OnlyOffice。测试数据必须使用运行前缀并接受脚本清理。修改共同 API 时还要运行 KMP 移动端和 Qt 的受影响测试。
 
 ## 提交前检查
 

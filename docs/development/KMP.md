@@ -87,7 +87,7 @@ Token、ticket、密码、请求正文和 SAF URI 不得进入日志、路由、
 | 修改范围 | 最低验证 |
 |----------|----------|
 | `commonMain` 模型、API、Repository 或 Store | `bash scripts/verify-all.sh --module mobile-unit` |
-| Ktor DTO 或共同 API | MockEngine 契约、相关 Store/Repository 测试，并按协议影响补后端、Web 和 Tauri 验证 |
+| Ktor DTO 或共同 API | MockEngine 契约、相关 Store/Repository 测试，并按协议影响补后端、Web 和 Qt 验证 |
 | Keystore、SAF、Room、通知或平台调度 | `mobile-unit`，并在 API 28 和 API 34 分别运行 `mobile-android` |
 | `androidApp`、Manifest、网络安全配置或 R8 | Android 设备测试和 Release 构建 |
 | Compose UI、导航、权限动作或系统选择器 | 相关共享状态测试和 Android instrumentation |
@@ -109,7 +109,7 @@ API 28 与 API 34 分别覆盖 WorkManager 和 UIDT。AVD 生命周期在验证�
 
 - 确认共享代码没有新增 Android API 依赖，敏感值没有进入日志、持久状态或报告。
 - 运行与修改范围匹配的 `mobile-unit` / `mobile-android`，设备相关改动覆盖 API 28 和 API 34。
-- 跨客户端协议变化同步检查后端、Web、Tauri、KMP DTO、错误语义和调用方。
+- 跨客户端协议变化同步检查后端、Web、Qt、KMP DTO、错误语义和调用方。
 - 更新相关架构、API、本地化、配置或测试文档，并运行 Markdown 相对链接检查。
 - 运行 `git diff --check`，不提交 SDK、AVD、IDE 配置、Gradle 缓存、构建产物或测试报告。
 

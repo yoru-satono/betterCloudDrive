@@ -6,7 +6,7 @@
 
 - [API 总入口](API.md)：基础地址、统一响应、错误码、通用约定和[业务域索引](api/README.md)。
 - [配置与部署](CONFIGURATION.md)：Compose、环境变量、反向代理、后端配置和上线检查。
-- [本地化协议](LOCALIZATION.md)：服务端语义 key 与 Web、Tauri、KMP 移动端文案约定。
+- [本地化协议](LOCALIZATION.md)：服务端语义 key 与 Web、Qt、KMP 移动端文案约定。
 - [测试策略迁移指针](TESTING.md)：旧链接兼容入口；当前正文位于[开发测试策略](../development/TESTING.md)。
 
 ## 维护边界

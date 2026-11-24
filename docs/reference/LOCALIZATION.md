@@ -1,6 +1,6 @@
 # 客户端本地化与语义文案协议
 
-BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务端只传递稳定的文案键和结构化参数，由 Web/Tauri 与 KMP 移动端使用本地简体中文或英文资源渲染；选择原因见[语义本地化 ADR](../decisions/008-semantic-localization.md)。
+BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务端只传递稳定的文案键和结构化参数，由 Web/Qt 与 KMP 移动端使用本地简体中文或英文资源渲染；选择原因见[语义本地化 ADR](../decisions/008-semantic-localization.md)。
 
 后端账号偏好接受 `en-US`、`zh-Hans`、`zh-CN` 和 `zh-SG`。未登录时使用当前设备已保存的选择，首次访问按系统语言选择；注册会保存当前语言。登录后以账号的 `preferredLocale` 为准，并同步到当前设备。全新数据库实例中的账号默认使用 `zh-Hans`。
 
@@ -40,10 +40,10 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 
 - 所有协议 key 和前端内部 key 使用 `domain.feature.intent` 形式，每段均为 lowerCamelCase。
 - 禁止哈希、序号、自然语言、`migrated.*` 和 snake_case 作为 key；通用动作、状态和分页文案归入 `common`。
-- 本次语义化改名是破坏性协议升级，不提供旧 key 别名或双读。后端、Web/Tauri 与 KMP 移动端必须同步发布。
+- 本次语义化改名是破坏性协议升级，不提供旧 key 别名或双读。后端、Web/Qt 与 KMP 移动端必须同步发布。
 - HTTP 路径、响应结构和 `messageParams` 形状不变；只有 `messageKey`、通知、任务、活动和权限描述 key 改名。
 
-## Web 与 Tauri
+## Web 与 Qt
 
 - 入口位于 `frontend/src/i18n.ts`，资源位于 `frontend/src/locales/zh-Hans.ts` 和 `frontend/src/locales/en-US.ts`。
 - 生产源码中的用户可见文本必须通过 locale key 获取。`pnpm run check:i18n` 检查 Vue 裸文本、用户可见静态属性和 TypeScript 中文字符串；技术名词例外集中登记在 `frontend/i18n-hardcode.config.mjs`，并必须说明原因。
@@ -51,7 +51,7 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 - 公开认证页提供全局语言入口，登录后可在个人资料中修改。切换立即生效并更新页面 `lang`；保存账号失败时回滚。
 - `resolveMessage(key, params)` 负责插值和未知键降级。
 - 未知键会写客户端诊断日志；生产界面只显示当前语言的本地通用提示，不显示服务端 key。
-- Tauri Rust 网络信封同样解析 `messageKey/messageParams`，不得重新依赖旧 `message`。
+- Qt Python 网络信封同样解析 `messageKey/messageParams`，不得重新依赖旧 `message`。
 
 ## KMP 移动端
 
@@ -71,4 +71,4 @@ BetterCloudDrive 的服务端 API 不返回面向用户的自然语言。服务�
 
 数据库仅提供面向全新实例的合并基线。`V1__schema.sql` 直接包含规范化 BCP 47 语言偏好字段和语义化 message key 字段，不提供旧数据库或旧 snake_case key 的原地升级路径。
 
-管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。`zh-Hans`、`zh-CN` 和 `zh-SG` 均映射到 Grafana 的 `zh-Hans`，`en-US` 保持不变；Web/Tauri 同样把 CN、SG 映射到现有 `zh-Hans` 词典。映射不改写账号保存的精确地区，Grafana 同步失败也不会影响主应用语言保存或管理员排障入口。
+管理员的语言偏好也会在创建 Grafana 会话和修改偏好时同步到 Grafana。`zh-Hans`、`zh-CN` 和 `zh-SG` 均映射到 Grafana 的 `zh-Hans`，`en-US` 保持不变；Web/Qt 同样把 CN、SG 映射到现有 `zh-Hans` 词典。映射不改写账号保存的精确地区，Grafana 同步失败也不会影响主应用语言保存或管理员排障入口。

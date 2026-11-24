@@ -45,7 +45,7 @@
 | `config/env-files/storage.env` | SeaweedFS / S3 存储变量 |
 | `config/env-files/security.env` | JWT 和分享密码加密密钥 |
 | `config/env-files/backend.env` | 后端日志、OnlyOffice、队列和后台任务变量 |
-| `config/env-files/frontend.env` | 前端 Nginx 代理、Web/Tauri/KMP 移动端构建与测试地址 |
+| `config/env-files/frontend.env` | 前端 Nginx 代理、Web/KMP 移动端构建与测试地址 |
 | `config/env-files/mail.env` | 邮件服务变量 |
 | `config/env-files/observability.env` | Prometheus、Loki、Alloy、Alertmanager、Grafana 和审计日志变量 |
 | `config/redis/redis.conf` | Redis 配置 |
@@ -261,8 +261,8 @@ docker run -d \
 |----------|------|
 | `VITE_API_BASE_URL` | Web 前端 API 根地址，例如 `https://api.example.com/api/v1` |
 | `VITE_WEB_BASE_URL` | 分享链接使用的 Web 根地址，例如 `https://drive.example.com` |
-| `VITE_DESKTOP_API_BASE_URL` | Tauri 客户端默认 API 根地址 |
-| `VITE_DESKTOP_WEB_BASE_URL` | Tauri 客户端默认 Web 根地址 |
+| `BCD_DESKTOP_API_BASE` | Qt 客户端默认 API 根地址 |
+| `BCD_DESKTOP_WEB_BASE` | Qt 客户端默认 Web 根地址 |
 
 构建：
 
@@ -353,8 +353,6 @@ pnpm run build
 | `ONLYOFFICE_JWT_SECRET` | 本地开发密钥 | OnlyOffice Document Server 和后端共享的 JWT 密钥，生产必须替换 |
 | `VITE_API_BASE_URL` | 空 | Web 前端构建时 API 根地址。空值表示使用 `/api/v1` |
 | `VITE_WEB_BASE_URL` | 空 | Web 前端构建时 Web 根地址。空值表示使用当前 origin |
-| `VITE_DESKTOP_API_BASE_URL` | `http://127.0.0.1:8080/api/v1` | Tauri 客户端默认 API 根地址 |
-| `VITE_DESKTOP_WEB_BASE_URL` | `http://127.0.0.1:3000` | Tauri 客户端默认 Web 根地址 |
 
 ### `database.env`
 
@@ -486,8 +484,8 @@ pnpm run build
 | `VITE_API_BASE_URL` | Web 构建时 API 根地址 |
 | `VITE_WEB_BASE_URL` | Web 构建时 Web 根地址 |
 | `VITE_DEV_BACKEND_PROXY_BASE` | Vite dev server 的 `/api`、`/webdav` 代理目标 |
-| `VITE_DESKTOP_API_BASE_URL` | Tauri 客户端默认 API 根地址 |
-| `VITE_DESKTOP_WEB_BASE_URL` | Tauri 客户端默认 Web 根地址 |
+
+Qt 构建另从宿主机环境读取 `BCD_DESKTOP_API_BASE`（默认 `http://127.0.0.1:8080/api/v1`）与 `BCD_DESKTOP_WEB_BASE`（默认 `http://127.0.0.1:3000`），不从此 Compose env 文件加载。
 
 KMP Android Debug 在官方模拟器中默认使用 `http://10.0.2.2:8080`，登录页可保存其他规范化服务器地址；Release 只接受 HTTPS。设备测试的 ADB serial 通过 `scripts/verify-all.ps1 -AndroidSerial` 或 `scripts/verify-all.sh --android-serial` 显式传入，不属于 `frontend.env`。
 
@@ -496,14 +494,14 @@ Web 前端地址解析顺序：
 | 场景 | API 地址优先级 |
 |------|----------------|
 | Web | localStorage 自定义值 > `VITE_API_BASE_URL` > `/api/v1` |
-| Tauri | localStorage 自定义值 > `VITE_API_BASE_URL` > `VITE_DESKTOP_API_BASE_URL` |
+| Qt | localStorage 自定义值 > 桌面构建注入的 `BCD_DESKTOP_API_BASE` > 默认回环地址 |
 
 分享链接 Web 根地址解析顺序：
 
 | 场景 | Web 地址优先级 |
 |------|----------------|
 | Web | localStorage 自定义值 > `VITE_WEB_BASE_URL` > `window.location.origin` |
-| Tauri | localStorage 自定义值 > `VITE_WEB_BASE_URL` > `VITE_DESKTOP_WEB_BASE_URL` |
+| Qt | localStorage 自定义值 > 桌面构建注入的 `BCD_DESKTOP_WEB_BASE` > 默认回环地址 |
 
 ### `mail.env`
 
@@ -744,3 +742,5 @@ docker compose exec redis redis-cli ping
 ```
 
 未登录访问 `/api/v1/grafana/auth` 和 `/grafana/` 返回 401 是正常结果，说明代理链路和鉴权接口可达。
+
+Qt 的 `BCD_DESKTOP_API_BASE`、`BCD_DESKTOP_WEB_BASE` 在桌面构建进程环境中设置，由独立构建注入网页默认值；不由 Compose 的前端服务 env 文件自动传给宿主机桌面进程。

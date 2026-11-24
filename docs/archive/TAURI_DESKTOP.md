@@ -1,3 +1,7 @@
+# 历史 Tauri 桌面开发指南（已退役）
+
+Tauri 客户端源码、依赖和验证入口已移除。下文保留原指南用于追溯，不是当前可执行说明。当前客户端见 [Qt 桌面开发](../../desktop/README.md)。旧源码可通过 `git show e153f07:frontend/src-tauri/src/lib.rs` 查看。
+
 # Tauri 开发指南
 
 本文面向修改桌面端原生能力的开发者。Tauri 复用 Vue 应用，Rust 层只负责浏览器无法可靠完成的本地文件系统、传输队列和平台设置。
@@ -80,7 +84,7 @@ Linux 推荐运行 `./scripts/verify-all.sh --module tauri`，脚本会临时放
 | 路径和文件写入 | 临时目录测试、取消/失败清理和越界用例 |
 | Tauri 配置/plugin/capability | E2E build + release build |
 
-共享 Vue 页面规范见 [Web 开发指南](WEB.md)，整体客户端边界见[客户端架构](../architecture/CLIENTS.md)。
+共享 Vue 页面规范见 [Web 开发指南](../development/WEB.md)，整体客户端边界见[客户端架构](../architecture/CLIENTS.md)。
 
 桌面 E2E 的 API 请求与连接设置断言统一使用 `E2E_BACKEND_URL`（默认 `http://127.0.0.1:8080`），Web 分享地址使用 `E2E_BASE_URL`（默认 `http://127.0.0.1:3000`）。宿主机端口冲突时可通过进程环境覆盖，并对应设置 Compose 的 `HOST_BACKEND_PORT`。
 

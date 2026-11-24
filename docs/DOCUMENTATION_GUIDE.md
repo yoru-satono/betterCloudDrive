@@ -45,7 +45,7 @@ docs/
 │   ├── WORKFLOW.md
 │   ├── BACKEND.md
 │   ├── WEB.md
-│   ├── TAURI.md
+│   ├── QT_DESKTOP_ACCEPTANCE.md
 │   ├── KMP.md
 │   └── TESTING.md
 ├── reference/
@@ -153,7 +153,7 @@ docs/
 | 修改数据表、实体关系或生命周期 | 数据模型、备份恢复、相关 API |
 | 修改团队角色或文件权限计算 | 权限架构、API、客户端开发指南和测试策略 |
 | 修改 Outbox、RabbitMQ、后台任务或 DLQ | 异步链路、队列 ADR、观测和运维 Runbook |
-| 修改 Web/Tauri/KMP 移动端共用协议 | 客户端架构、本地化协议、各端开发指南 |
+| 修改 Web/Qt/KMP 移动端共用协议 | 客户端架构、本地化协议、各端开发指南 |
 | 增删验证阶段或测试验收条件 | 测试策略和受影响的专项开发指南；若改变首次启动验收，再同步 Quickstart |
 
 ## 迁移规则

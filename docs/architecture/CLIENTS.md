@@ -1,6 +1,6 @@
 # 客户端架构
 
-本文面向 Web、Tauri 和 KMP 移动端开发者，说明三端共享的协议、代码复用边界和平台差异。复用策略见[KMP 移动端边界 ADR](../decisions/009-kmp-mobile-boundary.md)；接口字段以 [API 参考](../reference/API.md) 为准，本地化消息协议以[本地化参考](../reference/LOCALIZATION.md)为准。
+本文面向 Web、Qt 和 KMP 移动端开发者，说明三端共享的协议、代码复用边界和平台差异。复用策略见[KMP 移动端边界 ADR](../decisions/009-kmp-mobile-boundary.md)；接口字段以 [API 参考](../reference/API.md) 为准，本地化消息协议以[本地化参考](../reference/LOCALIZATION.md)为准。
 
 ## 共同边界
 
@@ -34,20 +34,18 @@ Page / Component
 - Web 提供最完整的管理界面，包括用户、团队、系统日志和死信管理。
 - 浏览器下载依赖服务端响应或下载 ticket；浏览器能力受同源、CORS 和文件系统 API 限制。
 
-## Tauri 桌面端
+## Qt 桌面端
 
-Tauri 复用同一套 Vue 页面、Router、Store 和大部分 API wrapper。运行时通过 Tauri command 增加原生文件系统选择、断点传输、目录递归和持久传输队列。
+Qt 通过 `desktop/` 的独立构建复用 Vue 页面、Router、Store 和 API wrapper。共享模块只依赖 `@/platform/desktop`：普通 Web 实现拒绝原生调用，Qt 构建映射到私有 QWebChannel 桥接。运行时、认证和预览适配由桌面构建入口替换，不维护旧客户端兼容层。
 
-Rust 边界位于 `frontend/src-tauri/src`：
+| 边界 | 职责 |
+| --- | --- |
+| `desktop/app.py` | 窗口、原生选择、可信来源/白名单、隔离 world、会话生命周期 |
+| `desktop/engine.py`、`transport.py`、`network.py` | 文件级调度、身份隔离、有限重试、Range/MD5、SQLite 设置及暂停恢复 |
+| `desktop/media.py` | 独立 Qt Multimedia 播放器、可撤销授权网关及连接清理 |
+| `desktop/web/` | 网页身份同步、迟到响应保护、平台接口、预览及 OnlyOffice 生命周期 |
 
-| 模块 | 职责 |
-|------|------|
-| `settings.rs` | 服务地址、默认下载目录和上传/下载限速 |
-| `transfer.rs` | 传输任务、节点状态、暂停/恢复/取消和持久化 |
-| `upload.rs` | 本地文件/目录遍历、分片上传和恢复 |
-| `download.rs` | 文件与目录下载、目标目录选择和本地写入 |
-
-前端通过运行时判断调用桌面 API；普通业务请求仍走共享 REST client。不要在 Rust 层复制团队权限或文件状态机。Tauri 的价值是平台 I/O 与长时间传输，不是建立第二套业务后端。
+业务权限和约束仍由后端决定。Python 承接桌面平台能力，页面和共同业务协议留在 TypeScript。当前已实测 Windows 开发版本；通用验证入口可跨平台运行，完整 Linux/macOS 客户端仍待各自验收。
 
 ## KMP 移动端
 
@@ -90,16 +88,16 @@ Compose Screen
 
 ## 能力矩阵
 
-| 能力 | Web | Tauri | KMP 移动端 |
+| 能力 | Web | Qt | KMP 移动端 |
 |------|-----|-------|---------|
 | 认证、个人文件、回收站、分享、标签、收藏、版本 | 是 | 复用 Web | Android 应用壳已支持 |
 | 团队文件、成员、邀请、权限与任务 | 是 | 复用 Web | Android 应用壳已支持 |
 | 浏览器在线预览/OnlyOffice | 按权限查看或编辑 | 复用 Web 页面 | Android WebView 只读查看 |
-| 原生目录上传与持久传输队列 | 受浏览器能力限制 | 是，Rust 实现 | KMP 使用 Room + UIDT/WorkManager |
+| 原生目录上传与持久传输队列 | 受浏览器能力限制 | 是，Python/Qt 实现 | KMP 使用 Room + UIDT/WorkManager |
 | 全局管理员界面 | 是 | 复用 Web | 非当前支持范围 |
 | WebDAV | 外部 WebDAV 客户端使用 | 外部客户端使用 | 外部客户端使用 |
 
-矩阵描述架构边界，不代替逐接口支持清单。修改共同协议时，应同时检索 Web API wrapper、Tauri 调用适配和 KMP 各领域 API。
+矩阵描述架构边界，不代替逐接口支持清单。修改共同协议时，应同时检索 Web API wrapper、Qt 调用适配和 KMP 各领域 API。
 
 ## 认证与刷新
 
@@ -123,5 +121,5 @@ SSE 通知不能把 access token 放在查询参数。客户端先以 Bearer tok
 1. API 路径或 DTO 改动同时更新三端契约入口和端点契约测试。
 2. 新增业务错误码时，保持通用错误处理可回退，不在页面硬编码后端英文消息。
 3. 新增消息 key 时同步 Web、KMP 移动端和后端 catalog，并运行本地化检查。
-4. Tauri 原生 command 只处理平台能力；可共享的页面和协议逻辑留在 TypeScript。
+4. Qt 原生命令只处理平台能力；可共享的页面和协议逻辑留在 TypeScript。
 5. KMP 移动端通过共享主机测试、Android 设备场景和 iOS 共享源码元数据编译验收，不以代码行覆盖率替代行为断言。

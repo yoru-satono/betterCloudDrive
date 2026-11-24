@@ -1,6 +1,6 @@
 # BetterCloudDrive
 
-全栈云盘系统，提供 Web、Qt 桌面开发版本、保留的 Tauri 桌面实现、Kotlin Multiplatform 移动端和 WebDAV 访问。
+全栈云盘系统，提供 Web、Qt 桌面开发版本、Kotlin Multiplatform 移动端和 WebDAV 访问。
 
 Qt 当前交付范围为 Windows 11 x64、uv 开发启动，见 [Qt 桌面开发](desktop/README.md)及[功能矩阵与验收记录](docs/development/QT_DESKTOP_ACCEPTANCE.md)。本机开发验收通过不代表安装包、干净 Windows、人工长期试用或完整 Linux/macOS 已验收。
 
@@ -18,7 +18,6 @@ Qt 当前交付范围为 Windows 11 x64、uv 开发启动，见 [Qt 桌面开发
 | **业务数仓（可选）** | ClickHouse 26.8.41.14 + dbt Core 1.12.7 + Airflow 3.4.0 + Python 3.12 |
 | **Web 前端** | Vue 3.5.40 + Vite 8.1.5 + Pinia 4.0.2 + Vue Router 5.2.0 |
 | **Qt 桌面（Windows 开发版）** | PySide6/Qt 6.12.0 + Python 3.12.13 + uv |
-| **Tauri 桌面（保留实现）** | Tauri 2.11.4 + Rust 1.88.0 |
 | **KMP 移动端** | Kotlin 2.4.10 + Compose Multiplatform 1.11.1 + Ktor 3.5.1 + Room 2.8.4；Android 应用壳，iOS 共享源码目标 |
 | **测试** | JUnit 5 + Mockito（后端）、pytest + httpx（黑盒）、Vitest + Playwright（前端） |
 | **部署** | Docker Compose 一键编排 |
@@ -54,7 +53,7 @@ betterCloudDrive/
 │   ├── betterclouddrive-web/        # Controller、Security
 │   ├── betterclouddrive-scheduler/  # 定时任务
 │   └── betterclouddrive-start/      # 启动入口 + Flyway 迁移
-├── frontend/                # Vue 3 Web 前端与 Tauri 桌面壳
+├── frontend/                # Vue 3 Web 前端与共享桌面页面
 ├── desktop/                 # Qt Windows 开发客户端、独立 Vue 适配与验收
 ├── mobile/                  # 活跃的 Kotlin Multiplatform 移动端
 ├── backend-test/            # Python 黑盒 API 测试
@@ -96,7 +95,7 @@ docker compose up -d --build
 
 部署细节见 [OnlyOffice 部署与排障](docs/operations/ONLYOFFICE_DEPLOYMENT.md) 和 [数据备份与恢复](docs/operations/BACKUP_RESTORE.md)。
 
-前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Tauri 默认地址可用 `VITE_DESKTOP_API_BASE_URL`、`VITE_DESKTOP_WEB_BASE_URL` 覆盖。KMP Android Debug 在官方模拟器中默认连接 `http://10.0.2.2:8080`，用户也可以在登录页设置自己的服务器地址。
+前端容器使用 nginx 托管构建产物，并将 `/api/`、`/webdav/` 和 `/grafana/` 分别反向代理到后端、WebDAV 和 Grafana。宿主机端口和前端 Docker 构建参数通过根目录 `.env` 调整；容器运行时变量、后端依赖地址、可观测性组件地址和 Grafana 同域访问地址通过 `config/env-files/*.env` 调整。Web 构建可用 `VITE_API_BASE_URL`、`VITE_WEB_BASE_URL` 覆盖默认地址；Qt 构建默认地址可用 `BCD_DESKTOP_API_BASE`、`BCD_DESKTOP_WEB_BASE` 覆盖。KMP Android Debug 在官方模拟器中默认连接 `http://10.0.2.2:8080`，用户也可以在登录页设置自己的服务器地址。
 
 ## 可观测性
 
@@ -123,7 +122,7 @@ Grafana 通过 Nginx `auth_request` 接入 BetterCloudDrive 管理员身份。�
 
 ### 方式二：本地开发启动
 
-按后端、Web、Qt、Tauri 或 KMP 移动端组合本地环境的完整说明见[开发环境准备](docs/getting-started/DEVELOPMENT_SETUP.md)和[专项开发指南](docs/development/README.md)。Qt 按[独立分步命令](desktop/README.md#环境与分步启动)启动；下面仅保留最短 Web 联调入口。
+按后端、Web、Qt 或 KMP 移动端组合本地环境的完整说明见[开发环境准备](docs/getting-started/DEVELOPMENT_SETUP.md)和[专项开发指南](docs/development/README.md)。Qt 按[独立分步命令](desktop/README.md#环境与分步启动)启动；下面仅保留最短 Web 联调入口。
 
 启动依赖和后端：
 
@@ -162,7 +161,7 @@ Android APK 输出在 `mobile/androidApp/build/outputs/apk/debug/`。正式应�
 
 客户端展示文案采用后端语义 key + 结构化参数协议，详见 [客户端本地化与语义文案协议](docs/reference/LOCALIZATION.md)。此协议不包含自然语言兜底字段，旧客户端不能与当前后端混用。
 
-Web、Tauri 与 KMP 移动端支持“跟随系统、浅色、深色”三种主题模式。首次启动默认跟随系统，用户可在个人设置的“外观”区域选择固定主题；偏好仅保存在当前设备并跨登录状态保留。
+Web、Qt 与 KMP 移动端支持“跟随系统、浅色、深色”三种主题模式。首次启动默认跟随系统，用户可在个人设置的“外观”区域选择固定主题；偏好仅保存在当前设备并跨登录状态保留。
 
 ## 文档
 
@@ -197,4 +196,4 @@ Linux/macOS：
 ./scripts/verify-all.sh
 ```
 
-完整运行包含需要 Docker、Rust、rclone 和 Android 设备的阶段；开发时应按[最低验证矩阵](docs/development/TESTING.md#修改范围到最低验证)选择子集。
+完整运行包含需要 Docker、uv/Python、rclone 和 Android 设备的阶段；开发时应按[最低验证矩阵](docs/development/TESTING.md#修改范围到最低验证)选择子集。

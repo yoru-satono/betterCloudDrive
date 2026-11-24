@@ -13,7 +13,7 @@ OnlyOffice 支持 `docx`、`pptx`、`xlsx` 等 Office 文件。个人文件只�
 | GET | `/api/v1/office/files/{fileId}/config?mobile=` | 文件所有者 | 个人只读 `OfficeConfigResponse`；`mobile=true` 返回移动查看配置 |
 | GET | `/api/v1/teams/{teamId}/office/files/{fileId}/config?mobile=` | 团队成员 | 默认按有效权限返回配置；`mobile=true` 强制只读移动查看 |
 
-`mobile` 缺省为 `false`，Web/Tauri 的现有编辑行为不变。`mobile=true` 时，响应具有以下固定语义：
+`mobile` 缺省为 `false`，Web/Qt 的现有编辑行为不变。`mobile=true` 时，响应具有以下固定语义：
 
 - `config.type` 为 `mobile`，`editable` 为 `false`，`editorConfig.mode` 为 `view`。
 - `document.permissions.edit/review/comment/fillForms` 均为 `false`，下载和打印权限保持启用。

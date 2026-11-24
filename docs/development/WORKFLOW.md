@@ -1,6 +1,6 @@
 # 开发工作流
 
-本文面向跨模块功能开发和代码评审，给出从确认事实、选择修改位置到验证与文档同步的统一流程。各端具体命令分别见[后端](BACKEND.md)、[Web](WEB.md)、[Tauri](TAURI.md)、[KMP 移动端](KMP.md)和[测试策略](TESTING.md)。
+本文面向跨模块功能开发和代码评审，给出从确认事实、选择修改位置到验证与文档同步的统一流程。各端具体命令分别见[后端](BACKEND.md)、[Web](WEB.md)、[Qt](../../desktop/README.md)、[KMP 移动端](KMP.md)和[测试策略](TESTING.md)。
 
 ## 1. 先确定事实来源
 
@@ -13,7 +13,7 @@
 | 数据表和查询 | Flyway、Entity、Repository、集成测试 |
 | 对象内容和生命周期 | StorageService、文件/版本/上传 Service |
 | 异步任务 | Outbox writer/publisher、`team_tasks`、Worker、DLQ |
-| Web/Tauri 协议 | `frontend/src/api`、共享 client、Rust envelope/command |
+| Web/Qt 协议 | `frontend/src/api`、共享 client、Qt 桥接与 Python 原生层 |
 | KMP 移动端协议 | `DomainApis`、窄 Repository、`AuthenticatedHttpClient` |
 | 运行配置 | 环境模板、Compose、Spring/Vite/Gradle 消费者 |
 
@@ -39,9 +39,9 @@
 2. migration、Entity 和 Repository（如需要）。
 3. Service 业务规则、事务和权限。
 4. Controller/WebDAV/Worker 入口。
-5. Web/Tauri/KMP 移动端协议适配和 UI 状态。
+5. Web/Qt/KMP 移动端协议适配和 UI 状态。
 
-只改客户端的功能也应先确认服务端已经支持所需协议。多个客户端共用的业务规则留在后端；Web 与 Tauri 共用的界面/协议逻辑留在 TypeScript；平台文件系统能力才进入 Rust 或 KMP 的平台 source set。
+只改客户端的功能也应先确认服务端已经支持所需协议。多个客户端共用的业务规则留在后端；Web 与 Qt 共用的界面/协议逻辑留在 TypeScript；平台文件系统能力才进入 Python 或 KMP 的平台 source set。
 
 ## 4. 先跑最小反馈，再跑边界验收
 
@@ -49,7 +49,7 @@
 
 - Service + Repository：模块单元测试，再运行 `integration`。
 - Controller + Web 页面：后端 Web 模块、blackbox、Web 单元和相关 Playwright。
-- 共同 API：后端契约、Web/Tauri、KMP 主机及 Android 设备相关测试。
+- 共同 API：后端契约、Web/Qt、KMP 主机及 Android 设备相关测试。
 - 队列恢复：Service/Scheduler 单元、integration、resilience。
 - KMP 移动端 UI：共享主机状态测试和 Android instrumentation；不生成或检查代码行覆盖率。
 
