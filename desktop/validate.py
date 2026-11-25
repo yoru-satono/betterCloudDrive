@@ -225,8 +225,9 @@ class Validation(PreviewChecks):
             self.page.command("Input.insertText", {"text": value})
         self.page.click("form button[type=submit]")
         self.page.wait("location.hash.includes('/files') && !!document.querySelector('[data-testid^=file-card]')", 40)
+        self.page.evaluate("window.__validationReloadMarker=true")
         self.page.command("Page.reload")
-        self.page.wait("location.hash.includes('/files') && !!document.querySelector('[data-testid^=file-card]')", 40)
+        self.page.wait("!window.__validationReloadMarker && location.hash.includes('/files') && !!document.querySelector('[data-testid^=file-card]')", 40)
         for key in ("accessToken", "refreshToken"):
             self.owner[key] = self.page.evaluate("localStorage.getItem(" + json.dumps(key) + ")")
             self.secrets.append(self.owner[key])
