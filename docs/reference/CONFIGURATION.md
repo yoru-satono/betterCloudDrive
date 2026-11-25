@@ -261,8 +261,15 @@ docker run -d \
 |----------|------|
 | `VITE_API_BASE_URL` | Web 前端 API 根地址，例如 `https://api.example.com/api/v1` |
 | `VITE_WEB_BASE_URL` | 分享链接使用的 Web 根地址，例如 `https://drive.example.com` |
-| `BCD_DESKTOP_API_BASE` | Qt 客户端默认 API 根地址 |
-| `BCD_DESKTOP_WEB_BASE` | Qt 客户端默认 Web 根地址 |
+
+Qt 默认地址在宿主机启动进程中设置，不进入 Web 构建，也不自动读取仓库 `.env` 或 Compose 服务环境：
+
+| 启动环境变量 | 说明 |
+|----------|------|
+| `BCD_DESKTOP_API_BASE` | Qt 默认 API 根地址，可由 `--api-base` 覆盖 |
+| `BCD_DESKTOP_WEB_BASE` | Qt 默认 Web 根地址，可由 `--web-base` 覆盖 |
+
+已保存的 Profile 连接设置优先于这些启动默认值。旧 `VITE_DESKTOP_API_BASE_URL`、`VITE_DESKTOP_WEB_BASE_URL` 已失效，不应继续配置。
 
 构建：
 
