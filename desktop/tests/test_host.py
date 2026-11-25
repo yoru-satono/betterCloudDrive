@@ -53,8 +53,9 @@ def test_native_picker_cancellation_and_unknown_commands(system, qt, monkeypatch
         assert responses[0]["result"] == {"selected": False}
         assert responses[1]["result"] == {"selected": False}
         assert responses[2]["result"] == {"saved": False}
-        bridge.dispatch('{"id":"x","command":"download_desktop_file","args":{}}')
-        assert responses[-1]["error"] == "UNKNOWN_COMMAND"
+        for legacy in ("download_desktop_file", "choose_desktop_folder", "download_desktop_file_to_path", "create_desktop_subdirectory"):
+            bridge.dispatch(json.dumps({"id": "legacy", "command": legacy, "args": {}}))
+            assert responses[-1]["error"] == "UNKNOWN_COMMAND"
         assert not engine.tasks
     finally:
         bridge.workers.shutdown(wait=True)

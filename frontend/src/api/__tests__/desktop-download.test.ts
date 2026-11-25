@@ -1,14 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as filesApi from '@/api/files'
-import { ensureFreshAccessToken, refreshAccessToken } from '@/api/client'
+import { ensureFreshAccessToken } from '@/api/client'
 import {
-  buildDownloadUrl,
-  buildUniquePathName,
-  downloadDesktopFile,
-  downloadDesktopFolder,
-  isPickerAbort,
   listAllChildren,
-  sanitizePathSegment,
   startQueuedDesktopFileDownload,
   startQueuedDesktopFolderDownload,
 } from '@/api/desktopDownload'
@@ -18,10 +12,10 @@ import { invoke } from '@/platform/desktop'
 vi.mock('@/api/files', () => ({
   listFiles: vi.fn(),
 }))
+vi.mock('@/api/teams', () => ({ listTeamFiles: vi.fn() }))
 
 vi.mock('@/api/client', () => ({
   ensureFreshAccessToken: vi.fn(() => Promise.resolve(undefined)),
-  refreshAccessToken: vi.fn(),
 }))
 
 vi.mock('@/config/runtime', () => ({
@@ -40,7 +34,6 @@ vi.mock('@/api/desktopSettings', () => ({
 const listFiles = vi.mocked(filesApi.listFiles)
 const invokeMock = vi.mocked(invoke)
 const ensureFreshAccessTokenMock = vi.mocked(ensureFreshAccessToken)
-const refreshAccessTokenMock = vi.mocked(refreshAccessToken)
 
 function file(id: number, parentId: number | null, fileName: string): FileEntity {
   return {
@@ -91,28 +84,25 @@ function page(records: FileEntity[], page = 1, pages = 1) {
 }
 
 describe('desktop downloads', () => {
+  it('uses only the queued command for a team file and preserves picker cancellation', async () => {
+    invokeMock.mockResolvedValueOnce({saved:false})
+    await expect(startQueuedDesktopFileDownload({id:3,fileName:'a.txt',fileSize:8},{teamId:9})).resolves.toBe(false)
+    expect(invokeMock).toHaveBeenCalledWith('start_desktop_download_file',expect.objectContaining({request:expect.objectContaining({fileId:3,apiBaseUrl:'http://127.0.0.1:8080/api/v1/teams/9'})}))
+  })
+
+  it('builds team folder trees through team APIs and forwards native rejection', async () => {
+    const {listTeamFiles}=await import('@/api/teams')
+    vi.mocked(listTeamFiles).mockResolvedValueOnce(await page([file(12,10,'root.txt')]))
+    invokeMock.mockRejectedValueOnce(new Error('PERMISSION_DENIED'))
+    await expect(startQueuedDesktopFolderDownload({id:10,fileName:'docs',fileSize:0},{teamId:9})).rejects.toThrow('PERMISSION_DENIED')
+    expect(listTeamFiles).toHaveBeenCalledWith(9,expect.objectContaining({parentId:10}))
+    expect(invokeMock).toHaveBeenCalledWith('start_desktop_download_folder',expect.objectContaining({request:expect.objectContaining({apiBaseUrl:'http://127.0.0.1:8080/api/v1/teams/9',root:expect.objectContaining({id:10,children:[expect.objectContaining({id:12})]})})}))
+  })
   beforeEach(() => {
     listFiles.mockReset()
     invokeMock.mockReset()
     ensureFreshAccessTokenMock.mockReset()
     ensureFreshAccessTokenMock.mockResolvedValue(undefined)
-    refreshAccessTokenMock.mockReset()
-  })
-
-  it('builds authenticated download URLs from the current API base', () => {
-    expect(buildDownloadUrl(7)).toBe('http://127.0.0.1:8080/api/v1/download/7')
-  })
-
-  it('sanitizes local file and folder names', () => {
-    expect(sanitizePathSegment('a<b>:c?.txt')).toBe('a_b__c_.txt')
-    expect(sanitizePathSegment('...')).toBe('download')
-    expect(buildUniquePathName('root.txt', 1)).toBe('root (1).txt')
-    expect(buildUniquePathName('docs', 2)).toBe('docs (2)')
-  })
-
-  it('detects picker cancellation', () => {
-    expect(isPickerAbort(new DOMException('cancel', 'AbortError'))).toBe(true)
-    expect(isPickerAbort(new Error('boom'))).toBe(false)
   })
 
   it('lists all children across pages', async () => {
@@ -125,18 +115,6 @@ describe('desktop downloads', () => {
       { fileName: 'b.txt' },
     ])
     expect(listFiles).toHaveBeenCalledTimes(2)
-  })
-
-  it('downloads one file after the user chooses a target path', async () => {
-    invokeMock.mockResolvedValue({ saved: true, path: 'chosen/a_.txt' })
-
-    await expect(downloadDesktopFile(3, 'a?.txt')).resolves.toBe(true)
-
-    expect(invokeMock).toHaveBeenCalledWith('download_desktop_file', {
-      url: 'http://127.0.0.1:8080/api/v1/download/3',
-      fileName: 'a?.txt',
-      token: undefined,
-    })
   })
 
   it('starts one queued desktop file download', async () => {
@@ -153,61 +131,6 @@ describe('desktop downloads', () => {
         token: 'fresh-token',
         apiBaseUrl: 'http://127.0.0.1:8080/api/v1',
       },
-    })
-  })
-
-  it('refreshes and retries direct desktop downloads when desktop reports expired auth', async () => {
-    ensureFreshAccessTokenMock.mockResolvedValue('expired-token')
-    refreshAccessTokenMock.mockResolvedValue('retried-token')
-    invokeMock
-      .mockRejectedValueOnce('AUTH_EXPIRED')
-      .mockResolvedValueOnce({ saved: true, path: 'chosen/a.txt' })
-
-    await expect(downloadDesktopFile(3, 'a.txt')).resolves.toBe(true)
-
-    expect(invokeMock).toHaveBeenNthCalledWith(1, 'download_desktop_file', {
-      url: 'http://127.0.0.1:8080/api/v1/download/3',
-      fileName: 'a.txt',
-      token: 'expired-token',
-    })
-    expect(invokeMock).toHaveBeenNthCalledWith(2, 'download_desktop_file', {
-      url: 'http://127.0.0.1:8080/api/v1/download/3',
-      fileName: 'a.txt',
-      token: 'retried-token',
-    })
-  })
-
-  it('recursively downloads folders without requesting ZIP files', async () => {
-    listFiles.mockImplementation(async (params) => {
-      if (params.parentId === 10) return page([folder(11, 10, 'child'), file(12, 10, 'root.txt')])
-      if (params.parentId === 11) return page([file(13, 11, 'nested.txt')])
-      return page([])
-    })
-
-    invokeMock.mockImplementation(async (command, args) => {
-      if (command === 'choose_desktop_folder') return { selected: true, path: 'chosen/docs' }
-      if (command === 'create_desktop_subdirectory') return { selected: true, path: `${(args as { directoryPath: string }).directoryPath}/child` }
-      return { saved: true, path: 'downloaded' }
-    })
-
-    await expect(downloadDesktopFolder({ id: 10, fileName: 'docs' })).resolves.toBe(true)
-
-    expect(invokeMock).toHaveBeenCalledWith('choose_desktop_folder', { folderName: 'docs' })
-    expect(invokeMock).toHaveBeenCalledWith('create_desktop_subdirectory', {
-      directoryPath: 'chosen/docs',
-      folderName: 'child',
-    })
-    expect(invokeMock).toHaveBeenCalledWith('download_desktop_file_to_path', {
-      url: 'http://127.0.0.1:8080/api/v1/download/12',
-      fileName: 'root.txt',
-      directoryPath: 'chosen/docs',
-      token: undefined,
-    })
-    expect(invokeMock).toHaveBeenCalledWith('download_desktop_file_to_path', {
-      url: 'http://127.0.0.1:8080/api/v1/download/13',
-      fileName: 'nested.txt',
-      directoryPath: 'chosen/docs/child',
-      token: undefined,
     })
   })
 

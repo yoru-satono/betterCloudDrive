@@ -19,8 +19,6 @@ vi.mock('@/api/client', () => ({
 }))
 
 vi.mock('@/api/desktopDownload', () => ({
-  downloadDesktopFile: vi.fn(),
-  downloadDesktopFolder: vi.fn(),
   startQueuedDesktopFileDownload: vi.fn(),
   startQueuedDesktopFolderDownload: vi.fn(),
   isDesktopDownloadRuntime: vi.fn(() => false),
@@ -31,8 +29,6 @@ const apiPost = api.post as Mock
 const toastError = toast.error as Mock
 const toastSuccess = toast.success as Mock
 const isDesktopDownloadRuntime = desktopDownload.isDesktopDownloadRuntime as Mock
-const downloadDesktopFile = desktopDownload.downloadDesktopFile as Mock
-const downloadDesktopFolder = desktopDownload.downloadDesktopFolder as Mock
 const startQueuedDesktopFileDownload = desktopDownload.startQueuedDesktopFileDownload as Mock
 const startQueuedDesktopFolderDownload = desktopDownload.startQueuedDesktopFolderDownload as Mock
 
@@ -43,8 +39,6 @@ describe('downloadFile', () => {
     toastError.mockReset()
     toastSuccess.mockReset()
     isDesktopDownloadRuntime.mockReturnValue(false)
-    downloadDesktopFile.mockReset()
-    downloadDesktopFolder.mockReset()
     startQueuedDesktopFileDownload.mockReset()
     startQueuedDesktopFolderDownload.mockReset()
   })

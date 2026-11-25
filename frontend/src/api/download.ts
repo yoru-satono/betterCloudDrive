@@ -5,8 +5,6 @@ import { toast } from 'vue-sonner'
 import { getApiBaseUrl } from '@/config/runtime'
 import { resolveMessage } from '@/i18n'
 import {
-  downloadDesktopFile,
-  downloadDesktopFolder,
   isDesktopDownloadRuntime,
   startQueuedDesktopFileDownload,
   startQueuedDesktopFolderDownload,
