@@ -16,6 +16,11 @@ export interface UserEntity {
   deletedAt?: string | null
 }
 
+export interface RegistrationResponse {
+  userId: number
+  username: string
+}
+
 export interface LoginResponse {
   accessToken: string
   refreshToken: string

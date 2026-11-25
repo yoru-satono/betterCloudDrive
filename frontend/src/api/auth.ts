@@ -1,5 +1,5 @@
 import api from './client'
-import type { LoginResponse, UserEntity } from '@/types/user'
+import type { LoginResponse, RegistrationResponse, UserEntity } from '@/types/user'
 import type { ApiResponse } from '@/types/api'
 import type { SupportedLocale } from '@/i18n'
 
@@ -10,7 +10,7 @@ export const sendRegistrationCode = (email: string, preferredLocale?: SupportedL
   api.post<ApiResponse<void>>('/auth/register-code/send', { email, ...(preferredLocale ? { preferredLocale } : {}) })
 
 export const register = (username: string, password: string, email: string, verificationCode: string, preferredLocale?: SupportedLocale) =>
-  api.post<ApiResponse<void>>('/auth/register', {
+  api.post<ApiResponse<RegistrationResponse>>('/auth/register', {
     username, password, email, verificationCode, ...(preferredLocale ? { preferredLocale } : {})
   })
 

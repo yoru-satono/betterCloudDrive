@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { beforeEach, describe, expect, expectTypeOf, it, vi, type Mock } from 'vitest'
+import type { RegistrationResponse } from '@/types/user'
 import api from '@/api/client'
 import * as uploadApi from '@/api/upload'
 import * as recycleApi from '@/api/recycle'
@@ -27,6 +28,12 @@ vi.mock('@/api/client', () => ({
 const apiMock = api as unknown as Record<'get' | 'post' | 'delete' | 'patch' | 'put', Mock>
 
 describe('API endpoint contracts', () => {
+  it('types registration data as the actual user identity response', async () => {
+    apiMock.post.mockResolvedValueOnce({data:{code:200,data:{userId:7,username:'synthetic-user'}}})
+    const response=await authApi.register('synthetic-user','synthetic-password','synthetic@test.local','123456')
+    expectTypeOf(response.data.data).toEqualTypeOf<RegistrationResponse>()
+    expect(response.data.data).toEqual({userId:7,username:'synthetic-user'})
+  })
   beforeEach(() => {
     Object.values(apiMock).forEach(mock => mock.mockResolvedValue({ data: { code: 200, data: null } }))
     localStorage.clear()
