@@ -4,6 +4,7 @@ import { resolveMessage } from '@/i18n'
 import type { UploadSession, UploadInitResult } from '@/types/file'
 export type { UploadInitResult } from '@/types/file'
 import type { ApiResponse } from '@/types/api'
+import { identityRevision, assertIdentity } from '@/platform/identity'
 
 export interface UploadContext {
   teamId?: number
@@ -34,12 +35,14 @@ export async function initUpload(parentId: number | null, fileName: string, file
 }
 
 export const uploadChunk = async (uploadId: string, chunkIndex: number, data: Blob, onProgress?: (pct: number) => void, context?: UploadContext) => {
+  const revision = identityRevision()
   const bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as ArrayBuffer)
     reader.onerror = () => reject(reader.error)
     reader.readAsArrayBuffer(data)
   })
+  assertIdentity(revision)
   const chunkMd5 = SparkMD5.ArrayBuffer.hash(bytes)
   const form = new FormData()
   form.append('file', data)
@@ -47,6 +50,7 @@ export const uploadChunk = async (uploadId: string, chunkIndex: number, data: Bl
     params: { chunkNumber: chunkIndex, chunkMd5 },
     headers: { 'Content-Type': 'multipart/form-data' },
     suppressToast: true,
+    _identityRevision: revision,
     onUploadProgress: onProgress ? (e) => { if (e.total) onProgress(Math.round((e.loaded / e.total) * 100)) } : undefined
   })
 }

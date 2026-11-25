@@ -13,7 +13,7 @@ import {
   type ResumableDirectoryRecord,
   type ResumableUploadRecord,
 } from './resumableUpload'
-import type { UploadItem } from '@/stores/upload'
+import { useUploadStore, type UploadItem } from '@/stores/upload'
 
 interface DesktopFolderUploadStart {
   selected: boolean
@@ -46,6 +46,7 @@ export function getDesktopUploadToken() {
 }
 
 export async function uploadDesktopFolder(parentId: number | null, teamId?: number) {
+  const { scope } = useUploadStore().captureIdentity()
   const apiBaseUrl = teamId ? `${getApiBaseUrl()}/teams/${teamId}` : getApiBaseUrl()
   return invoke<DesktopFolderUploadStart>('upload_desktop_folder', {
     request: {
@@ -53,13 +54,14 @@ export async function uploadDesktopFolder(parentId: number | null, teamId?: numb
       parentId,
       token: getDesktopUploadToken(),
       apiBaseUrl,
-      resumableUploads: readResumableUploads(),
-      resumableDirectories: readResumableDirectories(),
+      resumableUploads: readResumableUploads(scope),
+      resumableDirectories: readResumableDirectories(scope),
     },
   })
 }
 
 export async function uploadDesktopFiles(parentId: number | null, teamId?: number) {
+  const { scope } = useUploadStore().captureIdentity()
   const apiBaseUrl = teamId ? `${getApiBaseUrl()}/teams/${teamId}` : getApiBaseUrl()
   return invoke<DesktopFolderUploadStart>('upload_desktop_files', {
     request: {
@@ -67,8 +69,8 @@ export async function uploadDesktopFiles(parentId: number | null, teamId?: numbe
       parentId,
       token: getDesktopUploadToken(),
       apiBaseUrl,
-      resumableUploads: readResumableUploads(),
-      resumableDirectories: readResumableDirectories(),
+      resumableUploads: readResumableUploads(scope),
+      resumableDirectories: readResumableDirectories(scope),
     },
   })
 }
@@ -88,16 +90,22 @@ export async function registerDesktopUploadListeners(handlers: {
     listen<DesktopUploadItemEvent>('desktop-upload:item-updated', (event) => {
       handlers.onItemUpdated(event.payload)
       const item = event.payload
-      if ((item.status === 'done' || item.status === 'instant') && item.uploadId) {
-        removeResumableUpload(item.uploadId)
+      const scope = useUploadStore().currentScope()
+      if (scope && (item.status === 'done' || item.status === 'instant') && item.uploadId) {
+        removeResumableUpload(scope, item.uploadId)
       }
     }),
-    listen<string>('desktop-upload:session-invalidated', event => removeResumableUpload(event.payload)),
+    listen<string>('desktop-upload:session-invalidated', event => {
+      const scope = useUploadStore().currentScope()
+      if (scope) removeResumableUpload(scope, event.payload)
+    }),
     listen<ResumableUploadRecord>('desktop-upload:resumable-record', (event) => {
-      saveResumableUpload(event.payload)
+      const scope = useUploadStore().currentScope()
+      if (scope) saveResumableUpload(scope, event.payload)
     }),
     listen<{ record: ResumableDirectoryRecord }>('desktop-upload:directory-record', (event) => {
-      saveResumableDirectory(event.payload.record)
+      const scope = useUploadStore().currentScope()
+      if (scope) saveResumableDirectory(scope, event.payload.record)
     }),
     listen('desktop-upload:batch-completed', () => {
       handlers.onBatchCompleted()

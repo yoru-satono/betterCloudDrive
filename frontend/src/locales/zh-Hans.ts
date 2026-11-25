@@ -892,6 +892,7 @@ export default {
     },
   },
   auth: {
+    remoteLogoutUnconfirmed: "已退出本机，服务端注销未确认。",
     forgotpassword: {
       pleaseEnterAValidEmailAddress: "请输入有效邮箱",
       pleaseEnterTheVerificationCode: "请输入验证码",

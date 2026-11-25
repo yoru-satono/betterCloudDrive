@@ -914,6 +914,7 @@ export default {
     },
   },
   auth: {
+    remoteLogoutUnconfirmed: "Signed out locally. Server sign-out could not be confirmed.",
     forgotpassword: {
       pleaseEnterAValidEmailAddress: "Please enter a valid email address",
       pleaseEnterTheVerificationCode: "Please enter the verification code",

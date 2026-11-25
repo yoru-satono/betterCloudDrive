@@ -34,7 +34,6 @@ async function loadUnreadCount() {
 async function handleLogout() {
   closeNotificationStream()
   await auth.logout()
-  router.push('/login')
 }
 
 function handleRealtimeNotification(event: Event) {

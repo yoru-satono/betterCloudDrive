@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, expectTypeOf, it, vi, type Mock } from 'vitest'
 import type { RegistrationResponse } from '@/types/user'
+import { invalidateIdentity } from '@/platform/identity'
 import api from '@/api/client'
 import * as uploadApi from '@/api/upload'
 import * as recycleApi from '@/api/recycle'
@@ -28,6 +29,16 @@ vi.mock('@/api/client', () => ({
 const apiMock = api as unknown as Record<'get' | 'post' | 'delete' | 'patch' | 'put', Mock>
 
 describe('API endpoint contracts', () => {
+  it('does not send a chunk if identity changes while its bytes are being read', async () => {
+    let finish!: () => void
+    vi.stubGlobal('FileReader',class {onload:any;readAsArrayBuffer(){finish=()=>this.onload({target:{result:new ArrayBuffer(8)}})}})
+    try {
+      const sending=uploadApi.uploadChunk('old-session',0,new Blob(['old']))
+      const rejected=expect(sending).rejects.toThrow('SESSION_CHANGED')
+      invalidateIdentity('logout');finish();await rejected
+      expect(apiMock.post).not.toHaveBeenCalled()
+    } finally { vi.unstubAllGlobals() }
+  })
   it('types registration data as the actual user identity response', async () => {
     apiMock.post.mockResolvedValueOnce({data:{code:200,data:{userId:7,username:'synthetic-user'}}})
     const response=await authApi.register('synthetic-user','synthetic-password','synthetic@test.local','123456')

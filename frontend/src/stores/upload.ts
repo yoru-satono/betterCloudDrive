@@ -1,7 +1,7 @@
 import { i18n as __i18n } from '@/i18n'
 const __t = __i18n.global.t
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, onScopeDispose } from 'vue'
 import { resolveMessage } from '@/i18n'
 import SparkMD5 from 'spark-md5'
 import * as uploadApi from '@/api/upload'
@@ -11,12 +11,21 @@ import {
   removeResumableUpload,
   readResumableUploads,
   saveResumableUpload,
+  clearLegacyResumableRecords,
+  createResumableScope,
+  type ResumableScope,
   type ResumableUploadRecord,
 } from '@/api/resumableUpload'
 import { useFilesStore } from './files'
 import { useTeamFilesStore } from './teamFiles'
 import { toast } from 'vue-sonner'
 import { getDesktopSettings, isDesktopSettingsRuntime } from '@/api/desktopSettings'
+import { identityRevision } from '@/platform/identity'
+
+export interface UploadIdentity {
+  readonly scope: ResumableScope
+  readonly revision: number
+}
 
 export type UploadStatus = 'pending' | 'hashing' | 'uploading' | 'paused' | 'done' | 'error' | 'instant' | 'canceled' | 'resume_required'
 
@@ -72,7 +81,43 @@ interface DesktopUploadPatch {
 export const useUploadStore = defineStore('upload', () => {
   const queue = ref<UploadItem[]>([])
   const isOpen = ref(false)
-  let scheduling = false
+  let identity: UploadIdentity | undefined
+  let scheduling: UploadIdentity | undefined
+  clearLegacyResumableRecords()
+
+  function isIdentityCurrent(expected: UploadIdentity | undefined): expected is UploadIdentity {
+    return !!expected && identity === expected && expected.revision === identityRevision() && !!localStorage.getItem('accessToken')
+  }
+
+  function assertUploadIdentity(expected: UploadIdentity) {
+    if (!isIdentityCurrent(expected)) throw new Error('SESSION_CHANGED')
+  }
+
+  function captureIdentity(): UploadIdentity {
+    if (!isIdentityCurrent(identity)) throw new Error('AUTH_REQUIRED')
+    return identity
+  }
+
+  const currentScope = () => isIdentityCurrent(identity) ? identity.scope : undefined
+
+  function resetIdentity() {
+    identity = scheduling = undefined
+    for (const item of queue.value) item.status = 'canceled'
+    queue.value = []
+    isOpen.value = false
+  }
+  window.addEventListener('bcd:identity-invalidated', resetIdentity)
+  onScopeDispose(() => { resetIdentity(); window.removeEventListener('bcd:identity-invalidated', resetIdentity) })
+
+  // Called only after profile validation and native session acknowledgement.
+  function activateIdentity(apiBaseUrl: string, userId: number) {
+    const scope = createResumableScope(apiBaseUrl, userId)
+    if (isIdentityCurrent(identity) && identity.scope.apiBaseUrl === scope.apiBaseUrl && identity.scope.userId === scope.userId) return
+    if (!localStorage.getItem('accessToken')) throw new Error('AUTH_REQUIRED')
+    if (identity) resetIdentity()
+    identity = Object.freeze({ scope, revision: identityRevision() })
+    restoreResumableUploads()
+  }
 
   function addFiles(files: File[], parentId: number | null, teamId?: number | null) {
     addUploadFiles(files.map(file => ({ file, parentId, teamId: teamId ?? null })))
@@ -80,6 +125,7 @@ export const useUploadStore = defineStore('upload', () => {
 
   function addUploadFiles(entries: UploadFileEntry[]) {
     if (!entries.length) return
+    captureIdentity()
     const items: UploadItem[] = entries.map(entry => ({
       id: crypto.randomUUID(),
       teamId: entry.teamId ?? null,
@@ -98,9 +144,11 @@ export const useUploadStore = defineStore('upload', () => {
   }
 
   function restoreResumableUploads() {
-    const records = readResumableUploads()
-    if (!records.length || queue.value.length) return
-    queue.value = records.map(record => ({
+    if (!isIdentityCurrent(identity)) return
+    const expected = identity
+    const records = readResumableUploads(expected.scope).filter(record => !queue.value.some(item => !item.desktop && item.uploadId === record.sessionId))
+    if (!records.length) return
+    const restored: UploadItem[] = records.map(record => ({
       id: crypto.randomUUID(),
       fileName: record.fileName,
       teamId: record.teamId ?? null,
@@ -116,13 +164,19 @@ export const useUploadStore = defineStore('upload', () => {
       totalChunks: record.totalChunks,
       resumable: true,
     }))
+    queue.value.push(...restored)
     isOpen.value = true
-    queue.value.forEach(item => refreshUploadStatus(item.id).catch(() => {
-      if (item.uploadId) removeResumableUpload(item.uploadId)
-      Object.assign(item, {
+    restored.forEach(item => refreshUploadStatus(item.id).catch(error => {
+      if (!isIdentityCurrent(expected)) return
+      const code = (error as { response?: { data?: { code?: number } } }).response?.data?.code
+      const expired = code === 419006 || code === 404001
+      if (expired && item.uploadId) removeResumableUpload(expected.scope, item.uploadId)
+      const current = queue.value.find(entry => entry.id === item.id)
+      if (!current) return
+      Object.assign(current, {
         status: 'error' as UploadStatus,
-        error: __t('transferUi.upload.theResumeSessionHasExpiredPleaseUploadAgain'),
-        resumable: false,
+        error: expired ? __t('transferUi.upload.theResumeSessionHasExpiredPleaseUploadAgain') : uploadError(error),
+        resumable: !expired,
       })
     }))
   }
@@ -158,27 +212,31 @@ export const useUploadStore = defineStore('upload', () => {
   }
 
   function scheduleUploads() {
+    if (!isIdentityCurrent(identity)) return
+    const expected = identity
     if (!isDesktopSettingsRuntime()) {
-      startPendingUploads(DEFAULT_MAX_CONCURRENT_UPLOADS)
+      startPendingUploads(DEFAULT_MAX_CONCURRENT_UPLOADS, expected)
       return
     }
 
     if (scheduling) return
-    scheduling = true
+    scheduling = expected
     void getDesktopSettings().then((settings) => {
       const maxConcurrentUploads = Math.max(1, Math.min(16, Math.floor(settings.maxConcurrentUploads || DEFAULT_MAX_CONCURRENT_UPLOADS)))
-      startPendingUploads(maxConcurrentUploads)
+      startPendingUploads(maxConcurrentUploads, expected)
     }).catch(() => {
-      startPendingUploads(DEFAULT_MAX_CONCURRENT_UPLOADS)
+      startPendingUploads(DEFAULT_MAX_CONCURRENT_UPLOADS, expected)
     }).finally(() => {
-      scheduling = false
+      if (scheduling !== expected || !isIdentityCurrent(expected)) return
+      scheduling = undefined
       const activeCount = activeUploadCount()
       const hasPending = queue.value.some(item => !item.desktop && !item.started && item.status === 'pending')
       if (hasPending && activeCount === 0) scheduleUploads()
     })
   }
 
-  function startPendingUploads(maxConcurrentUploads: number) {
+  function startPendingUploads(maxConcurrentUploads: number, expected: UploadIdentity) {
+    if (!isIdentityCurrent(expected)) return
     const activeCount = activeUploadCount()
     const slots = Math.max(0, maxConcurrentUploads - activeCount)
     if (slots === 0) return
@@ -188,7 +246,7 @@ export const useUploadStore = defineStore('upload', () => {
       .slice(0, slots)
       .forEach(item => {
         item.started = true
-        void processUpload(item)
+        void processUpload(item, expected)
       })
   }
 
@@ -200,9 +258,12 @@ export const useUploadStore = defineStore('upload', () => {
     ).length
   }
 
-  async function processUpload(item: UploadItem) {
-    const isCanceled = () => queue.value.find(q => q.id === item.id)?.status === 'canceled'
+  async function processUpload(item: UploadItem, expected: UploadIdentity) {
+    const check = () => assertUploadIdentity(expected)
+    const isCanceled = () => !isIdentityCurrent(expected) || !queue.value.some(q => q.id === item.id && q.status !== 'canceled')
+    const wait = () => waitWhilePaused(item.id, expected)
     const update = (patch: Partial<UploadItem>) => {
+      if (!isIdentityCurrent(expected)) return
       const i = queue.value.find(q => q.id === item.id)
       if (i?.status === 'canceled' && patch.status !== 'canceled') return
       if (i) Object.assign(i, normalizeUploadPatch(patch))
@@ -217,7 +278,7 @@ export const useUploadStore = defineStore('upload', () => {
       update({ status: 'hashing' })
       const md5 = await computeMd5(item.file, (pct) => update({ progress: pct * 30 }))
       if (isCanceled()) return
-      if (!await waitWhilePaused(item.id)) return
+      if (!await wait() || isCanceled()) return
       if (item.uploadId && item.md5Hash && item.md5Hash !== md5) {
         update({
           status: 'resume_required',
@@ -241,7 +302,7 @@ export const useUploadStore = defineStore('upload', () => {
         fileSize: item.file.size,
         md5Hash: md5,
       }
-      const resumeRecord = findResumableUpload(uploadIdentity)
+      const resumeRecord = findResumableUpload(expected.scope, uploadIdentity)
       if (resumeRecord) {
         item.parentId = resumeRecord.parentId
         update({ parentId: resumeRecord.parentId })
@@ -250,29 +311,33 @@ export const useUploadStore = defineStore('upload', () => {
       if (isCanceled()) return
 
       const uploadContext = item.teamId ? { teamId: item.teamId } : undefined
-      const result = await getOrCreateUploadSession(item, md5, resumeRecord)
+      const result = await getOrCreateUploadSession(item, md5, resumeRecord, expected.scope, check)
+      if (!isIdentityCurrent(expected)) return
       if (result.mode === 'INSTANT') {
-        removeResumableUpload(resumeRecord?.sessionId || item.uploadId)
+        removeResumableUpload(expected.scope, resumeRecord?.sessionId || item.uploadId)
         if (isCanceled()) return
-        if (!await waitWhilePaused(item.id)) return
+        if (!await wait() || isCanceled()) return
         update({ status: 'instant', progress: 100, resumable: false, uploadId: undefined })
         toast.success(__t('transferUi.upload.transmissionSuccessfulInSeconds', { p0: label }))
         refreshFileSpace(item.teamId)
         return
       }
       const session = result
-      if (isCanceled() || !await waitWhilePaused(item.id)) {
+      if (isCanceled() || !await wait()) {
+        if (!isIdentityCurrent(expected)) return
         await abortMultipart(session.sessionId, uploadContext).catch(() => {})
-        removeResumableUpload(session.sessionId)
+        if (!isIdentityCurrent(expected)) return
+        removeResumableUpload(expected.scope, session.sessionId)
         return
       }
+      if (isCanceled()) return
       update({
         status: 'uploading', progress: 30,
         uploadId: session.sessionId,
         totalChunks: session.totalChunks,
         resumable: true,
       })
-      saveResumableUpload({
+      saveResumableUpload(expected.scope, {
         sessionId: session.sessionId,
         teamId: item.teamId ?? null,
         parentId: item.parentId,
@@ -288,21 +353,22 @@ export const useUploadStore = defineStore('upload', () => {
 
       if (session.totalChunks === 0) {
         await completeMultipart(session.sessionId, uploadContext)
-        removeResumableUpload(session.sessionId)
+        check()
+        removeResumableUpload(expected.scope, session.sessionId)
         update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
         toast.success(__t('transferUi.upload.uploadCompleted', { p0: label }))
         refreshFileSpace(item.teamId)
         return
       }
 
-      const missingChunks = await getMissingChunks(session.sessionId, session.totalChunks).catch(() => range(session.totalChunks))
+      const missingChunks = await getMissingChunks(session.sessionId, session.totalChunks, uploadContext)
       if (isCanceled()) return
       updateProgressFromChunks(update, session.totalChunks, session.totalChunks - missingChunks.length)
 
       for (const i of missingChunks) {
         const current = queue.value.find(q => q.id === item.id)
         if (current?.status === 'canceled') return
-        if (!await waitWhilePaused(item.id)) return
+        if (!await wait() || isCanceled()) return
         const chunk = item.file.slice(i * session.chunkSize, (i + 1) * session.chunkSize)
         const missingIndex = missingChunks.indexOf(i)
         await uploadChunk(session.sessionId, i, chunk, (pct) => {
@@ -311,45 +377,52 @@ export const useUploadStore = defineStore('upload', () => {
           const overall = 30 + (completedEquivalent / session.totalChunks) * 65
           update({ progress: overall, chunkProgress: `${Math.min(session.totalChunks, Math.floor(completedEquivalent))}/${session.totalChunks}` })
         }, uploadContext)
-        if (!await waitWhilePaused(item.id)) return
+        if (!await wait() || isCanceled()) return
         updateProgressFromChunks(update, session.totalChunks, session.totalChunks - missingChunks.length + missingIndex + 1)
       }
 
-      if (!await waitWhilePaused(item.id)) return
+      if (!await wait() || isCanceled()) return
       await completeMultipart(session.sessionId, uploadContext)
-      removeResumableUpload(session.sessionId)
+      check()
+      removeResumableUpload(expected.scope, session.sessionId)
       update({ status: 'done', progress: 100, chunkProgress: '', resumable: false })
       toast.success(__t('transferUi.upload.uploadCompleted', { p0: label }))
       refreshFileSpace(item.teamId)
     } catch (e: unknown) {
+      if (!isIdentityCurrent(expected) || isCanceled()) return
       const code = (e as { response?: { data?: { code?: number } } }).response?.data?.code
       if ((code === 419006 || code === 419016 || code === 419017) && item.uploadId) {
         await abortMultipart(item.uploadId, item.teamId ? { teamId: item.teamId } : undefined).catch(() => {})
-        removeResumableUpload(item.uploadId)
+        if (!isIdentityCurrent(expected)) return
+        removeResumableUpload(expected.scope, item.uploadId)
         update({ uploadId: undefined, md5Hash: undefined, resumable: false })
       }
-      const envelope = (e as { response?: { data?: { messageKey?: string } } }).response?.data
-      const msg = envelope?.messageKey ? resolveMessage(envelope.messageKey) : e instanceof Error ? e.message : __t('transferUi.upload.uploadFailed')
-      update({ status: 'error', error: msg, resumable: !!item.uploadId })
+      update({ status: 'error', error: uploadError(e), resumable: !!item.uploadId })
       toast.error(__t('transferUi.upload.namedUploadFailed', { p0: label }))
     } finally {
-      const current = queue.value.find(q => q.id === item.id)
-      if (current) current.started = false
-      scheduleUploads()
+      if (isIdentityCurrent(expected)) {
+        const current = queue.value.find(q => q.id === item.id)
+        if (current) current.started = false
+        scheduleUploads()
+      }
     }
   }
 
   async function cancelUpload(id: string) {
     const item = queue.value.find(q => q.id === id)
     if (!item) return
+    const expected = captureIdentity()
     if (item.desktop) {
       await cancelDesktopUpload(id).catch(() => {})
+      if (!isIdentityCurrent(expected)) return
       Object.assign(item, { status: 'canceled' as UploadStatus, error: null, resumable: false })
       return
     }
+    item.status = 'canceled'
     if (item.uploadId) {
       await abortMultipart(item.uploadId, item.teamId ? { teamId: item.teamId } : undefined).catch(() => {})
-      removeResumableUpload(item.uploadId)
+      if (!isIdentityCurrent(expected)) return
+      removeResumableUpload(expected.scope, item.uploadId)
     }
     Object.assign(item, { status: 'canceled' as UploadStatus, error: null, resumable: false, started: false })
     scheduleUploads()
@@ -376,7 +449,10 @@ export const useUploadStore = defineStore('upload', () => {
   async function refreshUploadStatus(id: string) {
     const item = queue.value.find(q => q.id === id)
     if (!item?.uploadId) return
+    const expected = captureIdentity()
     const { data } = await getUploadStatus(item.uploadId, item.teamId ? { teamId: item.teamId } : undefined)
+    assertUploadIdentity(expected)
+    if (!queue.value.some(entry => entry.id === id)) return
     const status = data.data
     if (status.uploadedChunks !== undefined && status.totalChunks) {
       item.chunkProgress = `${status.uploadedChunks}/${status.totalChunks}`
@@ -405,11 +481,23 @@ export const useUploadStore = defineStore('upload', () => {
     scheduleUploads()
   }
 
-  restoreResumableUploads()
+  async function waitWhilePaused(id: string, expected: UploadIdentity) {
+    while (isIdentityCurrent(expected)) {
+      const item = queue.value.find(entry => entry.id === id)
+      if (!item || item.status === 'canceled') return false
+      if (item.status !== 'paused') return true
+      await delay(100)
+    }
+    return false
+  }
 
   return {
     queue,
     isOpen,
+    activateIdentity,
+    captureIdentity,
+    assertUploadIdentity,
+    currentScope,
     addFiles,
     addUploadFiles,
     applyDesktopUploadItem,
@@ -429,14 +517,9 @@ function delay(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-async function waitWhilePaused(id: string) {
-  const store = useUploadStore()
-  while (true) {
-    const item = store.queue.find(q => q.id === id)
-    if (!item || item.status === 'canceled') return false
-    if (item.status !== 'paused') return true
-    await delay(100)
-  }
+function uploadError(error: unknown) {
+  const envelope = (error as { response?: { data?: { messageKey?: string } } })?.response?.data
+  return envelope?.messageKey ? resolveMessage(envelope.messageKey) : error instanceof Error ? error.message : __t('transferUi.upload.uploadFailed')
 }
 
 function normalizeUploadPatch(patch: Partial<UploadItem>) {
@@ -454,10 +537,12 @@ function normalizeProgress(progress: number) {
   return Math.round(clamped * 100) / 100
 }
 
-async function getOrCreateUploadSession(item: UploadItem, md5Hash: string, resumeRecord: ResumableUploadRecord | null): Promise<uploadApi.UploadInitResult> {
+async function getOrCreateUploadSession(item: UploadItem, md5Hash: string, resumeRecord: ResumableUploadRecord | null, scope: ResumableScope, check: () => void): Promise<uploadApi.UploadInitResult> {
+  check()
   if (resumeRecord) {
     try {
       await getUploadStatus(resumeRecord.sessionId, item.teamId ? { teamId: item.teamId } : undefined)
+      check()
       return {
         mode: 'MULTIPART',
         sessionId: resumeRecord.sessionId,
@@ -465,21 +550,22 @@ async function getOrCreateUploadSession(item: UploadItem, md5Hash: string, resum
         chunkSize: resumeRecord.chunkSize || CHUNK_SIZE,
       }
     } catch (error) {
+      check()
       const code = (error as { response?: { data?: { code?: number } } }).response?.data?.code
       if (code !== 419006 && code !== 404001) throw error
-      removeResumableUpload(resumeRecord.sessionId)
+      removeResumableUpload(scope, resumeRecord.sessionId)
     }
   }
 
   const context = item.teamId ? { teamId: item.teamId } : undefined
+  check()
   const initArgs = [item.parentId, item.fileName, item.fileSize ?? item.file!.size, md5Hash] as const
   const response = context ? await uploadApi.initUpload(...initArgs, context) : await uploadApi.initUpload(...initArgs)
   return response.data.data
 }
 
-async function getMissingChunks(sessionId: string, totalChunks: number) {
-  const item = useUploadStore().queue.find(queueItem => queueItem.uploadId === sessionId)
-  const { data } = await getUploadStatus(sessionId, item?.teamId ? { teamId: item.teamId } : undefined)
+async function getMissingChunks(sessionId: string, totalChunks: number, context?: uploadApi.UploadContext) {
+  const { data } = await getUploadStatus(sessionId, context)
   const missing = data.data.missingChunks
   if (Array.isArray(missing)) return missing
   const uploaded = data.data.uploadedChunks || 0

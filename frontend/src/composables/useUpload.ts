@@ -1,7 +1,7 @@
 import { i18n as __i18n } from '@/i18n'
 const __t = __i18n.global.t
 import { ref } from 'vue'
-import { useUploadStore } from '@/stores/upload'
+import { useUploadStore, type UploadIdentity } from '@/stores/upload'
 import { useFilesStore } from '@/stores/files'
 import { chooseFolderUploadPlan, isFolderPickerCancel, type FolderUploadPlan } from '@/api/desktopFolderUpload'
 import {
@@ -68,6 +68,7 @@ export function useUpload() {
   }
 
   async function triggerFolderPicker() {
+    let expected: UploadIdentity | undefined
     try {
       if (isDesktopFolderUploadRuntime()) {
         const result = await uploadDesktopFolder(filesStore.currentParentId)
@@ -77,15 +78,22 @@ export function useUpload() {
         return
       }
 
-      const plan = await chooseFolderUploadPlan(filesStore.currentParentId)
+      expected = uploadStore.captureIdentity()
+      const baseParentId = filesStore.currentParentId
+      const plan = await chooseFolderUploadPlan(baseParentId)
+      uploadStore.assertUploadIdentity(expected)
       if (!plan) return
-      const entries = await prepareFolderUploadEntries(plan, filesStore.currentParentId)
+      const entries = await prepareFolderUploadEntries(plan, baseParentId, expected, () => uploadStore.assertUploadIdentity(expected!))
+      uploadStore.assertUploadIdentity(expected)
       uploadStore.addUploadFiles(entries)
       toast.success(__t('transferUi.useupload.hasBeenAddedToTheUploadQueue', { p0: plan.rootName }))
       if (plan.directoryCount > 0 && entries.length === 0) {
         await filesStore.refresh()
       }
     } catch (error) {
+      if (expected) {
+        try { uploadStore.assertUploadIdentity(expected) } catch { return }
+      }
       if (isFolderPickerCancel(error)) return
       const message = error instanceof Error ? error.message : __t('commonUi.desktopupload.failedToUploadFolder')
       toast.error(message)
@@ -129,13 +137,14 @@ function registerDesktopUploadBridge(uploadStore: ReturnType<typeof useUploadSto
   })
 }
 
-async function prepareFolderUploadEntries(plan: FolderUploadPlan, baseParentId: number | null) {
+async function prepareFolderUploadEntries(plan: FolderUploadPlan, baseParentId: number | null, expected: UploadIdentity, check: () => void) {
   const directoryIds = new Map<string, number | null>()
   directoryIds.set(directoryPathKey([], baseParentId), baseParentId)
   const paths = collectDirectoryPaths(plan)
   for (const path of paths) {
+    check()
     const key = directoryPathKey(path, baseParentId)
-    const stored = findResumableDirectory(key)
+    const stored = findResumableDirectory(expected.scope, key)
     if (stored) {
       directoryIds.set(key, stored.remoteId)
       continue
@@ -144,9 +153,10 @@ async function prepareFolderUploadEntries(plan: FolderUploadPlan, baseParentId: 
     const parentPath = path.slice(0, -1)
     const parentKey = directoryPathKey(parentPath, baseParentId)
     const parentId = directoryIds.get(parentKey) ?? baseParentId
-    const remote = await createUniqueRemoteFolder(parentId, path[path.length - 1])
+    const remote = await createUniqueRemoteFolder(parentId, path[path.length - 1], check)
+    check()
     directoryIds.set(key, remote.id)
-    saveResumableDirectory({
+    saveResumableDirectory(expected.scope, {
       pathKey: key,
       parentPathKey: parentKey || null,
       baseParentId,
@@ -182,14 +192,16 @@ function collectDirectoryPaths(plan: FolderUploadPlan) {
   return [...keys.values()]
 }
 
-async function createUniqueRemoteFolder(parentId: number | null, folderName: string) {
+async function createUniqueRemoteFolder(parentId: number | null, folderName: string, check: () => void) {
   let index = 0
   while (true) {
+    check()
     const candidate = index === 0 ? folderName : `${folderName} (${index})`
     try {
       const { data } = await filesApi.createFolder(parentId, candidate)
       return data.data
     } catch (error) {
+      check()
       const code = (error as { response?: { data?: { code?: number } } }).response?.data?.code
       if (code !== FILE_NAME_CONFLICT_CODE) throw error
       index += 1

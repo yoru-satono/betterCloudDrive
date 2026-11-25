@@ -5,6 +5,8 @@ import { useUploadStore } from '@/stores/upload'
 import { useUpload } from '@/composables/useUpload'
 import * as folderUpload from '@/api/desktopFolderUpload'
 import * as filesApi from '@/api/files'
+import { saveResumableDirectory, createResumableScope, readResumableDirectories } from '@/api/resumableUpload'
+import { invalidateIdentity } from '@/platform/identity'
 
 vi.mock('@/api/desktopFolderUpload', () => ({
   chooseFolderUploadPlan: vi.fn(),
@@ -19,13 +21,38 @@ const chooseFolderUploadPlan = folderUpload.chooseFolderUploadPlan as Mock
 const createFolder = filesApi.createFolder as Mock
 
 beforeEach(() => {
+  invalidateIdentity('test')
   setActivePinia(createPinia())
   localStorage.clear()
   chooseFolderUploadPlan.mockReset()
   createFolder.mockReset()
+  localStorage.setItem('accessToken', 'synthetic-access')
+  useUploadStore().activateIdentity('/api/v1', 7)
 })
 
 describe('useUpload', () => {
+  it('stops directory creation and cache writes when a response arrives after logout', async () => {
+    let finish!: (value: unknown) => void
+    createFolder.mockReturnValueOnce(new Promise(resolve => { finish=resolve }))
+    chooseFolderUploadPlan.mockResolvedValueOnce({rootName:'private',directoryCount:2,emptyDirectories:[['private','nested']],files:[]})
+    const store=useUploadStore(),add=vi.spyOn(store,'addUploadFiles')
+    const uploading=useUpload().triggerFolderPicker()
+    await vi.waitFor(()=>expect(createFolder).toHaveBeenCalledTimes(1))
+    invalidateIdentity('logout')
+    finish({data:{data:{id:21,fileName:'private'}}});await uploading
+    expect(createFolder).toHaveBeenCalledTimes(1)
+    expect(readResumableDirectories(createResumableScope('/api/v1',7))).toEqual([])
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  it('does not create directories when a picker returns after identity changes', async () => {
+    let finish!: (value: unknown) => void
+    chooseFolderUploadPlan.mockReturnValueOnce(new Promise(resolve => { finish=resolve }))
+    const uploading=useUpload().triggerFolderPicker()
+    invalidateIdentity('connection')
+    finish({rootName:'old',directoryCount:1,emptyDirectories:[['old']],files:[]});await uploading
+    expect(createFolder).not.toHaveBeenCalled()
+  })
   it('adds files to the upload store at root with null parent id', () => {
     const filesStore = useFilesStore()
     filesStore.currentParentId = null
@@ -85,7 +112,7 @@ describe('useUpload', () => {
   })
 
   it('reuses persisted remote folder paths for folder upload resume', async () => {
-    localStorage.setItem('bcd.resumableUploadDirectories', JSON.stringify([{
+    saveResumableDirectory(createResumableScope('/api/v1',7), {
       pathKey: 'root:Project',
       parentPathKey: 'root:',
       baseParentId: null,
@@ -93,7 +120,7 @@ describe('useUpload', () => {
       remoteName: 'Project',
       createdAt: Date.now(),
       updatedAt: Date.now(),
-    }]))
+    })
     const uploadStore = useUploadStore()
     const addUploadFiles = vi.spyOn(uploadStore, 'addUploadFiles').mockImplementation(() => {})
     const file = new File(['x'], 'readme.txt')

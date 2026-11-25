@@ -5,6 +5,10 @@ import { useAuthStore } from '@/stores/auth'
 import { revokeRemote } from '@/api/client'
 import { identityRevision } from '@/platform/identity'
 import { locale } from '@/i18n'
+import router from '@/router'
+import { toast } from 'vue-sonner'
+
+vi.mock('@/router', () => ({ default: { replace: vi.fn() } }))
 
 vi.mock('@/api/auth', () => ({
   login: vi.fn(),
@@ -158,7 +162,26 @@ describe('auth store', () => {
     expect(identityRevision()).toBeGreaterThan(revision)
     expect(localStorage.getItem('accessToken')).toBeNull()
     expect(store.user).toBeNull()
+    await vi.waitFor(() => expect(router.replace).toHaveBeenCalledWith('/login'))
     finish(); await loggingOut
+  })
+
+  it('does not navigate or report an old logout failure after another login', async () => {
+    let fail!: (error: Error) => void
+    vi.mocked(revokeRemote).mockReturnValueOnce(new Promise<void>((_,reject) => { fail=reject }))
+    localStorage.setItem('accessToken','old-access')
+    const store=useAuthStore(), loggingOut=store.logout()
+    vi.mocked(authApi.login).mockResolvedValueOnce({data:{data:{accessToken:'new-access',refreshToken:'new-refresh'}}} as never)
+    vi.mocked(authApi.getMe).mockResolvedValueOnce({data:{data:{...user,id:8}}} as never)
+    const loggingIn=store.login('bob','synthetic-password')
+    await loggingIn
+    fail(new Error('timeout'));await loggingOut
+    expect(router.replace).not.toHaveBeenCalled()
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(store.user?.id).toBe(8)
+    expect(localStorage.getItem('accessToken')).toBe('new-access')
+    expect(revokeRemote).toHaveBeenCalledTimes(1)
+    expect(revokeRemote).toHaveBeenCalledWith('/api/v1','old-access')
   })
   it('discards a profile returned after logout', async () => {
     let finish!: (value: any) => void

@@ -1,4 +1,4 @@
-import { redirectToLogin } from '@/platform/environment'
+import { redirectToLogin, isQtRuntime } from '@/platform/environment'
 import { onScopeDispose } from 'vue'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
@@ -25,9 +25,6 @@ export const useAuthStore = defineStore('auth', () => {
   function reset() {
     user.value = null
     initialized.value = false
-    const uploads = useUploadStore()
-    for (const item of uploads.queue) item.status = 'canceled'
-    uploads.queue = []
     useTransferStore().applyQueue({ tasks: [] })
   }
   window.addEventListener('bcd:identity-invalidated', reset)
@@ -68,6 +65,7 @@ export const useAuthStore = defineStore('auth', () => {
       assertIdentity(revision)
       await synchronizeSession()
       assertIdentity(revision)
+      useUploadStore().activateIdentity(getApiBaseUrl(), user.value!.id)
       initialized.value = true
       return data
     } catch (error) { await abandon(revision); throw error }
@@ -84,6 +82,7 @@ export const useAuthStore = defineStore('auth', () => {
         assertIdentity(revision)
         await synchronizeSession()
         assertIdentity(revision)
+        useUploadStore().activateIdentity(getApiBaseUrl(), user.value!.id)
         return true
       } catch { await abandon(revision); return false }
       finally {
@@ -98,11 +97,15 @@ export const useAuthStore = defineStore('auth', () => {
     const base = getApiBaseUrl(), token = localStorage.getItem('accessToken')
     // Clear web state before either network operation, even if the bridge fails.
     const clearing = clearSession()
+    const revision = identityRevision()
     initialized.value = true
-    redirectToLogin()
+    const navigation = isQtRuntime() ? Promise.resolve(redirectToLogin()) : import('@/router').then(({ default: router }) => {
+      if (revision === identityRevision()) return router.replace('/login')
+    })
     await Promise.all([
-      clearing.catch(() => { toast.error(i18n.global.t('file.client.networkConnectionFailedPleaseTryAgainLater')) }),
-      revokeRemote(base, token).catch(() => undefined),
+      navigation,
+      clearing.catch(() => { if (revision === identityRevision()) toast.error(i18n.global.t('file.client.networkConnectionFailedPleaseTryAgainLater')) }),
+      revokeRemote(base, token).catch(() => { if (revision === identityRevision()) toast.error(i18n.global.t('auth.remoteLogoutUnconfirmed')) }),
     ])
   }
   const register = (username: string, password: string, email: string, verificationCode: string) => authApi.register(username, password, email, verificationCode, locale.value)

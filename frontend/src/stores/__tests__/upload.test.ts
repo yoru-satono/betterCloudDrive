@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { nextTick } from 'vue'
+import { invalidateIdentity } from '@/platform/identity'
 import { toast } from 'vue-sonner'
 import { useUploadStore } from '@/stores/upload'
 import { useFilesStore } from '@/stores/files'
@@ -16,7 +17,8 @@ vi.mock('@/api/upload', () => ({
   getUploadStatus: vi.fn(),
 }))
 
-vi.mock('@/api/resumableUpload', () => ({
+vi.mock('@/api/resumableUpload', async importOriginal => ({
+  ...await importOriginal<typeof import('@/api/resumableUpload')>(),
   findResumableUpload: vi.fn(),
   removeResumableUpload: vi.fn(),
   readResumableUploads: vi.fn(() => []),
@@ -80,6 +82,7 @@ const deferred = <T = unknown>() => {
 }
 
 beforeEach(() => {
+  invalidateIdentity('test')
   setActivePinia(createPinia())
   localStorage.clear()
   vi.stubGlobal('FileReader', MockFileReader)
@@ -101,6 +104,8 @@ beforeEach(() => {
   isDesktopSettingsRuntime.mockReturnValue(false)
   toastError.mockReset()
   toastSuccess.mockReset()
+  localStorage.setItem('accessToken', 'synthetic-access')
+  useUploadStore().activateIdentity('/api/v1', 7)
 })
 
 describe('upload store', () => {
@@ -242,13 +247,13 @@ describe('upload store', () => {
     expect(initUpload).toHaveBeenCalledWith(10, 'demo.txt', 3, expect.any(String))
     expect(uploadChunk).toHaveBeenCalledWith('session-1', 0, expect.any(Blob), expect.any(Function))
     expect(completeMultipart).toHaveBeenCalledWith('session-1')
-    expect(saveResumableUpload).toHaveBeenCalledWith(expect.objectContaining({
+    expect(saveResumableUpload).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
       sessionId: 'session-1',
       parentId: 10,
       fileName: 'demo.txt',
       displayName: 'demo.txt',
     }))
-    expect(removeResumableUpload).toHaveBeenCalledWith('session-1')
+    expect(removeResumableUpload).toHaveBeenCalledWith(expect.any(Object), 'session-1')
     expect(store.queue[0]).toMatchObject({ status: 'done', progress: 100, chunkProgress: '' })
     expect(toastError).not.toHaveBeenCalledWith(expect.stringContaining('no matching'))
   })
@@ -265,8 +270,8 @@ describe('upload store', () => {
 
     expect(initUpload).toHaveBeenCalledWith(null, 'empty.txt', 0, expect.any(String))
     expect(uploadChunk).not.toHaveBeenCalled()
-    expect(saveResumableUpload).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'empty-session', totalChunks: 0 }))
-    expect(removeResumableUpload).toHaveBeenCalledWith('empty-session')
+    expect(saveResumableUpload).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ sessionId: 'empty-session', totalChunks: 0 }))
+    expect(removeResumableUpload).toHaveBeenCalledWith(expect.any(Object), 'empty-session')
     expect(store.queue[0]).toMatchObject({ status: 'done', progress: 100, chunkProgress: '' })
     expect(refresh).toHaveBeenCalled()
   })
@@ -355,7 +360,7 @@ describe('upload store', () => {
     expect(uploadChunk).toHaveBeenCalledTimes(2)
     expect(uploadChunk.mock.calls.map(call => call[1])).toEqual([1, 2])
     expect(completeMultipart).toHaveBeenCalledWith('resume-session')
-    expect(removeResumableUpload).toHaveBeenCalledWith('resume-session')
+    expect(removeResumableUpload).toHaveBeenCalledWith(expect.any(Object), 'resume-session')
     expect(store.queue[0]).toMatchObject({ uploadId: 'resume-session', status: 'done' })
   })
 
@@ -373,7 +378,7 @@ describe('upload store', () => {
     await vi.waitFor(() => expect(store.queue[0]?.status).toBe('instant'))
     expect(initUpload).toHaveBeenCalledTimes(1)
     expect(getUploadStatus).toHaveBeenCalledTimes(1)
-    expect(removeResumableUpload).toHaveBeenCalledWith('expired')
+    expect(removeResumableUpload).toHaveBeenCalledWith(expect.any(Object), 'expired')
     expect(uploadChunk).not.toHaveBeenCalled()
     expect(completeMultipart).not.toHaveBeenCalled()
   })
@@ -384,10 +389,10 @@ describe('upload store', () => {
     const store = useUploadStore()
     store.addFiles([makeFile(0, 'empty.txt')], 10)
     await vi.waitFor(() => expect(store.queue[0]?.status).toBe('error'))
-    expect(saveResumableUpload).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'empty-session', totalChunks: 0 }))
-    expect(removeResumableUpload).not.toHaveBeenCalledWith('empty-session')
+    expect(saveResumableUpload).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ sessionId: 'empty-session', totalChunks: 0 }))
+    expect(removeResumableUpload).not.toHaveBeenCalledWith(expect.any(Object), 'empty-session')
     expect(uploadChunk).not.toHaveBeenCalled()
-    findResumableUpload.mockReturnValue(saveResumableUpload.mock.calls[0]![0])
+    findResumableUpload.mockReturnValue(saveResumableUpload.mock.calls[0]![1])
     getUploadStatus.mockResolvedValue({ data: { data: { totalChunks: 0, uploadedChunks: 0, missingChunks: [] } } })
     completeMultipart.mockResolvedValue({ data: { data: { fileId: 89 } } })
     mockFilesRefresh()
@@ -395,7 +400,7 @@ describe('upload store', () => {
     await vi.waitFor(() => expect(store.queue[0]?.status).toBe('done'))
     expect(initUpload).toHaveBeenCalledTimes(1)
     expect(completeMultipart).toHaveBeenCalledTimes(2)
-    expect(removeResumableUpload).toHaveBeenCalledWith('empty-session')
+    expect(removeResumableUpload).toHaveBeenCalledWith(expect.any(Object), 'empty-session')
   })
 
   it('restores resumable records as tasks that require selecting the file again', async () => {
@@ -414,6 +419,7 @@ describe('upload store', () => {
     getUploadStatus.mockResolvedValue({ data: { data: { totalChunks: 2, uploadedChunks: 1, missingChunks: [1] } } })
 
     const store = useUploadStore()
+    store.restoreResumableUploads()
     await flushAsync()
 
     expect(store.queue).toHaveLength(1)
@@ -433,8 +439,8 @@ describe('upload store', () => {
     store.addFiles([makeFile()], 10)
     await vi.waitFor(() => expect(toastError).toHaveBeenCalledWith('demo.txt 上传失败'))
 
-    expect(saveResumableUpload).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'failed-session' }))
-    expect(removeResumableUpload).not.toHaveBeenCalledWith('failed-session')
+    expect(saveResumableUpload).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ sessionId: 'failed-session' }))
+    expect(removeResumableUpload).not.toHaveBeenCalledWith(expect.any(Object), 'failed-session')
     expect(store.queue[0]).toMatchObject({ status: 'error', uploadId: 'failed-session', resumable: true })
   })
 
@@ -506,7 +512,7 @@ describe('upload store', () => {
     expect(store.queue[0].uploadId).toBe(code === 419007 ? 'failed-session' : undefined)
     expect(store.queue[0].resumable).toBe(code === 419007)
     expect(abortMultipart).toHaveBeenCalledTimes(code === 419007 ? 0 : 1)
-    if (code !== 419007) expect(removeResumableUpload).toHaveBeenCalledWith('failed-session')
+    if (code !== 419007) expect(removeResumableUpload).toHaveBeenCalledWith(expect.any(Object), 'failed-session')
     completeMultipart.mockResolvedValue({ data: { data: { fileId: 9 } } })
     store.retryUpload(store.queue[0].id)
     await vi.waitFor(() => expect(store.queue[0].status).toBe('done'))

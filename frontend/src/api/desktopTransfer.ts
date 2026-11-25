@@ -4,6 +4,7 @@ import { invoke } from '@/platform/desktop'
 import { listen, type UnlistenFn } from '@/platform/desktop'
 import { ensureFreshAccessToken } from './client'
 import { getApiBaseUrl, isDesktopRuntime } from '@/config/runtime'
+import { useUploadStore } from '@/stores/upload'
 import {
   readResumableDirectories,
   readResumableUploads,
@@ -73,13 +74,15 @@ export async function getTransferQueue() {
 
 export async function restoreDesktopTransfers() {
   if (!isDesktopTransferRuntime()) return EMPTY_TRANSFER_QUEUE
+  const store = useUploadStore(), expected = store.captureIdentity()
   const token = await ensureFreshAccessToken()
+  store.assertUploadIdentity(expected)
   return invoke<TransferQueue>('restore_desktop_transfers', {
     request: {
       token: token || '',
       apiBaseUrl: getApiBaseUrl(),
-      resumableUploads: readResumableUploads(),
-      resumableDirectories: readResumableDirectories(),
+      resumableUploads: readResumableUploads(expected.scope),
+      resumableDirectories: readResumableDirectories(expected.scope),
     },
   })
 }

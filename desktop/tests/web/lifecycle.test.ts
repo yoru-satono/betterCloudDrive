@@ -7,7 +7,7 @@ const bridge = vi.hoisted(() => ({
   configureConnection: vi.fn(), isConnectionConfirmed: vi.fn(() => true),
 }))
 vi.mock('@/platform/desktop', () => bridge)
-vi.mock('../../../frontend/src/stores/upload', () => ({ useUploadStore: () => ({ queue: [] }) }))
+vi.mock('../../../frontend/src/stores/upload', () => ({ useUploadStore: () => ({ queue: [], activateIdentity: vi.fn() }) }))
 vi.mock('../../../frontend/src/stores/transfer', () => ({ useTransferStore: () => ({ applyQueue: vi.fn() }) }))
 import api, { refreshAccessToken } from '@/api/client'
 import { invalidateIdentity } from '@/platform/identity'
