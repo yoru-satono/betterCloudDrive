@@ -2,7 +2,8 @@
 import { i18n as __i18n } from '@/i18n'
 const __t = __i18n.global.t
 
-import { computed, ref } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
+import { identityRevision } from '@/platform/identity'
 import OButton from '@/components/base/OButton.vue'
 import OModal from '@/components/base/OModal.vue'
 import OSpinner from '@/components/base/OSpinner.vue'
@@ -22,6 +23,22 @@ const versionsOpen = ref(false)
 const versionsLoading = ref(false)
 const versionsError = ref('')
 const versions = ref<FileVersionEntity[]>([])
+let versionsRevision = 0
+interface VersionsTarget { teamId: number; fileId: number; fileName: string; identity: number; request: number }
+let versionsTarget: VersionsTarget | undefined
+
+function closeVersions() {
+  versionsRevision++
+  versionsTarget = undefined
+  versionsOpen.value = versionsLoading.value = false
+  versionsError.value = ''
+  versions.value = []
+}
+const currentVersions = (expected: VersionsTarget | undefined): expected is VersionsTarget => !!expected && versionsTarget === expected
+  && expected.request === versionsRevision && expected.identity === identityRevision()
+  && preview.open && versionsOpen.value && preview.teamId === expected.teamId && preview.target?.id === expected.fileId
+watch([() => preview.open, () => preview.teamId, () => preview.target?.id], closeVersions, { flush: 'sync' })
+onUnmounted(closeVersions)
 const canShowTeamVersions = computed(() => preview.officeMode && !!preview.teamId && !!preview.target)
 const canRestoreTeamVersion = computed(() => !!preview.officeConfig?.editable)
 
@@ -35,39 +52,49 @@ function downloadPreviewTarget() {
 }
 
 function closePreview() {
-  versionsOpen.value = false
+  closeVersions()
   preview.closePreview()
 }
 
 async function openTeamVersions() {
   if (!preview.teamId || !preview.target) return
+  closeVersions()
+  const expected = { teamId: preview.teamId, fileId: preview.target.id, fileName: preview.target.fileName, identity: identityRevision(), request: ++versionsRevision }
+  versionsTarget = expected
   versionsOpen.value = true
   versionsLoading.value = true
   versionsError.value = ''
   try {
-    const { data } = await versionsApi.listTeamVersions(preview.teamId, preview.target.id)
-    versions.value = data.data
+    const { data } = await versionsApi.listTeamVersions(expected.teamId, expected.fileId)
+    if (currentVersions(expected)) versions.value = data.data
   } catch {
-    versionsError.value = __t('file.filepreview.failedToLoadHistoricalVersion')
+    if (currentVersions(expected)) versionsError.value = __t('file.filepreview.failedToLoadHistoricalVersion')
   } finally {
-    versionsLoading.value = false
+    if (currentVersions(expected)) versionsLoading.value = false
   }
 }
 
 async function downloadTeamVersion(versionNumber: number) {
-  if (!preview.teamId || !preview.target) return
-  await versionsApi.downloadTeamVersion(preview.teamId, preview.target.id, versionNumber, preview.target.fileName)
+  const expected = versionsTarget
+  if (!currentVersions(expected) || !versions.value.some(version => version.versionNumber === versionNumber)) return
+  await versionsApi.downloadTeamVersion(expected.teamId, expected.fileId, versionNumber, expected.fileName)
 }
 
 async function restoreTeamVersion(versionNumber: number) {
-  if (!preview.teamId || !preview.target || !canRestoreTeamVersion.value) return
+  const expected = versionsTarget
+  if (!currentVersions(expected) || !canRestoreTeamVersion.value || !versions.value.some(version => version.versionNumber === versionNumber)) return
   const ok = await confirm(__t('team.filepreview.recoveryVersion'), __t('team.filepreview.restoreVersionToCurrentFileTheCurrentFileWillBe', { p0: versionNumber }))
-  if (!ok) return
-  const { data } = await versionsApi.restoreTeamVersion(preview.teamId, preview.target.id, versionNumber)
-  preview.replaceTarget(data.data)
-  toast.success(__t('team.filepreview.versionRestored'))
-  await preview.refreshOfficeConfig()
-  await openTeamVersions()
+  if (!ok || !currentVersions(expected) || !canRestoreTeamVersion.value) return
+  try {
+    const { data } = await versionsApi.restoreTeamVersion(expected.teamId, expected.fileId, versionNumber)
+    if (!currentVersions(expected)) return
+    preview.replaceTarget(data.data)
+    toast.success(__t('team.filepreview.versionRestored'))
+    await preview.refreshOfficeConfig()
+    if (currentVersions(expected)) await openTeamVersions()
+  } catch {
+    if (currentVersions(expected)) versionsError.value = __t('file.filepreview.failedToLoadHistoricalVersion')
+  }
 }
 </script>
 
@@ -99,7 +126,7 @@ async function restoreTeamVersion(versionNumber: number) {
     </template>
   </OModal>
 
-  <OModal :title="__t('file.filepreview.historicalVersion')" :open="versionsOpen" width="560px" @close="versionsOpen = false">
+  <OModal :title="__t('file.filepreview.historicalVersion')" :open="versionsOpen" width="560px" @close="closeVersions">
     <div class="office-versions">
       <div class="office-versions__target">{{ preview.target?.fileName }}</div>
       <div v-if="versionsLoading" class="office-versions__loading"><OSpinner /></div>
@@ -127,7 +154,7 @@ async function restoreTeamVersion(versionNumber: number) {
     </div>
     <template #footer>
       <span v-if="!canRestoreTeamVersion" class="office-versions__permission">{{ __t('file.filepreview.readOnlyPermissionCanOnlyDownloadHistoricalVersions') }}</span>
-      <OButton variant="ghost" @click="versionsOpen = false">{{ __t('commonUi.o.closure') }}</OButton>
+      <OButton variant="ghost" @click="closeVersions">{{ __t('commonUi.o.closure') }}</OButton>
     </template>
   </OModal>
 </template>
